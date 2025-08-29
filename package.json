@@ -1,0 +1,19 @@
+{
+  "name": "resumeforge",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node -e \"console.log('no tests')\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.432.0",
+    "@aws-sdk/client-secrets-manager": "^3.432.0",
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.0.0"
+  }
+}
