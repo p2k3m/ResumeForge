@@ -10,7 +10,8 @@ The server relies on the following environment variables:
 {
   "AWS_REGION": "us-east-1",
   "SECRET_ID": "your-secret-id",
-  "PORT": "3000"
+  "PORT": "3000",
+  "ALLOW_DEV_PLAINTEXT": "0"
 }
 ```
 
@@ -22,6 +23,8 @@ The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
   "S3_BUCKET": "resume-forge-data"
 }
 ```
+
+If `ALLOW_DEV_PLAINTEXT` is set to `1`, the server will read the OpenAI API key from the `OPENAI_API_KEY` environment variable for local development. In production, leave `ALLOW_DEV_PLAINTEXT` unset (or `0`) to ensure credentials are retrieved exclusively from AWS Secrets Manager.
 
 ## IAM Policy
 Minimal permissions required by the server:
@@ -59,6 +62,11 @@ Minimal permissions required by the server:
    ```bash
    cd client && npm run dev
    ```
+
+## Upload Restrictions
+- Maximum file size: 5&nbsp;MB
+- Allowed file types: `.pdf`, `.docx`
+- Legacy `.doc` files are rejected.
 
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".

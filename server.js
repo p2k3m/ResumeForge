@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import path from 'path';
 import axios from 'axios';
 import OpenAI from 'openai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -10,7 +11,23 @@ import { logEvent } from './logger.js';
 const app = express();
 app.use(cors());
 app.use(express.json());
-const upload = multer();
+
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowed = ['.pdf', '.doc', '.docx'];
+    if (!allowed.includes(ext)) {
+      return cb(new Error('Only .pdf, .doc, .docx files are allowed'));
+    }
+    if (ext === '.doc') {
+      return cb(new Error('Legacy .doc files are not supported. Please upload a .pdf or .docx file.'));
+    }
+    cb(null, true);
+  }
+});
+
+const uploadResume = upload.single('resume');
 
 const region = process.env.AWS_REGION || 'us-east-1';
 const secretsClient = new SecretsManagerClient({ region });
@@ -28,7 +45,12 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/process-cv', upload.single('resume'), async (req, res) => {
+app.post('/api/process-cv', (req, res, next) => {
+  uploadResume(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
   const jobId = Date.now().toString();
   const prefix = `sessions/${jobId}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
@@ -53,7 +75,11 @@ app.post('/api/process-cv', upload.single('resume'), async (req, res) => {
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
-    const openai = new OpenAI({ apiKey: secrets.OPENAI_API_KEY });
+    const openaiApiKey =
+      process.env.ALLOW_DEV_PLAINTEXT === '1' && process.env.OPENAI_API_KEY
+        ? process.env.OPENAI_API_KEY
+        : secrets.OPENAI_API_KEY;
+    const openai = new OpenAI({ apiKey: openaiApiKey });
 
     const prompt = `Using the resume below and job description, craft a tailored cover letter.\nResume:\n${req.file.buffer.toString()}\nJob Description:\n${jobDescription}`;
     const completion = await openai.chat.completions.create({
