@@ -3,7 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
@@ -11,13 +11,6 @@ import { logEvent } from './logger.js';
 import PDFDocument from 'pdfkit';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
-
-let encoding_for_model;
-try {
-  ({ encoding_for_model } = await import('tiktoken'));
-} catch (err) {
-  console.error("Failed to load 'tiktoken'. Install it with `npm install tiktoken` to enable token counting.");
-}
 
 const app = express();
 app.use(cors());
@@ -196,51 +189,21 @@ app.post('/api/process-cv', (req, res, next) => {
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
-    const openaiApiKey =
-      process.env.ALLOW_DEV_PLAINTEXT === '1' && process.env.OPENAI_API_KEY
-        ? process.env.OPENAI_API_KEY
-        : secrets.OPENAI_API_KEY;
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    // Use GEMINI_API_KEY from environment or secrets
+    const geminiApiKey =
+      process.env.ALLOW_DEV_PLAINTEXT === '1' && process.env.GEMINI_API_KEY
+        ? process.env.GEMINI_API_KEY
+        : secrets.GEMINI_API_KEY;
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
     const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
 
-    const MODEL_LIMITS = {
-      'gpt-4-turbo': 128000
-    };
-    const model = 'gpt-4-turbo';
-
-    let tokenCount = 0;
-    if (encoding_for_model) {
-      const enc = encoding_for_model(model);
-      tokenCount = enc.encode(prompt).length;
-      enc.free();
-    } else {
-      console.warn('tiktoken module is not available; skipping token count check.');
-    }
-
-    const limit = MODEL_LIMITS[model];
-    if (tokenCount > limit) {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'input_too_long',
-        level: 'error',
-        message: `The resume and job description are too long for ${model}`
-      });
-      return res.status(400).json({
-        error: `The resume and job description are too long for ${model}. Please shorten them and try again.`
-      });
-    }
-
-    const completion = await openai.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }]
-    });
+    const completion = await model.generateContent(prompt);
     let letters;
     try {
-      letters = JSON.parse(completion.choices[0].message?.content ?? '{}');
+      const responseText = completion.response?.text();
+      letters = JSON.parse(responseText ?? '{}');
     } catch (e) {
       letters = {};
     }
