@@ -8,7 +8,7 @@ The server relies on the following environment variables:
 
 ```json
 {
-  "AWS_REGION": "us-east-1",
+  "AWS_REGION": "ap-south-1",
   "SECRET_ID": "your-secret-id",
   "PORT": "3000",
   "ALLOW_DEV_PLAINTEXT": "0"
