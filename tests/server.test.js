@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
+import fs from 'fs';
 
 const mockS3Send = jest.fn().mockResolvedValue({});
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
@@ -84,10 +85,15 @@ describe('/api/process-cv', () => {
 
     const sanitized = res.body.applicantName.replace(/\s+/g, '_');
 
-    // Returned URLs should contain applicant-specific paths
-    res.body.urls.forEach(({ url }) => {
+    // Returned URLs should contain applicant-specific and type-based paths
+    res.body.urls.forEach(({ type, url }) => {
       expect(url).toContain(`/${sanitized}/`);
       expect(url).not.toContain('/first/');
+      if (type.startsWith('cover_letter')) {
+        expect(url).toContain('/generated/cover_letter/');
+      } else {
+        expect(url).toContain('/generated/cv/');
+      }
     });
 
     // All uploaded PDFs should use applicant-specific S3 keys
@@ -153,5 +159,22 @@ describe('extractText', () => {
   test('extracts text from txt', async () => {
     const file = { originalname: 'file.txt', buffer: Buffer.from('plain') };
     await expect(extractText(file)).resolves.toBe('plain');
+  });
+});
+
+describe('client download labels', () => {
+  test('App displays correct labels for each file type', () => {
+    const source = fs.readFileSync('./client/src/App.jsx', 'utf8');
+    const mappings = {
+      cover_letter1: 'Cover Letter 1 (PDF)',
+      cover_letter2: 'Cover Letter 2 (PDF)',
+      version1: 'CV Version 1 (PDF)',
+      version2: 'CV Version 2 (PDF)'
+    };
+
+    Object.entries(mappings).forEach(([type, label]) => {
+      expect(source).toContain(`case '${type}':`);
+      expect(source).toContain(`label = '${label}'`);
+    });
   });
 });
