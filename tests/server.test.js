@@ -4,7 +4,7 @@ import request from 'supertest';
 const mockS3Send = jest.fn().mockResolvedValue({});
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: mockS3Send })),
-  PutObjectCommand: jest.fn(),
+  PutObjectCommand: jest.fn((input) => ({ input })),
   GetObjectCommand: jest.fn()
 }));
 
@@ -81,6 +81,20 @@ describe('/api/process-cv', () => {
       'version2'
     ]);
     expect(res.body.applicantName).toBeTruthy();
+
+    const sanitized = res.body.applicantName.replace(/\s+/g, '_');
+
+    // Returned URLs should contain applicant-specific paths
+    res.body.urls.forEach(({ url }) => {
+      expect(url).toContain(`/${sanitized}/`);
+    });
+
+    // All uploaded PDFs should use applicant-specific S3 keys
+    const pdfKeys = mockS3Send.mock.calls
+      .map((c) => c[0]?.input?.Key)
+      .filter((k) => k && k.endsWith('.pdf'));
+    expect(pdfKeys).toHaveLength(5);
+    pdfKeys.forEach((k) => expect(k).toContain(`/${sanitized}/`));
   });
 
   test('malformed AI response', async () => {
