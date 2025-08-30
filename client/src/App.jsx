@@ -42,8 +42,15 @@ function App() {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(errorText || 'Request failed')
+        let message = 'Request failed'
+        try {
+          const data = await response.json()
+          message = data.error || data.message || message
+        } catch {
+          const text = await response.text()
+          message = text || message
+        }
+        throw new Error(message)
       }
 
       const contentType = response.headers.get('content-type') || ''

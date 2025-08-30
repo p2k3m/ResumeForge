@@ -118,23 +118,44 @@ app.post('/api/process-cv', (req, res, next) => {
   const jobId = Date.now().toString();
   const prefix = `sessions/${jobId}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
+  const s3 = new S3Client({ region });
+  let bucket;
+
   // Store raw file to initial bucket
   if (req.file) {
     const initialS3 = new S3Client({ region });
     try {
-      await initialS3.send(new PutObjectCommand({
-        Bucket: 'resume-forge-data',
-        Key: `first/${req.file.originalname}`,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype
-      }));
+      await initialS3.send(
+        new PutObjectCommand({
+          Bucket: 'resume-forge-data',
+          Key: `first/${req.file.originalname}`,
+          Body: req.file.buffer,
+          ContentType: req.file.mimetype
+        })
+      );
     } catch (e) {
       console.error('initial upload failed', e);
+      const message = e.message || 'initial S3 upload failed';
+      try {
+        const secrets = await getSecrets();
+        bucket = secrets.S3_BUCKET;
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'initial_upload_failed',
+          level: 'error',
+          message
+        });
+      } catch (logErr) {
+        console.error('failed to log initial upload error', logErr);
+      }
+      return res
+        .status(500)
+        .json({ error: `Initial S3 upload failed: ${message}` });
     }
   }
-
-  const s3 = new S3Client({ region });
-  let bucket;
 
   try {
     const secrets = await getSecrets();
