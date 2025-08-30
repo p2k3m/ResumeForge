@@ -82,12 +82,18 @@ function parseLine(text) {
         continued: true
       });
     } else if (match[3]) {
-      tokens.push({
-        type: 'link',
-        text: match[3],
-        href: match[3],
-        continued: true
-      });
+      const domainMap = {
+        'linkedin.com': 'LinkedIn',
+        'github.com': 'GitHub'
+      };
+      let label = match[3];
+      try {
+        const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
+        label = domainMap[hostname] || match[3];
+      } catch {
+        label = match[3];
+      }
+      tokens.push({ type: 'link', text: label, href: match[3], continued: true });
     } else if (match[4]) {
       tokens.push({
         type: 'paragraph',
@@ -112,19 +118,6 @@ function parseLine(text) {
   if (rest) tokens.push({ type: 'paragraph', text: rest });
   tokens.forEach((t, i) => (t.continued = i < tokens.length - 1));
   return tokens;
-}
-
-function tokensToHtml(tokens) {
-  return tokens
-    .map((t) => {
-      if (t.type === 'link') {
-        return `<a href="${t.href}">${t.text}</a>`;
-      }
-      if (t.style === 'bold') return `<strong>${t.text}</strong>`;
-      if (t.style === 'italic') return `<em>${t.text}</em>`;
-      return t.text;
-    })
-    .join('');
 }
 
 function parseContent(text) {
@@ -204,7 +197,16 @@ function prepareTemplateData(text) {
   const items = lines.map((l) => {
     const cleaned = l.replace(/^[-*]\s*/, '');
     const tokens = parseLine(cleaned);
-    return tokensToHtml(tokens);
+    return tokens
+      .map((t) => {
+        if (t.type === 'link') {
+          return `<a href="${t.href}">${t.text}</a>`;
+        }
+        if (t.style === 'bold') return `<strong>${t.text}</strong>`;
+        if (t.style === 'italic') return `<em>${t.text}</em>`;
+        return t.text;
+      })
+      .join('');
   });
   return { name, sections: [{ heading: 'Summary', items }] };
 }
@@ -233,7 +235,15 @@ async function generatePdf(text) {
       doc.font('Helvetica-Bold').fontSize(20).text(data.name, { paragraphGap: 10 });
       data.sections.forEach((sec) => {
         doc.font('Helvetica-Bold').fontSize(14).text(sec.heading, { paragraphGap: 4 });
-        doc.font('Helvetica').fontSize(12).list(sec.items || []);
+        doc.font('Helvetica').fontSize(12);
+        (sec.items || []).forEach((item) => {
+          const linkMatch = item.match(/^<a href="([^\"]+)">([^<]+)<\/a>$/);
+          if (linkMatch) {
+            doc.text(`• ${linkMatch[2]}`, { link: linkMatch[1], underline: true });
+          } else {
+            doc.text(`• ${item}`);
+          }
+        });
         doc.moveDown();
       });
       doc.end();
