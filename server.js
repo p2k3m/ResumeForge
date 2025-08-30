@@ -196,7 +196,20 @@ function prepareTemplateData(text) {
   const name = lines.shift() || 'Resume';
   const items = lines.map((l) => {
     const cleaned = l.replace(/^[-*]\s*/, '');
-    return parseLine(cleaned);
+    const tokens = parseLine(cleaned);
+    // Ensure spacing between tokens matches original text
+    return tokens.reduce((acc, t, idx) => {
+      acc.push(t);
+      const next = tokens[idx + 1];
+      if (
+        next &&
+        !/\s$/.test(t.text) &&
+        !/^\s/.test(next.text)
+      ) {
+        acc.push({ type: 'paragraph', text: ' ' });
+      }
+      return acc;
+    }, []);
   });
   return { name, sections: [{ heading: 'Summary', items }] };
 }
