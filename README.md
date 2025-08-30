@@ -55,8 +55,10 @@ Minimal permissions required by the server:
 1. Install dependencies in both the server and client directories:
    ```bash
    npm install
+   npm install tiktoken
    cd client && npm install
    ```
+   `tiktoken` is required for token counting and may require Node.js 18 or later.
 2. Provide the environment variables and AWS secret as shown above.
 3. Start the server:
    ```bash
