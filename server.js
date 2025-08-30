@@ -195,36 +195,15 @@ app.post('/api/process-cv', (req, res, next) => {
     const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
 
     const MODEL_LIMITS = {
-      'gpt-4o-mini': 16000,
-      'gpt-4o': 128000
+      'gpt-4-turbo': 128000
     };
-    let model = 'gpt-4o-mini';
+    const model = 'gpt-4-turbo';
 
-    const enc = encoding_for_model('gpt-4o-mini');
+    const enc = encoding_for_model(model);
     const tokenCount = enc.encode(prompt).length;
     enc.free();
 
-    let limit = MODEL_LIMITS[model];
-    if (tokenCount > limit) {
-      if (tokenCount <= MODEL_LIMITS['gpt-4o']) {
-        model = 'gpt-4o';
-        limit = MODEL_LIMITS[model];
-      } else {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'input_too_long',
-          level: 'error',
-          message: 'The resume and job description are too long.'
-        });
-        return res.status(400).json({
-          error: 'The resume and job description are too long. Please shorten them and try again.'
-        });
-      }
-    }
-
+    const limit = MODEL_LIMITS[model];
     if (tokenCount > limit) {
       await logEvent({
         s3,
@@ -233,7 +212,7 @@ app.post('/api/process-cv', (req, res, next) => {
         jobId,
         event: 'input_too_long',
         level: 'error',
-        message: `Input exceeds context window for ${model}`
+        message: `The resume and job description are too long for ${model}`
       });
       return res.status(400).json({
         error: `The resume and job description are too long for ${model}. Please shorten them and try again.`
