@@ -40,10 +40,18 @@ function App() {
         body: formData,
       })
 
-      const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error || 'Request failed')
+        const errorText = await response.text()
+        throw new Error(errorText || 'Request failed')
       }
+
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        const text = await response.text()
+        throw new Error(text || 'Invalid JSON response')
+      }
+
+      const data = await response.json()
 
       setOutputFiles(data.urls || [])
     } catch (err) {
