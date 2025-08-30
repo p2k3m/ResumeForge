@@ -62,23 +62,62 @@ async function getSecrets() {
   return secretCache;
 }
 
+function parseLine(text) {
+  const tokens = [];
+  const regex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const part = text.slice(lastIndex, match.index);
+      if (part) tokens.push({ type: 'paragraph', text: part, continued: true });
+    }
+    if (match[1] && match[2]) {
+      tokens.push({
+        type: 'link',
+        text: match[1],
+        href: match[2],
+        continued: true
+      });
+    } else if (match[3]) {
+      tokens.push({
+        type: 'link',
+        text: match[3],
+        href: match[3],
+        continued: true
+      });
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (tokens.length === 0) {
+    return [{ type: 'paragraph', text }];
+  }
+  const rest = text.slice(lastIndex);
+  if (rest) tokens.push({ type: 'paragraph', text: rest });
+  tokens.forEach((t, i) => (t.continued = i < tokens.length - 1));
+  return tokens;
+}
+
 function parseContent(text) {
   try {
     const data = JSON.parse(text);
     const sections = Array.isArray(data.sections)
       ? data.sections
-      : Object.entries(data).map(([heading, content]) => ({
-          heading,
-          content
-        }));
+      : Object.entries(data).map(([heading, content]) => ({ heading, content }));
     const tokens = [];
     for (const sec of sections) {
       if (sec.heading) tokens.push({ type: 'heading', text: String(sec.heading) });
       const items = sec.items || sec.content;
       if (Array.isArray(items)) {
-        tokens.push({ type: 'list', items: items.map(String) });
+        const strItems = items.map(String);
+        tokens.push({ type: 'list', items: strItems });
+        strItems.forEach((i) => {
+          parseLine(i).forEach((t) => {
+            if (t.type === 'link') tokens.push(t);
+          });
+        });
       } else if (items) {
-        tokens.push({ type: 'paragraph', text: String(items) });
+        tokens.push(...parseLine(String(items)));
       }
       tokens.push({ type: 'space' });
     }
@@ -109,13 +148,16 @@ function parseContent(text) {
       const bulletMatch = trimmed.match(/^[-*]\s+(.*)/);
       if (bulletMatch) {
         list.push(bulletMatch[1]);
+        parseLine(bulletMatch[1]).forEach((t) => {
+          if (t.type === 'link') tokens.push(t);
+        });
         continue;
       }
       if (list.length) {
         tokens.push({ type: 'list', items: list });
         list = [];
       }
-      tokens.push({ type: 'paragraph', text: trimmed });
+      tokens.push(...parseLine(trimmed));
     }
     if (list.length) tokens.push({ type: 'list', items: list });
     return tokens;
@@ -140,10 +182,22 @@ function renderTokens(doc, tokens) {
         doc.moveDown(0.5);
         break;
       case 'paragraph':
-        doc.font('Helvetica').fontSize(12).text(token.text, {
-          paragraphGap: 4
-        });
+        doc
+          .font('Helvetica')
+          .fontSize(12)
+          .fillColor('black')
+          .text(
+            token.text,
+            token.continued ? { continued: true } : { paragraphGap: 4 }
+          );
         break;
+      case 'link': {
+        const options = token.continued
+          ? { link: token.href, underline: true, continued: true }
+          : { link: token.href, underline: true, paragraphGap: 4 };
+        doc.fillColor('blue').text(token.text, options).fillColor('black');
+        break;
+      }
       case 'space':
         doc.moveDown(0.5);
         break;
@@ -298,6 +352,7 @@ app.post('/api/process-cv', (req, res, next) => {
   3. Incorporate relevant projects and required technical terminology from the job description.
   4. Enhance content clarity and impact while preserving factual accuracy.
   5. Maintain an ATS-friendly format with appropriate keywords.
+  6. Keep any URLs from the original CV unchanged.
   `;
 
     const versionsPrompt = versionsTemplate
@@ -325,7 +380,7 @@ app.post('/api/process-cv', (req, res, next) => {
       return res.status(500).json({ error: 'AI response invalid' });
     }
 
-    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2".\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
+    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
 
     const coverPrompt = coverTemplate
       .replace('{{cvText}}', text)

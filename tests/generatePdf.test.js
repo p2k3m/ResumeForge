@@ -28,4 +28,30 @@ describe('generatePdf and parsing', () => {
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(100); // ensure content written
   });
+
+  test('parseContent detects links', () => {
+    const tokens = parseContent(
+      'Check [OpenAI](https://openai.com) and https://example.com'
+    );
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          text: 'OpenAI',
+          href: 'https://openai.com'
+        }),
+        expect.objectContaining({
+          type: 'link',
+          text: 'https://example.com',
+          href: 'https://example.com'
+        })
+      ])
+    );
+  });
+
+  test('generatePdf embeds hyperlinks', async () => {
+    const buffer = await generatePdf('Visit [OpenAI](https://openai.com)');
+    const pdfText = buffer.toString('utf8');
+    expect(pdfText).toContain('https://openai.com');
+  });
 });
