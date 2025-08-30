@@ -62,6 +62,8 @@ Minimal permissions required by the server:
    ```bash
    cd client && npm run dev
    ```
+5. The client issues requests to `/api`. During development the Vite dev server proxies these paths to `http://localhost:3000`.
+   If the backend runs elsewhere (e.g., in production), set `VITE_API_BASE_URL` to the server's base URL before starting the client.
 
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB

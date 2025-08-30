@@ -6,6 +6,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
   const [error, setError] = useState('')
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -35,7 +36,7 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', linkedinUrl)
 
-      const response = await fetch('/api/process-cv', {
+      const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
         body: formData,
       })
