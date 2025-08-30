@@ -137,6 +137,7 @@ app.post('/api/process-cv', (req, res, next) => {
   }
   const applicantName = extractName(text);
   const sanitizedName = applicantName.replace(/\s+/g, '_');
+  const ext = path.extname(req.file.originalname).toLowerCase();
   const prefix = `${date}/${sanitizedName}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
 
@@ -146,7 +147,7 @@ app.post('/api/process-cv', (req, res, next) => {
     await initialS3.send(
       new PutObjectCommand({
         Bucket: bucket,
-        Key: `first/${prefix}${sanitizedName}${path.extname(req.file.originalname)}`,
+        Key: `${prefix}${sanitizedName}${ext}`,
         Body: req.file.buffer,
         ContentType: req.file.mimetype
       })
