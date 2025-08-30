@@ -1,4 +1,5 @@
 import { generatePdf, parseContent } from '../server.js';
+import { inflateSync } from 'zlib';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
@@ -53,5 +54,18 @@ describe('generatePdf and parsing', () => {
     const buffer = await generatePdf('Visit [OpenAI](https://openai.com)');
     const pdfText = buffer.toString('utf8');
     expect(pdfText).toContain('https://openai.com');
+  });
+
+  test('generatePdf renders bold text without markers', async () => {
+    const buffer = await generatePdf('This is **bold** text');
+    const start = buffer.indexOf('\n', buffer.indexOf('stream')) + 1;
+    const end = buffer.indexOf('endstream', start);
+    const slice = buffer.slice(start, end);
+    const uncompressed = inflateSync(slice);
+    const decoded = [...uncompressed.toString().matchAll(/<([0-9A-Fa-f]+)>/g)]
+      .map((m) => Buffer.from(m[1], 'hex').toString('utf8'))
+      .join('');
+    expect(decoded).toContain('bold');
+    expect(decoded).not.toContain('**');
   });
 });
