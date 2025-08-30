@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
 import OpenAI from 'openai';
+import { encoding_for_model } from 'tiktoken';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
@@ -205,8 +206,29 @@ app.post('/api/process-cv', (req, res, next) => {
     const openai = new OpenAI({ apiKey: openaiApiKey });
 
     const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
+
+    const enc = encoding_for_model('gpt-3.5-turbo');
+    const tokenCount = enc.encode(prompt).length;
+    enc.free();
+
+    const GPT35_LIMIT = 16000;
+    const GPT4O_LIMIT = 128000;
+    let model = 'gpt-3.5-turbo';
+
+    if (tokenCount > GPT4O_LIMIT) {
+      return res
+        .status(400)
+        .json({ error: 'The resume and job description are too long. Please shorten them and try again.' });
+    } else if (tokenCount > GPT35_LIMIT) {
+      model = 'gpt-4o-mini';
+    } else if (tokenCount > GPT35_LIMIT - 500) {
+      return res.status(400).json({
+        error: 'The resume and job description are too long for gpt-3.5-turbo. Please shorten them and try again.'
+      });
+    }
+
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model,
       messages: [{ role: 'user', content: prompt }]
     });
     let letters;
