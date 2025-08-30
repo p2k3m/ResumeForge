@@ -196,17 +196,7 @@ function prepareTemplateData(text) {
   const name = lines.shift() || 'Resume';
   const items = lines.map((l) => {
     const cleaned = l.replace(/^[-*]\s*/, '');
-    const tokens = parseLine(cleaned);
-    return tokens
-      .map((t) => {
-        if (t.type === 'link') {
-          return `<a href="${t.href}">${t.text}</a>`;
-        }
-        if (t.style === 'bold') return `<strong>${t.text}</strong>`;
-        if (t.style === 'italic') return `<em>${t.text}</em>`;
-        return t.text;
-      })
-      .join('');
+    return parseLine(cleaned);
   });
   return { name, sections: [{ heading: 'Summary', items }] };
 }
@@ -215,7 +205,26 @@ async function generatePdf(text, templateId = 'modern') {
   const data = prepareTemplateData(text);
   const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
-  const html = Handlebars.compile(templateSource)(data);
+  // Convert token-based data to HTML for Handlebars templates
+  const htmlData = {
+    ...data,
+    sections: data.sections.map((sec) => ({
+      ...sec,
+      items: sec.items.map((tokens) =>
+        tokens
+          .map((t) => {
+            if (t.type === 'link') {
+              return `<a href="${t.href}">${t.text}</a>`;
+            }
+            if (t.style === 'bold') return `<strong>${t.text}</strong>`;
+            if (t.style === 'italic') return `<em>${t.text}</em>`;
+            return t.text;
+          })
+          .join('')
+      )
+    }))
+  };
+  const html = Handlebars.compile(templateSource)(htmlData);
   try {
     const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
     const page = await browser.newPage();
@@ -235,14 +244,21 @@ async function generatePdf(text, templateId = 'modern') {
       doc.font('Helvetica-Bold').fontSize(20).text(data.name, { paragraphGap: 10 });
       data.sections.forEach((sec) => {
         doc.font('Helvetica-Bold').fontSize(14).text(sec.heading, { paragraphGap: 4 });
-        doc.font('Helvetica').fontSize(12);
-        (sec.items || []).forEach((item) => {
-          const linkMatch = item.match(/^<a href="([^\"]+)">([^<]+)<\/a>$/);
-          if (linkMatch) {
-            doc.text(`• ${linkMatch[2]}`, { link: linkMatch[1], underline: true });
-          } else {
-            doc.text(`• ${item}`);
-          }
+        (sec.items || []).forEach((tokens) => {
+          doc.font('Helvetica').fontSize(12);
+          doc.text('• ', { continued: true });
+          tokens.forEach((t, idx) => {
+            const opts = { continued: idx < tokens.length - 1 };
+            if (t.type === 'link') {
+              doc.text(t.text, { ...opts, link: t.href, underline: true });
+            } else {
+              if (t.style === 'bold') doc.font('Helvetica-Bold');
+              else if (t.style === 'italic') doc.font('Helvetica-Oblique');
+              else doc.font('Helvetica');
+              doc.text(t.text, opts);
+              doc.font('Helvetica');
+            }
+          });
         });
         doc.moveDown();
       });
