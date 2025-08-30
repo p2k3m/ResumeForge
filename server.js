@@ -34,6 +34,12 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
+const DEFAULT_SECRET_ID = 'ResumeForge';
+const DEFAULT_AWS_REGION = 'ap-south-1';
+
+process.env.SECRET_ID = process.env.SECRET_ID || DEFAULT_SECRET_ID;
+process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
+
 const region = process.env.AWS_REGION || 'ap-south-1';
 const secretsClient = new SecretsManagerClient({ region });
 
