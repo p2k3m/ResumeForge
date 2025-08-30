@@ -211,9 +211,9 @@ function prepareTemplateData(text) {
   return { name, sections: [{ heading: 'Summary', items }] };
 }
 
-async function generatePdf(text) {
+async function generatePdf(text, templateId = 'modern') {
   const data = prepareTemplateData(text);
-  const templatePath = path.resolve('templates', 'modern.html');
+  const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
   const html = Handlebars.compile(templateSource)(data);
   try {
