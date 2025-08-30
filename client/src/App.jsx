@@ -123,12 +123,32 @@ function App() {
       {error && <p className="mt-4 text-red-600">{error}</p>}
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
-        {outputFiles.map((file) => (
-          <div key={file.type} className="p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow text-center">
-            <p className="mb-2 font-semibold text-purple-800">Enhanced CV (PDF)</p>
-            <a href={file.url} className="text-purple-700 hover:underline">Download PDF</a>
-          </div>
-        ))}
+        {outputFiles.map((file) => {
+          let label
+          switch (file.type) {
+            case 'cover_letter1':
+              label = 'Cover Letter 1 (PDF)'
+              break
+            case 'cover_letter2':
+              label = 'Cover Letter 2 (PDF)'
+              break
+            case 'version1':
+              label = 'CV Version 1 (PDF)'
+              break
+            case 'version2':
+              label = 'CV Version 2 (PDF)'
+              break
+            default:
+              label = 'Download (PDF)'
+          }
+
+          return (
+            <div key={file.type} className="p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow text-center">
+              <p className="mb-2 font-semibold text-purple-800">{label}</p>
+              <a href={file.url} className="text-purple-700 hover:underline">Download PDF</a>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
