@@ -109,8 +109,7 @@ app.post('/api/process-cv', (req, res, next) => {
   });
 }, async (req, res) => {
   const jobId = Date.now().toString();
-  const prefix = `sessions/${jobId}/`;
-  const logKey = `${prefix}logs/processing.jsonl`;
+  const date = new Date().toISOString().slice(0, 10);
   const s3 = new S3Client({ region });
   let bucket;
   let secrets;
@@ -122,69 +121,59 @@ app.post('/api/process-cv', (req, res, next) => {
     return res.status(500).json({ error: 'failed to load configuration' });
   }
 
-  // Store raw file to configured bucket
-  if (req.file) {
-    const initialS3 = new S3Client({ region });
-    try {
-      await initialS3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: `first/${req.file.originalname}`,
-          Body: req.file.buffer,
-          ContentType: req.file.mimetype
-        })
-      );
-    } catch (e) {
-      console.error(`initial upload to bucket ${bucket} failed`, e);
-      const message = e.message || 'initial S3 upload failed';
-      try {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'initial_upload_failed',
-          level: 'error',
-          message: `Failed to upload to bucket ${bucket}: ${message}`
-        });
-      } catch (logErr) {
-        console.error('failed to log initial upload error', logErr);
-      }
-      return res
-        .status(500)
-        .json({ error: `Initial S3 upload to bucket ${bucket} failed: ${message}` });
-    }
+  const { jobDescriptionUrl } = req.body;
+  if (!req.file) {
+    return res.status(400).json({ error: 'resume file required' });
+  }
+  if (!jobDescriptionUrl) {
+    return res.status(400).json({ error: 'jobDescriptionUrl required' });
   }
 
+  const text = await extractText(req.file);
+  if (!isResume(text)) {
+    return res
+      .status(400)
+      .json({ error: 'It does not look like your CV, please upload a CV' });
+  }
+  const applicantName = extractName(text);
+  const sanitizedName = applicantName.replace(/\s+/g, '_');
+  const prefix = `${date}/${sanitizedName}/`;
+  const logKey = `${prefix}logs/processing.jsonl`;
+
+  // Store raw file to configured bucket
+  const initialS3 = new S3Client({ region });
   try {
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'request_received' });
-
-    const { jobDescriptionUrl } = req.body;
-    if (!req.file) {
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'missing_resume', level: 'error', message: 'resume file required' });
-      return res.status(400).json({ error: 'resume file required' });
-    }
-    if (!jobDescriptionUrl) {
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'missing_jobDescriptionUrl', level: 'error', message: 'jobDescriptionUrl required' });
-      return res.status(400).json({ error: 'jobDescriptionUrl required' });
-    }
-
-    const text = await extractText(req.file);
-    if (!isResume(text)) {
+    await initialS3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: `first/${prefix}${sanitizedName}${path.extname(req.file.originalname)}`,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype
+      })
+    );
+  } catch (e) {
+    console.error(`initial upload to bucket ${bucket} failed`, e);
+    const message = e.message || 'initial S3 upload failed';
+    try {
       await logEvent({
         s3,
         bucket,
         key: logKey,
         jobId,
-        event: 'invalid_resume',
+        event: 'initial_upload_failed',
         level: 'error',
-        message: 'It does not look like your CV, please upload a CV'
+        message: `Failed to upload to bucket ${bucket}: ${message}`
       });
-      return res
-        .status(400)
-        .json({ error: 'It does not look like your CV, please upload a CV' });
+    } catch (logErr) {
+      console.error('failed to log initial upload error', logErr);
     }
-    const applicantName = extractName(text);
+    return res
+      .status(500)
+      .json({ error: `Initial S3 upload to bucket ${bucket} failed: ${message}` });
+  }
+
+  try {
+    await logEvent({ s3, bucket, key: logKey, jobId, event: 'request_received' });
 
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
@@ -219,7 +208,7 @@ app.post('/api/process-cv', (req, res, next) => {
 
     await s3.send(new PutObjectCommand({
       Bucket: bucket,
-      Key: `${prefix}${req.file.originalname}`,
+      Key: `${prefix}${sanitizedName}${path.extname(req.file.originalname)}`,
       Body: req.file.buffer,
       ContentType: req.file.mimetype
     }));
@@ -235,7 +224,15 @@ app.post('/api/process-cv', (req, res, next) => {
     const urls = [];
     for (const [name, text] of Object.entries(outputs)) {
       if (!text) continue;
-      const key = `${generatedPrefix}${name}.pdf`;
+      let fileName;
+      if (name === 'version1') {
+        fileName = sanitizedName;
+      } else if (name === 'version2') {
+        fileName = `${sanitizedName}_2`;
+      } else {
+        fileName = name;
+      }
+      const key = `${generatedPrefix}${fileName}.pdf`;
       const pdfBuffer = await generatePdf(text);
       await s3.send(new PutObjectCommand({
         Bucket: bucket,
