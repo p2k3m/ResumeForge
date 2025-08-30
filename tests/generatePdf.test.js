@@ -1,4 +1,6 @@
+import { jest } from '@jest/globals';
 import { generatePdf, parseContent, prepareTemplateData } from '../server.js';
+import puppeteer from 'puppeteer';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
@@ -58,6 +60,21 @@ describe('generatePdf and parsing', () => {
         })
       ])
     );
+  });
+
+  test('generated PDF contains clickable links with display text', async () => {
+    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
+    const input =
+      'John Doe\n- https://www.linkedin.com/in/johndoe\n- https://github.com/johndoe';
+    const buffer = await generatePdf(input);
+    const items = prepareTemplateData(input).sections[0].items;
+    expect(items).toContain(
+      '<a href="https://www.linkedin.com/in/johndoe">LinkedIn</a>'
+    );
+    expect(items).toContain('<a href="https://github.com/johndoe">GitHub</a>');
+    const raw = buffer.toString();
+    expect(raw).toContain('https://www.linkedin.com/in/johndoe');
+    expect(raw).toContain('https://github.com/johndoe');
   });
 
 });
