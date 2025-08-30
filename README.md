@@ -11,13 +11,17 @@ The server relies on the following environment variables:
   "AWS_REGION": "ap-south-1",
   "SECRET_ID": "your-secret-id",
   "PORT": "3000",
-  "ALLOW_DEV_PLAINTEXT": "0"
+  "ALLOW_DEV_PLAINTEXT": "0",
+  "S3_BUCKET": "resume-forge-data"
 }
 ```
 
 `SECRET_ID` is required in production and must reference an AWS Secrets Manager secret containing the values shown below. During
 local development you may omit `SECRET_ID` and instead provide a `local-secrets.json` file at the project root with the same
 JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the server will fail to start.
+
+`S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
+`resume-forge-data`, which is suitable for local development.
 
 The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 
