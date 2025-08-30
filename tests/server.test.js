@@ -28,9 +28,7 @@ generateContentMock
       text: () =>
         JSON.stringify({
           version1: 'v1',
-          version2: 'v2',
-          version3: 'v3',
-          version4: 'v4'
+          version2: 'v2'
         })
     }
   })
@@ -89,6 +87,7 @@ describe('/api/process-cv', () => {
     // Returned URLs should contain applicant-specific paths
     res.body.urls.forEach(({ url }) => {
       expect(url).toContain(`/${sanitized}/`);
+      expect(url).not.toContain('/first/');
     });
 
     // All uploaded PDFs should use applicant-specific S3 keys
@@ -96,7 +95,10 @@ describe('/api/process-cv', () => {
       .map((c) => c[0]?.input?.Key)
       .filter((k) => k && k.endsWith('.pdf'));
     expect(pdfKeys).toHaveLength(5);
-    pdfKeys.forEach((k) => expect(k).toContain(`/${sanitized}/`));
+    pdfKeys.forEach((k) => {
+      expect(k).toContain(`/${sanitized}/`);
+      expect(k).not.toContain('/first/');
+    });
   });
 
   test('malformed AI response', async () => {
