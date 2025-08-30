@@ -6,6 +6,7 @@ import axios from 'axios';
 import OpenAI from 'openai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import fs from 'fs/promises';
 import { logEvent } from './logger.js';
 import { Document, Packer, Paragraph } from 'docx';
 import PDFDocument from 'pdfkit';
@@ -40,7 +41,18 @@ let secretCache;
 async function getSecrets() {
   if (secretCache) return secretCache;
   const secretId = process.env.SECRET_ID;
-  const { SecretString } = await secretsClient.send(new GetSecretValueCommand({ SecretId: secretId }));
+  if (!secretId) {
+    try {
+      const data = await fs.readFile(path.resolve('local-secrets.json'), 'utf-8');
+      secretCache = JSON.parse(data);
+      return secretCache;
+    } catch (err) {
+      throw new Error('SECRET_ID environment variable is required');
+    }
+  }
+  const { SecretString } = await secretsClient.send(
+    new GetSecretValueCommand({ SecretId: secretId })
+  );
   secretCache = JSON.parse(SecretString ?? '{}');
   return secretCache;
 }

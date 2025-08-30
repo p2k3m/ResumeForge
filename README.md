@@ -15,6 +15,10 @@ The server relies on the following environment variables:
 }
 ```
 
+`SECRET_ID` is required in production and must reference an AWS Secrets Manager secret containing the values shown below. During
+local development you may omit `SECRET_ID` and instead provide a `local-secrets.json` file at the project root with the same
+JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the server will fail to start.
+
 The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 
 ```json
