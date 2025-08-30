@@ -9,6 +9,8 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { logEvent } from './logger.js';
 import { Document, Packer, Paragraph } from 'docx';
 import PDFDocument from 'pdfkit';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
 
 const app = express();
 app.use(cors());
@@ -67,6 +69,30 @@ function generatePdf(text) {
   });
 }
 
+async function extractText(file) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ext === '.pdf') {
+    const data = await pdfParse(file.buffer);
+    return data.text;
+  }
+  if (ext === '.docx') {
+    const { value } = await mammoth.extractRawText({ buffer: file.buffer });
+    return value;
+  }
+  return file.buffer.toString();
+}
+
+function isResume(text) {
+  const indicators = ['education', 'experience', 'skills'];
+  const lower = text.toLowerCase();
+  return indicators.some((i) => lower.includes(i));
+}
+
+function extractName(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return lines[0] || '';
+}
+
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -80,6 +106,21 @@ app.post('/api/process-cv', (req, res, next) => {
   const jobId = Date.now().toString();
   const prefix = `sessions/${jobId}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
+  // Store raw file to initial bucket
+  if (req.file) {
+    const initialS3 = new S3Client({ region: 'us-east-1' });
+    try {
+      await initialS3.send(new PutObjectCommand({
+        Bucket: 'resume-forge-data',
+        Key: `first/${req.file.originalname}`,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype
+      }));
+    } catch (e) {
+      console.error('initial upload failed', e);
+    }
+  }
+
   const s3 = new S3Client({ region });
   let bucket;
 
@@ -98,6 +139,23 @@ app.post('/api/process-cv', (req, res, next) => {
       return res.status(400).json({ error: 'jobDescriptionUrl required' });
     }
 
+    const text = await extractText(req.file);
+    if (!isResume(text)) {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'invalid_resume',
+        level: 'error',
+        message: 'It does not look like your CV, please upload a CV'
+      });
+      return res
+        .status(400)
+        .json({ error: 'It does not look like your CV, please upload a CV' });
+    }
+    const applicantName = extractName(text);
+
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
@@ -107,7 +165,7 @@ app.post('/api/process-cv', (req, res, next) => {
         : secrets.OPENAI_API_KEY;
     const openai = new OpenAI({ apiKey: openaiApiKey });
 
-    const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${req.file.buffer.toString()}\nJob Description:\n${jobDescription}`;
+    const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: prompt }]
@@ -158,13 +216,13 @@ app.post('/api/process-cv', (req, res, next) => {
     await s3.send(new PutObjectCommand({
       Bucket: bucket,
       Key: `${prefix}log.json`,
-      Body: JSON.stringify({ jobDescriptionUrl }),
+      Body: JSON.stringify({ jobDescriptionUrl, applicantName }),
       ContentType: 'application/json'
     }));
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
-    res.json({ letters });
+    res.json({ letters, applicantName });
   } catch (err) {
     console.error('processing failed', err);
     if (bucket) {
