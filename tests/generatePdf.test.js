@@ -35,11 +35,19 @@ describe('generatePdf and parsing', () => {
     const data = prepareTemplateData(
       'Jane Doe\n- This is **bold** text\n- This is _italic_ text'
     );
-    const [boldLine, italicLine] = data.sections[0].items;
-    expect(boldLine).toBe('This is <strong>bold</strong> text');
-    expect(italicLine).toBe('This is <em>italic</em> text');
-    expect(boldLine).not.toContain('**');
-    expect(italicLine).not.toContain('_');
+    const [boldTokens, italicTokens] = data.sections[0].items;
+    expect(boldTokens.map((t) => t.text).join('')).toBe('This is bold text');
+    expect(italicTokens.map((t) => t.text).join('')).toBe('This is italic text');
+    expect(boldTokens).toEqual(
+      expect.arrayContaining([expect.objectContaining({ text: 'bold', style: 'bold' })])
+    );
+    expect(italicTokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'italic', style: 'italic' })
+      ])
+    );
+    boldTokens.forEach((t) => expect(t.text).not.toContain('**'));
+    italicTokens.forEach((t) => expect(t.text).not.toContain('_'));
   });
 
   test('parseContent detects links', () => {
@@ -62,19 +70,34 @@ describe('generatePdf and parsing', () => {
     );
   });
 
-  test('generated PDF contains clickable links with display text', async () => {
+  test('generated PDF contains clickable links without HTML anchors', async () => {
     jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
     const input =
       'John Doe\n- https://www.linkedin.com/in/johndoe\n- https://github.com/johndoe';
     const buffer = await generatePdf(input);
     const items = prepareTemplateData(input).sections[0].items;
-    expect(items).toContain(
-      '<a href="https://www.linkedin.com/in/johndoe">LinkedIn</a>'
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'link',
+            text: 'LinkedIn',
+            href: 'https://www.linkedin.com/in/johndoe'
+          })
+        ]),
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'link',
+            text: 'GitHub',
+            href: 'https://github.com/johndoe'
+          })
+        ])
+      ])
     );
-    expect(items).toContain('<a href="https://github.com/johndoe">GitHub</a>');
     const raw = buffer.toString();
     expect(raw).toContain('https://www.linkedin.com/in/johndoe');
     expect(raw).toContain('https://github.com/johndoe');
+    expect(raw).not.toContain('<a');
   });
 
 });
