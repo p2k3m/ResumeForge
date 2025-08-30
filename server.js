@@ -62,14 +62,106 @@ async function getSecrets() {
   return secretCache;
 }
 
+function parseContent(text) {
+  try {
+    const data = JSON.parse(text);
+    const sections = Array.isArray(data.sections)
+      ? data.sections
+      : Object.entries(data).map(([heading, content]) => ({
+          heading,
+          content
+        }));
+    const tokens = [];
+    for (const sec of sections) {
+      if (sec.heading) tokens.push({ type: 'heading', text: String(sec.heading) });
+      const items = sec.items || sec.content;
+      if (Array.isArray(items)) {
+        tokens.push({ type: 'list', items: items.map(String) });
+      } else if (items) {
+        tokens.push({ type: 'paragraph', text: String(items) });
+      }
+      tokens.push({ type: 'space' });
+    }
+    return tokens;
+  } catch {
+    const tokens = [];
+    const lines = text.split(/\r?\n/);
+    let list = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (list.length) {
+          tokens.push({ type: 'list', items: list });
+          list = [];
+        }
+        tokens.push({ type: 'space' });
+        continue;
+      }
+      const headingMatch = trimmed.match(/^#{1,6}\s+(.*)/);
+      if (headingMatch) {
+        if (list.length) {
+          tokens.push({ type: 'list', items: list });
+          list = [];
+        }
+        tokens.push({ type: 'heading', text: headingMatch[1].trim() });
+        continue;
+      }
+      const bulletMatch = trimmed.match(/^[-*]\s+(.*)/);
+      if (bulletMatch) {
+        list.push(bulletMatch[1]);
+        continue;
+      }
+      if (list.length) {
+        tokens.push({ type: 'list', items: list });
+        list = [];
+      }
+      tokens.push({ type: 'paragraph', text: trimmed });
+    }
+    if (list.length) tokens.push({ type: 'list', items: list });
+    return tokens;
+  }
+}
+
+function renderTokens(doc, tokens) {
+  tokens.forEach((token) => {
+    switch (token.type) {
+      case 'heading':
+        doc.font('Helvetica-Bold').fontSize(16).text(token.text, {
+          paragraphGap: 6
+        });
+        break;
+      case 'list':
+        doc.moveDown(0.25);
+        doc.font('Helvetica').fontSize(12).list(token.items, {
+          bulletRadius: 2,
+          textIndent: 20,
+          bulletIndent: 10
+        });
+        doc.moveDown(0.5);
+        break;
+      case 'paragraph':
+        doc.font('Helvetica').fontSize(12).text(token.text, {
+          paragraphGap: 4
+        });
+        break;
+      case 'space':
+        doc.moveDown(0.5);
+        break;
+    }
+  });
+}
+
 function generatePdf(text) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
+    const doc = new PDFDocument({ margin: 50 });
     const buffers = [];
     doc.on('data', (d) => buffers.push(d));
     doc.on('end', () => resolve(Buffer.concat(buffers)));
     doc.on('error', reject);
-    doc.text(text);
+
+    const tokens = parseContent(text);
+    renderTokens(doc, tokens);
+
     doc.end();
   });
 }
@@ -331,9 +423,11 @@ app.post('/api/process-cv', (req, res, next) => {
 });
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+  });
+}
 
 export default app;
-export { extractText };
+export { extractText, generatePdf, parseContent };
