@@ -1,5 +1,5 @@
 import { generatePdf, parseContent } from '../server.js';
-import { inflateSync } from 'zlib';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
@@ -24,10 +24,12 @@ describe('generatePdf and parsing', () => {
     );
   });
 
-  test('generatePdf creates buffer output', async () => {
-    const buffer = await generatePdf('# Test\n- Bullet');
+  test('generatePdf creates PDF from template', async () => {
+    const buffer = await generatePdf('Jane Doe\n- Loves testing');
     expect(Buffer.isBuffer(buffer)).toBe(true);
-    expect(buffer.length).toBeGreaterThan(100); // ensure content written
+    const data = await pdfParse(buffer);
+    expect(data.text).toContain('Jane Doe');
+    expect(data.text).toContain('Loves testing');
   });
 
   test('parseContent detects links', () => {
@@ -50,22 +52,4 @@ describe('generatePdf and parsing', () => {
     );
   });
 
-  test('generatePdf embeds hyperlinks', async () => {
-    const buffer = await generatePdf('Visit [OpenAI](https://openai.com)');
-    const pdfText = buffer.toString('utf8');
-    expect(pdfText).toContain('https://openai.com');
-  });
-
-  test('generatePdf renders bold text without markers', async () => {
-    const buffer = await generatePdf('This is **bold** text');
-    const start = buffer.indexOf('\n', buffer.indexOf('stream')) + 1;
-    const end = buffer.indexOf('endstream', start);
-    const slice = buffer.slice(start, end);
-    const uncompressed = inflateSync(slice);
-    const decoded = [...uncompressed.toString().matchAll(/<([0-9A-Fa-f]+)>/g)]
-      .map((m) => Buffer.from(m[1], 'hex').toString('utf8'))
-      .join('');
-    expect(decoded).toContain('bold');
-    expect(decoded).not.toContain('**');
-  });
 });

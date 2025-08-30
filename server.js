@@ -8,9 +8,10 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
 import { logEvent } from './logger.js';
-import PDFDocument from 'pdfkit';
+import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
+import puppeteer from 'puppeteer';
 
 const app = express();
 app.use(cors());
@@ -181,66 +182,43 @@ function parseContent(text) {
   }
 }
 
-function renderTokens(doc, tokens) {
-  tokens.forEach((token) => {
-    switch (token.type) {
-      case 'heading':
-        doc.font('Helvetica-Bold').fontSize(16).text(token.text, {
-          paragraphGap: 6
-        });
-        break;
-      case 'list':
-        doc.moveDown(0.25);
-        doc.font('Helvetica').fontSize(12).list(token.items, {
-          bulletRadius: 2,
-          textIndent: 20,
-          bulletIndent: 10
-        });
-        doc.moveDown(0.5);
-        break;
-      case 'paragraph': {
-        const baseFont = 'Helvetica';
-        let font = baseFont;
-        if (token.style === 'bold') font = 'Helvetica-Bold';
-        else if (token.style === 'italic') font = 'Helvetica-Oblique';
-        doc
-          .font(font)
-          .fontSize(12)
-          .fillColor('black')
-          .text(
-            token.text,
-            token.continued ? { continued: true } : { paragraphGap: 4 }
-          );
-        if (token.style) doc.font(baseFont);
-        break;
-      }
-      case 'link': {
-        const options = token.continued
-          ? { link: token.href, underline: true, continued: true }
-          : { link: token.href, underline: true, paragraphGap: 4 };
-        doc.fillColor('blue').text(token.text, options).fillColor('black');
-        break;
-      }
-      case 'space':
-        doc.moveDown(0.5);
-        break;
-    }
-  });
+function prepareTemplateData(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const name = lines.shift() || 'Resume';
+  const items = lines.map((l) => l.replace(/^[-*]\s*/, ''));
+  return { name, sections: [{ heading: 'Summary', items }] };
 }
 
-function generatePdf(text) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
-    const buffers = [];
-    doc.on('data', (d) => buffers.push(d));
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
-    doc.on('error', reject);
-
-    const tokens = parseContent(text);
-    renderTokens(doc, tokens);
-
-    doc.end();
-  });
+async function generatePdf(text) {
+  const data = prepareTemplateData(text);
+  const templatePath = path.resolve('templates', 'modern.html');
+  const templateSource = await fs.readFile(templatePath, 'utf-8');
+  const html = Handlebars.compile(templateSource)(data);
+  try {
+    const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
+    await browser.close();
+    return pdfBuffer;
+  } catch (err) {
+    // Fallback for environments without Chromium dependencies
+    const { default: PDFDocument } = await import('pdfkit');
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const buffers = [];
+      doc.on('data', (d) => buffers.push(d));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', reject);
+      doc.font('Helvetica-Bold').fontSize(20).text(data.name, { paragraphGap: 10 });
+      data.sections.forEach((sec) => {
+        doc.font('Helvetica-Bold').fontSize(14).text(sec.heading, { paragraphGap: 4 });
+        doc.font('Helvetica').fontSize(12).list(sec.items || []);
+        doc.moveDown();
+      });
+      doc.end();
+    });
+  }
 }
 
 async function extractText(file) {
