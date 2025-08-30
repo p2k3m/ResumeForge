@@ -9,7 +9,7 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { logEvent } from './logger.js';
 import { Document, Packer, Paragraph } from 'docx';
 import PDFDocument from 'pdfkit';
-import pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 
 const app = express();
