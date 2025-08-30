@@ -98,6 +98,10 @@ function extractName(text) {
   return lines[0] || '';
 }
 
+function sanitizeName(name) {
+  return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
+}
+
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -136,7 +140,7 @@ app.post('/api/process-cv', (req, res, next) => {
       .json({ error: 'It does not look like your CV, please upload a CV' });
   }
   const applicantName = extractName(text);
-  const sanitizedName = applicantName.replace(/\s+/g, '_');
+  const sanitizedName = sanitizeName(applicantName);
   const ext = path.extname(req.file.originalname).toLowerCase();
   const prefix = `${date}/${sanitizedName}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
