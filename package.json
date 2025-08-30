@@ -12,7 +12,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.432.0",
     "@aws-sdk/client-secrets-manager": "^3.432.0",
-    "@google/generative-ai": "^0.7.2",
+    "openai": "^4.28.4",
     "axios": "^1.6.2",
     "cors": "^2.8.5",
     "docx": "^8.0.2",
