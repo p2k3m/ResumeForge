@@ -108,7 +108,7 @@ app.post('/api/process-cv', (req, res, next) => {
   const logKey = `${prefix}logs/processing.jsonl`;
   // Store raw file to initial bucket
   if (req.file) {
-    const initialS3 = new S3Client({ region: 'us-east-1' });
+    const initialS3 = new S3Client({ region });
     try {
       await initialS3.send(new PutObjectCommand({
         Bucket: 'resume-forge-data',
