@@ -1,7 +1,7 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation and stores session artifacts in Amazon S3.
+ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation and stores session artifacts in Amazon S3.
 
 ## Environment Variables
 The server relies on the following environment variables:
@@ -89,10 +89,23 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
 ```json
 {
   "urls": [
-    { "type": "ats", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/ats.pdf" }
+    { "type": "cover_letter1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cover_letter/cover_letter1.pdf" },
+    { "type": "version1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cv/Jane_Doe.pdf" }
   ],
   "applicantName": "Jane Doe"
 }
 ```
 
-Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters are produced, the server responds with HTTP 500 and an error message.
+S3 keys follow the pattern `sessions/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
+
+```
+sessions/<id>/generated/
+├── cover_letter/
+│   ├── cover_letter1.pdf
+│   └── cover_letter2.pdf
+└── cv/
+    ├── Jane_Doe.pdf
+    └── Jane_Doe_2.pdf
+```
+
+Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters or CVs are produced, the server responds with HTTP 500 and an error message.
