@@ -71,7 +71,7 @@ Minimal permissions required by the server:
 
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
-- Allowed file types: `.pdf`, `.docx`
+- Allowed file types: `.pdf`
 - Legacy `.doc` files are rejected.
 
 ## Edge Cases

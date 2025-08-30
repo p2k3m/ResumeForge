@@ -9,7 +9,6 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
 import { logEvent } from './logger.js';
-import { Document, Packer, Paragraph } from 'docx';
 import PDFDocument from 'pdfkit';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
@@ -62,18 +61,6 @@ async function getSecrets() {
   );
   secretCache = JSON.parse(SecretString ?? '{}');
   return secretCache;
-}
-
-async function generateDocx(text) {
-  const doc = new Document({
-    sections: [
-      {
-        properties: {},
-        children: text.split('\n').map((line) => new Paragraph(line))
-      }
-    ]
-  });
-  return Packer.toBuffer(doc);
 }
 
 function generatePdf(text) {
@@ -282,14 +269,6 @@ app.post('/api/process-cv', (req, res, next) => {
     };
     for (const [name, text] of Object.entries(outputs)) {
       if (!text) continue;
-      const docxBuffer = await generateDocx(text);
-      await s3.send(new PutObjectCommand({
-        Bucket: bucket,
-        Key: `${generatedPrefix}${name}.docx`,
-        Body: docxBuffer,
-        ContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-      }));
-      await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_docx` });
       const pdfBuffer = await generatePdf(text);
       await s3.send(new PutObjectCommand({
         Bucket: bucket,
