@@ -64,7 +64,8 @@ async function getSecrets() {
 
 function parseLine(text) {
   const tokens = [];
-  const regex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
+  const regex =
+    /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)|\*\*([^*]+)\*\*|_([^_]+)_/g;
   let lastIndex = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
@@ -84,6 +85,20 @@ function parseLine(text) {
         type: 'link',
         text: match[3],
         href: match[3],
+        continued: true
+      });
+    } else if (match[4]) {
+      tokens.push({
+        type: 'paragraph',
+        text: match[4],
+        style: 'bold',
+        continued: true
+      });
+    } else if (match[5]) {
+      tokens.push({
+        type: 'paragraph',
+        text: match[5],
+        style: 'italic',
         continued: true
       });
     }
@@ -109,13 +124,14 @@ function parseContent(text) {
       if (sec.heading) tokens.push({ type: 'heading', text: String(sec.heading) });
       const items = sec.items || sec.content;
       if (Array.isArray(items)) {
-        const strItems = items.map(String);
-        tokens.push({ type: 'list', items: strItems });
-        strItems.forEach((i) => {
-          parseLine(i).forEach((t) => {
+        const strItems = items.map((i) => {
+          const parts = parseLine(String(i));
+          parts.forEach((t) => {
             if (t.type === 'link') tokens.push(t);
           });
+          return parts.map((t) => t.text).join('');
         });
+        tokens.push({ type: 'list', items: strItems });
       } else if (items) {
         tokens.push(...parseLine(String(items)));
       }
@@ -147,8 +163,9 @@ function parseContent(text) {
       }
       const bulletMatch = trimmed.match(/^[-*]\s+(.*)/);
       if (bulletMatch) {
-        list.push(bulletMatch[1]);
-        parseLine(bulletMatch[1]).forEach((t) => {
+        const parts = parseLine(bulletMatch[1]);
+        list.push(parts.map((t) => t.text).join(''));
+        parts.forEach((t) => {
           if (t.type === 'link') tokens.push(t);
         });
         continue;
@@ -181,16 +198,22 @@ function renderTokens(doc, tokens) {
         });
         doc.moveDown(0.5);
         break;
-      case 'paragraph':
+      case 'paragraph': {
+        const baseFont = 'Helvetica';
+        let font = baseFont;
+        if (token.style === 'bold') font = 'Helvetica-Bold';
+        else if (token.style === 'italic') font = 'Helvetica-Oblique';
         doc
-          .font('Helvetica')
+          .font(font)
           .fontSize(12)
           .fillColor('black')
           .text(
             token.text,
             token.continued ? { continued: true } : { paragraphGap: 4 }
           );
+        if (token.style) doc.font(baseFont);
         break;
+      }
       case 'link': {
         const options = token.continued
           ? { link: token.href, underline: true, continued: true }
