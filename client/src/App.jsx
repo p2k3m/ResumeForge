@@ -57,7 +57,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
-      <h1 className="text-3xl font-bold mb-4 text-center">Enhance Your CV with AI</h1>
+      <h1 className="text-3xl font-bold mb-4 text-center">Enhance Your CV</h1>
       <p className="mb-6 text-center max-w-xl">
         Provide your LinkedIn profile and upload your CV to receive enhanced versions tailored to your job.
       </p>
