@@ -184,7 +184,25 @@ app.post('/api/process-cv', (req, res, next) => {
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const versionsTemplate = `Using the resume text and job description below, create four resume versions. Return a JSON object with keys "version1", "version2", "version3", and "version4".\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
+    const versionsTemplate = `
+  You are an expert resume writer and career coach. Your task is to analyze a candidate's CV and a job description to generate two distinct, highly optimized resumes.
+
+  **Goal:** Maximize the candidate's chances of passing ATS screenings and impressing hiring managers.
+
+  **Input Data:**
+  - **Raw CV Text:** {{cvText}}
+  - **Job Description Text:** {{jdText}}
+
+  **Instructions:**
+  Generate a JSON object with two keys: \`version1\`, \`version2\`. Each value must be a full resume string.
+
+  **For each version, ensure you perform the following enhancements:**
+  1. Job Title Alignment
+  2. Responsibility Matching
+  3. Technical Jargon Integration
+  4. Content Enhancement
+  5. ATS-Friendliness
+  `;
 
     const versionsPrompt = versionsTemplate
       .replace('{{cvText}}', text)
