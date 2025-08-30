@@ -120,25 +120,31 @@ app.post('/api/process-cv', (req, res, next) => {
   const logKey = `${prefix}logs/processing.jsonl`;
   const s3 = new S3Client({ region });
   let bucket;
+  let secrets;
+  try {
+    secrets = await getSecrets();
+    bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+  } catch (err) {
+    console.error('failed to load configuration', err);
+    return res.status(500).json({ error: 'failed to load configuration' });
+  }
 
-  // Store raw file to initial bucket
+  // Store raw file to configured bucket
   if (req.file) {
     const initialS3 = new S3Client({ region });
     try {
       await initialS3.send(
         new PutObjectCommand({
-          Bucket: 'resume-forge-data',
+          Bucket: bucket,
           Key: `first/${req.file.originalname}`,
           Body: req.file.buffer,
           ContentType: req.file.mimetype
         })
       );
     } catch (e) {
-      console.error('initial upload failed', e);
+      console.error(`initial upload to bucket ${bucket} failed`, e);
       const message = e.message || 'initial S3 upload failed';
       try {
-        const secrets = await getSecrets();
-        bucket = secrets.S3_BUCKET;
         await logEvent({
           s3,
           bucket,
@@ -146,20 +152,18 @@ app.post('/api/process-cv', (req, res, next) => {
           jobId,
           event: 'initial_upload_failed',
           level: 'error',
-          message
+          message: `Failed to upload to bucket ${bucket}: ${message}`
         });
       } catch (logErr) {
         console.error('failed to log initial upload error', logErr);
       }
       return res
         .status(500)
-        .json({ error: `Initial S3 upload failed: ${message}` });
+        .json({ error: `Initial S3 upload to bucket ${bucket} failed: ${message}` });
     }
   }
 
   try {
-    const secrets = await getSecrets();
-    bucket = secrets.S3_BUCKET;
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'request_received' });
 
     const { jobDescriptionUrl } = req.body;
