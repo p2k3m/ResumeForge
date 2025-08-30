@@ -34,7 +34,7 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
-const region = process.env.AWS_REGION || 'us-east-1';
+const region = process.env.AWS_REGION || 'ap-south-1';
 const secretsClient = new SecretsManagerClient({ region });
 
 let secretCache;
