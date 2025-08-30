@@ -3,7 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
@@ -178,48 +178,66 @@ app.post('/api/process-cv', (req, res, next) => {
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
-    // Use OPENAI_API_KEY from environment or secrets
-    const openaiApiKey = process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY;
-    const openai = new OpenAI({ apiKey: openaiApiKey });
+    // Use GEMINI_API_KEY from environment or secrets
+    const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const prompt = `Using the resume and job description below, craft two tailored cover letters and two resume versions. Return a JSON object with keys \"cover_letter1\", \"cover_letter2\", \"version1\", and \"version2\".\nResume:\n${text}\nJob Description:\n${jobDescription}`;
+    const versionsTemplate = `Using the resume text and job description below, create four resume versions. Return a JSON object with keys "version1", "version2", "version3", and "version4".\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
 
-    let outputsData = {};
+    const versionsPrompt = versionsTemplate
+      .replace('{{cvText}}', text)
+      .replace('{{jdText}}', jobDescription);
+
+    let versionData = {};
     try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: prompt }]
-      });
-      const responseText = completion.choices[0]?.message?.content;
-      if (responseText) {
-        const match = responseText.match(/\{[\s\S]*\}/);
-        if (match) {
-          outputsData = JSON.parse(match[0]);
-        } else {
-          console.error('No JSON object found in AI response:', responseText);
-        }
+      const result = await generativeModel.generateContent(versionsPrompt);
+      const responseText = result.response.text();
+      const match = responseText.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        versionData.version1 = parsed.version1;
+        versionData.version2 = parsed.version2;
       } else {
-        console.error('No text returned from AI completion');
+        console.error('No JSON object found in AI response:', responseText);
       }
     } catch (e) {
-      console.error('Failed to generate content:', e);
+      console.error('Failed to generate resume versions:', e);
     }
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
 
-    await s3.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: `${prefix}${sanitizedName}${path.extname(req.file.originalname)}`,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype
-    }));
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_resume' });
+    if (!versionData.version1 || !versionData.version2) {
+      await logEvent({ s3, bucket, key: logKey, jobId, event: 'invalid_ai_response', level: 'error', message: 'AI response invalid' });
+      return res.status(500).json({ error: 'AI response invalid' });
+    }
+
+    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2".\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
+
+    const coverPrompt = coverTemplate
+      .replace('{{cvText}}', text)
+      .replace('{{jdText}}', jobDescription);
+
+    let coverData = {};
+    try {
+      const coverResult = await generativeModel.generateContent(coverPrompt);
+      const coverText = coverResult.response.text();
+      const match = coverText.match(/\{[\s\S]*\}/);
+      if (match) {
+        coverData = JSON.parse(match[0]);
+      } else {
+        console.error('No JSON object found in cover letter response:', coverText);
+      }
+    } catch (e) {
+      console.error('Failed to generate cover letters:', e);
+    }
+
+    await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
 
     const generatedPrefix = `${prefix}generated/`;
     const outputs = {
-      cover_letter1: outputsData.cover_letter1,
-      cover_letter2: outputsData.cover_letter2,
-      version1: outputsData.version1,
-      version2: outputsData.version2
+      cover_letter1: coverData.cover_letter1,
+      cover_letter2: coverData.cover_letter2,
+      version1: versionData.version1,
+      version2: versionData.version2
     };
     const urls = [];
     for (const [name, text] of Object.entries(outputs)) {
