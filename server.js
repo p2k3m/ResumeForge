@@ -190,10 +190,7 @@ app.post('/api/process-cv', (req, res, next) => {
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
     // Use GEMINI_API_KEY from environment or secrets
-    const geminiApiKey =
-      process.env.ALLOW_DEV_PLAINTEXT === '1' && process.env.GEMINI_API_KEY
-        ? process.env.GEMINI_API_KEY
-        : secrets.GEMINI_API_KEY;
+    const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
