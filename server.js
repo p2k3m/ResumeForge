@@ -207,23 +207,49 @@ app.post('/api/process-cv', (req, res, next) => {
 
     const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
 
-    const enc = encoding_for_model('gpt-3.5-turbo');
+    const MODEL_LIMITS = {
+      'gpt-4o-mini': 16000,
+      'gpt-4o': 128000
+    };
+    let model = 'gpt-4o-mini';
+
+    const enc = encoding_for_model('gpt-4o-mini');
     const tokenCount = enc.encode(prompt).length;
     enc.free();
 
-    const GPT35_LIMIT = 16000;
-    const GPT4O_LIMIT = 128000;
-    let model = 'gpt-3.5-turbo';
+    let limit = MODEL_LIMITS[model];
+    if (tokenCount > limit) {
+      if (tokenCount <= MODEL_LIMITS['gpt-4o']) {
+        model = 'gpt-4o';
+        limit = MODEL_LIMITS[model];
+      } else {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'input_too_long',
+          level: 'error',
+          message: 'The resume and job description are too long.'
+        });
+        return res.status(400).json({
+          error: 'The resume and job description are too long. Please shorten them and try again.'
+        });
+      }
+    }
 
-    if (tokenCount > GPT4O_LIMIT) {
-      return res
-        .status(400)
-        .json({ error: 'The resume and job description are too long. Please shorten them and try again.' });
-    } else if (tokenCount > GPT35_LIMIT) {
-      model = 'gpt-4o-mini';
-    } else if (tokenCount > GPT35_LIMIT - 500) {
+    if (tokenCount > limit) {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'input_too_long',
+        level: 'error',
+        message: `Input exceeds context window for ${model}`
+      });
       return res.status(400).json({
-        error: 'The resume and job description are too long for gpt-3.5-turbo. Please shorten them and try again.'
+        error: `The resume and job description are too long for ${model}. Please shorten them and try again.`
       });
     }
 
