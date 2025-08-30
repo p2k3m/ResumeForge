@@ -251,14 +251,22 @@ app.post('/api/process-cv', (req, res, next) => {
       } else {
         fileName = name;
       }
-      const key = `${generatedPrefix}${fileName}.pdf`;
+      const subdir =
+        name === 'version1' || name === 'version2'
+          ? 'cv/'
+          : name === 'cover_letter1' || name === 'cover_letter2'
+          ? 'cover_letter/'
+          : '';
+      const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
       const pdfBuffer = await generatePdf(text);
-      await s3.send(new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: pdfBuffer,
-        ContentType: 'application/pdf'
-      }));
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: pdfBuffer,
+          ContentType: 'application/pdf'
+        })
+      );
       await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
       const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
       urls.push({ type: name, url });
