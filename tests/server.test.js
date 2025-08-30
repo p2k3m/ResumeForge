@@ -83,7 +83,12 @@ describe('/api/process-cv', () => {
     ]);
     expect(res.body.applicantName).toBeTruthy();
 
-    const sanitized = res.body.applicantName.replace(/\s+/g, '_');
+    const sanitized = res.body.applicantName
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .join('_')
+      .toLowerCase();
 
     // Returned URLs should contain applicant-specific and type-based paths
     res.body.urls.forEach(({ type, url }) => {
