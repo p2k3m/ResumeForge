@@ -78,3 +78,16 @@ Minimal permissions required by the server:
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
 
+## API Response
+The `/api/process-cv` endpoint returns JSON containing an array of generated files:
+
+```json
+{
+  "urls": [
+    { "type": "ats", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/ats.pdf" }
+  ],
+  "applicantName": "Jane Doe"
+}
+```
+
+Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters are produced, the server responds with HTTP 500 and an error message.
