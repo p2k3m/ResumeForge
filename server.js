@@ -234,7 +234,7 @@ app.post('/api/process-cv', (req, res, next) => {
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName);
   const ext = path.extname(req.file.originalname).toLowerCase();
-  const prefix = `${date}/${sanitizedName}/`;
+  const prefix = `first/${date}/${sanitizedName}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
 
   // Store raw file to configured bucket

@@ -92,8 +92,8 @@ describe('/api/process-cv', () => {
 
     // Returned URLs should contain applicant-specific and type-based paths
     res.body.urls.forEach(({ type, url }) => {
+      expect(url).toContain('/first/');
       expect(url).toContain(`/${sanitized}/`);
-      expect(url).not.toContain('/first/');
       if (type.startsWith('cover_letter')) {
         expect(url).toContain('/generated/cover_letter/');
       } else {
@@ -107,8 +107,8 @@ describe('/api/process-cv', () => {
       .filter((k) => k && k.endsWith('.pdf'));
     expect(pdfKeys).toHaveLength(5);
     pdfKeys.forEach((k) => {
+      expect(k).toContain('first/');
       expect(k).toContain(`/${sanitized}/`);
-      expect(k).not.toContain('/first/');
     });
   });
 
