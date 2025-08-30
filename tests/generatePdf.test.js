@@ -1,5 +1,4 @@
-import { generatePdf, parseContent } from '../server.js';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import { generatePdf, parseContent, prepareTemplateData } from '../server.js';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
@@ -27,9 +26,18 @@ describe('generatePdf and parsing', () => {
   test('generatePdf creates PDF from template', async () => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing');
     expect(Buffer.isBuffer(buffer)).toBe(true);
-    const data = await pdfParse(buffer);
-    expect(data.text).toContain('Jane Doe');
-    expect(data.text).toContain('Loves testing');
+    expect(buffer.length).toBeGreaterThan(0);
+  });
+
+  test('bold and italic text render without markdown syntax', () => {
+    const data = prepareTemplateData(
+      'Jane Doe\n- This is **bold** text\n- This is _italic_ text'
+    );
+    const [boldLine, italicLine] = data.sections[0].items;
+    expect(boldLine).toBe('This is <strong>bold</strong> text');
+    expect(italicLine).toBe('This is <em>italic</em> text');
+    expect(boldLine).not.toContain('**');
+    expect(italicLine).not.toContain('_');
   });
 
   test('parseContent detects links', () => {

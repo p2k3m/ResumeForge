@@ -114,6 +114,19 @@ function parseLine(text) {
   return tokens;
 }
 
+function tokensToHtml(tokens) {
+  return tokens
+    .map((t) => {
+      if (t.type === 'link') {
+        return `<a href="${t.href}">${t.text}</a>`;
+      }
+      if (t.style === 'bold') return `<strong>${t.text}</strong>`;
+      if (t.style === 'italic') return `<em>${t.text}</em>`;
+      return t.text;
+    })
+    .join('');
+}
+
 function parseContent(text) {
   try {
     const data = JSON.parse(text);
@@ -183,9 +196,16 @@ function parseContent(text) {
 }
 
 function prepareTemplateData(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   const name = lines.shift() || 'Resume';
-  const items = lines.map((l) => l.replace(/^[-*]\s*/, ''));
+  const items = lines.map((l) => {
+    const cleaned = l.replace(/^[-*]\s*/, '');
+    const tokens = parseLine(cleaned);
+    return tokensToHtml(tokens);
+  });
   return { name, sections: [{ heading: 'Summary', items }] };
 }
 
@@ -486,4 +506,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-export { extractText, generatePdf, parseContent };
+export { extractText, generatePdf, parseContent, prepareTemplateData };
