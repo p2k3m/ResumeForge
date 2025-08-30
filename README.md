@@ -1,7 +1,7 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters by combining a candidate's résumé with a scraped job description. The service uses OpenAI for text generation and stores session artifacts in Amazon S3.
+ResumeForge generates tailored cover letters by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation and stores session artifacts in Amazon S3.
 
 ## Environment Variables
 The server relies on the following environment variables:
@@ -27,12 +27,12 @@ The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 
 ```json
 {
-  "OPENAI_API_KEY": "sk-...",
+  "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data"
 }
 ```
 
-If `ALLOW_DEV_PLAINTEXT` is set to `1`, the server will read the OpenAI API key from the `OPENAI_API_KEY` environment variable for local development. In production, leave `ALLOW_DEV_PLAINTEXT` unset (or `0`) to ensure credentials are retrieved exclusively from AWS Secrets Manager.
+If `ALLOW_DEV_PLAINTEXT` is set to `1`, the server will read the Gemini API key from the `GEMINI_API_KEY` environment variable for local development. In production, leave `ALLOW_DEV_PLAINTEXT` unset (or `0`) to ensure credentials are retrieved exclusively from AWS Secrets Manager.
 
 ## IAM Policy
 Minimal permissions required by the server:
@@ -59,10 +59,8 @@ Minimal permissions required by the server:
 1. Install dependencies in both the server and client directories:
    ```bash
    npm install
-   npm install tiktoken
    cd client && npm install
    ```
-   `tiktoken` is required for token counting and may require Node.js 18 or later.
 2. Provide the environment variables and AWS secret as shown above.
 3. Start the server:
    ```bash
