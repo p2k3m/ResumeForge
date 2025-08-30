@@ -50,6 +50,19 @@ describe('generatePdf and parsing', () => {
     italicTokens.forEach((t) => expect(t.text).not.toContain('_'));
   });
 
+  test('spacing is preserved across multiple tokens', () => {
+    const data = prepareTemplateData(
+      'Jane Doe\n- Visit [OpenAI](https://openai.com) and [GitHub](https://github.com)\n- Mix **bold** and _italic_ styles'
+    );
+    const [linkTokens, mixTokens] = data.sections[0].items;
+    expect(linkTokens.map((t) => t.text).join('')).toBe(
+      'Visit OpenAI and GitHub'
+    );
+    expect(mixTokens.map((t) => t.text).join('')).toBe(
+      'Mix bold and italic styles'
+    );
+  });
+
   test('parseContent detects links', () => {
     const tokens = parseContent(
       'Check [OpenAI](https://openai.com) and https://example.com'
