@@ -21,21 +21,21 @@ jest.unstable_mockModule('../logger.js', () => ({
   logEvent: jest.fn().mockResolvedValue(undefined)
 }));
 
+const generateContentMock = jest.fn().mockResolvedValue({
+  response: {
+    text: () =>
+      JSON.stringify({
+        ats: 'ats',
+        concise: 'concise',
+        narrative: 'narrative',
+        gov_plain: 'gov'
+      })
+  }
+});
+
 jest.unstable_mockModule('@google/generative-ai', () => ({
   GoogleGenerativeAI: jest.fn(() => ({
-    getGenerativeModel: jest.fn(() => ({
-      generateContent: jest.fn().mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({
-              ats: 'ats',
-              concise: 'concise',
-              narrative: 'narrative',
-              gov_plain: 'gov'
-            })
-        }
-      })
-    }))
+    getGenerativeModel: jest.fn(() => ({ generateContent: generateContentMock }))
   }))
 }));
 
@@ -72,6 +72,18 @@ describe('/api/process-cv', () => {
     expect(res.status).toBe(200);
     expect(res.body.urls).toHaveLength(4);
     expect(res.body.applicantName).toBeTruthy();
+  });
+
+  test('malformed AI response', async () => {
+    generateContentMock.mockResolvedValueOnce({
+      response: { text: () => 'not json' }
+    });
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('AI response invalid');
   });
 
   test('missing file', async () => {

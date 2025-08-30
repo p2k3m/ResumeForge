@@ -197,12 +197,21 @@ app.post('/api/process-cv', (req, res, next) => {
     const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
 
     const completion = await model.generateContent(prompt);
-    let letters;
-    try {
-      const responseText = completion.response?.text();
-      letters = JSON.parse(responseText ?? '{}');
-    } catch (e) {
-      letters = {};
+    let letters = {};
+    let responseText = completion.response?.text();
+    if (responseText) {
+      const match = responseText.match(/\{[\s\S]*\}/);
+      if (match) {
+        try {
+          letters = JSON.parse(match[0]);
+        } catch (e) {
+          console.error('Failed to parse AI response:', responseText);
+        }
+      } else {
+        console.error('No JSON object found in AI response:', responseText);
+      }
+    } else {
+      console.error('No text returned from AI completion');
     }
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_cover_letters' });
 
@@ -243,11 +252,11 @@ app.post('/api/process-cv', (req, res, next) => {
         bucket,
         key: logKey,
         jobId,
-        event: 'no_outputs',
+        event: 'invalid_ai_response',
         level: 'error',
-        message: 'No cover letters generated'
+        message: 'AI response invalid'
       });
-      return res.status(500).json({ error: 'No cover letters generated' });
+      return res.status(500).json({ error: 'AI response invalid' });
     }
 
     await s3.send(new PutObjectCommand({
