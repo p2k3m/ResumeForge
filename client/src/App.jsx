@@ -86,11 +86,11 @@ function App() {
         {cvFile ? (
           <p className="text-purple-800">{cvFile.name}</p>
         ) : (
-          <p className="text-purple-700">Drag and drop your CV here, or click to select (PDF or DOCX, max 5MB)</p>
+          <p className="text-purple-700">Drag and drop your CV here, or click to select (PDF, max 5MB)</p>
         )}
         <input
           type="file"
-          accept=".pdf,.docx"
+          accept=".pdf"
           onChange={handleFileChange}
           className="hidden"
           id="cv-input"
@@ -125,10 +125,8 @@ function App() {
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
         {outputFiles.map((file) => (
           <div key={file.type} className="p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow text-center">
-            <p className="mb-2 font-semibold text-purple-800">Enhanced CV ({file.type.toUpperCase()})</p>
-            <a href={file.url} className="text-purple-700 hover:underline">
-              {file.type === 'pdf' ? 'Download PDF' : 'Download Word'}
-            </a>
+            <p className="mb-2 font-semibold text-purple-800">Enhanced CV (PDF)</p>
+            <a href={file.url} className="text-purple-700 hover:underline">Download PDF</a>
           </div>
         ))}
       </div>
