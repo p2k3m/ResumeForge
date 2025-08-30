@@ -29,14 +29,25 @@ function App() {
   const handleSubmit = async () => {
     setIsProcessing(true)
     setError('')
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-      setOutputFiles([
-        { type: 'pdf', url: '#' },
-        { type: 'docx', url: '#' },
-      ])
+      const formData = new FormData()
+      formData.append('resume', cvFile)
+      formData.append('jobDescriptionUrl', linkedinUrl)
+
+      const response = await fetch('/api/process-cv', {
+        method: 'POST',
+        body: formData,
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Request failed')
+      }
+
+      setOutputFiles(data.urls || [])
     } catch (err) {
-      setError('Something went wrong. Please try again.')
+      setError(err.message || 'Something went wrong. Please try again.')
     } finally {
       setIsProcessing(false)
     }
