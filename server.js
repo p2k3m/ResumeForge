@@ -198,14 +198,14 @@ app.post('/api/process-cv', (req, res, next) => {
   - **Job Description Text:** {{jdText}}
 
   **Instructions:**
-  Generate a JSON object with two keys: \`version1\`, \`version2\`. Each value must be a full resume string.
+  Return ONLY a valid JSON object with two keys: \`version1\` and \`version2\`. Each value must be a full resume string.
 
   **For each version, ensure you perform the following enhancements:**
-  1. Job Title Alignment
-  2. Responsibility Matching
-  3. Technical Jargon Integration
-  4. Content Enhancement
-  5. ATS-Friendliness
+  1. Rewrite the candidate's most recent job title to exactly match the job description's title.
+  2. Recast responsibilities to mirror those in the job description.
+  3. Incorporate relevant projects and required technical terminology from the job description.
+  4. Enhance content clarity and impact while preserving factual accuracy.
+  5. Maintain an ATS-friendly format with appropriate keywords.
   `;
 
     const versionsPrompt = versionsTemplate
