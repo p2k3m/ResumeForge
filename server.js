@@ -4,7 +4,6 @@ import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
 import OpenAI from 'openai';
-import { encoding_for_model } from 'tiktoken';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
@@ -12,6 +11,13 @@ import { logEvent } from './logger.js';
 import PDFDocument from 'pdfkit';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
+
+let encoding_for_model;
+try {
+  ({ encoding_for_model } = await import('tiktoken'));
+} catch (err) {
+  console.error("Failed to load 'tiktoken'. Install it with `npm install tiktoken` to enable token counting.");
+}
 
 const app = express();
 app.use(cors());
@@ -199,9 +205,14 @@ app.post('/api/process-cv', (req, res, next) => {
     };
     const model = 'gpt-4-turbo';
 
-    const enc = encoding_for_model(model);
-    const tokenCount = enc.encode(prompt).length;
-    enc.free();
+    let tokenCount = 0;
+    if (encoding_for_model) {
+      const enc = encoding_for_model(model);
+      tokenCount = enc.encode(prompt).length;
+      enc.free();
+    } else {
+      console.warn('tiktoken module is not available; skipping token count check.');
+    }
 
     const limit = MODEL_LIMITS[model];
     if (tokenCount > limit) {
