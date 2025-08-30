@@ -319,3 +319,4 @@ app.listen(port, () => {
 });
 
 export default app;
+export { extractText };
