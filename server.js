@@ -267,16 +267,33 @@ app.post('/api/process-cv', (req, res, next) => {
       narrative: letters.narrative,
       gov_plain: letters.gov_plain
     };
+    const urls = [];
     for (const [name, text] of Object.entries(outputs)) {
       if (!text) continue;
+      const key = `${generatedPrefix}${name}.pdf`;
       const pdfBuffer = await generatePdf(text);
       await s3.send(new PutObjectCommand({
         Bucket: bucket,
-        Key: `${generatedPrefix}${name}.pdf`,
+        Key: key,
         Body: pdfBuffer,
         ContentType: 'application/pdf'
       }));
       await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
+      const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+      urls.push({ type: name, url });
+    }
+
+    if (urls.length === 0) {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'no_outputs',
+        level: 'error',
+        message: 'No cover letters generated'
+      });
+      return res.status(500).json({ error: 'No cover letters generated' });
     }
 
     await s3.send(new PutObjectCommand({
@@ -288,7 +305,7 @@ app.post('/api/process-cv', (req, res, next) => {
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
-    res.json({ letters, applicantName });
+    res.json({ urls, applicantName });
   } catch (err) {
     console.error('processing failed', err);
     if (bucket) {
