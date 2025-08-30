@@ -11,7 +11,7 @@ The server relies on the following environment variables:
   "AWS_REGION": "ap-south-1",
   "SECRET_ID": "your-secret-id",
   "PORT": "3000",
-  "ALLOW_DEV_PLAINTEXT": "0",
+  "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data"
 }
 ```
@@ -23,6 +23,9 @@ JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the 
 `S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
 `resume-forge-data`, which is suitable for local development.
 
+`GEMINI_API_KEY` supplies the Google Gemini API key. Set it directly in your environment for development or include it in the
+secret.
+
 The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 
 ```json
@@ -31,8 +34,6 @@ The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
   "S3_BUCKET": "resume-forge-data"
 }
 ```
-
-If `ALLOW_DEV_PLAINTEXT` is set to `1`, the server will read the Gemini API key from the `GEMINI_API_KEY` environment variable for local development. In production, leave `ALLOW_DEV_PLAINTEXT` unset (or `0`) to ensure credentials are retrieved exclusively from AWS Secrets Manager.
 
 ## IAM Policy
 Minimal permissions required by the server:
