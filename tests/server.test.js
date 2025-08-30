@@ -11,7 +11,7 @@ jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
 jest.unstable_mockModule('@aws-sdk/client-secrets-manager', () => ({
   SecretsManagerClient: jest.fn(() => ({
     send: jest.fn().mockResolvedValue({
-      SecretString: JSON.stringify({ BUCKET: 'test-bucket', OPENAI_API_KEY: 'test-key' })
+      SecretString: JSON.stringify({ BUCKET: 'test-bucket', GEMINI_API_KEY: 'test-key' })
     })
   })),
   GetSecretValueCommand: jest.fn()
@@ -21,26 +21,21 @@ jest.unstable_mockModule('../logger.js', () => ({
   logEvent: jest.fn().mockResolvedValue(undefined)
 }));
 
-jest.unstable_mockModule('openai', () => ({
-  default: jest.fn(() => ({
-    chat: {
-      completions: {
-        create: jest.fn().mockResolvedValue({
-          choices: [
-            {
-              message: {
-                content: JSON.stringify({
-                  ats: 'ats',
-                  concise: 'concise',
-                  narrative: 'narrative',
-                  gov_plain: 'gov'
-                })
-              }
-            }
-          ]
-        })
-      }
-    }
+jest.unstable_mockModule('@google/generative-ai', () => ({
+  GoogleGenerativeAI: jest.fn(() => ({
+    getGenerativeModel: jest.fn(() => ({
+      generateContent: jest.fn().mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              ats: 'ats',
+              concise: 'concise',
+              narrative: 'narrative',
+              gov_plain: 'gov'
+            })
+        }
+      })
+    }))
   }))
 }));
 
