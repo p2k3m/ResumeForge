@@ -3,7 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
@@ -189,31 +189,33 @@ app.post('/api/process-cv', (req, res, next) => {
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
-    // Use GEMINI_API_KEY from environment or secrets
-    const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    // Use OPENAI_API_KEY from environment or secrets
+    const openaiApiKey = process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY;
+    const openai = new OpenAI({ apiKey: openaiApiKey });
 
-    const prompt = `Using the resume below and job description, craft four cover letters in different styles. Return a JSON object with keys \"ats\", \"concise\", \"narrative\", and \"gov_plain\" containing the respective cover letters.\nResume:\n${text}\nJob Description:\n${jobDescription}`;
+    const prompt = `Using the resume and job description below, craft two tailored cover letters and two resume versions. Return a JSON object with keys \"cover_letter1\", \"cover_letter2\", \"version1\", and \"version2\".\nResume:\n${text}\nJob Description:\n${jobDescription}`;
 
-    const completion = await model.generateContent(prompt);
-    let letters = {};
-    let responseText = completion.response?.text();
-    if (responseText) {
-      const match = responseText.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          letters = JSON.parse(match[0]);
-        } catch (e) {
-          console.error('Failed to parse AI response:', responseText);
+    let outputsData = {};
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }]
+      });
+      const responseText = completion.choices[0]?.message?.content;
+      if (responseText) {
+        const match = responseText.match(/\{[\s\S]*\}/);
+        if (match) {
+          outputsData = JSON.parse(match[0]);
+        } else {
+          console.error('No JSON object found in AI response:', responseText);
         }
       } else {
-        console.error('No JSON object found in AI response:', responseText);
+        console.error('No text returned from AI completion');
       }
-    } else {
-      console.error('No text returned from AI completion');
+    } catch (e) {
+      console.error('Failed to generate content:', e);
     }
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_cover_letters' });
+    await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
 
     await s3.send(new PutObjectCommand({
       Bucket: bucket,
@@ -225,10 +227,10 @@ app.post('/api/process-cv', (req, res, next) => {
 
     const generatedPrefix = `${prefix}generated/`;
     const outputs = {
-      ats: letters.ats,
-      concise: letters.concise,
-      narrative: letters.narrative,
-      gov_plain: letters.gov_plain
+      cover_letter1: outputsData.cover_letter1,
+      cover_letter2: outputsData.cover_letter2,
+      version1: outputsData.version1,
+      version2: outputsData.version2
     };
     const urls = [];
     for (const [name, text] of Object.entries(outputs)) {

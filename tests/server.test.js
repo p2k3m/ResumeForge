@@ -11,7 +11,7 @@ jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
 jest.unstable_mockModule('@aws-sdk/client-secrets-manager', () => ({
   SecretsManagerClient: jest.fn(() => ({
     send: jest.fn().mockResolvedValue({
-      SecretString: JSON.stringify({ BUCKET: 'test-bucket', GEMINI_API_KEY: 'test-key' })
+      SecretString: JSON.stringify({ BUCKET: 'test-bucket', OPENAI_API_KEY: 'test-key' })
     })
   })),
   GetSecretValueCommand: jest.fn()
@@ -21,21 +21,24 @@ jest.unstable_mockModule('../logger.js', () => ({
   logEvent: jest.fn().mockResolvedValue(undefined)
 }));
 
-const generateContentMock = jest.fn().mockResolvedValue({
-  response: {
-    text: () =>
-      JSON.stringify({
-        ats: 'ats',
-        concise: 'concise',
-        narrative: 'narrative',
-        gov_plain: 'gov'
-      })
-  }
+const createMock = jest.fn().mockResolvedValue({
+  choices: [
+    {
+      message: {
+        content: JSON.stringify({
+          cover_letter1: 'cl1',
+          cover_letter2: 'cl2',
+          version1: 'v1',
+          version2: 'v2'
+        })
+      }
+    }
+  ]
 });
 
-jest.unstable_mockModule('@google/generative-ai', () => ({
-  GoogleGenerativeAI: jest.fn(() => ({
-    getGenerativeModel: jest.fn(() => ({ generateContent: generateContentMock }))
+jest.unstable_mockModule('openai', () => ({
+  default: jest.fn(() => ({
+    chat: { completions: { create: createMock } }
   }))
 }));
 
@@ -71,12 +74,18 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls).toHaveLength(4);
+    expect(res.body.urls.map((u) => u.type).sort()).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'version1',
+      'version2'
+    ]);
     expect(res.body.applicantName).toBeTruthy();
   });
 
   test('malformed AI response', async () => {
-    generateContentMock.mockResolvedValueOnce({
-      response: { text: () => 'not json' }
+    createMock.mockResolvedValueOnce({
+      choices: [{ message: { content: 'not json' } }]
     });
     const res = await request(app)
       .post('/api/process-cv')
