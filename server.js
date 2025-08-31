@@ -560,6 +560,15 @@ function moveSummaryJobEntries(sections = []) {
   }
 }
 
+function pruneEmptySections(sections = []) {
+  return sections.filter((sec) => {
+    sec.items = (sec.items || []).filter((tokens) =>
+      tokens.some((t) => t.text && t.text.trim())
+    );
+    return sec.items.length > 0;
+  });
+}
+
 function parseContent(text, options = {}) {
   try {
     const data = JSON.parse(text);
@@ -604,7 +613,8 @@ function parseContent(text, options = {}) {
     });
     splitSkills(sections);
     moveSummaryJobEntries(sections);
-    return ensureRequiredSections({ name, sections }, options);
+    const prunedSections = pruneEmptySections(sections);
+    return ensureRequiredSections({ name, sections: prunedSections }, options);
   } catch {
     const lines = text.split(/\r?\n/);
     const name = normalizeName((lines.shift() || 'Resume').trim());
@@ -678,7 +688,8 @@ function parseContent(text, options = {}) {
     });
     splitSkills(sections);
     moveSummaryJobEntries(sections);
-    return ensureRequiredSections({ name, sections }, options);
+    const prunedSections = pruneEmptySections(sections);
+    return ensureRequiredSections({ name, sections: prunedSections }, options);
   }
 }
 

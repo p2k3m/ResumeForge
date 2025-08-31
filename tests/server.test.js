@@ -304,6 +304,8 @@ describe('/api/process-cv', () => {
           )
           .join('\n');
         if (options && options.skipRequiredSections) {
+          const headings = data.sections.map((s) => s.heading);
+          expect(headings).not.toContain('Work Experience');
           expect(combined).not.toContain('Information not provided');
         }
         return Promise.resolve(Buffer.from('pdf'));
