@@ -7,6 +7,15 @@ import fs from 'fs/promises';
 import path from 'path';
 import Handlebars from '../lib/handlebars.js';
 
+function escapeHtml(str = '') {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
     const data = parseContent('Jane Doe\n# Education\n- Item 1\nText');
@@ -60,6 +69,42 @@ describe('generatePdf and parsing', () => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing', tpl);
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(0);
+  });
+
+  test('script tags render as text', () => {
+    const tokens = parseContent('Jane Doe\n- uses <script>alert(1)</script> safely')
+      .sections[0].items[0];
+    const rendered = tokens
+      .map((t) => {
+        const text = t.text ? escapeHtml(t.text) : '';
+        if (t.type === 'link') return `<a href="${t.href}">${text}</a>`;
+        if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+        if (t.style === 'bold') return `<strong>${text}</strong>`;
+        if (t.style === 'italic') return `<em>${text}</em>`;
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        return text;
+      })
+      .join('');
+    expect(rendered).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  });
+
+  test('div tags render as text', () => {
+    const tokens = parseContent('Jane Doe\n- contains <div>markup</div> here')
+      .sections[0].items[0];
+    const rendered = tokens
+      .map((t) => {
+        const text = t.text ? escapeHtml(t.text) : '';
+        if (t.type === 'link') return `<a href="${t.href}">${text}</a>`;
+        if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+        if (t.style === 'bold') return `<strong>${text}</strong>`;
+        if (t.style === 'italic') return `<em>${text}</em>`;
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        return text;
+      })
+      .join('');
+    expect(rendered).toContain('&lt;div&gt;markup&lt;/div&gt;');
   });
 
   test('bold and italic text render without markdown syntax', () => {
