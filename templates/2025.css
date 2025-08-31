@@ -1,7 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 :root {
-  --accent: #3f51b5;
+  --accent: #1f3c5d;
+  --bullet: #4a5568;
 }
 
 body {
@@ -74,7 +75,7 @@ li {
   display: inline-block;
   width: 1.2em;
   margin-left: -1.2em;
-  color: var(--accent);
+  color: var(--bullet);
 }
 
 .tab {
