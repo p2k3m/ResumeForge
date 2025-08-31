@@ -105,6 +105,10 @@ describe('/api/process-cv', () => {
 
     const res1 = await request(app)
       .post('/api/process-cv')
+      .set('User-Agent',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+      )
+      .set('X-Forwarded-For', '203.0.113.42')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -143,6 +147,10 @@ describe('/api/process-cv', () => {
 
     const res2 = await request(app)
       .post('/api/process-cv')
+      .set('User-Agent',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+      )
+      .set('X-Forwarded-For', '203.0.113.42')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -191,6 +199,11 @@ describe('/api/process-cv', () => {
       'http://linkedin.com/in/example'
     );
     expect(putCall[0].input.Item.candidateName.S).toBe(res2.body.applicantName);
+    expect(putCall[0].input.Item.ipAddress.S).toBe('203.0.113.42');
+    expect(putCall[0].input.Item.userAgent.S).toContain('iPhone');
+    expect(putCall[0].input.Item.os.S).toBe('iOS');
+    expect(putCall[0].input.Item.device.S).toBe('iPhone');
+    expect(putCall[0].input.Item.browser.S).toBe('Safari');
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual(['DescribeTableCommand', 'PutItemCommand']);
   });
