@@ -280,6 +280,33 @@ describe('generatePdf and parsing', () => {
     expect(raw).not.toMatch(/<a[\s>]/);
   });
 
+  test('sanitizes markdown from name in PDF', async () => {
+    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
+    const buffer = await generatePdf('**John Doe**\n- Bullet');
+    try {
+      const text = (await pdfParse(buffer)).text;
+      expect(text).toContain('John Doe');
+      expect(text).not.toContain('**John Doe**');
+    } catch {
+      let idx = 0;
+      let text = '';
+      while ((idx = buffer.indexOf(Buffer.from('stream'), idx)) !== -1) {
+        const nl = buffer.indexOf('\n', idx) + 1;
+        const end = buffer.indexOf(Buffer.from('endstream'), nl);
+        let chunk = buffer.slice(nl, end);
+        try {
+          chunk = zlib.inflateSync(chunk).toString();
+        } catch {
+          chunk = chunk.toString();
+        }
+        text += chunk;
+        idx = end + 9;
+      }
+      expect(text).toContain('John Doe');
+      expect(text).not.toContain('**John Doe**');
+    }
+  });
+
   test('PDFKit fallback matches Puppeteer output text', async () => {
     const input = 'Jane Doe\n- Bullet point';
     const browserPdf = await generatePdf(input, 'modern');

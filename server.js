@@ -353,11 +353,14 @@ function ensureRequiredSections(data) {
   return data;
 }
 
+function normalizeName(name = 'Resume') {
+  return String(name).replace(/[*_]/g, '');
+}
 
 function parseContent(text) {
   try {
     const data = JSON.parse(text);
-    const name = data.name || 'Resume';
+    const name = normalizeName(data.name || 'Resume');
     const rawSections = Array.isArray(data.sections)
       ? data.sections
       : Object.entries(data).map(([heading, content]) => ({ heading, content }));
@@ -393,7 +396,7 @@ function parseContent(text) {
     return ensureRequiredSections({ name, sections });
   } catch {
     const lines = text.split(/\r?\n/);
-    const name = (lines.shift() || 'Resume').trim();
+    const name = normalizeName((lines.shift() || 'Resume').trim());
     const sections = [];
     let currentSection = { heading: 'Summary', items: [] };
     sections.push(currentSection);
