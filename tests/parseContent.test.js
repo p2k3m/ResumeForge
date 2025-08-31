@@ -104,6 +104,32 @@ describe('parseContent experience fallbacks', () => {
     expect(work.items).toHaveLength(1);
     expect(work.items[0].map((t) => t.text).join('')).toBe('LinkedIn item');
   });
+  test('merges resume and LinkedIn experiences with dates and descriptions', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JS', {
+      resumeExperience: [
+        {
+          title: 'Developer',
+          company: 'Beta Corp',
+          startDate: 'Mar 2018',
+          endDate: 'Apr 2019',
+          responsibilities: ['Built things']
+        }
+      ],
+      linkedinExperience: [
+        {
+          title: 'Engineer',
+          company: 'Acme',
+          startDate: 'Jan 2020',
+          endDate: 'Feb 2021'
+        }
+      ],
+      jobTitle: 'Senior Engineer'
+    });
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    expect(work.items).toHaveLength(2);
+    expect(work.items[0].map((t) => t.text).join('')).toBe('Senior Engineer at Acme (Jan 2020 – Feb 2021)');
+    expect(work.items[1].map((t) => t.text).join('')).toBe('Developer at Beta Corp (Mar 2018 – Apr 2019)Built things');
+  });
 });
 
 describe('parseContent education fallbacks', () => {

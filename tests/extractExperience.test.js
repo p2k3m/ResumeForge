@@ -17,14 +17,16 @@ jest.unstable_mockModule('axios', () => ({
 const { extractExperience, fetchLinkedInProfile } = await import('../server.js');
 
 describe('extractExperience', () => {
-  test('parses company and dates from resume text', () => {
-    const text = 'Experience\n- Developer at Beta Corp (Mar 2018 - Apr 2019)\n';
+  test('parses company, dates, and responsibilities from resume text', () => {
+    const text =
+      'Experience\n- Developer at Beta Corp (Mar 2018 - Apr 2019)\n  - Built API\n';
     expect(extractExperience(text)).toEqual([
       {
         company: 'Beta Corp',
         title: 'Developer',
         startDate: 'Mar 2018',
-        endDate: 'Apr 2019'
+        endDate: 'Apr 2019',
+        responsibilities: ['Built API']
       }
     ]);
   });
