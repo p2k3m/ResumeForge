@@ -65,8 +65,20 @@ describe('parseContent summary reclassification', () => {
     );
     expect(work.items).toHaveLength(1);
     expect(work.items[0].map((t) => t.text).join('')).toBe(
-      'Acme Corp | Developer | Jan 2020 - Present'
+      'Acme Corp Developer Jan 2020 - Present'
     );
+  });
+});
+
+describe('parseContent skills list handling', () => {
+  test('splits comma or semicolon separated skills into bullets', () => {
+    const input = 'Jane Doe\n# Skills\nJavaScript, Python; Go';
+    const data = parseContent(input);
+    const skills = data.sections.find((s) => s.heading === 'Skills');
+    const items = skills.items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['JavaScript', 'Python', 'Go']);
   });
 });
 
