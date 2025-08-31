@@ -816,6 +816,31 @@ function parseAiJson(text) {
   }
 }
 
+function removeGuidanceLines(text = '') {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !/consolidate relevant experience/i.test(line))
+    .join('\n');
+}
+
+function reparseAndStringify(text, options = {}) {
+  const data = parseContent(text, options);
+  const lines = [data.name];
+  data.sections.forEach((sec) => {
+    lines.push(`# ${sec.heading}`);
+    sec.items.forEach((tokens) => {
+      lines.push(tokens.map((t) => t.text || '').join(''));
+    });
+  });
+  return lines.join('\n');
+}
+
+function sanitizeGeneratedText(text, options = {}) {
+  if (!text) return text;
+  const cleaned = removeGuidanceLines(text);
+  return reparseAndStringify(cleaned, options);
+}
+
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -990,8 +1015,20 @@ app.post('/api/process-cv', (req, res, next) => {
       const responseText = result.response.text();
       const parsed = parseAiJson(responseText);
       if (parsed) {
-        versionData.version1 = parsed.version1;
-        versionData.version2 = parsed.version2;
+        const sanitizeOptions = {
+          resumeExperience,
+          linkedinExperience,
+          resumeEducation,
+          linkedinEducation
+        };
+        versionData.version1 = sanitizeGeneratedText(
+          parsed.version1,
+          sanitizeOptions
+        );
+        versionData.version2 = sanitizeGeneratedText(
+          parsed.version2,
+          sanitizeOptions
+        );
       }
     } catch (e) {
       console.error('Failed to generate resume versions:', e);
