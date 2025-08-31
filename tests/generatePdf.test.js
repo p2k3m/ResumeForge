@@ -1,29 +1,29 @@
 import { jest } from '@jest/globals';
-import { generatePdf, parseContent, prepareTemplateData } from '../server.js';
+import { generatePdf, parseContent } from '../server.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
-    const tokens = parseContent('# Education\n- Item 1\nText');
-    expect(tokens).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'heading', text: 'Education' }),
-        expect.objectContaining({ type: 'list', items: ['Item 1'] }),
-        expect.objectContaining({ type: 'paragraph', text: 'Text' })
-      ])
-    );
+    const data = parseContent('Jane Doe\n# Education\n- Item 1\nText');
+    const education = data.sections.find((s) => s.heading === 'Education');
+    expect(education).toBeDefined();
+    expect(education.items[0].map((t) => t.text).join('')).toBe('Item 1');
+    expect(education.items[1].map((t) => t.text).join('')).toBe('Text');
   });
 
   test('parseContent handles JSON structure', () => {
-    const data = { sections: [{ heading: 'Skills', items: ['JS'] }] };
-    const tokens = parseContent(JSON.stringify(data));
-    expect(tokens).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: 'heading', text: 'Skills' }),
-        expect.objectContaining({ type: 'list', items: ['JS'] })
-      ])
-    );
+    const json = { name: 'John', sections: [{ heading: 'Skills', items: ['JS'] }] };
+    const data = parseContent(JSON.stringify(json));
+    expect(data.name).toBe('John');
+    const skills = data.sections.find((s) => s.heading === 'Skills');
+    expect(skills.items[0].map((t) => t.text).join('')).toBe('JS');
+  });
+
+  test('parseContent creates multiple sections from headings', () => {
+    const input = 'Jane Doe\n# Experience\n- Worked\n# Skills\n- JavaScript';
+    const data = parseContent(input);
+    expect(data.sections.map((s) => s.heading)).toEqual(['Experience', 'Skills']);
   });
 
   test.each(['modern', 'ucmo', 'professional', 'vibrant'])('generatePdf creates PDF from %s template', async (tpl) => {
@@ -33,7 +33,7 @@ describe('generatePdf and parsing', () => {
   });
 
   test('bold and italic text render without markdown syntax', () => {
-    const data = prepareTemplateData(
+    const data = parseContent(
       'Jane Doe\n- This is **bold** text\n- This is _italic_ text'
     );
     const [boldTokens, italicTokens] = data.sections[0].items;
@@ -52,7 +52,7 @@ describe('generatePdf and parsing', () => {
   });
 
   test('spacing is preserved across multiple tokens', () => {
-    const data = prepareTemplateData(
+    const data = parseContent(
       'Jane Doe\n- Visit [OpenAI](https://openai.com) and [GitHub](https://github.com)\n- Mix **bold** and _italic_ styles'
     );
     const [linkTokens, mixTokens] = data.sections[0].items;
@@ -66,7 +66,7 @@ describe('generatePdf and parsing', () => {
 
   test('line breaks and tabs retained for mixed bullet and paragraph content', () => {
     const input = 'Jane Doe\n- First bullet\n\tContinuation paragraph\nFinal line';
-    const data = prepareTemplateData(input);
+    const data = parseContent(input);
     const [first, second] = data.sections[0].items;
     expect(first).toEqual(
       expect.arrayContaining([
@@ -90,7 +90,7 @@ describe('generatePdf and parsing', () => {
   });
 
   test('single asterisk italic and bullet handling', () => {
-    const data = prepareTemplateData(
+    const data = parseContent(
       'Jane Doe\n* This has *italic* text'
     );
     const [tokens] = data.sections[0].items;
@@ -106,9 +106,10 @@ describe('generatePdf and parsing', () => {
   });
 
   test('parseContent detects links', () => {
-    const tokens = parseContent(
-      'Check [OpenAI](https://openai.com) and https://example.com'
+    const data = parseContent(
+      'Jane Doe\n- Check [OpenAI](https://openai.com) and https://example.com'
     );
+    const tokens = data.sections[0].items[0];
     expect(tokens).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -130,7 +131,7 @@ describe('generatePdf and parsing', () => {
     const input =
       'John Doe\n- https://www.linkedin.com/in/johndoe\n- https://github.com/johndoe';
     const buffer = await generatePdf(input);
-    const items = prepareTemplateData(input).sections[0].items;
+    const items = parseContent(input).sections[0].items;
     expect(items).toEqual(
       expect.arrayContaining([
         expect.arrayContaining([

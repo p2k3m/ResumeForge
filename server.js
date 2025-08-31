@@ -177,130 +177,120 @@ function parseEmphasis(segment) {
   return tokens;
 }
 
+
 function parseContent(text) {
   try {
     const data = JSON.parse(text);
-    const sections = Array.isArray(data.sections)
+    const name = data.name || 'Resume';
+    const rawSections = Array.isArray(data.sections)
       ? data.sections
       : Object.entries(data).map(([heading, content]) => ({ heading, content }));
-    const tokens = [];
-    for (const sec of sections) {
-      if (sec.heading) tokens.push({ type: 'heading', text: String(sec.heading) });
-      const items = sec.items || sec.content;
-      if (Array.isArray(items)) {
-        const strItems = items.map((i) => {
-          const parts = parseLine(String(i));
-          parts.forEach((t) => {
-            if (t.type === 'link') tokens.push(t);
-          });
-          return parts.map((t) => t.text).join('');
-        });
-        tokens.push({ type: 'list', items: strItems });
-      } else if (items) {
-        tokens.push(...parseLine(String(items)));
+    const sections = rawSections.map((sec) => {
+      const heading = sec.heading || '';
+      const items = [];
+      const src = sec.items || sec.content;
+      if (Array.isArray(src)) {
+        src.forEach((i) => items.push(parseLine(String(i))));
+      } else if (src) {
+        items.push(parseLine(String(src)));
       }
-      tokens.push({ type: 'space' });
-    }
-    return tokens;
+      return {
+        heading,
+        items: items.map((tokens) =>
+          tokens.reduce((acc, t, i) => {
+            acc.push(t);
+            const next = tokens[i + 1];
+            if (
+              next &&
+              t.text &&
+              next.text &&
+              !/\s$/.test(t.text) &&
+              !/^\s/.test(next.text)
+            ) {
+              acc.push({ type: 'paragraph', text: ' ' });
+            }
+            return acc;
+          }, [])
+        )
+      };
+    });
+    return { name, sections };
   } catch {
-    const tokens = [];
     const lines = text.split(/\r?\n/);
-    let list = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        if (list.length) {
-          tokens.push({ type: 'list', items: list });
-          list = [];
-        }
-        tokens.push({ type: 'space' });
+    const name = (lines.shift() || 'Resume').trim();
+    const sections = [];
+    let currentSection = { heading: 'Summary', items: [] };
+    sections.push(currentSection);
+    let current = [];
+    for (const raw of lines) {
+      const line = raw.replace(/\t/g, '\u0009');
+      if (!line.trim()) {
+        if (current.length) current.push({ type: 'newline' });
         continue;
       }
-      const headingMatch = trimmed.match(/^#{1,6}\s+(.*)/);
+      const headingMatch = line.trim().match(/^#{1,6}\s+(.*)/);
       if (headingMatch) {
-        if (list.length) {
-          tokens.push({ type: 'list', items: list });
-          list = [];
+        if (current.length) {
+          currentSection.items.push(current);
+          current = [];
         }
-        tokens.push({ type: 'heading', text: headingMatch[1].trim() });
+        if (
+          currentSection.items.length === 0 &&
+          currentSection.heading === 'Summary'
+        ) {
+          sections.pop();
+        }
+        currentSection = { heading: headingMatch[1].trim(), items: [] };
+        sections.push(currentSection);
         continue;
       }
-      const bulletMatch = trimmed.match(/^[-*]\s+(.*)/);
+      const bulletMatch = line.match(/^[-*]\s*(.*)/);
       if (bulletMatch) {
-        const parts = parseLine(bulletMatch[1]);
-        list.push(parts.map((t) => t.text).join(''));
-        parts.forEach((t) => {
-          if (t.type === 'link') tokens.push(t);
-        });
+        if (current.length) currentSection.items.push(current);
+        current = parseLine(bulletMatch[1]);
         continue;
       }
-      if (list.length) {
-        tokens.push({ type: 'list', items: list });
-        list = [];
-      }
-      tokens.push(...parseLine(trimmed));
-    }
-    if (list.length) tokens.push({ type: 'list', items: list });
-    return tokens;
-  }
-}
-
-function prepareTemplateData(text) {
-  const lines = text.split(/\r?\n/);
-  const name = (lines.shift() || 'Resume').trim();
-  const items = [];
-  let current = [];
-  for (const raw of lines) {
-    const line = raw.replace(/\t/g, '\u0009');
-    if (!line.trim()) {
-      // blank line signifies explicit line break
-      if (current.length) {
+      const indentMatch = line.match(/^\s+(.*)/);
+      if (indentMatch && current.length) {
         current.push({ type: 'newline' });
+        const tabs = (line.match(/^\s+/) || [''])[0];
+        for (const ch of tabs) {
+          if (ch === '\u0009') current.push({ type: 'tab' });
+        }
+        current.push(...parseLine(indentMatch[1].trim()));
+        continue;
       }
-      continue;
+      if (current.length) currentSection.items.push(current);
+      current = parseLine(line.trim());
     }
-    const bulletMatch = line.match(/^[-*]\s*(.*)/);
-    if (bulletMatch) {
-      if (current.length) items.push(current);
-      current = parseLine(bulletMatch[1]);
-      continue;
+    if (current.length) currentSection.items.push(current);
+    if (sections.length && sections[0].heading === 'Summary' && sections[0].items.length === 0) {
+      sections.shift();
     }
-    const indentMatch = line.match(/^\s+(.*)/);
-    if (indentMatch && current.length) {
-      current.push({ type: 'newline' });
-      const tabs = (line.match(/^\s+/) || [''])[0];
-      for (const ch of tabs) {
-        if (ch === '\u0009') current.push({ type: 'tab' });
-      }
-      current.push(...parseLine(indentMatch[1].trim()));
-      continue;
-    }
-    if (current.length) items.push(current);
-    current = parseLine(line.trim());
+    sections.forEach((sec, sIdx) => {
+      sec.items = sec.items.map((tokens) =>
+        tokens.reduce((acc, t, i) => {
+          acc.push(t);
+          const next = tokens[i + 1];
+          if (
+            next &&
+            t.text &&
+            next.text &&
+            !/\s$/.test(t.text) &&
+            !/^\s/.test(next.text)
+          ) {
+            acc.push({ type: 'paragraph', text: ' ' });
+          }
+          return acc;
+        }, [])
+      );
+    });
+    return { name, sections };
   }
-  if (current.length) items.push(current);
-  // Ensure spacing between tokens matches original text for each item
-  items.forEach((tokens, idx) => {
-    items[idx] = tokens.reduce((acc, t, i) => {
-      acc.push(t);
-      const next = tokens[i + 1];
-      if (
-        next &&
-        t.text &&
-        next.text &&
-        !/\s$/.test(t.text) &&
-        !/^\s/.test(next.text)
-      ) {
-        acc.push({ type: 'paragraph', text: ' ' });
-      }
-      return acc;
-    }, []);
-  });
-  return { name, sections: [{ heading: 'Summary', items }] };
 }
 
 async function generatePdf(text, templateId = 'modern') {
-  const data = prepareTemplateData(text);
+  const data = parseContent(text);
   const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
   // Convert token-based data to HTML for Handlebars templates
@@ -709,4 +699,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-export { extractText, generatePdf, parseContent, prepareTemplateData, parseLine };
+export { extractText, generatePdf, parseContent, parseLine };
