@@ -27,3 +27,45 @@ describe('ensureRequiredSections work experience merging', () => {
     expect(ensured.sections[0].items).toHaveLength(1);
   });
 });
+
+describe('ensureRequiredSections certifications merging', () => {
+  test('merges and deduplicates certifications with hyperlinks', () => {
+    const data = { sections: [] };
+    const resumeCertifications = [
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://www.credly.com/badges/aws-dev'
+      }
+    ];
+    const linkedinCertifications = [
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://www.credly.com/badges/aws-dev'
+      },
+      {
+        name: 'PMP',
+        provider: 'PMI',
+        url: 'https://example.com/pmp'
+      }
+    ];
+    const ensured = ensureRequiredSections(data, {
+      resumeCertifications,
+      linkedinCertifications
+    });
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certifications'
+    );
+    expect(certSection).toBeTruthy();
+    expect(certSection.items).toHaveLength(2);
+    certSection.items.forEach((tokens) => {
+      expect(tokens[0].type).toBe('bullet');
+    });
+    const first = certSection.items[0];
+    const hasLink = first.some(
+      (t) => t.type === 'link' && t.href === 'https://www.credly.com/badges/aws-dev'
+    );
+    expect(hasLink).toBe(true);
+  });
+});
