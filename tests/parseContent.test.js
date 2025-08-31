@@ -31,3 +31,23 @@ describe('parseContent placeholders', () => {
   });
 });
 
+describe('parseContent experience fallbacks', () => {
+  test('uses resume experience when AI output lacks it', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JS', {
+      resumeExperience: ['Did something']
+    });
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    expect(work.items).toHaveLength(1);
+    expect(work.items[0].map((t) => t.text).join('')).toBe('Did something');
+  });
+
+  test('uses linkedin experience when resume lacks it', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JS', {
+      linkedinExperience: ['LinkedIn item']
+    });
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    expect(work.items).toHaveLength(1);
+    expect(work.items[0].map((t) => t.text).join('')).toBe('LinkedIn item');
+  });
+});
+

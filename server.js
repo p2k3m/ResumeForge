@@ -336,7 +336,10 @@ function parseEmphasis(segment) {
 }
 
 
-function ensureRequiredSections(data) {
+function ensureRequiredSections(
+  data,
+  { resumeExperience = [], linkedinExperience = [] } = {}
+) {
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
     let section = data.sections.find(
@@ -347,7 +350,18 @@ function ensureRequiredSections(data) {
       data.sections.push(section);
     }
     if (!section.items || section.items.length === 0) {
-      section.items = [parseLine('Information not provided')];
+      if (heading.toLowerCase() === 'work experience') {
+        const bullets = resumeExperience.length
+          ? resumeExperience
+          : linkedinExperience;
+        if (bullets.length) {
+          section.items = bullets.map((b) => parseLine(String(b)));
+        } else {
+          section.items = [parseLine('Information not provided')];
+        }
+      } else {
+        section.items = [parseLine('Information not provided')];
+      }
     }
   });
   return data;
@@ -357,7 +371,7 @@ function normalizeName(name = 'Resume') {
   return String(name).replace(/[*_]/g, '');
 }
 
-function parseContent(text) {
+function parseContent(text, options = {}) {
   try {
     const data = JSON.parse(text);
     const name = normalizeName(data.name || 'Resume');
@@ -393,7 +407,7 @@ function parseContent(text) {
         )
       };
     });
-    return ensureRequiredSections({ name, sections });
+    return ensureRequiredSections({ name, sections }, options);
   } catch {
     const lines = text.split(/\r?\n/);
     const name = normalizeName((lines.shift() || 'Resume').trim());
@@ -465,7 +479,7 @@ function parseContent(text) {
         }, [])
       );
     });
-    return ensureRequiredSections({ name, sections });
+    return ensureRequiredSections({ name, sections }, options);
   }
 }
 
@@ -478,9 +492,9 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
-let generatePdf = async function (text, templateId = 'modern') {
+let generatePdf = async function (text, templateId = 'modern', options = {}) {
   if (!TEMPLATE_IDS.includes(templateId)) templateId = 'modern';
-  const data = parseContent(text);
+  const data = parseContent(text, options);
   const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
   let css = '';
@@ -704,6 +718,30 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
+function extractExperience(source) {
+  if (!source) return [];
+  if (Array.isArray(source)) return source.map((s) => String(s));
+  const lines = String(source).split(/\r?\n/);
+  const bullets = [];
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^experience/i.test(trimmed)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && /^\s*$/.test(trimmed)) {
+      inSection = false;
+      continue;
+    }
+    if (inSection) {
+      const match = trimmed.match(/^[-*]\s+(.*)/);
+      if (match) bullets.push(match[1].trim());
+    }
+  }
+  return bullets;
+}
+
 function extractJsonBlock(text) {
   const fenced = text.match(/```json[\s\S]*?```/i);
   if (fenced) {
@@ -864,6 +902,8 @@ app.post('/api/process-cv', (req, res, next) => {
     }
 
     const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData);
+    const resumeExperience = extractExperience(text);
+    const linkedinExperience = extractExperience(linkedinData.experience || []);
 
     // Use GEMINI_API_KEY from environment or secrets
     const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
@@ -969,7 +1009,11 @@ app.post('/api/process-cv', (req, res, next) => {
           : name === 'version2'
           ? template2
           : defaultTemplate;
-      const pdfBuffer = await generatePdf(text, tpl);
+      const options =
+        name === 'version1' || name === 'version2'
+          ? { resumeExperience, linkedinExperience }
+          : {};
+      const pdfBuffer = await generatePdf(text, tpl, options);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1035,6 +1079,7 @@ export {
   setGeneratePdf,
   parseContent,
   parseLine,
+  extractExperience,
   TEMPLATE_IDS,
   selectTemplates
 };
