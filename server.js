@@ -444,6 +444,14 @@ function parseEmphasis(segment) {
 }
 
 
+function normalizeHeading(heading = '') {
+  return String(heading)
+    .trim()
+    .replace(/[-–—:.;,!?]+$/g, '')
+    .trim();
+}
+
+
 function ensureRequiredSections(
   data,
   {
@@ -461,12 +469,15 @@ function ensureRequiredSections(
   }
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
+    const key = normalizeHeading(heading).toLowerCase();
     let section = data.sections.find(
-      (s) => s.heading.toLowerCase() === heading.toLowerCase()
+      (s) => normalizeHeading(s.heading).toLowerCase() === key
     );
     if (!section) {
-      section = { heading, items: [] };
+      section = { heading: normalizeHeading(heading), items: [] };
       data.sections.push(section);
+    } else {
+      section.heading = normalizeHeading(section.heading);
     }
     if (!section.items || section.items.length === 0) {
       if (heading.toLowerCase() === 'work experience') {
@@ -641,12 +652,13 @@ function mergeDuplicateSections(sections = []) {
   const seen = new Map();
   const result = [];
   sections.forEach((sec) => {
-    const key = (sec.heading || '').toLowerCase();
+    const heading = normalizeHeading(sec.heading || '');
+    const key = heading.toLowerCase();
     if (seen.has(key)) {
       const existing = seen.get(key);
       existing.items = existing.items.concat(sec.items || []);
     } else {
-      const copy = { ...sec, items: [...(sec.items || [])] };
+      const copy = { ...sec, heading, items: [...(sec.items || [])] };
       seen.set(key, copy);
       result.push(copy);
     }
@@ -710,7 +722,12 @@ function parseContent(text, options = {}) {
     moveSummaryJobEntries(sections);
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
-    return ensureRequiredSections({ name, sections: prunedSections }, rest);
+    const ensured = ensureRequiredSections(
+      { name, sections: prunedSections },
+      rest
+    );
+    ensured.sections = mergeDuplicateSections(ensured.sections);
+    return ensured;
   } catch {
     const lines = text.split(/\r?\n/);
     const name = normalizeName((lines.shift() || 'Resume').trim());
@@ -790,7 +807,12 @@ function parseContent(text, options = {}) {
     moveSummaryJobEntries(sections);
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
-    return ensureRequiredSections({ name, sections: prunedSections }, rest);
+    const ensured = ensureRequiredSections(
+      { name, sections: prunedSections },
+      rest
+    );
+    ensured.sections = mergeDuplicateSections(ensured.sections);
+    return ensured;
   }
 }
 

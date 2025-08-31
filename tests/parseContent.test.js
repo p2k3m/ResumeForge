@@ -252,6 +252,43 @@ describe('parseContent duplicate section merging', () => {
     );
     expect(items).toEqual(['B.S. in CS', 'M.S. in CS']);
   });
+
+  test('merges headings with trailing punctuation or whitespace', () => {
+    const input = [
+      'Jane Doe',
+      '# Education:',
+      '- B.S. in CS',
+      '# Education ',
+      '- M.S. in CS'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS', 'M.S. in CS']);
+    expect(educationSections[0].heading).toBe('Education');
+  });
+
+  test('avoids duplicating education section when heading has punctuation', () => {
+    const json = {
+      name: 'Jane',
+      sections: [{ heading: 'Education:', items: ['B.S. in CS'] }]
+    };
+    const data = parseContent(JSON.stringify(json));
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS']);
+    expect(educationSections[0].heading).toBe('Education');
+  });
 });
 
 describe('parseContent defaultHeading option', () => {
