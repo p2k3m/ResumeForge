@@ -27,7 +27,7 @@ describe('generatePdf and parsing', () => {
     expect(data.sections.map((s) => s.heading)).toEqual(['Experience', 'Skills']);
   });
 
-  test.each(['modern', 'ucmo', 'professional', 'vibrant'])('generatePdf creates PDF from %s template', async (tpl) => {
+  test.each(['modern', 'ucmo', 'professional', 'vibrant', '2025'])('generatePdf creates PDF from %s template', async (tpl) => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing', tpl);
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(0);
@@ -168,8 +168,28 @@ describe('generatePdf and parsing', () => {
       expect(browserText).toContain('• Bullet point');
       expect(fallbackText).toBe(browserText);
     } catch {
-      const rawBrowser = browserPdf.toString();
-      const rawFallback = fallbackPdf.toString();
+      const extract = (pdf) => {
+        let idx = 0;
+        let text = '';
+        while ((idx = pdf.indexOf(Buffer.from('stream'), idx)) !== -1) {
+          const nl = pdf.indexOf('\n', idx) + 1;
+          const end = pdf.indexOf(Buffer.from('endstream'), nl);
+          const chunk = pdf.slice(nl, end);
+          let content;
+          try {
+            content = zlib.inflateSync(chunk).toString();
+          } catch {
+            content = chunk.toString();
+          }
+          text += content.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
+            Buffer.from(hex, 'hex').toString()
+          );
+          idx = end + 9;
+        }
+        return text;
+      };
+      const rawBrowser = extract(browserPdf);
+      const rawFallback = extract(fallbackPdf);
       expect(rawBrowser).toContain('Bullet point');
       expect(rawFallback).toContain('Bullet point');
     }

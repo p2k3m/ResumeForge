@@ -293,6 +293,10 @@ async function generatePdf(text, templateId = 'modern') {
   const data = parseContent(text);
   const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
+  let css = '';
+  try {
+    css = await fs.readFile(path.resolve('templates', `${templateId}.css`), 'utf-8');
+  } catch {}
   // Convert token-based data to HTML for Handlebars templates
   const htmlData = {
     ...data,
@@ -315,7 +319,10 @@ async function generatePdf(text, templateId = 'modern') {
       )
     }))
   };
-  const html = Handlebars.compile(templateSource)(htmlData);
+  let html = Handlebars.compile(templateSource)(htmlData);
+  if (css) {
+    html = html.replace('</head>', `<style>${css}</style></head>`);
+  }
   try {
     const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
     const page = await browser.newPage();
@@ -361,6 +368,15 @@ async function generatePdf(text, templateId = 'modern') {
         headingColor: '#ff6b6b',
         bullet: '✱',
         bulletColor: '#4ecdc4',
+        textColor: '#333'
+      },
+      '2025': {
+        font: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italic: 'Helvetica-Oblique',
+        headingColor: '#3f51b5',
+        bullet: '•',
+        bulletColor: '#3f51b5',
         textColor: '#333'
       }
     };
