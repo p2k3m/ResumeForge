@@ -6,6 +6,12 @@ import axios from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import {
+  DynamoDBClient,
+  CreateTableCommand,
+  DescribeTableCommand,
+  PutItemCommand
+} from '@aws-sdk/client-dynamodb';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import { logEvent } from './logger.js';
@@ -1478,6 +1484,55 @@ app.post('/api/process-cv', (req, res, next) => {
       });
       return res.status(500).json({ error: 'AI response invalid' });
     }
+
+    const dynamo = new DynamoDBClient({ region });
+    const tableName = 'ResumeForge';
+    async function ensureTableExists() {
+      try {
+        await dynamo.send(new DescribeTableCommand({ TableName: tableName }));
+      } catch (err) {
+        if (err.name !== 'ResourceNotFoundException') throw err;
+        try {
+          await dynamo.send(
+            new CreateTableCommand({
+              TableName: tableName,
+              AttributeDefinitions: [
+                { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
+              ],
+              KeySchema: [
+                { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
+              ],
+              BillingMode: 'PAY_PER_REQUEST'
+            })
+          );
+        } catch (createErr) {
+          if (createErr.name !== 'ResourceInUseException') throw createErr;
+        }
+        while (true) {
+          const desc = await dynamo.send(
+            new DescribeTableCommand({ TableName: tableName })
+          );
+          if (desc.Table && desc.Table.TableStatus === 'ACTIVE') break;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    }
+    await ensureTableExists();
+    const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: tableName,
+        Item: {
+          linkedinProfileUrl: { S: linkedinProfileUrl },
+          candidateName: { S: applicantName },
+          timestamp: { S: new Date().toISOString() },
+          cv1Url: { S: urlMap.version1 || '' },
+          cv2Url: { S: urlMap.version2 || '' },
+          coverLetter1Url: { S: urlMap.cover_letter1 || '' },
+          coverLetter2Url: { S: urlMap.cover_letter2 || '' }
+        }
+      })
+    );
 
     await s3.send(
       new PutObjectCommand({
