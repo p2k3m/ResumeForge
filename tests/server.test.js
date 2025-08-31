@@ -124,6 +124,64 @@ describe('/api/process-cv', () => {
     expect(res.body.error).toBe('AI response invalid');
   });
 
+  test('handles code-fenced JSON with extra text', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            '```json\n{"version1":"v1","version2":"v2"}\n``` trailing'
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            '```json\n{"cover_letter1":"cl1","cover_letter2":"cl2"}\n``` noise'
+        }
+      });
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(200);
+    expect(res.body.urls.map((u) => u.type).sort()).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'version1',
+      'version2'
+    ]);
+  });
+
+  test('handles JSON surrounded by text', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            'start {"version1":"v1","version2":"v2"} end'
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            'prefix {"cover_letter1":"cl1","cover_letter2":"cl2"} suffix'
+        }
+      });
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(200);
+    expect(res.body.urls.map((u) => u.type).sort()).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'version1',
+      'version2'
+    ]);
+  });
+
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')
