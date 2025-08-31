@@ -146,8 +146,12 @@ describe('generatePdf and parsing', () => {
         expect.objectContaining({ text: 'italic', style: 'italic' })
       ])
     );
-    boldTokens.forEach((t) => expect(t.text).not.toContain('**'));
-    italicTokens.forEach((t) => expect(t.text).not.toContain('_'));
+    boldTokens.forEach((t) => {
+      if (t.text) expect(t.text).not.toContain('**');
+    });
+    italicTokens.forEach((t) => {
+      if (t.text) expect(t.text).not.toContain('_');
+    });
   });
 
   test('spacing is preserved across multiple tokens', () => {
@@ -177,14 +181,16 @@ describe('generatePdf and parsing', () => {
     );
     const rendered = first
       .map((t) => {
+        if (t.type === 'bullet') return '•';
         if (t.type === 'newline') return '<br>';
         if (t.type === 'tab') return '<span class="tab"></span>';
         return t.text;
       })
       .join('');
     expect(rendered).toBe(
-      'First bullet<br><span class="tab"></span>Continuation paragraph'
+      '•First bullet<br><span class="tab"></span>Continuation paragraph'
     );
+    expect(rendered).not.toMatch(/[-–]/);
     expect(second.map((t) => t.text).join('')).toBe('Final line');
   });
 
@@ -205,12 +211,14 @@ describe('generatePdf and parsing', () => {
     );
     const rendered = tokens
       .map((t) => {
+        if (t.type === 'bullet') return '•';
         if (t.type === 'newline') return '<br>';
         if (t.type === 'tab') return '<span class="tab"></span>';
         return t.text;
       })
       .join('');
-    expect(rendered).toBe('First line<br><span class="tab"></span>Second line');
+    expect(rendered).toBe('•First line<br><span class="tab"></span>Second line');
+    expect(rendered).not.toMatch(/[-–]/);
   });
 
   test('single asterisk italic and bullet handling', () => {
@@ -226,7 +234,9 @@ describe('generatePdf and parsing', () => {
         expect.objectContaining({ text: 'italic', style: 'italic' })
       ])
     );
-    tokens.forEach((t) => expect(t.text).not.toContain('*'));
+    tokens.forEach((t) => {
+      if (t.text) expect(t.text).not.toContain('*');
+    });
   });
 
   test('parseContent detects links', () => {
@@ -376,7 +386,7 @@ describe('generatePdf and parsing', () => {
     const nl = pdf.indexOf('\n', start) + 1;
     const end = pdf.indexOf(Buffer.from('endstream'), nl);
     const content = zlib.inflateSync(pdf.slice(nl, end)).toString();
-    const matches = [...content.matchAll(/1 0 0 1 57\.536 ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
+    const matches = [...content.matchAll(/1 0 0 1 [0-9.]+ ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
     expect(matches.length).toBeGreaterThan(1);
     expect(matches[1]).toBeLessThan(matches[0]);
   });
@@ -433,6 +443,7 @@ describe('generatePdf and parsing', () => {
               if (t.style === 'italic') return `<em>${t.text}</em>`;
               if (t.type === 'newline') return '<br>';
               if (t.type === 'tab') return '<span class="tab"></span>';
+              if (t.type === 'bullet') return '<span class="bullet">•</span>';
               return t.text || '';
             })
             .join('')
@@ -449,14 +460,16 @@ describe('generatePdf and parsing', () => {
     const [tokens] = parseContent(input).sections[0].items;
     const rendered = tokens
       .map((t) => {
+        if (t.type === 'bullet') return '•';
         if (t.type === 'newline') return '<br>';
         if (t.type === 'tab') return '<span class="tab"></span>';
         return t.text || '';
       })
       .join('');
     expect(rendered).toBe(
-      'First line<br><span class="tab"></span>Second line'
+      '•First line<br><span class="tab"></span>Second line'
     );
+    expect(rendered).not.toMatch(/[-–]/);
     const css = await fs.readFile(path.resolve('templates', '2025.css'), 'utf8');
     expect(css).toMatch(/li\s*{[^}]*white-space:\s*pre-wrap/);
     expect(css).toMatch(/li\s*{[^}]*line-height:\s*[0-9.]+/);

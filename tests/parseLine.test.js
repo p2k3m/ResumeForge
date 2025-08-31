@@ -17,13 +17,13 @@ describe('parseLine emphasis handling', () => {
     tokens.forEach((t) => expect(t.style).toBeUndefined());
   });
 
-  test('strips leading bullet before tokenization', () => {
-    const tokens = parseLine('* bullet *italic*');
-    const shapes = tokens.map(({ text, style }) => ({ text, style }));
-    expect(shapes).toEqual([
-      { text: 'bullet ', style: undefined },
-      { text: 'italic', style: 'italic' }
-    ]);
+  test.each(['- dash bullet', '– en dash bullet'])('emits bullet token for %s', (input) => {
+    const tokens = parseLine(input);
+    expect(tokens[0]).toMatchObject({ type: 'bullet' });
+    const text = tokens.slice(1).map((t) => t.text).join('');
+    const expected = input.replace(/^[\-*–]\s+/, '');
+    expect(text).toBe(expected);
+    expect(text).not.toMatch(/[-–]/);
   });
 
   test('handles combined bold and italic markers', () => {
