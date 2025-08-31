@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { generatePdf, parseContent, prepareTemplateData } from '../server.js';
 import puppeteer from 'puppeteer';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
@@ -152,6 +153,18 @@ describe('generatePdf and parsing', () => {
     expect(raw).toContain('https://www.linkedin.com/in/johndoe');
     expect(raw).toContain('https://github.com/johndoe');
     expect(raw).not.toMatch(/<a[\s>]/);
+  });
+
+  test('PDFKit fallback matches Puppeteer output text', async () => {
+    const input = 'Jane Doe\n- Bullet point';
+    const browserPdf = await generatePdf(input, 'modern');
+    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
+    const fallbackPdf = await generatePdf(input, 'modern');
+    const browserText = (await pdfParse(browserPdf)).text.trim();
+    const fallbackText = (await pdfParse(fallbackPdf)).text.trim();
+    expect(browserText).toContain('• Bullet point');
+    expect(fallbackText).toContain('• Bullet point');
+    expect(fallbackText).toBe(browserText);
   });
 
 });
