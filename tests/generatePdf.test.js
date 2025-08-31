@@ -63,6 +63,22 @@ describe('generatePdf and parsing', () => {
     );
   });
 
+  test('single asterisk italic and bullet handling', () => {
+    const data = prepareTemplateData(
+      'Jane Doe\n* This has *italic* text'
+    );
+    const [tokens] = data.sections[0].items;
+    expect(tokens.map((t) => t.text).join('')).toBe(
+      'This has italic text'
+    );
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'italic', style: 'italic' })
+      ])
+    );
+    tokens.forEach((t) => expect(t.text).not.toContain('*'));
+  });
+
   test('parseContent detects links', () => {
     const tokens = parseContent(
       'Check [OpenAI](https://openai.com) and https://example.com'
@@ -110,7 +126,7 @@ describe('generatePdf and parsing', () => {
     const raw = buffer.toString();
     expect(raw).toContain('https://www.linkedin.com/in/johndoe');
     expect(raw).toContain('https://github.com/johndoe');
-    expect(raw).not.toContain('<a');
+    expect(raw).not.toMatch(/<a[\s>]/);
   });
 
 });

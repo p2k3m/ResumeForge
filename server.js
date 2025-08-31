@@ -66,12 +66,12 @@ async function getSecrets() {
 function parseLine(text) {
   const tokens = [];
   const regex =
-    /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)|\*\*([^*]+)\*\*|_([^_]+)_/g;
+    /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)|\*\*([^*]+)\*\*|\*([^*]+)\*|_([^_]+)_/g;
   let lastIndex = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      const part = text.slice(lastIndex, match.index);
+      const part = text.slice(lastIndex, match.index).replace(/\*/g, '');
       if (part) tokens.push({ type: 'paragraph', text: part, continued: true });
     }
     if (match[1] && match[2]) {
@@ -108,13 +108,20 @@ function parseLine(text) {
         style: 'italic',
         continued: true
       });
+    } else if (match[6]) {
+      tokens.push({
+        type: 'paragraph',
+        text: match[6],
+        style: 'italic',
+        continued: true
+      });
     }
     lastIndex = regex.lastIndex;
   }
   if (tokens.length === 0) {
-    return [{ type: 'paragraph', text }];
+    return [{ type: 'paragraph', text: text.replace(/\*/g, '') }];
   }
-  const rest = text.slice(lastIndex);
+  const rest = text.slice(lastIndex).replace(/\*/g, '');
   if (rest) tokens.push({ type: 'paragraph', text: rest });
   tokens.forEach((t, i) => (t.continued = i < tokens.length - 1));
   return tokens;
@@ -195,7 +202,7 @@ function prepareTemplateData(text) {
     .filter(Boolean);
   const name = lines.shift() || 'Resume';
   const items = lines.map((l) => {
-    const cleaned = l.replace(/^[-*]\s*/, '');
+    const cleaned = l.replace(/^[-*]+\s*/, '');
     const tokens = parseLine(cleaned);
     // Ensure spacing between tokens matches original text
     return tokens.reduce((acc, t, idx) => {
