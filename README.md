@@ -85,6 +85,7 @@ Minimal permissions required by the server:
 - `ucmo` – classic serif styling
 - `professional` – centered header with subtle dividers
 - `vibrant` – bold color accents with contemporary typography
+- `2025` – responsive grid layout with modern Inter font and blue accents
 
 If omitted, `modern` is used.
 
