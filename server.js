@@ -50,6 +50,22 @@ const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
 const TEMPLATE_IDS = CV_TEMPLATES; // Backwards compatibility
 const ALL_TEMPLATES = [...CV_TEMPLATES, ...CL_TEMPLATES];
 
+// Map each CV template to a style group so we can ensure contrasting picks
+const CV_TEMPLATE_GROUPS = {
+  modern: 'modern',
+  ucmo: 'classic',
+  professional: 'professional',
+  vibrant: 'creative',
+  2025: 'futuristic'
+};
+
+// Predefined contrasting template pairs used when no explicit templates are provided
+const CONTRASTING_PAIRS = [
+  ['modern', 'vibrant'],
+  ['ucmo', '2025'],
+  ['professional', 'vibrant']
+];
+
 function selectTemplates({
   defaultCvTemplate = CV_TEMPLATES[0],
   defaultClTemplate = CL_TEMPLATES[0],
@@ -83,14 +99,34 @@ function selectTemplates({
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
   if (!template1 && !template2) {
-    template1 = CV_TEMPLATES[0];
-    template2 = CV_TEMPLATES.find((t) => t !== template1) || CV_TEMPLATES[0];
+    // Randomly pick from contrasting pairs when no templates are specified
+    const pair =
+      CONTRASTING_PAIRS[Math.floor(Math.random() * CONTRASTING_PAIRS.length)];
+    [template1, template2] = pair;
   } else {
     template1 = template1 || defaultCvTemplate;
-    template2 = template2 || defaultCvTemplate;
+    if (!template2) {
+      // Try to find a contrasting template for the specified template1
+      const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
+      if (pair) {
+        template2 = pair.find((t) => t !== template1);
+      } else {
+        template2 = CV_TEMPLATES.find(
+          (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
+        );
+      }
+    } else {
+      template2 = template2;
+    }
   }
-  if (template1 === template2) {
-    template2 = CV_TEMPLATES.find((t) => t !== template1) || CV_TEMPLATES[0];
+  if (
+    template1 === template2 ||
+    CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
+  ) {
+    template2 =
+      CV_TEMPLATES.find(
+        (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
+      ) || CV_TEMPLATES[0];
   }
 
   if (!coverTemplate1 && !coverTemplate2) {
@@ -1656,6 +1692,8 @@ export {
   TEMPLATE_IDS,
   CV_TEMPLATES,
   CL_TEMPLATES,
+  CV_TEMPLATE_GROUPS,
+  CONTRASTING_PAIRS,
   selectTemplates,
   removeGuidanceLines,
   sanitizeGeneratedText
