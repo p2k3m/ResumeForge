@@ -522,6 +522,8 @@ function ensureRequiredSections(
     linkedinExperience = [],
     resumeEducation = [],
     linkedinEducation = [],
+    resumeCertifications = [],
+    linkedinCertifications = [],
     jobTitle,
     skipRequiredSections = false
   } = {},
@@ -647,6 +649,65 @@ function ensureRequiredSections(
       }
     }
   });
+
+  // Certifications section
+  const certHeading = 'Certifications';
+  let certSection = data.sections.find(
+    (s) => normalizeHeading(s.heading).toLowerCase() === certHeading.toLowerCase()
+  );
+  const existing = certSection
+    ? certSection.items.map((tokens) => {
+        if (!tokens.some((t) => t.type === 'bullet')) {
+          tokens.unshift({ type: 'bullet' });
+        }
+        const text = tokens
+          .map((t) => t.text || t.href || '')
+          .join(' ')
+          .trim();
+        const parsed = extractCertifications([text])[0] || {};
+        const key = [
+          parsed.name || '',
+          parsed.provider || '',
+          parsed.url || ''
+        ]
+          .map((s) => s.toLowerCase())
+          .join('|');
+        return { key, tokens };
+      })
+    : [];
+
+  const seenCerts = new Set(existing.map((e) => e.key));
+  const combinedCerts = [...resumeCertifications, ...linkedinCertifications];
+  const certAdditions = [];
+  combinedCerts.forEach((cert) => {
+    const key = [cert.name || '', cert.provider || '', cert.url || '']
+      .map((s) => s.toLowerCase())
+      .join('|');
+    if (seenCerts.has(key)) return;
+    seenCerts.add(key);
+    let line = cert.name || '';
+    if (cert.provider) line += ` - ${cert.provider}`;
+    if (cert.url) line += ` ${cert.url}`;
+    let tokens = parseLine(line);
+    if (!tokens.some((t) => t.type === 'bullet')) {
+      tokens.unshift({ type: 'bullet' });
+    }
+    certAdditions.push({ key, tokens });
+  });
+
+  if (!certSection && (existing.length || certAdditions.length)) {
+    certSection = { heading: certHeading, items: [] };
+    data.sections.push(certSection);
+  }
+
+  if (certSection) {
+    certSection.heading = normalizeHeading(certSection.heading || certHeading);
+    certSection.items = [...existing.map((e) => e.tokens), ...certAdditions.map((c) => c.tokens)];
+    if (!certSection.items.length) {
+      certSection.items = [parseLine('Information not provided')];
+    }
+  }
+
   return data;
 }
 
@@ -1254,6 +1315,71 @@ function extractEducation(source) {
   return entries;
 }
 
+function extractCertifications(source) {
+  if (!source) return [];
+
+  const parseEntry = (text = '') => {
+    const urlMatch = text.match(/https?:\/\/\S+/);
+    const url = urlMatch ? urlMatch[0] : '';
+    if (url) text = text.replace(url, '').trim();
+
+    let name = '';
+    let provider = '';
+
+    const parenMatch = text.match(/^(.*?)\s*\((.*?)\)$/);
+    if (parenMatch) {
+      name = parenMatch[1].trim();
+      provider = parenMatch[2].trim();
+    } else {
+      const parts = text.split(/[-–—|]/);
+      name = parts.shift()?.trim() || '';
+      provider = parts.join('-').trim();
+    }
+
+    return { name, provider, url };
+  };
+
+  if (Array.isArray(source)) {
+    return source.map((item) => {
+      if (typeof item === 'string') return parseEntry(item);
+      const name =
+        item.name || item.title || item.certificateName || item.credentialName || '';
+      const provider =
+        item.provider ||
+        item.authority ||
+        item.issuingOrganization ||
+        item.issuer ||
+        item.organization ||
+        '';
+      const url =
+        item.url || item.credentialUrl || item.link || item.certUrl || '';
+      if (url || name || provider) return { name, provider, url };
+      return parseEntry(String(item));
+    });
+  }
+
+  const lines = String(source).split(/\r?\n/);
+  const entries = [];
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^certifications?/i.test(trimmed)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && /^\s*$/.test(trimmed)) {
+      inSection = false;
+      continue;
+    }
+    if (inSection) {
+      const match = trimmed.match(/^[-*]\s+(.*)/);
+      if (match) entries.push(parseEntry(match[1].trim()));
+      else if (trimmed) entries.push(parseEntry(trimmed));
+    }
+  }
+  return entries;
+}
+
 function extractJsonBlock(text) {
   const fenced = text.match(/```json[\s\S]*?```/i);
   if (fenced) {
@@ -1469,6 +1595,10 @@ app.post('/api/process-cv', (req, res, next) => {
     const linkedinExperience = extractExperience(linkedinData.experience || []);
     const resumeEducation = extractEducation(text);
     const linkedinEducation = extractEducation(linkedinData.education || []);
+    const resumeCertifications = extractCertifications(text);
+    const linkedinCertifications = extractCertifications(
+      linkedinData.certifications || []
+    );
 
     // Use GEMINI_API_KEY from environment or secrets
     const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
@@ -1518,6 +1648,8 @@ app.post('/api/process-cv', (req, res, next) => {
           linkedinExperience,
           resumeEducation,
           linkedinEducation,
+          resumeCertifications,
+          linkedinCertifications,
           jobTitle
         };
         versionData.version1 = sanitizeGeneratedText(
@@ -1598,6 +1730,8 @@ app.post('/api/process-cv', (req, res, next) => {
               linkedinExperience,
               resumeEducation,
               linkedinEducation,
+              resumeCertifications,
+              linkedinCertifications,
               jobTitle
             }
           : name === 'cover_letter1' || name === 'cover_letter2'
@@ -1726,6 +1860,7 @@ export {
   ensureRequiredSections,
   extractExperience,
   extractEducation,
+  extractCertifications,
   fetchLinkedInProfile,
   mergeResumeWithLinkedIn,
   TEMPLATE_IDS,
