@@ -37,4 +37,13 @@ describe('parseLine emphasis handling', () => {
     expect(tokens.map((t) => t.text).join('')).toBe('Text with mismatched markers inside');
     tokens.forEach((t) => expect(t.style).toBeUndefined());
   });
+
+  test('bolds job title and company before pipe', () => {
+    const tokens = parseLine('Software Engineer, Acme Corp | Jan 2020 - Present');
+    const text = tokens.map((t) => t.text || '').join('');
+    expect(text).toBe('Software Engineer, Acme Corp Jan 2020 - Present');
+    const bold = tokens.filter((t) => t.style === 'bold' || t.style === 'bolditalic');
+    expect(bold.map((t) => t.text).join('')).toBe('Software Engineer, Acme Corp');
+    expect(tokens.some((t) => t.type === 'jobsep')).toBe(true);
+  });
 });

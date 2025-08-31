@@ -252,64 +252,94 @@ function parseLine(text) {
   });
   const tokens = [];
   if (bullet) tokens.push({ type: 'bullet' });
-  const parts = text.split(/(\n|\t)/);
-  for (const part of parts) {
-    if (part === '\n') {
-      tokens.push({ type: 'newline' });
-      continue;
-    }
-    if (part === '\t') {
-      tokens.push({ type: 'tab' });
-      continue;
-    }
-    const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
-    let lastIndex = 0;
-    let match;
 
-    function flushSegment(segment) {
-      if (!segment) return;
-      tokens.push(...parseEmphasis(segment));
-    }
-
-    while ((match = linkRegex.exec(part)) !== null) {
-      if (match.index > lastIndex) {
-        flushSegment(part.slice(lastIndex, match.index));
+  function processPart(part, forceBold = false) {
+    const pieces = part.split(/(\n|\t)/);
+    for (const piece of pieces) {
+      if (piece === '\n') {
+        tokens.push({ type: 'newline' });
+        continue;
       }
-      if (match[1] && match[2]) {
-        tokens.push({
-          type: 'link',
-          text: match[1].replace(/[*_]/g, ''),
-          href: match[2],
-          continued: true
-        });
-      } else if (match[3]) {
-        const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
-        let label = match[3];
-        try {
-          const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
-          label = domainMap[hostname] || match[3];
-        } catch {
-          label = match[3];
+      if (piece === '\t') {
+        tokens.push({ type: 'tab' });
+        continue;
+      }
+      const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
+      let lastIndex = 0;
+      let match;
+
+      function flushSegment(segment) {
+        if (!segment) return;
+        const segTokens = parseEmphasis(segment);
+        if (forceBold) {
+          segTokens.forEach((t) => {
+            if (t.style === 'italic') t.style = 'bolditalic';
+            else t.style = t.style && t.style.includes('bold') ? t.style : 'bold';
+          });
         }
-        tokens.push({
-          type: 'link',
-          text: label.replace(/[*_]/g, ''),
-          href: match[3],
-          continued: true
-        });
+        tokens.push(...segTokens);
       }
-      lastIndex = linkRegex.lastIndex;
-    }
-    if (lastIndex < part.length) {
-      flushSegment(part.slice(lastIndex));
+
+      while ((match = linkRegex.exec(piece)) !== null) {
+        if (match.index > lastIndex) {
+          flushSegment(piece.slice(lastIndex, match.index));
+        }
+        if (match[1] && match[2]) {
+          tokens.push({
+            type: 'link',
+            text: match[1].replace(/[*_]/g, ''),
+            href: match[2],
+            continued: true,
+            ...(forceBold ? { style: 'bold' } : {})
+          });
+        } else if (match[3]) {
+          const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
+          let label = match[3];
+          try {
+            const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
+            label = domainMap[hostname] || match[3];
+          } catch {
+            label = match[3];
+          }
+          tokens.push({
+            type: 'link',
+            text: label.replace(/[*_]/g, ''),
+            href: match[3],
+            continued: true,
+            ...(forceBold ? { style: 'bold' } : {})
+          });
+        }
+        lastIndex = linkRegex.lastIndex;
+      }
+      if (lastIndex < piece.length) {
+        flushSegment(piece.slice(lastIndex));
+      }
     }
   }
+
+  const pipeIdx = text.indexOf('|');
+  if (pipeIdx !== -1) {
+    const before = text.slice(0, pipeIdx).trim();
+    const after = text.slice(pipeIdx + 1);
+    processPart(before, true);
+    tokens.push({ type: 'jobsep' });
+    const segments = after.split('|');
+    segments.forEach((seg) => {
+      const trimmed = seg.trim();
+      if (!trimmed) return;
+      tokens.push({ type: 'paragraph', text: ' ' });
+      processPart(trimmed, false);
+    });
+  } else {
+    processPart(text, false);
+  }
+
   if (tokens.length === 0) {
     return [{ type: 'paragraph', text: text.replace(/[*_]/g, '') }];
   }
   const filtered = tokens.filter((t) => t.type !== 'paragraph' || t.text);
   filtered.forEach((t, i) => {
-    if (t.type === 'newline' || t.type === 'tab') return;
+    if (t.type === 'newline' || t.type === 'tab' || t.type === 'jobsep') return;
     t.continued = i < filtered.length - 1;
   });
   return filtered;
@@ -439,14 +469,41 @@ function normalizeName(name = 'Resume') {
 }
 
 function isJobEntry(tokens = []) {
+  if (tokens.some((t) => t.type === 'jobsep')) return true;
   const text = tokens
     .map((t) => t.text || '')
     .join('')
     .toLowerCase();
-  if (text.includes('|')) return true;
   const monthRange = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}.*?(present|\d{4})/;
   const yearRange = /\b\d{4}\b\s*[-–to]+\s*(present|\d{4})/;
   return monthRange.test(text) || yearRange.test(text);
+}
+
+function splitSkills(sections = []) {
+  sections.forEach((sec) => {
+    if (!sec.heading || sec.heading.toLowerCase() !== 'skills') return;
+    const expanded = [];
+    sec.items.forEach((tokens) => {
+      const text = tokens
+        .filter((t) => t.text)
+        .map((t) => t.text)
+        .join('')
+        .trim();
+      if (/[;,]/.test(text)) {
+        const skills = text.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+        skills.forEach((skill) => {
+          const skillTokens = parseLine(skill);
+          if (!skillTokens.some((t) => t.type === 'bullet')) {
+            skillTokens.unshift({ type: 'bullet' });
+          }
+          expanded.push(skillTokens);
+        });
+      } else {
+        expanded.push(tokens);
+      }
+    });
+    sec.items = expanded;
+  });
 }
 
 function moveSummaryJobEntries(sections = []) {
@@ -516,6 +573,7 @@ function parseContent(text, options = {}) {
         )
       };
     });
+    splitSkills(sections);
     moveSummaryJobEntries(sections);
     return ensureRequiredSections({ name, sections }, options);
   } catch {
@@ -589,6 +647,7 @@ function parseContent(text, options = {}) {
         }, [])
       );
     });
+    splitSkills(sections);
     moveSummaryJobEntries(sections);
     return ensureRequiredSections({ name, sections }, options);
   }
@@ -630,6 +689,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             if (t.type === 'newline') return '<br>';
             if (t.type === 'tab') return '<span class="tab"></span>';
             if (t.type === 'bullet') return '<span class="bullet">•</span>';
+            if (t.type === 'jobsep') return '';
             return text;
           })
           .join('')
@@ -763,6 +823,9 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
                 .fillColor(style.bulletColor)
                 .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap })
                 .fillColor(style.textColor);
+              return;
+            }
+            if (t.type === 'jobsep') {
               return;
             }
             if (t.type === 'newline') {
