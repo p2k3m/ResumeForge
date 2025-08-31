@@ -125,8 +125,9 @@ function parseLine(text) {
   if (tokens.length === 0) {
     return [{ type: 'paragraph', text: text.replace(/[*_]/g, '') }];
   }
-  tokens.forEach((t, i) => (t.continued = i < tokens.length - 1));
-  return tokens;
+  const filtered = tokens.filter((t) => t.type !== 'paragraph' || t.text);
+  filtered.forEach((t, i) => (t.continued = i < filtered.length - 1));
+  return filtered;
 }
 
 function parseEmphasis(segment) {
@@ -135,9 +136,15 @@ function parseEmphasis(segment) {
   let buffer = '';
   const stack = [];
 
+  const pushBuffer = () => {
+    if (!buffer) return;
+    tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
+    buffer = '';
+  };
+
   const styleFromStack = () => {
-    const hasBold = stack.some((s) => s.type === 'bold');
-    const hasItalic = stack.some((s) => s.type === 'italic');
+    const hasBold = stack.some((s) => s.type === 'bold' || s.type === 'bolditalic');
+    const hasItalic = stack.some((s) => s.type === 'italic' || s.type === 'bolditalic');
     if (hasBold && hasItalic) return 'bolditalic';
     if (hasBold) return 'bold';
     if (hasItalic) return 'italic';
@@ -149,36 +156,32 @@ function parseEmphasis(segment) {
     if (ch === '*' || ch === '_') {
       let count = 1;
       while (segment[i + count] === ch) count++;
-      const type = count >= 2 ? 'bold' : 'italic';
-      const markerLen = count >= 2 ? 2 : 1;
-      const ahead = segment.indexOf(ch.repeat(markerLen), i + markerLen);
-      if (stack.length && stack[stack.length - 1].char === ch && stack[stack.length - 1].type === type) {
-        if (buffer) {
-          tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
-          buffer = '';
+      let remaining = count;
+      while (remaining > 0) {
+        const markerLen = remaining >= 3 ? 3 : remaining >= 2 ? 2 : 1;
+        const type = markerLen === 3 ? 'bolditalic' : markerLen === 2 ? 'bold' : 'italic';
+        const ahead = segment.indexOf(ch.repeat(markerLen), i + markerLen);
+        if (
+          stack.length &&
+          stack[stack.length - 1].char === ch &&
+          stack[stack.length - 1].type === type
+        ) {
+          pushBuffer();
+          stack.pop();
+        } else if (ahead !== -1) {
+          pushBuffer();
+          stack.push({ char: ch, type });
         }
-        stack.pop();
-        if (count > markerLen) buffer += ch.repeat(count - markerLen);
-      } else if (ahead !== -1) {
-        if (buffer) {
-          tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
-          buffer = '';
-        }
-        stack.push({ char: ch, type });
-        if (count > markerLen) buffer += ch.repeat(count - markerLen);
-      } else {
-        if (count > markerLen) buffer += ch.repeat(count - markerLen);
+        i += markerLen;
+        remaining -= markerLen;
       }
-      i += count;
     } else {
       buffer += ch;
       i++;
     }
   }
 
-  if (buffer) {
-    tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
-  }
+  pushBuffer();
   if (stack.length) {
     tokens.forEach((t) => {
       t.style = undefined;
@@ -187,7 +190,7 @@ function parseEmphasis(segment) {
   tokens.forEach((t) => {
     if (t.text) t.text = t.text.replace(/[*_]/g, '');
   });
-  return tokens;
+  return tokens.filter((t) => t.text);
 }
 
 
