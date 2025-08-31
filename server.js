@@ -592,19 +592,22 @@ let generatePdf = async function (text, templateId = 'modern') {
           .fontSize(14)
           .text(sec.heading, { paragraphGap: style.paragraphGap, lineGap: style.lineGap });
         (sec.items || []).forEach((tokens) => {
+          const startY = doc.y;
           doc
             .font(style.font)
             .fontSize(12)
             .fillColor(style.bulletColor)
-            .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap, paragraphGap: style.paragraphGap })
+            .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap })
             .fillColor(style.textColor);
           tokens.forEach((t, idx) => {
             if (t.type === 'newline') {
-              doc.text('', { continued: false, lineGap: style.lineGap, paragraphGap: style.paragraphGap });
-              doc.text('   ', { continued: true, lineGap: style.lineGap, paragraphGap: style.paragraphGap });
+              const before = doc.y;
+              doc.text('', { continued: false, lineGap: style.lineGap });
+              if (doc.y === before) doc.moveDown();
+              doc.text('   ', { continued: true, lineGap: style.lineGap });
               return;
             }
-            const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap, paragraphGap: style.paragraphGap };
+            const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap };
             if (t.type === 'tab') {
               doc.text('    ', opts);
               return;
@@ -621,6 +624,9 @@ let generatePdf = async function (text, templateId = 'modern') {
               doc.font(style.font);
             }
           });
+          if (doc.y === startY) doc.moveDown();
+          const extra = style.paragraphGap / doc.currentLineHeight(true);
+          if (extra) doc.moveDown(extra);
         });
         doc.moveDown();
       });

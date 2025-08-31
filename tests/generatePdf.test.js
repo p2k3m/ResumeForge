@@ -330,6 +330,40 @@ describe('generatePdf and parsing', () => {
     expect(matches[1]).toBeLessThan(matches[0]);
   });
 
+  test('PDFKit multi-line bullets do not overlap', async () => {
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockRejectedValue(new Error('no browser'));
+    const input = 'Jane Doe\n- First line\n\tSecond line\n- Third bullet';
+    const pdf = await generatePdf(input, 'modern');
+    const start = pdf.indexOf(Buffer.from('stream')) + 6;
+    const nl = pdf.indexOf('\n', start) + 1;
+    const end = pdf.indexOf(Buffer.from('endstream'), nl);
+    let content = pdf.slice(nl, end);
+    try {
+      content = zlib.inflateSync(content).toString();
+    } catch {
+      content = content.toString();
+    }
+    const getY = (text) => {
+      const hex = Buffer.from(text).toString('hex');
+      const regex = new RegExp(
+        `1 0 0 1 [0-9.]+ ([0-9.]+) Tm\\n\/F1 12 Tf\\n\\[<${hex}[0-9a-f]*>[^\\]]*\\] TJ`
+      );
+      const m = content.match(regex);
+      return m ? parseFloat(m[1]) : null;
+    };
+    const y1 = getY('First line');
+    const y2 = getY('Second line');
+    const y3 = getY('Third');
+    expect(y1).toBeDefined();
+    expect(y2).toBeDefined();
+    expect(y3).toBeDefined();
+    expect(y2).toBeLessThan(y1);
+    expect(y3).toBeLessThan(y2);
+    launchSpy.mockRestore();
+  });
+
   test('2025 template renders expected HTML snapshot', async () => {
     const input = 'Jane Doe\n# Skills\n- Testing';
     const data = parseContent(input);
