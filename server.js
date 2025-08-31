@@ -103,6 +103,68 @@ async function fetchLinkedInProfile(url) {
   }
 }
 
+function analyzeJobDescription(html) {
+  const strip = (s) =>
+    s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = strip(html);
+
+  let title = '';
+  const titleMatch =
+    html.match(/<h1[^>]*>([^<]+)<\/h1>/i) ||
+    html.match(/<title>([^<]+)<\/title>/i) ||
+    html.match(/"title"\s*:\s*"([^\"]+)"/i);
+  if (titleMatch) title = strip(titleMatch[1]);
+
+  const technicalTerms = [
+    'javascript',
+    'typescript',
+    'python',
+    'java',
+    'c\\+\\+',
+    'c#',
+    'go',
+    'ruby',
+    'php',
+    'swift',
+    'kotlin',
+    'react',
+    'angular',
+    'vue',
+    'node',
+    'express',
+    'next.js',
+    'docker',
+    'kubernetes',
+    'aws',
+    'gcp',
+    'azure',
+    'sql',
+    'mysql',
+    'postgresql',
+    'mongodb',
+    'git',
+    'graphql',
+    'linux',
+    'bash',
+    'redis',
+    'jenkins',
+    'terraform',
+    'ansible'
+  ];
+
+  const lower = text.toLowerCase();
+  const skills = [];
+  for (const term of technicalTerms) {
+    const regex = new RegExp(`\\b${term}\\b`, 'g');
+    const matches = lower.match(regex);
+    if (matches && matches.length > 1) {
+      skills.push(term.replace(/\\+\\+/g, '++'));
+    }
+  }
+
+  return { title, skills, text };
+}
+
 function mergeResumeWithLinkedIn(resumeText, profile) {
   const parts = [resumeText];
   if (profile && typeof profile === 'object') {
@@ -726,8 +788,13 @@ app.post('/api/process-cv', (req, res, next) => {
       message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}`
     });
 
-    const { data: jobDescription } = await axios.get(jobDescriptionUrl);
+    const { data: jobDescriptionHtml } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
+    const {
+      title: jobTitle,
+      skills: jobSkills,
+      text: jobDescription
+    } = analyzeJobDescription(jobDescriptionHtml);
 
     let linkedinData = {};
     try {
@@ -766,6 +833,8 @@ app.post('/api/process-cv', (req, res, next) => {
   **Input Data:**
   - **Raw CV Text:** {{cvText}}
   - **Job Description Text:** {{jdText}}
+  - **Official Job Title:** {{jobTitle}}
+  - **Key Skills from Job Description:** {{jobSkills}}
 
   **Instructions:**
   Return ONLY a valid JSON object with two keys: \`version1\` and \`version2\`. Each value must be a full resume string.
@@ -782,7 +851,9 @@ app.post('/api/process-cv', (req, res, next) => {
 
     const versionsPrompt = versionsTemplate
       .replace('{{cvText}}', combinedProfile)
-      .replace('{{jdText}}', jobDescription);
+      .replace('{{jdText}}', jobDescription)
+      .replace('{{jobTitle}}', jobTitle)
+      .replace('{{jobSkills}}', jobSkills.join(', '));
 
     let versionData = {};
     try {
@@ -802,11 +873,13 @@ app.post('/api/process-cv', (req, res, next) => {
       return res.status(500).json({ error: 'AI response invalid' });
     }
 
-    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
+    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nOfficial Job Title: {{jobTitle}}\nKey Skills: {{jobSkills}}\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
 
     const coverPrompt = coverTemplate
       .replace('{{cvText}}', combinedProfile)
-      .replace('{{jdText}}', jobDescription);
+      .replace('{{jdText}}', jobDescription)
+      .replace('{{jobTitle}}', jobTitle)
+      .replace('{{jobSkills}}', jobSkills.join(', '));
 
     let coverData = {};
     try {
