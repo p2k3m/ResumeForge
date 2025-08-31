@@ -90,6 +90,31 @@ describe('generatePdf and parsing', () => {
     expect(second.map((t) => t.text).join('')).toBe('Final line');
   });
 
+  test('multi-line bullet spacing maintained in JSON input', () => {
+    const json = {
+      name: 'Jane Doe',
+      sections: [{ heading: 'Work', items: ['First line\n\tSecond line'] }]
+    };
+    const data = parseContent(JSON.stringify(json));
+    const [tokens] = data.sections[0].items;
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'First line' }),
+        expect.objectContaining({ type: 'newline' }),
+        expect.objectContaining({ type: 'tab' }),
+        expect.objectContaining({ text: 'Second line' })
+      ])
+    );
+    const rendered = tokens
+      .map((t) => {
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        return t.text;
+      })
+      .join('');
+    expect(rendered).toBe('First line<br><span class="tab"></span>Second line');
+  });
+
   test('single asterisk italic and bullet handling', () => {
     const data = parseContent(
       'Jane Doe\n* This has *italic* text'
