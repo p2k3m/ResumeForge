@@ -13,6 +13,7 @@ import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import puppeteer from 'puppeteer';
+import JSON5 from 'json5';
 
 const app = express();
 app.use(cors());
@@ -490,6 +491,38 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
+function extractJsonBlock(text) {
+  const fenced = text.match(/```json[\s\S]*?```/i);
+  if (fenced) {
+    text = fenced[0].replace(/```json|```/gi, '');
+  }
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function parseAiJson(text) {
+  const block = extractJsonBlock(text);
+  if (!block) {
+    console.error('No JSON object found in AI response:', text);
+    return null;
+  }
+  try {
+    return JSON5.parse(block);
+  } catch (e) {
+    console.error('Failed to parse AI JSON:', text);
+    return null;
+  }
+}
+
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -606,13 +639,10 @@ app.post('/api/process-cv', (req, res, next) => {
     try {
       const result = await generativeModel.generateContent(versionsPrompt);
       const responseText = result.response.text();
-      const match = responseText.match(/\{[\s\S]*\}/);
-      if (match) {
-        const parsed = JSON.parse(match[0]);
+      const parsed = parseAiJson(responseText);
+      if (parsed) {
         versionData.version1 = parsed.version1;
         versionData.version2 = parsed.version2;
-      } else {
-        console.error('No JSON object found in AI response:', responseText);
       }
     } catch (e) {
       console.error('Failed to generate resume versions:', e);
@@ -633,12 +663,8 @@ app.post('/api/process-cv', (req, res, next) => {
     try {
       const coverResult = await generativeModel.generateContent(coverPrompt);
       const coverText = coverResult.response.text();
-      const match = coverText.match(/\{[\s\S]*\}/);
-      if (match) {
-        coverData = JSON.parse(match[0]);
-      } else {
-        console.error('No JSON object found in cover letter response:', coverText);
-      }
+      const parsed = parseAiJson(coverText);
+      if (parsed) coverData = parsed;
     } catch (e) {
       console.error('Failed to generate cover letters:', e);
     }
