@@ -4,7 +4,8 @@ import {
   parseContent,
   CV_TEMPLATES,
   CL_TEMPLATES,
-  selectTemplates
+  selectTemplates,
+  CONTRASTING_PAIRS
 } from '../server.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
@@ -101,9 +102,14 @@ describe('generatePdf and parsing', () => {
     }
   );
 
-  test('selectTemplates picks different defaults', () => {
+  test('selectTemplates picks contrasting defaults', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
-    expect(template1).not.toBe(template2);
+    const contrasting = CONTRASTING_PAIRS.some(
+      ([a, b]) =>
+        (template1 === a && template2 === b) ||
+        (template1 === b && template2 === a)
+    );
+    expect(contrasting).toBe(true);
     expect(coverTemplate1).not.toBe(coverTemplate2);
     expect(CV_TEMPLATES).toContain(template1);
     expect(CV_TEMPLATES).toContain(template2);
@@ -111,13 +117,14 @@ describe('generatePdf and parsing', () => {
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
-  test('mismatched defaults yield different templates', () => {
+  test('mismatched defaults yield contrasting templates', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates({
       template1: CV_TEMPLATES[0],
       coverTemplate1: CL_TEMPLATES[0]
     });
     expect(template1).toBe(CV_TEMPLATES[0]);
-    expect(template2).not.toBe(template1);
+    const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
+    expect(template2).toBe(pair.find((t) => t !== template1));
     expect(coverTemplate1).toBe(CL_TEMPLATES[0]);
     expect(coverTemplate2).not.toBe(coverTemplate1);
     expect(CV_TEMPLATES).toContain(template2);
