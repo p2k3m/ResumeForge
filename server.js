@@ -332,6 +332,7 @@ app.post('/api/process-cv', (req, res, next) => {
   }
 
   const { jobDescriptionUrl } = req.body;
+  const templateId = req.body.template || req.query.template || 'modern';
   if (!req.file) {
     return res.status(400).json({ error: 'resume file required' });
   }
@@ -487,7 +488,7 @@ app.post('/api/process-cv', (req, res, next) => {
           ? 'cover_letter/'
           : '';
       const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-      const pdfBuffer = await generatePdf(text);
+      const pdfBuffer = await generatePdf(text, templateId);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
