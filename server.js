@@ -508,10 +508,19 @@ function parseEmphasis(segment) {
 
 
 function normalizeHeading(heading = '') {
-  return String(heading)
+  const base = String(heading)
     .trim()
     .replace(/[-–—:.;,!?]+$/g, '')
     .trim();
+  const lower = base.toLowerCase().replace(/\s+/g, ' ');
+  if (
+    /^certifications?$/.test(lower) ||
+    /^trainings?$/.test(lower) ||
+    /^trainings?\s*[\/&]\s*certifications?$/.test(lower)
+  ) {
+    return 'Certification';
+  }
+  return base;
 }
 
 
@@ -651,7 +660,7 @@ function ensureRequiredSections(
   });
 
   // Certifications section
-  const certHeading = 'Certifications';
+  const certHeading = 'Certification';
   let certSection = data.sections.find(
     (s) => normalizeHeading(s.heading).toLowerCase() === certHeading.toLowerCase()
   );
@@ -885,6 +894,7 @@ function parseContent(text, options = {}) {
       rest
     );
     ensured.sections = mergeDuplicateSections(ensured.sections);
+    ensured.sections = pruneEmptySections(ensured.sections);
     return ensured;
   } catch {
     const lines = text.split(/\r?\n/);
