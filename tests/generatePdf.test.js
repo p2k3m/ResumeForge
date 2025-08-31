@@ -2,7 +2,8 @@ import { jest } from '@jest/globals';
 import {
   generatePdf,
   parseContent,
-  TEMPLATE_IDS,
+  CV_TEMPLATES,
+  CL_TEMPLATES,
   selectTemplates
 } from '../server.js';
 import puppeteer from 'puppeteer';
@@ -82,24 +83,41 @@ describe('generatePdf and parsing', () => {
     );
   });
 
-  test.each(TEMPLATE_IDS)('generatePdf creates PDF from %s template', async (tpl) => {
+  test.each(CV_TEMPLATES)('generatePdf creates PDF from %s template', async (tpl) => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing', tpl);
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(0);
   });
 
+  test.each(CL_TEMPLATES)('generatePdf creates PDF from %s cover template', async (tpl) => {
+    const buffer = await generatePdf('Jane Doe\nParagraph', tpl, {
+      skipRequiredSections: true
+    });
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(buffer.length).toBeGreaterThan(0);
+  });
+
   test('selectTemplates picks different defaults', () => {
-    const { template1, template2 } = selectTemplates();
+    const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
     expect(template1).not.toBe(template2);
-    expect(TEMPLATE_IDS).toContain(template1);
-    expect(TEMPLATE_IDS).toContain(template2);
+    expect(coverTemplate1).not.toBe(coverTemplate2);
+    expect(CV_TEMPLATES).toContain(template1);
+    expect(CV_TEMPLATES).toContain(template2);
+    expect(CL_TEMPLATES).toContain(coverTemplate1);
+    expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
   test('mismatched defaults yield different templates', () => {
-    const { template1, template2 } = selectTemplates({ template1: TEMPLATE_IDS[0] });
-    expect(template1).toBe(TEMPLATE_IDS[0]);
+    const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates({
+      template1: CV_TEMPLATES[0],
+      coverTemplate1: CL_TEMPLATES[0]
+    });
+    expect(template1).toBe(CV_TEMPLATES[0]);
     expect(template2).not.toBe(template1);
-    expect(TEMPLATE_IDS).toContain(template2);
+    expect(coverTemplate1).toBe(CL_TEMPLATES[0]);
+    expect(coverTemplate2).not.toBe(coverTemplate1);
+    expect(CV_TEMPLATES).toContain(template2);
+    expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
   test('script tags render as text', () => {
