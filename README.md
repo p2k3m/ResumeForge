@@ -79,6 +79,15 @@ Minimal permissions required by the server:
 - Allowed file types: `.pdf`
 - Legacy `.doc` files are rejected.
 
+## Templates
+`/api/process-cv` accepts a `template` parameter (in the request body or query string) selecting the resume layout. Available values:
+- `modern` – clean sans-serif look (default)
+- `ucmo` – classic serif styling
+- `professional` – centered header with subtle dividers
+
+If omitted, `modern` is used.
+
+
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
