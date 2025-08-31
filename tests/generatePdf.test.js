@@ -288,4 +288,22 @@ describe('generatePdf and parsing', () => {
     expect(html).toMatchSnapshot();
   });
 
+  test('2025 template handles multi-line bullet spacing', async () => {
+    const input = 'Jane Doe\n# Skills\n- First line\n\tSecond line';
+    const [tokens] = parseContent(input).sections[0].items;
+    const rendered = tokens
+      .map((t) => {
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        return t.text || '';
+      })
+      .join('');
+    expect(rendered).toBe(
+      'First line<br><span class="tab"></span>Second line'
+    );
+    const css = await fs.readFile(path.resolve('templates', '2025.css'), 'utf8');
+    expect(css).toMatch(/li\s*{[^}]*white-space:\s*pre-wrap/);
+    expect(css).toMatch(/li\s*{[^}]*line-height:\s*[0-9.]+/);
+  });
+
 });
