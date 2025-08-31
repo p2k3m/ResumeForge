@@ -38,6 +38,8 @@ const uploadResume = upload.single('resume');
 const DEFAULT_SECRET_ID = 'ResumeForge';
 const DEFAULT_AWS_REGION = 'ap-south-1';
 
+const TEMPLATE_IDS = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
+
 process.env.SECRET_ID = process.env.SECRET_ID || DEFAULT_SECRET_ID;
 process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
 
@@ -300,6 +302,7 @@ function parseContent(text) {
 }
 
 async function generatePdf(text, templateId = 'modern') {
+  if (!TEMPLATE_IDS.includes(templateId)) templateId = 'modern';
   const data = parseContent(text);
   const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
@@ -725,4 +728,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-export { extractText, generatePdf, parseContent, parseLine };
+export { extractText, generatePdf, parseContent, parseLine, TEMPLATE_IDS };
