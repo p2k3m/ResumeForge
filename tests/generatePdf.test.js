@@ -1,8 +1,11 @@
 import { jest } from '@jest/globals';
-import { generatePdf, parseContent } from '../server.js';
+import { generatePdf, parseContent, TEMPLATE_IDS } from '../server.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import zlib from 'zlib';
+import fs from 'fs/promises';
+import path from 'path';
+import Handlebars from '../lib/handlebars.js';
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
@@ -27,7 +30,7 @@ describe('generatePdf and parsing', () => {
     expect(data.sections.map((s) => s.heading)).toEqual(['Experience', 'Skills']);
   });
 
-  test.each(['modern', 'ucmo', 'professional', 'vibrant', '2025'])('generatePdf creates PDF from %s template', async (tpl) => {
+  test.each(TEMPLATE_IDS)('generatePdf creates PDF from %s template', async (tpl) => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing', tpl);
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(0);
@@ -230,6 +233,35 @@ describe('generatePdf and parsing', () => {
     const matches = [...content.matchAll(/1 0 0 1 57\.536 ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
     expect(matches.length).toBeGreaterThan(1);
     expect(matches[1]).toBeLessThan(matches[0]);
+  });
+
+  test('2025 template renders expected HTML snapshot', async () => {
+    const input = 'Jane Doe\n# Skills\n- Testing';
+    const data = parseContent(input);
+    const tplSrc = await fs.readFile(path.resolve('templates', '2025.html'), 'utf8');
+    const css = await fs.readFile(path.resolve('templates', '2025.css'), 'utf8');
+    const htmlData = {
+      ...data,
+      sections: data.sections.map((sec) => ({
+        ...sec,
+        items: sec.items.map((tokens) =>
+          tokens
+            .map((t) => {
+              if (t.type === 'link') return `<a href="${t.href}">${t.text}</a>`;
+              if (t.style === 'bolditalic') return `<strong><em>${t.text}</em></strong>`;
+              if (t.style === 'bold') return `<strong>${t.text}</strong>`;
+              if (t.style === 'italic') return `<em>${t.text}</em>`;
+              if (t.type === 'newline') return '<br>';
+              if (t.type === 'tab') return '<span class="tab"></span>';
+              return t.text || '';
+            })
+            .join('')
+        )
+      }))
+    };
+    let html = Handlebars.compile(tplSrc)(htmlData);
+    html = html.replace('</head>', `<style>${css}</style></head>`);
+    expect(html).toMatchSnapshot();
   });
 
 });

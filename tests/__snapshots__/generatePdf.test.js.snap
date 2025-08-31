@@ -1,4 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`generatePdf and parsing 2025 template renders expected HTML snapshot 1`] = `
+"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resume</title>
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 :root {
   --accent: #3f51b5;
@@ -71,7 +80,7 @@ li {
 }
 
 li::before {
-  content: '\2022';
+  content: '\\2022';
   position: absolute;
   left: 0;
   color: var(--accent);
@@ -82,3 +91,26 @@ li::before {
   width: 1.5em;
 }
 
+</style></head>
+<body>
+  <header class="header">
+    <h1>Jane Doe</h1>
+  </header>
+  <main class="content">
+    
+    <section class="section">
+      <h2>Skills</h2>
+      {{#if items}}
+        <ul>
+          {{#each items}}
+            <li>{{{this}}}</li>
+          
+        </ul>
+      {{/if}}
+    </section>
+    {{/each}}
+  </main>
+</body>
+</html>
+"
+`;
