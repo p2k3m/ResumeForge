@@ -479,64 +479,98 @@ function ensureRequiredSections(
     } else {
       section.heading = normalizeHeading(section.heading);
     }
-    if (!section.items || section.items.length === 0) {
-      if (heading.toLowerCase() === 'work experience') {
-        const combined = [...resumeExperience, ...linkedinExperience];
-        const seen = new Set();
-        const unique = [];
-        combined.forEach((exp) => {
+    if (heading.toLowerCase() === 'work experience') {
+      section.items = section.items || [];
+      const existing = section.items
+        .map((tokens) => {
+          const parts = [];
+          for (const t of tokens) {
+            if (t.type === 'newline') break;
+            if (t.text) parts.push(t.text);
+          }
+          const line = parts.join('').trim();
+          if (!line) return null;
+          const parsed = extractExperience([line])[0];
+          if (!parsed) return null;
           const key = [
-            exp.company || '',
-            exp.title || '',
-            exp.startDate || '',
-            exp.endDate || ''
+            parsed.company || '',
+            parsed.title || '',
+            parsed.startDate || '',
+            parsed.endDate || ''
           ]
             .map((s) => s.toLowerCase())
             .join('|');
-          if (!seen.has(key)) {
-            seen.add(key);
-            unique.push({ ...exp });
-          }
-        });
-        unique.sort((a, b) => {
-          const aDate = Date.parse(a.endDate || a.startDate || '');
-          const bDate = Date.parse(b.endDate || b.startDate || '');
-          return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
-        });
-        if (jobTitle && unique.length && unique[0]) {
-          unique[0].title = jobTitle;
+          return { key, exp: parsed, tokens };
+        })
+        .filter(Boolean);
+
+      const seen = new Set(existing.map((e) => e.key));
+      const combined = [...resumeExperience, ...linkedinExperience];
+      const additions = [];
+      combined.forEach((exp) => {
+        const key = [
+          exp.company || '',
+          exp.title || '',
+          exp.startDate || '',
+          exp.endDate || ''
+        ]
+          .map((s) => s.toLowerCase())
+          .join('|');
+        if (!seen.has(key)) {
+          seen.add(key);
+          additions.push({ ...exp, key });
         }
-        const format = (exp) => {
-          const datePart =
-            exp.startDate || exp.endDate
-              ? ` (${exp.startDate || ''} – ${exp.endDate || ''})`
-              : '';
-          const base = [exp.title, exp.company].filter(Boolean).join(' at ');
-          return `${base}${datePart}`.trim();
-        };
-        if (unique.length) {
-          section.items = unique.map((exp) => {
-            const tokens = parseLine(format(exp));
-            if (!tokens.some((t) => t.type === 'bullet')) {
-              tokens.unshift({ type: 'bullet' });
+      });
+
+      additions.sort((a, b) => {
+        const aDate = Date.parse(a.endDate || a.startDate || '');
+        const bDate = Date.parse(b.endDate || b.startDate || '');
+        return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
+      });
+      if (jobTitle && additions.length && existing.length === 0) {
+        additions[0].title = jobTitle;
+      }
+
+      const format = (exp) => {
+        const datePart =
+          exp.startDate || exp.endDate
+            ? ` (${exp.startDate || ''} – ${exp.endDate || ''})`
+            : '';
+        const base = [exp.title, exp.company].filter(Boolean).join(' at ');
+        return `${base}${datePart}`.trim();
+      };
+
+      const formattedAdditions = additions.map((exp) => {
+        const tokens = parseLine(format(exp));
+        if (!tokens.some((t) => t.type === 'bullet')) {
+          tokens.unshift({ type: 'bullet' });
+        }
+        if (exp.responsibilities && exp.responsibilities.length) {
+          exp.responsibilities.forEach((r) => {
+            tokens.push({ type: 'newline' });
+            tokens.push({ type: 'tab' });
+            let respTokens = parseLine(String(r));
+            if (!respTokens.some((t) => t.type === 'bullet')) {
+              respTokens.unshift({ type: 'bullet' });
             }
-            if (exp.responsibilities && exp.responsibilities.length) {
-              exp.responsibilities.forEach((r) => {
-                tokens.push({ type: 'newline' });
-                tokens.push({ type: 'tab' });
-                let respTokens = parseLine(String(r));
-                if (!respTokens.some((t) => t.type === 'bullet')) {
-                  respTokens.unshift({ type: 'bullet' });
-                }
-                tokens.push(...respTokens);
-              });
-            }
-            return tokens;
+            tokens.push(...respTokens);
           });
-        } else {
-          section.items = [parseLine('Information not provided')];
         }
-      } else if (heading.toLowerCase() === 'education') {
+        return { key: exp.key, exp, tokens };
+      });
+
+      const all = [...existing, ...formattedAdditions];
+      all.sort((a, b) => {
+        const aDate = Date.parse(a.exp.endDate || a.exp.startDate || '');
+        const bDate = Date.parse(b.exp.endDate || b.exp.startDate || '');
+        return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
+      });
+
+      section.items = all.length
+        ? all.map((e) => e.tokens)
+        : [parseLine('Information not provided')];
+    } else if (!section.items || section.items.length === 0) {
+      if (heading.toLowerCase() === 'education') {
         const bullets = resumeEducation.length
           ? resumeEducation
           : linkedinEducation;
@@ -1600,6 +1634,7 @@ export {
   setGeneratePdf,
   parseContent,
   parseLine,
+  ensureRequiredSections,
   extractExperience,
   extractEducation,
   fetchLinkedInProfile,
