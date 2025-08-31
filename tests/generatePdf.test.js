@@ -50,8 +50,14 @@ describe('generatePdf and parsing', () => {
     const edu = data.sections.find((s) => s.heading === 'Education');
     expect(work).toBeDefined();
     expect(edu).toBeDefined();
-    expect(work.items).toEqual([]);
-    expect(edu.items).toEqual([]);
+    expect(work.items).toHaveLength(1);
+    expect(work.items[0].map((t) => t.text).join('')).toBe(
+      'Information not provided'
+    );
+    expect(edu.items).toHaveLength(1);
+    expect(edu.items[0].map((t) => t.text).join('')).toBe(
+      'Information not provided'
+    );
   });
 
   test('parseContent adds required sections for JSON', () => {
@@ -61,8 +67,14 @@ describe('generatePdf and parsing', () => {
     const edu = data.sections.find((s) => s.heading === 'Education');
     expect(work).toBeDefined();
     expect(edu).toBeDefined();
-    expect(work.items).toEqual([]);
-    expect(edu.items).toEqual([]);
+    expect(work.items).toHaveLength(1);
+    expect(work.items[0].map((t) => t.text).join('')).toBe(
+      'Information not provided'
+    );
+    expect(edu.items).toHaveLength(1);
+    expect(edu.items[0].map((t) => t.text).join('')).toBe(
+      'Information not provided'
+    );
   });
 
   test.each(TEMPLATE_IDS)('generatePdf creates PDF from %s template', async (tpl) => {
