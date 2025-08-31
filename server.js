@@ -126,7 +126,10 @@ function parseLine(text) {
     return [{ type: 'paragraph', text: text.replace(/[*_]/g, '') }];
   }
   const filtered = tokens.filter((t) => t.type !== 'paragraph' || t.text);
-  filtered.forEach((t, i) => (t.continued = i < filtered.length - 1));
+  filtered.forEach((t, i) => {
+    if (t.type === 'newline' || t.type === 'tab') return;
+    t.continued = i < filtered.length - 1;
+  });
   return filtered;
 }
 
@@ -273,7 +276,8 @@ function parseContent(text) {
         for (const ch of tabs) {
           if (ch === '\u0009') current.push({ type: 'tab' });
         }
-        current.push(...parseLine(indentMatch[1].trim()));
+        // Preserve internal spacing on continuation lines
+        current.push(...parseLine(indentMatch[1]));
         continue;
       }
       if (current.length) currentSection.items.push(current);

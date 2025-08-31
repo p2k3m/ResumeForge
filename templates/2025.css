@@ -63,6 +63,7 @@ ul {
 }
 
 li {
+  /* preserve formatting for multi-line bullets */
   margin-bottom: 0.5rem;
   position: relative;
   padding-left: 1.2em;
