@@ -18,6 +18,14 @@ jest.unstable_mockModule('@aws-sdk/client-secrets-manager', () => ({
   GetSecretValueCommand: jest.fn()
 }));
 
+const mockDynamoSend = jest.fn();
+jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({ send: mockDynamoSend })),
+  CreateTableCommand: jest.fn((input) => ({ input, __type: 'CreateTableCommand' })),
+  DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
+  PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' }))
+}));
+
 jest.unstable_mockModule('../logger.js', () => ({
   logEvent: jest.fn().mockResolvedValue(undefined)
 }));
@@ -43,6 +51,17 @@ generateContentMock
     }
   });
 
+const setupDefaultDynamoMock = () => {
+  mockDynamoSend.mockReset();
+  mockDynamoSend.mockImplementation((cmd) => {
+    if (cmd.__type === 'DescribeTableCommand') {
+      return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+    }
+    return Promise.resolve({});
+  });
+};
+setupDefaultDynamoMock();
+
 jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: 'Job description' }) }
 }));
@@ -61,6 +80,10 @@ const serverModule = await import('../server.js');
 const { default: app, extractText, setGeneratePdf, parseContent } = serverModule;
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
+beforeEach(() => {
+  setupDefaultDynamoMock();
+});
+
 describe('health check', () => {
   test('GET /healthz', async () => {
     const res = await request(app).get('/healthz');
@@ -70,31 +93,77 @@ describe('health check', () => {
 });
 
 describe('/api/process-cv', () => {
-  test('successful processing', async () => {
-    const res = await request(app)
+  test('handles DynamoDB table lifecycle', async () => {
+    mockDynamoSend
+      .mockImplementationOnce(() =>
+        Promise.reject({ name: 'ResourceNotFoundException' })
+      )
+      .mockImplementationOnce(() => Promise.resolve({}))
+      .mockImplementationOnce(() =>
+        Promise.resolve({ Table: { TableStatus: 'ACTIVE' } })
+      );
+
+    const res1 = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-    expect(res.status).toBe(200);
-    expect(res.body.urls).toHaveLength(4);
-    expect(res.body.urls.map((u) => u.type).sort()).toEqual([
+    expect(res1.status).toBe(200);
+    let types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
+    expect(types).toEqual([
+      'DescribeTableCommand',
+      'CreateTableCommand',
+      'DescribeTableCommand',
+      'PutItemCommand'
+    ]);
+
+    setupDefaultDynamoMock();
+    mockDynamoSend.mockClear();
+    mockS3Send.mockClear();
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              version1: 'v1',
+              version2: 'v2'
+            })
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              cover_letter1: 'cl1',
+              cover_letter2: 'cl2'
+            })
+        }
+      });
+
+    const res2 = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res2.status).toBe(200);
+    expect(res2.body.urls).toHaveLength(4);
+    expect(res2.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
       'cover_letter2',
       'version1',
       'version2'
     ]);
-    expect(res.body.applicantName).toBeTruthy();
+    expect(res2.body.applicantName).toBeTruthy();
 
-    const sanitized = res.body.applicantName
+    const sanitized = res2.body.applicantName
       .trim()
       .split(/\s+/)
       .slice(0, 2)
       .join('_')
       .toLowerCase();
 
-    // Returned URLs should contain applicant-specific and type-based paths
-    res.body.urls.forEach(({ type, url }) => {
+    res2.body.urls.forEach(({ type, url }) => {
       expect(url).toContain('/first/');
       expect(url).toContain(`/${sanitized}/`);
       if (type.startsWith('cover_letter')) {
@@ -104,7 +173,6 @@ describe('/api/process-cv', () => {
       }
     });
 
-    // All uploaded PDFs should use applicant-specific S3 keys
     const pdfKeys = mockS3Send.mock.calls
       .map((c) => c[0]?.input?.Key)
       .filter((k) => k && k.endsWith('.pdf'));
@@ -113,6 +181,18 @@ describe('/api/process-cv', () => {
       expect(k).toContain('first/');
       expect(k).toContain(`/${sanitized}/`);
     });
+
+    const putCall = mockDynamoSend.mock.calls.find(
+      ([cmd]) => cmd.__type === 'PutItemCommand'
+    );
+    expect(putCall).toBeTruthy();
+    expect(putCall[0].input.TableName).toBe('ResumeForge');
+    expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
+      'http://linkedin.com/in/example'
+    );
+    expect(putCall[0].input.Item.candidateName.S).toBe(res2.body.applicantName);
+    types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
+    expect(types).toEqual(['DescribeTableCommand', 'PutItemCommand']);
   });
 
   test('malformed AI response', async () => {
