@@ -664,6 +664,7 @@ function pruneEmptySections(sections = []) {
 }
 
 function parseContent(text, options = {}) {
+  const { defaultHeading = 'Summary', ...rest } = options;
   try {
     const data = JSON.parse(text);
     const name = normalizeName(data.name || 'Resume');
@@ -709,12 +710,12 @@ function parseContent(text, options = {}) {
     moveSummaryJobEntries(sections);
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
-    return ensureRequiredSections({ name, sections: prunedSections }, options);
+    return ensureRequiredSections({ name, sections: prunedSections }, rest);
   } catch {
     const lines = text.split(/\r?\n/);
     const name = normalizeName((lines.shift() || 'Resume').trim());
     const sections = [];
-    let currentSection = { heading: 'Summary', items: [] };
+    let currentSection = { heading: defaultHeading, items: [] };
     sections.push(currentSection);
     let current = [];
     for (const raw of lines) {
@@ -731,7 +732,7 @@ function parseContent(text, options = {}) {
         }
         if (
           currentSection.items.length === 0 &&
-          currentSection.heading === 'Summary'
+          currentSection.heading === defaultHeading
         ) {
           sections.pop();
         }
@@ -760,7 +761,11 @@ function parseContent(text, options = {}) {
       current = parseLine(line.trim());
     }
     if (current.length) currentSection.items.push(current);
-    if (sections.length && sections[0].heading === 'Summary' && sections[0].items.length === 0) {
+    if (
+      sections.length &&
+      sections[0].heading === defaultHeading &&
+      sections[0].items.length === 0
+    ) {
       sections.shift();
     }
     sections.forEach((sec, sIdx) => {
@@ -785,7 +790,7 @@ function parseContent(text, options = {}) {
     moveSummaryJobEntries(sections);
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
-    return ensureRequiredSections({ name, sections: prunedSections }, options);
+    return ensureRequiredSections({ name, sections: prunedSections }, rest);
   }
 }
 
@@ -1456,7 +1461,7 @@ app.post('/api/process-cv', (req, res, next) => {
               jobTitle
             }
           : name === 'cover_letter1' || name === 'cover_letter2'
-          ? { skipRequiredSections: true }
+          ? { skipRequiredSections: true, defaultHeading: '' }
           : {};
       const pdfBuffer = await generatePdf(text, tpl, options);
       await s3.send(

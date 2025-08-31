@@ -254,3 +254,12 @@ describe('parseContent duplicate section merging', () => {
   });
 });
 
+describe('parseContent defaultHeading option', () => {
+  test('omits summary heading when defaultHeading is empty', () => {
+    const input = 'Jane Doe\nThis is a cover letter paragraph.';
+    const data = parseContent(input, { defaultHeading: '', skipRequiredSections: true });
+    expect(data.sections).toHaveLength(1);
+    expect(data.sections[0].heading).toBe('');
+  });
+});
+
