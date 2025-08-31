@@ -89,13 +89,17 @@ describe('generatePdf and parsing', () => {
     expect(buffer.length).toBeGreaterThan(0);
   });
 
-  test.each(CL_TEMPLATES)('generatePdf creates PDF from %s cover template', async (tpl) => {
-    const buffer = await generatePdf('Jane Doe\nParagraph', tpl, {
-      skipRequiredSections: true
-    });
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    expect(buffer.length).toBeGreaterThan(0);
-  });
+  test.each(CL_TEMPLATES)(
+    'generatePdf creates PDF from %s cover template',
+    async (tpl) => {
+      const buffer = await generatePdf('Jane Doe\nParagraph', tpl, {
+        skipRequiredSections: true,
+        defaultHeading: ''
+      });
+      expect(Buffer.isBuffer(buffer)).toBe(true);
+      expect(buffer.length).toBeGreaterThan(0);
+    }
+  );
 
   test('selectTemplates picks different defaults', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
@@ -337,6 +341,9 @@ describe('generatePdf and parsing', () => {
         text += chunk;
         idx = end + 9;
       }
+      text = text.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
+        Buffer.from(hex, 'hex').toString()
+      );
       expect(text).toContain('John Doe');
       expect(text).not.toContain('**John Doe**');
     }
