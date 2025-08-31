@@ -872,9 +872,11 @@ function parseAiJson(text) {
 }
 
 function removeGuidanceLines(text = '') {
+  const guidanceRegex =
+    /^\s*\([^)]*\)\s*$|\b(?:consolidate relevant experience|add other relevant experience|list key skills)\b/i;
   return text
     .split(/\r?\n/)
-    .filter((line) => !/consolidate relevant experience/i.test(line))
+    .filter((line) => !guidanceRegex.test(line))
     .join('\n');
 }
 
@@ -1231,5 +1233,6 @@ export {
   extractExperience,
   extractEducation,
   TEMPLATE_IDS,
-  selectTemplates
+  selectTemplates,
+  removeGuidanceLines
 };
