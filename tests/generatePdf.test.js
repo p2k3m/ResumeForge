@@ -250,6 +250,19 @@ describe('generatePdf and parsing', () => {
     expect(rendered).not.toMatch(/[-–]/);
   });
 
+  test('education section uses alternate bullet glyph', () => {
+    const input = 'Jane Doe\n# Education\n- Bachelor of Science';
+    const data = parseContent(input);
+    const edu = data.sections.find((s) => s.heading === 'Education');
+    const rendered = edu.items[0]
+      .map((t) => {
+        if (t.type === 'bullet') return '<span class="edu-bullet">–</span>';
+        return t.text || '';
+      })
+      .join('');
+    expect(rendered).toBe('<span class="edu-bullet">–</span>Bachelor of Science');
+  });
+
   test('single asterisk italic and bullet handling', () => {
     const data = parseContent(
       'Jane Doe\n* This has *italic* text'

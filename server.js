@@ -885,7 +885,12 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             if (t.style === 'italic') return `<em>${text}</em>`;
             if (t.type === 'newline') return '<br>';
             if (t.type === 'tab') return '<span class="tab"></span>';
-            if (t.type === 'bullet') return '<span class="bullet">•</span>';
+            if (t.type === 'bullet') {
+              if (sec.heading === 'Education') {
+                return '<span class="edu-bullet">–</span>';
+              }
+              return '<span class="bullet">•</span>';
+            }
             if (t.type === 'jobsep') return '';
             return text;
           })
@@ -914,6 +919,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
+        eduBullet: '–',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -925,6 +931,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
+        eduBullet: '–',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -936,6 +943,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Times-Italic',
         headingColor: '#1f3c5d',
         bullet: '•',
+        eduBullet: '–',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -947,6 +955,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
+        eduBullet: '–',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -958,6 +967,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
+        eduBullet: '–',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -1016,9 +1026,13 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
           doc.font(style.font).fontSize(12);
           tokens.forEach((t, idx) => {
             if (t.type === 'bullet') {
+              const glyph =
+                sec.heading === 'Education'
+                  ? style.eduBullet || style.bullet
+                  : style.bullet;
               doc
                 .fillColor(style.bulletColor)
-                .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap })
+                .text(`${glyph} `, { continued: true, lineGap: style.lineGap })
                 .fillColor(style.textColor);
               return;
             }
