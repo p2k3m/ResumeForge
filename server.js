@@ -39,36 +39,65 @@ const uploadResume = upload.single('resume');
 const DEFAULT_SECRET_ID = 'ResumeForge';
 const DEFAULT_AWS_REGION = 'ap-south-1';
 
-const TEMPLATE_IDS = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
+const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
+const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
+const TEMPLATE_IDS = CV_TEMPLATES; // Backwards compatibility
+const ALL_TEMPLATES = [...CV_TEMPLATES, ...CL_TEMPLATES];
 
 function selectTemplates({
-  defaultTemplate = 'modern',
+  defaultCvTemplate = CV_TEMPLATES[0],
+  defaultClTemplate = CL_TEMPLATES[0],
   template1,
   template2,
-  templates
+  coverTemplate1,
+  coverTemplate2,
+  cvTemplates,
+  clTemplates
 } = {}) {
-  if (typeof templates === 'string') {
+  if (typeof cvTemplates === 'string') {
     try {
-      templates = JSON.parse(templates);
+      cvTemplates = JSON.parse(cvTemplates);
     } catch {
-      templates = templates.split(',');
+      cvTemplates = cvTemplates.split(',');
     }
   }
-  if (Array.isArray(templates)) {
-    if (!template1 && templates[0]) template1 = templates[0];
-    if (!template2 && templates[1]) template2 = templates[1];
+  if (typeof clTemplates === 'string') {
+    try {
+      clTemplates = JSON.parse(clTemplates);
+    } catch {
+      clTemplates = clTemplates.split(',');
+    }
+  }
+  if (Array.isArray(cvTemplates)) {
+    if (!template1 && cvTemplates[0]) template1 = cvTemplates[0];
+    if (!template2 && cvTemplates[1]) template2 = cvTemplates[1];
+  }
+  if (Array.isArray(clTemplates)) {
+    if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
+    if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
   if (!template1 && !template2) {
-    template1 = TEMPLATE_IDS[0];
-    template2 = TEMPLATE_IDS.find((t) => t !== template1) || TEMPLATE_IDS[0];
+    template1 = CV_TEMPLATES[0];
+    template2 = CV_TEMPLATES.find((t) => t !== template1) || CV_TEMPLATES[0];
   } else {
-    template1 = template1 || defaultTemplate;
-    template2 = template2 || defaultTemplate;
+    template1 = template1 || defaultCvTemplate;
+    template2 = template2 || defaultCvTemplate;
   }
   if (template1 === template2) {
-    template2 = TEMPLATE_IDS.find((t) => t !== template1) || TEMPLATE_IDS[0];
+    template2 = CV_TEMPLATES.find((t) => t !== template1) || CV_TEMPLATES[0];
   }
-  return { template1, template2 };
+
+  if (!coverTemplate1 && !coverTemplate2) {
+    coverTemplate1 = CL_TEMPLATES[0];
+    coverTemplate2 = CL_TEMPLATES.find((t) => t !== coverTemplate1) || CL_TEMPLATES[0];
+  } else {
+    coverTemplate1 = coverTemplate1 || defaultClTemplate;
+    coverTemplate2 = coverTemplate2 || defaultClTemplate;
+  }
+  if (coverTemplate1 === coverTemplate2) {
+    coverTemplate2 = CL_TEMPLATES.find((t) => t !== coverTemplate1) || CL_TEMPLATES[0];
+  }
+  return { template1, template2, coverTemplate1, coverTemplate2 };
 }
 
 process.env.SECRET_ID = process.env.SECRET_ID || DEFAULT_SECRET_ID;
@@ -663,7 +692,7 @@ function escapeHtml(str = '') {
 }
 
 let generatePdf = async function (text, templateId = 'modern', options = {}) {
-  if (!TEMPLATE_IDS.includes(templateId)) templateId = 'modern';
+  if (!ALL_TEMPLATES.includes(templateId)) templateId = 'modern';
   const data = parseContent(text, options);
   const templatePath = path.resolve('templates', `${templateId}.html`);
   const templateSource = await fs.readFile(templatePath, 'utf-8');
@@ -1053,15 +1082,24 @@ app.post('/api/process-cv', (req, res, next) => {
   }
 
   const { jobDescriptionUrl, linkedinProfileUrl } = req.body;
-  const defaultTemplate = req.body.template || req.query.template || 'modern';
+  const defaultCvTemplate =
+    req.body.template || req.query.template || CV_TEMPLATES[0];
+  const defaultClTemplate =
+    req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
   const selection = selectTemplates({
-    defaultTemplate,
+    defaultCvTemplate,
+    defaultClTemplate,
     template1: req.body.template1 || req.query.template1,
     template2: req.body.template2 || req.query.template2,
-    templates: req.body.templates || req.query.templates
+    coverTemplate1: req.body.coverTemplate1 || req.query.coverTemplate1,
+    coverTemplate2: req.body.coverTemplate2 || req.query.coverTemplate2,
+    cvTemplates: req.body.templates || req.query.templates,
+    clTemplates: req.body.coverTemplates || req.query.coverTemplates
   });
-  let { template1, template2 } = selection;
-  console.log(`Selected templates: template1=${template1}, template2=${template2}`);
+  let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
+  console.log(
+    `Selected templates: template1=${template1}, template2=${template2}, coverTemplate1=${coverTemplate1}, coverTemplate2=${coverTemplate2}`
+  );
   if (!req.file) {
     return res.status(400).json({ error: 'resume file required' });
   }
@@ -1287,7 +1325,9 @@ app.post('/api/process-cv', (req, res, next) => {
           ? template1
           : name === 'version2'
           ? template2
-          : defaultTemplate;
+          : name === 'cover_letter1'
+          ? coverTemplate1
+          : coverTemplate2;
       const options =
         name === 'version1' || name === 'version2'
           ? {
@@ -1370,6 +1410,8 @@ export {
   fetchLinkedInProfile,
   mergeResumeWithLinkedIn,
   TEMPLATE_IDS,
+  CV_TEMPLATES,
+  CL_TEMPLATES,
   selectTemplates,
   removeGuidanceLines,
   sanitizeGeneratedText
