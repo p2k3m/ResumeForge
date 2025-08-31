@@ -116,8 +116,35 @@ async function fetchLinkedInProfile(url) {
       const items = [];
       let m;
       while ((m = itemRegex.exec(sectionMatch[1])) !== null) {
-        const text = strip(m[1]);
-        if (text) items.push(text);
+        const itemHtml = m[1];
+        const text = strip(itemHtml);
+        if (!text) continue;
+        if (id === 'experience') {
+          const titleMatch =
+            itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
+            itemHtml.match(/"title"\s*:\s*"(.*?)"/i);
+          const companyMatch =
+            itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
+            itemHtml.match(/"companyName"\s*:\s*"(.*?)"/i);
+          const dateMatch =
+            itemHtml.match(/<span[^>]*>([^<]*\d{4}[^<]*)<\/span>/i) ||
+            itemHtml.match(/"dateRange"\s*:\s*"(.*?)"/i);
+          let startDate = '';
+          let endDate = '';
+          if (dateMatch) {
+            const parts = strip(dateMatch[1]).split(/[-–to]+/);
+            startDate = parts[0]?.trim() || '';
+            endDate = parts[1]?.trim() || '';
+          }
+          items.push({
+            company: companyMatch ? strip(companyMatch[1]) : '',
+            title: titleMatch ? strip(titleMatch[1]) : '',
+            startDate,
+            endDate
+          });
+        } else {
+          items.push(text);
+        }
       }
       return items;
     };
@@ -195,12 +222,20 @@ function analyzeJobDescription(html) {
   return { title, skills, text };
 }
 
-function mergeResumeWithLinkedIn(resumeText, profile) {
+function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
   const parts = [resumeText];
   if (profile && typeof profile === 'object') {
     if (profile.headline) parts.push(`LinkedIn Headline: ${profile.headline}`);
-    if (profile.experience?.length)
-      parts.push('LinkedIn Experience: ' + profile.experience.join('; '));
+    if (profile.experience?.length) {
+      const formatted = profile.experience.map((exp, idx) => {
+        const e = { ...exp };
+        if (idx === 0 && jobTitle) e.title = jobTitle;
+        const datePart = e.startDate || e.endDate ? ` (${e.startDate || ''} - ${e.endDate || ''})` : '';
+        const base = [e.title, e.company].filter(Boolean).join(' at ');
+        return `${base}${datePart}`.trim();
+      });
+      parts.push('LinkedIn Experience: ' + formatted.join('; '));
+    }
     if (profile.education?.length)
       parts.push('LinkedIn Education: ' + profile.education.join('; '));
     if (profile.skills?.length)
@@ -369,9 +404,14 @@ function ensureRequiredSections(
     }
     if (!section.items || section.items.length === 0) {
       if (heading.toLowerCase() === 'work experience') {
+        const format = (exp) => {
+          const datePart = exp.startDate || exp.endDate ? ` (${exp.startDate || ''} - ${exp.endDate || ''})` : '';
+          const base = [exp.title, exp.company].filter(Boolean).join(' at ');
+          return `${base}${datePart}`.trim();
+        };
         const bullets = resumeExperience.length
-          ? resumeExperience
-          : linkedinExperience;
+          ? resumeExperience.map(format)
+          : linkedinExperience.map(format);
         if (bullets.length) {
           section.items = bullets.map((b) => parseLine(String(b)));
         } else {
@@ -794,9 +834,32 @@ function sanitizeName(name) {
 
 function extractExperience(source) {
   if (!source) return [];
-  if (Array.isArray(source)) return source.map((s) => String(s));
+  const parseEntry = (text) => {
+    let company = '';
+    let title = '';
+    let startDate = '';
+    let endDate = '';
+    const dateMatch = text.match(/\(([^)]+)\)/);
+    if (dateMatch) {
+      const parts = dateMatch[1].split(/[-–to]+/);
+      startDate = parts[0]?.trim() || '';
+      endDate = parts[1]?.trim() || '';
+      text = text.replace(dateMatch[0], '').trim();
+    }
+    const atMatch = text.match(/(.+?)\s+at\s+(.+)/i);
+    if (atMatch) {
+      title = atMatch[1].trim();
+      company = atMatch[2].trim();
+    } else {
+      title = text.trim();
+    }
+    return { company, title, startDate, endDate };
+  };
+  if (Array.isArray(source)) {
+    return source.map((s) => (typeof s === 'string' ? parseEntry(s) : s));
+  }
   const lines = String(source).split(/\r?\n/);
-  const bullets = [];
+  const entries = [];
   let inSection = false;
   for (const line of lines) {
     const trimmed = line.trim();
@@ -810,10 +873,10 @@ function extractExperience(source) {
     }
     if (inSection) {
       const match = trimmed.match(/^[-*]\s+(.*)/);
-      if (match) bullets.push(match[1].trim());
+      if (match) entries.push(parseEntry(match[1].trim()));
     }
   }
-  return bullets;
+  return entries;
 }
 
 function extractEducation(source) {
@@ -1038,7 +1101,7 @@ app.post('/api/process-cv', (req, res, next) => {
       });
     }
 
-    const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData);
+    const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData, jobTitle);
     const resumeExperience = extractExperience(text);
     const linkedinExperience = extractExperience(linkedinData.experience || []);
     const resumeEducation = extractEducation(text);
@@ -1073,11 +1136,13 @@ app.post('/api/process-cv', (req, res, next) => {
   7. Include "Work Experience" and "Education" sections in every resume, adding empty sections if necessary.
   `;
 
-    const versionsPrompt = versionsTemplate
-      .replace('{{cvText}}', combinedProfile)
-      .replace('{{jdText}}', jobDescription)
-      .replace('{{jobTitle}}', jobTitle)
-      .replace('{{jobSkills}}', jobSkills.join(', '));
+    const versionsPrompt =
+      versionsTemplate
+        .replace('{{cvText}}', combinedProfile)
+        .replace('{{jdText}}', jobDescription)
+        .replace('{{jobTitle}}', jobTitle)
+        .replace('{{jobSkills}}', jobSkills.join(', ')) +
+      '\n\nNote: The candidate performed duties matching the job description in their last role.';
 
     let versionData = {};
     try {
@@ -1239,6 +1304,8 @@ export {
   parseLine,
   extractExperience,
   extractEducation,
+  fetchLinkedInProfile,
+  mergeResumeWithLinkedIn,
   TEMPLATE_IDS,
   selectTemplates,
   removeGuidanceLines,
