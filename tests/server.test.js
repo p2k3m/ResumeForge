@@ -58,7 +58,7 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 const serverModule = await import('../server.js');
-const { default: app, extractText, setGeneratePdf } = serverModule;
+const { default: app, extractText, setGeneratePdf, parseContent } = serverModule;
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 describe('health check', () => {
@@ -208,10 +208,9 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const calls = serverModule.generatePdf.mock.calls;
-    const callV1 = calls.find((c) => c[0] === 'v1');
-    const callV2 = calls.find((c) => c[0] === 'v2');
-    expect(callV1[1]).toBe('modern');
-    expect(callV2[1]).toBe('professional');
+    const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
+    expect(resumeCalls[0][1]).toBe('modern');
+    expect(resumeCalls[1][1]).toBe('professional');
   });
 
   test('uses templates array', async () => {
@@ -233,10 +232,54 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const calls = serverModule.generatePdf.mock.calls;
-    const callV1 = calls.find((c) => c[0] === 'v1');
-    const callV2 = calls.find((c) => c[0] === 'v2');
-    expect(callV1[1]).toBe('ucmo');
-    expect(callV2[1]).toBe('vibrant');
+    const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
+    expect(resumeCalls[0][1]).toBe('ucmo');
+    expect(resumeCalls[1][1]).toBe('vibrant');
+  });
+
+  test('filters AI guidance lines', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              version1:
+                'Line1\nConsolidate relevant experience into bullet points.\nLine2',
+              version2:
+                'Start\nCONSOLIDATE RELEVANT EXPERIENCE IN A SECTION\nEnd'
+            })
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+        }
+      });
+    serverModule.generatePdf.mockClear();
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(200);
+
+    const resumeCalls = serverModule.generatePdf.mock.calls.filter(
+      ([, , opts]) => opts && opts.resumeExperience
+    );
+    expect(resumeCalls).toHaveLength(2);
+    resumeCalls.forEach(([text]) => {
+      const parsed = parseContent(text);
+      const all = parsed.sections
+        .flatMap((s) =>
+          s.items.map((tokens) => tokens.map((t) => t.text || '').join(''))
+        )
+        .join('\n');
+      expect(all).not.toMatch(/consolidate relevant experience/i);
+    });
   });
 
   test('missing file', async () => {
