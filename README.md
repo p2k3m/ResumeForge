@@ -84,6 +84,7 @@ Minimal permissions required by the server:
 - `modern` – clean sans-serif look (default)
 - `ucmo` – classic serif styling
 - `professional` – centered header with subtle dividers
+- `vibrant` – bold color accents with contemporary typography
 
 If omitted, `modern` is used.
 
