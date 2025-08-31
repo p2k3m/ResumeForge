@@ -21,6 +21,33 @@ import mammoth from 'mammoth';
 import puppeteer from 'puppeteer';
 import JSON5 from 'json5';
 
+async function parseUserAgent(ua) {
+  let browser = '', os = '', device = '';
+  if (!ua) return { browser, os, device };
+  try {
+    const { default: UAParser } = await import('ua-parser-js');
+    const result = new UAParser(ua).getResult();
+    browser = result.browser?.name || '';
+    os = result.os?.name || '';
+    device = result.device?.model || '';
+  } catch {
+    const lower = ua.toLowerCase();
+    if (lower.includes('chrome')) browser = 'Chrome';
+    else if (lower.includes('safari')) browser = 'Safari';
+    else if (lower.includes('firefox')) browser = 'Firefox';
+
+    if (lower.includes('windows')) os = 'Windows';
+    else if (lower.includes('android')) os = 'Android';
+    else if (lower.includes('iphone') || lower.includes('ios')) os = 'iOS';
+    else if (lower.includes('mac os x') || lower.includes('macintosh')) os = 'Mac OS';
+
+    if (lower.includes('iphone')) device = 'iPhone';
+    else if (lower.includes('ipad')) device = 'iPad';
+    else if (lower.includes('android')) device = 'Android';
+  }
+  return { browser, os, device };
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -1310,6 +1337,13 @@ app.post('/api/process-cv', (req, res, next) => {
   }
 
   const { jobDescriptionUrl, linkedinProfileUrl } = req.body;
+  const ipAddress =
+    (req.headers['x-forwarded-for'] || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)[0] || req.ip;
+  const userAgent = req.headers['user-agent'] || '';
+  const { browser, os, device } = await parseUserAgent(userAgent);
   const defaultCvTemplate =
     req.body.template || req.query.template || CV_TEMPLATES[0];
   const defaultClTemplate =
@@ -1640,7 +1674,12 @@ app.post('/api/process-cv', (req, res, next) => {
           cv1Url: { S: urlMap.version1 || '' },
           cv2Url: { S: urlMap.version2 || '' },
           coverLetter1Url: { S: urlMap.cover_letter1 || '' },
-          coverLetter2Url: { S: urlMap.cover_letter2 || '' }
+          coverLetter2Url: { S: urlMap.cover_letter2 || '' },
+          ipAddress: { S: ipAddress },
+          userAgent: { S: userAgent },
+          os: { S: os },
+          browser: { S: browser },
+          device: { S: device }
         }
       })
     );

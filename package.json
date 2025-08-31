@@ -23,7 +23,8 @@
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.13.0",
     "puppeteer": "^22.9.0",
-    "json5": "^2.2.3"
+    "json5": "^2.2.3",
+    "ua-parser-js": "^1.0.35"
   },
   "devDependencies": {
     "jest": "^29.7.0",
