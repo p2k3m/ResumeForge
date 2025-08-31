@@ -128,3 +128,20 @@ describe('parseContent education fallbacks', () => {
   });
 });
 
+describe('parseContent empty section removal', () => {
+  test('omits sections with only whitespace items', () => {
+    const input = [
+      'Jane Doe',
+      '# Work Experience',
+      '-   ',
+      '# Skills',
+      '- JavaScript',
+      '# Empty',
+      '-   '
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const headings = data.sections.map((s) => s.heading);
+    expect(headings).toEqual(['Skills']);
+  });
+});
+
