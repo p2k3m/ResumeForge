@@ -196,20 +196,48 @@ function parseContent(text) {
 }
 
 function prepareTemplateData(text) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const name = lines.shift() || 'Resume';
-  const items = lines.map((l) => {
-    const cleaned = l.replace(/^[-*]+\s*/, '');
-    const tokens = parseLine(cleaned);
-    // Ensure spacing between tokens matches original text
-    return tokens.reduce((acc, t, idx) => {
+  const lines = text.split(/\r?\n/);
+  const name = (lines.shift() || 'Resume').trim();
+  const items = [];
+  let current = [];
+  for (const raw of lines) {
+    const line = raw.replace(/\t/g, '\u0009');
+    if (!line.trim()) {
+      // blank line signifies explicit line break
+      if (current.length) {
+        current.push({ type: 'newline' });
+      }
+      continue;
+    }
+    const bulletMatch = line.match(/^[-*]\s*(.*)/);
+    if (bulletMatch) {
+      if (current.length) items.push(current);
+      current = parseLine(bulletMatch[1]);
+      continue;
+    }
+    const indentMatch = line.match(/^\s+(.*)/);
+    if (indentMatch && current.length) {
+      current.push({ type: 'newline' });
+      const tabs = (line.match(/^\s+/) || [''])[0];
+      for (const ch of tabs) {
+        if (ch === '\u0009') current.push({ type: 'tab' });
+      }
+      current.push(...parseLine(indentMatch[1].trim()));
+      continue;
+    }
+    if (current.length) items.push(current);
+    current = parseLine(line.trim());
+  }
+  if (current.length) items.push(current);
+  // Ensure spacing between tokens matches original text for each item
+  items.forEach((tokens, idx) => {
+    items[idx] = tokens.reduce((acc, t, i) => {
       acc.push(t);
-      const next = tokens[idx + 1];
+      const next = tokens[i + 1];
       if (
         next &&
+        t.text &&
+        next.text &&
         !/\s$/.test(t.text) &&
         !/^\s/.test(next.text)
       ) {
@@ -238,7 +266,9 @@ async function generatePdf(text, templateId = 'modern') {
             }
             if (t.style === 'bold') return `<strong>${t.text}</strong>`;
             if (t.style === 'italic') return `<em>${t.text}</em>`;
-            return t.text;
+            if (t.type === 'newline') return '<br>';
+            if (t.type === 'tab') return '<span class="tab"></span>';
+            return t.text || '';
           })
           .join('')
       )
@@ -268,7 +298,16 @@ async function generatePdf(text, templateId = 'modern') {
           doc.font('Helvetica').fontSize(12);
           doc.text('• ', { continued: true });
           tokens.forEach((t, idx) => {
+            if (t.type === 'newline') {
+              doc.text('', { continued: false });
+              doc.text('   ', { continued: true });
+              return;
+            }
             const opts = { continued: idx < tokens.length - 1 };
+            if (t.type === 'tab') {
+              doc.text('    ', opts);
+              return;
+            }
             if (t.type === 'link') {
               doc.text(t.text, { ...opts, link: t.href, underline: true });
             } else {
