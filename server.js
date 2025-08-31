@@ -594,7 +594,7 @@ app.post('/api/process-cv', (req, res, next) => {
     return res.status(500).json({ error: 'failed to load configuration' });
   }
 
-  const { jobDescriptionUrl } = req.body;
+  const { jobDescriptionUrl, linkedinProfileUrl } = req.body;
   const defaultTemplate = req.body.template || req.query.template || 'modern';
   let template1 = req.body.template1 || req.query.template1;
   let template2 = req.body.template2 || req.query.template2;
@@ -617,6 +617,9 @@ app.post('/api/process-cv', (req, res, next) => {
   }
   if (!jobDescriptionUrl) {
     return res.status(400).json({ error: 'jobDescriptionUrl required' });
+  }
+  if (!linkedinProfileUrl) {
+    return res.status(400).json({ error: 'linkedinProfileUrl required' });
   }
 
   const text = await extractText(req.file);
@@ -664,7 +667,14 @@ app.post('/api/process-cv', (req, res, next) => {
   }
 
   try {
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'request_received' });
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'request_received',
+      message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}`
+    });
 
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
@@ -794,12 +804,14 @@ app.post('/api/process-cv', (req, res, next) => {
       return res.status(500).json({ error: 'AI response invalid' });
     }
 
-    await s3.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: `${prefix}log.json`,
-      Body: JSON.stringify({ jobDescriptionUrl, applicantName }),
-      ContentType: 'application/json'
-    }));
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: `${prefix}log.json`,
+        Body: JSON.stringify({ jobDescriptionUrl, linkedinProfileUrl, applicantName }),
+        ContentType: 'application/json'
+      })
+    );
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });

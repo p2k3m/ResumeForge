@@ -74,6 +74,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls).toHaveLength(4);
@@ -121,6 +122,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('AI response invalid');
@@ -145,6 +147,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -174,6 +177,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -198,6 +202,7 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('template1', 'modern')
       .field('template2', 'professional')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -223,6 +228,7 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('templates', JSON.stringify(['ucmo', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -236,7 +242,8 @@ describe('/api/process-cv', () => {
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com');
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('resume file required');
   });
@@ -245,6 +252,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Only .pdf, .doc, .docx files are allowed');
@@ -253,9 +261,19 @@ describe('/api/process-cv', () => {
   test('missing job description URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('jobDescriptionUrl required');
+  });
+
+  test('missing linkedin profile URL', async () => {
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('linkedinProfileUrl required');
   });
 });
 
