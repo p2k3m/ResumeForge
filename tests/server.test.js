@@ -282,6 +282,48 @@ describe('/api/process-cv', () => {
     });
   });
 
+  test('cover letters omit placeholder sections', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: { text: () => JSON.stringify({ version1: 'v1', version2: 'v2' }) }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+        }
+      });
+
+    setGeneratePdf(
+      jest.fn((text, tpl, options) => {
+        const data = parseContent(text, options);
+        const combined = data.sections
+          .flatMap((s) =>
+            s.items.map((tokens) => tokens.map((t) => t.text || '').join(''))
+          )
+          .join('\n');
+        if (options && options.skipRequiredSections) {
+          expect(combined).not.toContain('Information not provided');
+        }
+        return Promise.resolve(Buffer.from('pdf'));
+      })
+    );
+
+    await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    const coverCalls = serverModule.generatePdf.mock.calls.filter(
+      ([, , opts]) => opts && opts.skipRequiredSections
+    );
+    expect(coverCalls).toHaveLength(2);
+
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')

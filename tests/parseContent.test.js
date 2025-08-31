@@ -29,6 +29,22 @@ describe('parseContent placeholders', () => {
       'Information not provided'
     );
   });
+
+  test('omits required sections when skipRequiredSections is true', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JavaScript', {
+      skipRequiredSections: true
+    });
+    const headings = data.sections.map((s) => s.heading);
+    expect(headings).not.toContain('Work Experience');
+    expect(headings).not.toContain('Education');
+    data.sections.forEach((s) =>
+      s.items.forEach((tokens) => {
+        expect(tokens.map((t) => t.text).join('')).not.toBe(
+          'Information not provided'
+        );
+      })
+    );
+  });
 });
 
 describe('parseContent summary reclassification', () => {
