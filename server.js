@@ -309,7 +309,7 @@ function parseContent(text) {
   }
 }
 
-async function generatePdf(text, templateId = 'modern') {
+let generatePdf = async function (text, templateId = 'modern') {
   if (!TEMPLATE_IDS.includes(templateId)) templateId = 'modern';
   const data = parseContent(text);
   const templatePath = path.resolve('templates', `${templateId}.html`);
@@ -494,6 +494,10 @@ async function generatePdf(text, templateId = 'modern') {
       doc.end();
     });
   }
+};
+
+function setGeneratePdf(fn) {
+  generatePdf = fn;
 }
 
 async function extractText(file) {
@@ -580,7 +584,23 @@ app.post('/api/process-cv', (req, res, next) => {
   }
 
   const { jobDescriptionUrl } = req.body;
-  const templateId = req.body.template || req.query.template || 'modern';
+  const defaultTemplate = req.body.template || req.query.template || 'modern';
+  let template1 = req.body.template1 || req.query.template1;
+  let template2 = req.body.template2 || req.query.template2;
+  let templates = req.body.templates || req.query.templates;
+  if (typeof templates === 'string') {
+    try {
+      templates = JSON.parse(templates);
+    } catch {
+      templates = templates.split(',');
+    }
+  }
+  if (Array.isArray(templates)) {
+    if (!template1 && templates[0]) template1 = templates[0];
+    if (!template2 && templates[1]) template2 = templates[1];
+  }
+  template1 = template1 || defaultTemplate;
+  template2 = template2 || defaultTemplate;
   if (!req.file) {
     return res.status(400).json({ error: 'resume file required' });
   }
@@ -729,7 +749,13 @@ app.post('/api/process-cv', (req, res, next) => {
           ? 'cover_letter/'
           : '';
       const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-      const pdfBuffer = await generatePdf(text, templateId);
+      const tpl =
+        name === 'version1'
+          ? template1
+          : name === 'version2'
+          ? template2
+          : defaultTemplate;
+      const pdfBuffer = await generatePdf(text, tpl);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -787,4 +813,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-export { extractText, generatePdf, parseContent, parseLine, TEMPLATE_IDS };
+export { extractText, generatePdf, setGeneratePdf, parseContent, parseLine, TEMPLATE_IDS };

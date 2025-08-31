@@ -80,14 +80,20 @@ Minimal permissions required by the server:
 - Legacy `.doc` files are rejected.
 
 ## Templates
-`/api/process-cv` accepts a `template` parameter (in the request body or query string) selecting the resume layout. Available values:
+`/api/process-cv` supports several template parameters for selecting the resume layout:
+
+- `template` – apply the same template to both generated CV versions.
+- `template1` and `template2` – specify different templates for each version.
+- `templates` – array of two template IDs, equivalent to providing `template1` and `template2`.
+
+Available template values:
 - `modern` – clean sans-serif look (default)
 - `ucmo` – classic serif styling
 - `professional` – centered header with subtle dividers
 - `vibrant` – bold color accents with contemporary typography
- - `2025` – responsive grid layout with modern Inter font, blue accents, and spacious margins
+- `2025` – responsive grid layout with modern Inter font, blue accents, and spacious margins
 
-If omitted, `modern` is used.
+Any missing or invalid ID falls back to `modern`.
 
 
 ## Edge Cases
