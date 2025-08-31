@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react'
 
 function App() {
-  const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [profileUrl, setProfileUrl] = useState('')
+  const [jobUrl, setJobUrl] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
@@ -34,7 +35,8 @@ function App() {
     try {
       const formData = new FormData()
       formData.append('resume', cvFile)
-      formData.append('jobDescriptionUrl', linkedinUrl)
+      formData.append('linkedinProfileUrl', profileUrl)
+      formData.append('jobDescriptionUrl', jobUrl)
 
       const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
@@ -69,13 +71,13 @@ function App() {
     }
   }
 
-  const disabled = !linkedinUrl || !cvFile || isProcessing
+  const disabled = !profileUrl || !jobUrl || !cvFile || isProcessing
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-blue-200 to-purple-300 flex flex-col items-center p-4">
       <h1 className="text-3xl font-bold mb-4 text-center text-purple-800">Enhance Your CV</h1>
       <p className="mb-6 text-center max-w-xl text-indigo-800">
-        Provide your LinkedIn profile and upload your CV to receive enhanced versions tailored to your job.
+        Provide your LinkedIn profile and job description URLs, and upload your CV to receive enhanced versions tailored to your job.
       </p>
 
       <div
@@ -102,9 +104,17 @@ function App() {
 
       <input
         type="url"
-        placeholder="Enter LinkedIn job URL"
-        value={linkedinUrl}
-        onChange={(e) => setLinkedinUrl(e.target.value)}
+        placeholder="LinkedIn Profile URL"
+        value={profileUrl}
+        onChange={(e) => setProfileUrl(e.target.value)}
+        className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+      />
+
+      <input
+        type="url"
+        placeholder="Job Description URL"
+        value={jobUrl}
+        onChange={(e) => setJobUrl(e.target.value)}
         className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
       />
 
