@@ -66,27 +66,28 @@ async function getSecrets() {
 
 function parseLine(text) {
   const tokens = [];
-  const regex =
-    /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)|\*\*([^*]+)\*\*|\*([^*]+)\*|_([^_]+)_/g;
+  const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
   let lastIndex = 0;
   let match;
-  while ((match = regex.exec(text)) !== null) {
+
+  function flushSegment(segment) {
+    if (!segment) return;
+    tokens.push(...parseEmphasis(segment));
+  }
+
+  while ((match = linkRegex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      const part = text.slice(lastIndex, match.index).replace(/\*/g, '');
-      if (part) tokens.push({ type: 'paragraph', text: part, continued: true });
+      flushSegment(text.slice(lastIndex, match.index));
     }
     if (match[1] && match[2]) {
       tokens.push({
         type: 'link',
-        text: match[1],
+        text: match[1].replace(/\*/g, ''),
         href: match[2],
         continued: true
       });
     } else if (match[3]) {
-      const domainMap = {
-        'linkedin.com': 'LinkedIn',
-        'github.com': 'GitHub'
-      };
+      const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
       let label = match[3];
       try {
         const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
@@ -94,37 +95,85 @@ function parseLine(text) {
       } catch {
         label = match[3];
       }
-      tokens.push({ type: 'link', text: label, href: match[3], continued: true });
-    } else if (match[4]) {
       tokens.push({
-        type: 'paragraph',
-        text: match[4],
-        style: 'bold',
-        continued: true
-      });
-    } else if (match[5]) {
-      tokens.push({
-        type: 'paragraph',
-        text: match[5],
-        style: 'italic',
-        continued: true
-      });
-    } else if (match[6]) {
-      tokens.push({
-        type: 'paragraph',
-        text: match[6],
-        style: 'italic',
+        type: 'link',
+        text: label.replace(/\*/g, ''),
+        href: match[3],
         continued: true
       });
     }
-    lastIndex = regex.lastIndex;
+    lastIndex = linkRegex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    flushSegment(text.slice(lastIndex));
   }
   if (tokens.length === 0) {
     return [{ type: 'paragraph', text: text.replace(/\*/g, '') }];
   }
-  const rest = text.slice(lastIndex).replace(/\*/g, '');
-  if (rest) tokens.push({ type: 'paragraph', text: rest });
   tokens.forEach((t, i) => (t.continued = i < tokens.length - 1));
+  return tokens;
+}
+
+function parseEmphasis(segment) {
+  const tokens = [];
+  let i = 0;
+  let buffer = '';
+  const stack = [];
+
+  const styleFromStack = () => {
+    const hasBold = stack.some((s) => s.type === 'bold');
+    const hasItalic = stack.some((s) => s.type === 'italic');
+    if (hasBold && hasItalic) return 'bolditalic';
+    if (hasBold) return 'bold';
+    if (hasItalic) return 'italic';
+    return undefined;
+  };
+
+  while (i < segment.length) {
+    const ch = segment[i];
+    if (ch === '*' || ch === '_') {
+      let count = 1;
+      while (segment[i + count] === ch) count++;
+      const type = count >= 2 ? 'bold' : 'italic';
+      const markerLen = count >= 2 ? 2 : 1;
+      const ahead = segment.indexOf(ch.repeat(markerLen), i + markerLen);
+      if (stack.length && stack[stack.length - 1].char === ch && stack[stack.length - 1].type === type) {
+        if (buffer) {
+          tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
+          buffer = '';
+        }
+        stack.pop();
+        if (count > markerLen) buffer += ch.repeat(count - markerLen);
+      } else if (ahead !== -1) {
+        if (buffer) {
+          tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
+          buffer = '';
+        }
+        stack.push({ char: ch, type });
+        if (count > markerLen) buffer += ch.repeat(count - markerLen);
+      } else {
+        buffer += ch.repeat(count);
+      }
+      i += count;
+    } else {
+      buffer += ch;
+      i++;
+    }
+  }
+
+  if (buffer) {
+    tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
+  }
+  // Any remaining stack markers are unmatched; treat them as literal by
+  // normalizing away any style they might have implied.
+  if (stack.length) {
+    tokens.forEach((t) => {
+      t.style = undefined;
+    });
+  }
+  tokens.forEach((t) => {
+    if (t.text) t.text = t.text.replace(/\*/g, '');
+  });
   return tokens;
 }
 
@@ -265,6 +314,7 @@ async function generatePdf(text, templateId = 'modern') {
             if (t.type === 'link') {
               return `<a href="${t.href}">${t.text}</a>`;
             }
+            if (t.style === 'bolditalic') return `<strong><em>${t.text}</em></strong>`;
             if (t.style === 'bold') return `<strong>${t.text}</strong>`;
             if (t.style === 'italic') return `<em>${t.text}</em>`;
             if (t.type === 'newline') return '<br>';
@@ -378,7 +428,7 @@ async function generatePdf(text, templateId = 'modern') {
               doc.text(t.text, { ...opts, link: t.href, underline: true });
               doc.fillColor(style.textColor);
             } else {
-              if (t.style === 'bold') doc.font(style.bold);
+              if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
               else if (t.style === 'italic') doc.font(style.italic);
               else doc.font(style.font);
               doc.text(t.text, opts);
@@ -659,4 +709,4 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-export { extractText, generatePdf, parseContent, prepareTemplateData };
+export { extractText, generatePdf, parseContent, prepareTemplateData, parseLine };
