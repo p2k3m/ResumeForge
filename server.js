@@ -41,6 +41,33 @@ const DEFAULT_AWS_REGION = 'ap-south-1';
 
 const TEMPLATE_IDS = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
 
+function selectTemplates({
+  defaultTemplate = 'modern',
+  template1,
+  template2,
+  templates
+} = {}) {
+  if (typeof templates === 'string') {
+    try {
+      templates = JSON.parse(templates);
+    } catch {
+      templates = templates.split(',');
+    }
+  }
+  if (Array.isArray(templates)) {
+    if (!template1 && templates[0]) template1 = templates[0];
+    if (!template2 && templates[1]) template2 = templates[1];
+  }
+  if (!template1 && !template2) {
+    template1 = TEMPLATE_IDS[0];
+    template2 = TEMPLATE_IDS.find((t) => t !== template1) || TEMPLATE_IDS[0];
+  } else {
+    template1 = template1 || defaultTemplate;
+    template2 = template2 || defaultTemplate;
+  }
+  return { template1, template2 };
+}
+
 process.env.SECRET_ID = process.env.SECRET_ID || DEFAULT_SECRET_ID;
 process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
 
@@ -731,22 +758,14 @@ app.post('/api/process-cv', (req, res, next) => {
 
   const { jobDescriptionUrl, linkedinProfileUrl } = req.body;
   const defaultTemplate = req.body.template || req.query.template || 'modern';
-  let template1 = req.body.template1 || req.query.template1;
-  let template2 = req.body.template2 || req.query.template2;
-  let templates = req.body.templates || req.query.templates;
-  if (typeof templates === 'string') {
-    try {
-      templates = JSON.parse(templates);
-    } catch {
-      templates = templates.split(',');
-    }
-  }
-  if (Array.isArray(templates)) {
-    if (!template1 && templates[0]) template1 = templates[0];
-    if (!template2 && templates[1]) template2 = templates[1];
-  }
-  template1 = template1 || defaultTemplate;
-  template2 = template2 || defaultTemplate;
+  const selection = selectTemplates({
+    defaultTemplate,
+    template1: req.body.template1 || req.query.template1,
+    template2: req.body.template2 || req.query.template2,
+    templates: req.body.templates || req.query.templates
+  });
+  let { template1, template2 } = selection;
+  console.log(`Selected templates: ${template1}, ${template2}`);
   if (!req.file) {
     return res.status(400).json({ error: 'resume file required' });
   }
@@ -1007,4 +1026,12 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export default app;
-export { extractText, generatePdf, setGeneratePdf, parseContent, parseLine, TEMPLATE_IDS };
+export {
+  extractText,
+  generatePdf,
+  setGeneratePdf,
+  parseContent,
+  parseLine,
+  TEMPLATE_IDS,
+  selectTemplates
+};

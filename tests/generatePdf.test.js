@@ -1,5 +1,10 @@
 import { jest } from '@jest/globals';
-import { generatePdf, parseContent, TEMPLATE_IDS } from '../server.js';
+import {
+  generatePdf,
+  parseContent,
+  TEMPLATE_IDS,
+  selectTemplates
+} from '../server.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import zlib from 'zlib';
@@ -81,6 +86,13 @@ describe('generatePdf and parsing', () => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing', tpl);
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(0);
+  });
+
+  test('selectTemplates picks different defaults', () => {
+    const { template1, template2 } = selectTemplates();
+    expect(template1).not.toBe(template2);
+    expect(TEMPLATE_IDS).toContain(template1);
+    expect(TEMPLATE_IDS).toContain(template2);
   });
 
   test('script tags render as text', () => {
