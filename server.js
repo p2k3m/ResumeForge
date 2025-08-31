@@ -560,6 +560,23 @@ function moveSummaryJobEntries(sections = []) {
   }
 }
 
+function mergeDuplicateSections(sections = []) {
+  const seen = new Map();
+  const result = [];
+  sections.forEach((sec) => {
+    const key = (sec.heading || '').toLowerCase();
+    if (seen.has(key)) {
+      const existing = seen.get(key);
+      existing.items = existing.items.concat(sec.items || []);
+    } else {
+      const copy = { ...sec, items: [...(sec.items || [])] };
+      seen.set(key, copy);
+      result.push(copy);
+    }
+  });
+  return result;
+}
+
 function pruneEmptySections(sections = []) {
   return sections.filter((sec) => {
     sec.items = (sec.items || []).filter((tokens) =>
@@ -613,7 +630,8 @@ function parseContent(text, options = {}) {
     });
     splitSkills(sections);
     moveSummaryJobEntries(sections);
-    const prunedSections = pruneEmptySections(sections);
+    const mergedSections = mergeDuplicateSections(sections);
+    const prunedSections = pruneEmptySections(mergedSections);
     return ensureRequiredSections({ name, sections: prunedSections }, options);
   } catch {
     const lines = text.split(/\r?\n/);
@@ -688,7 +706,8 @@ function parseContent(text, options = {}) {
     });
     splitSkills(sections);
     moveSummaryJobEntries(sections);
-    const prunedSections = pruneEmptySections(sections);
+    const mergedSections = mergeDuplicateSections(sections);
+    const prunedSections = pruneEmptySections(mergedSections);
     return ensureRequiredSections({ name, sections: prunedSections }, options);
   }
 }
