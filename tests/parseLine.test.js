@@ -25,4 +25,16 @@ describe('parseLine emphasis handling', () => {
       { text: 'italic', style: 'italic' }
     ]);
   });
+
+  test('handles combined bold and italic markers', () => {
+    const tokens = parseLine('***both***');
+    const shapes = tokens.map(({ text, style }) => ({ text, style }));
+    expect(shapes).toEqual([{ text: 'both', style: 'bolditalic' }]);
+  });
+
+  test('normalizes malformed emphasis strings', () => {
+    const tokens = parseLine('Text with *mismatched _markers* inside_');
+    expect(tokens.map((t) => t.text).join('')).toBe('Text with mismatched markers inside');
+    tokens.forEach((t) => expect(t.style).toBeUndefined());
+  });
 });
