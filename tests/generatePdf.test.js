@@ -95,6 +95,13 @@ describe('generatePdf and parsing', () => {
     expect(TEMPLATE_IDS).toContain(template2);
   });
 
+  test('mismatched defaults yield different templates', () => {
+    const { template1, template2 } = selectTemplates({ template1: TEMPLATE_IDS[0] });
+    expect(template1).toBe(TEMPLATE_IDS[0]);
+    expect(template2).not.toBe(template1);
+    expect(TEMPLATE_IDS).toContain(template2);
+  });
+
   test('script tags render as text', () => {
     const tokens = parseContent('Jane Doe\n- uses <script>alert(1)</script> safely')
       .sections[0].items[0];
