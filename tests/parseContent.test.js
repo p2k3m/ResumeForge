@@ -145,3 +145,43 @@ describe('parseContent empty section removal', () => {
   });
 });
 
+describe('parseContent duplicate section merging', () => {
+  test('merges markdown sections with same heading case-insensitively', () => {
+    const input = [
+      'Jane Doe',
+      '# Education',
+      '- B.S. in CS',
+      '# education',
+      '- M.S. in CS'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS', 'M.S. in CS']);
+  });
+
+  test('merges JSON sections with same heading case-insensitively', () => {
+    const json = {
+      name: 'Jane',
+      sections: [
+        { heading: 'Education', items: ['B.S. in CS'] },
+        { heading: 'education', items: ['M.S. in CS'] }
+      ]
+    };
+    const data = parseContent(JSON.stringify(json), { skipRequiredSections: true });
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS', 'M.S. in CS']);
+  });
+});
+
