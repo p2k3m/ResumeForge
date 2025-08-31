@@ -385,6 +385,42 @@ function normalizeName(name = 'Resume') {
   return String(name).replace(/[*_]/g, '');
 }
 
+function isJobEntry(tokens = []) {
+  const text = tokens
+    .map((t) => t.text || '')
+    .join('')
+    .toLowerCase();
+  if (text.includes('|')) return true;
+  const monthRange = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}.*?(present|\d{4})/;
+  const yearRange = /\b\d{4}\b\s*[-–to]+\s*(present|\d{4})/;
+  return monthRange.test(text) || yearRange.test(text);
+}
+
+function moveSummaryJobEntries(sections = []) {
+  const summary = sections.find(
+    (s) => s.heading && s.heading.toLowerCase() === 'summary'
+  );
+  if (!summary) return;
+  let work = sections.find(
+    (s) => s.heading && s.heading.toLowerCase() === 'work experience'
+  );
+  if (!work) {
+    work = { heading: 'Work Experience', items: [] };
+    sections.push(work);
+  }
+  summary.items = summary.items.filter((tokens) => {
+    if (isJobEntry(tokens)) {
+      work.items.push(tokens);
+      return false;
+    }
+    return true;
+  });
+  if (summary.items.length === 0) {
+    const idx = sections.indexOf(summary);
+    if (idx !== -1) sections.splice(idx, 1);
+  }
+}
+
 function parseContent(text, options = {}) {
   try {
     const data = JSON.parse(text);
@@ -421,6 +457,7 @@ function parseContent(text, options = {}) {
         )
       };
     });
+    moveSummaryJobEntries(sections);
     return ensureRequiredSections({ name, sections }, options);
   } catch {
     const lines = text.split(/\r?\n/);
@@ -493,6 +530,7 @@ function parseContent(text, options = {}) {
         }, [])
       );
     });
+    moveSummaryJobEntries(sections);
     return ensureRequiredSections({ name, sections }, options);
   }
 }
