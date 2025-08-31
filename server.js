@@ -65,6 +65,9 @@ function selectTemplates({
     template1 = template1 || defaultTemplate;
     template2 = template2 || defaultTemplate;
   }
+  if (template1 === template2) {
+    template2 = TEMPLATE_IDS.find((t) => t !== template1) || TEMPLATE_IDS[0];
+  }
   return { template1, template2 };
 }
 
@@ -925,7 +928,7 @@ app.post('/api/process-cv', (req, res, next) => {
     templates: req.body.templates || req.query.templates
   });
   let { template1, template2 } = selection;
-  console.log(`Selected templates: ${template1}, ${template2}`);
+  console.log(`Selected templates: template1=${template1}, template2=${template2}`);
   if (!req.file) {
     return res.status(400).json({ error: 'resume file required' });
   }
@@ -988,6 +991,14 @@ app.post('/api/process-cv', (req, res, next) => {
       jobId,
       event: 'request_received',
       message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}`
+    });
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'selected_templates',
+      message: `template1=${template1}; template2=${template2}`
     });
 
     const { data: jobDescriptionHtml } = await axios.get(jobDescriptionUrl);
