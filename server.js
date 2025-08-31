@@ -67,6 +67,56 @@ async function getSecrets() {
   return secretCache;
 }
 
+async function fetchLinkedInProfile(url) {
+  try {
+    const { data: html } = await axios.get(url);
+    const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
+    const headlineMatch =
+      html.match(/<title>([^<]*)<\/title>/i) || html.match(/"headline":"(.*?)"/i);
+    const headline = headlineMatch ? strip(headlineMatch[1]) : '';
+
+    const extractList = (id) => {
+      const sectionRegex = new RegExp(
+        `<section[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)<\\/section>`,
+        'i'
+      );
+      const sectionMatch = html.match(sectionRegex);
+      if (!sectionMatch) return [];
+      const itemRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      const items = [];
+      let m;
+      while ((m = itemRegex.exec(sectionMatch[1])) !== null) {
+        const text = strip(m[1]);
+        if (text) items.push(text);
+      }
+      return items;
+    };
+
+    return {
+      headline,
+      experience: extractList('experience'),
+      education: extractList('education'),
+      skills: extractList('skills')
+    };
+  } catch (err) {
+    throw new Error('LinkedIn profile fetch failed');
+  }
+}
+
+function mergeResumeWithLinkedIn(resumeText, profile) {
+  const parts = [resumeText];
+  if (profile && typeof profile === 'object') {
+    if (profile.headline) parts.push(`LinkedIn Headline: ${profile.headline}`);
+    if (profile.experience?.length)
+      parts.push('LinkedIn Experience: ' + profile.experience.join('; '));
+    if (profile.education?.length)
+      parts.push('LinkedIn Education: ' + profile.education.join('; '));
+    if (profile.skills?.length)
+      parts.push('LinkedIn Skills: ' + profile.skills.join(', '));
+  }
+  return parts.join('\n');
+}
+
 function parseLine(text) {
   text = text.replace(/^\*\s+/, '');
   const tokens = [];
@@ -679,6 +729,30 @@ app.post('/api/process-cv', (req, res, next) => {
     const { data: jobDescription } = await axios.get(jobDescriptionUrl);
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
 
+    let linkedinData = {};
+    try {
+      linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'fetched_linkedin_profile'
+      });
+    } catch (err) {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'linkedin_profile_fetch_failed',
+        level: 'error',
+        message: err.message
+      });
+    }
+
+    const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData);
+
     // Use GEMINI_API_KEY from environment or secrets
     const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
     const genAI = new GoogleGenerativeAI(geminiApiKey);
@@ -707,7 +781,7 @@ app.post('/api/process-cv', (req, res, next) => {
   `;
 
     const versionsPrompt = versionsTemplate
-      .replace('{{cvText}}', text)
+      .replace('{{cvText}}', combinedProfile)
       .replace('{{jdText}}', jobDescription);
 
     let versionData = {};
@@ -731,7 +805,7 @@ app.post('/api/process-cv', (req, res, next) => {
     const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
 
     const coverPrompt = coverTemplate
-      .replace('{{cvText}}', text)
+      .replace('{{cvText}}', combinedProfile)
       .replace('{{jdText}}', jobDescription);
 
     let coverData = {};
