@@ -11,9 +11,18 @@ describe('parseLine emphasis handling', () => {
     ]);
   });
 
-  test('handles malformed emphasis markers gracefully', () => {
-    const tokens = parseLine('This *text **is not closed');
+  test('drops unbalanced emphasis markers', () => {
+    const tokens = parseLine('This _text *is not closed');
     expect(tokens.map((t) => t.text).join('')).toBe('This text is not closed');
     tokens.forEach((t) => expect(t.style).toBeUndefined());
+  });
+
+  test('strips leading bullet before tokenization', () => {
+    const tokens = parseLine('* bullet *italic*');
+    const shapes = tokens.map(({ text, style }) => ({ text, style }));
+    expect(shapes).toEqual([
+      { text: 'bullet ', style: undefined },
+      { text: 'italic', style: 'italic' }
+    ]);
   });
 });

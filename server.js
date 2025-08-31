@@ -65,6 +65,7 @@ async function getSecrets() {
 }
 
 function parseLine(text) {
+  text = text.replace(/^\*\s+/, '');
   const tokens = [];
   const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
   let lastIndex = 0;
@@ -82,7 +83,7 @@ function parseLine(text) {
     if (match[1] && match[2]) {
       tokens.push({
         type: 'link',
-        text: match[1].replace(/\*/g, ''),
+        text: match[1].replace(/[*_]/g, ''),
         href: match[2],
         continued: true
       });
@@ -97,7 +98,7 @@ function parseLine(text) {
       }
       tokens.push({
         type: 'link',
-        text: label.replace(/\*/g, ''),
+        text: label.replace(/[*_]/g, ''),
         href: match[3],
         continued: true
       });
@@ -108,7 +109,7 @@ function parseLine(text) {
     flushSegment(text.slice(lastIndex));
   }
   if (tokens.length === 0) {
-    return [{ type: 'paragraph', text: text.replace(/\*/g, '') }];
+    return [{ type: 'paragraph', text: text.replace(/[*_]/g, '') }];
   }
   tokens.forEach((t, i) => (t.continued = i < tokens.length - 1));
   return tokens;
@@ -152,7 +153,7 @@ function parseEmphasis(segment) {
         stack.push({ char: ch, type });
         if (count > markerLen) buffer += ch.repeat(count - markerLen);
       } else {
-        buffer += ch.repeat(count);
+        if (count > markerLen) buffer += ch.repeat(count - markerLen);
       }
       i += count;
     } else {
@@ -164,15 +165,13 @@ function parseEmphasis(segment) {
   if (buffer) {
     tokens.push({ type: 'paragraph', text: buffer, style: styleFromStack(), continued: true });
   }
-  // Any remaining stack markers are unmatched; treat them as literal by
-  // normalizing away any style they might have implied.
   if (stack.length) {
     tokens.forEach((t) => {
       t.style = undefined;
     });
   }
   tokens.forEach((t) => {
-    if (t.text) t.text = t.text.replace(/\*/g, '');
+    if (t.text) t.text = t.text.replace(/[*_]/g, '');
   });
   return tokens;
 }
