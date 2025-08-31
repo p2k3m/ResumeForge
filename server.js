@@ -312,8 +312,15 @@ function parseEmphasis(segment) {
 function ensureRequiredSections(data) {
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
-    if (!data.sections.some((s) => s.heading.toLowerCase() === heading.toLowerCase())) {
-      data.sections.push({ heading, items: [] });
+    let section = data.sections.find(
+      (s) => s.heading.toLowerCase() === heading.toLowerCase()
+    );
+    if (!section) {
+      section = { heading, items: [] };
+      data.sections.push(section);
+    }
+    if (!section.items || section.items.length === 0) {
+      section.items = [parseLine('Information not provided')];
     }
   });
   return data;
