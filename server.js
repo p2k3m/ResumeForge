@@ -541,15 +541,26 @@ function normalizeName(name = 'Resume') {
   return String(name).replace(/[*_]/g, '');
 }
 
+function containsContactInfo(str = '') {
+  const text = String(str).toLowerCase();
+  return (
+    /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text) ||
+    /\b(?:\+?\d[\d\-\s().]{7,}\d)\b/.test(text) ||
+    /\bhttps?:\/\/\S+/i.test(text) ||
+    /linkedin|github/.test(text)
+  );
+}
+
 function isJobEntry(tokens = []) {
-  if (tokens.some((t) => t.type === 'jobsep')) return true;
   const text = tokens
-    .map((t) => t.text || '')
-    .join('')
-    .toLowerCase();
+    .map((t) => `${t.text || ''} ${t.href || ''}`)
+    .join(' ');
+  if (containsContactInfo(text)) return false;
+  if (tokens.some((t) => t.type === 'jobsep')) return true;
+  const lower = text.toLowerCase();
   const monthRange = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{4}.*?(present|\d{4})/;
   const yearRange = /\b\d{4}\b\s*[-–to]+\s*(present|\d{4})/;
-  return monthRange.test(text) || yearRange.test(text);
+  return monthRange.test(lower) || yearRange.test(lower);
 }
 
 function splitSkills(sections = []) {
@@ -591,9 +602,25 @@ function moveSummaryJobEntries(sections = []) {
     work = { heading: 'Work Experience', items: [] };
     sections.push(work);
   }
+  const sanitizeTokens = (tokens = []) => {
+    const filtered = tokens.filter((t) => {
+      const raw = `${t.text || ''} ${t.href || ''}`.toLowerCase();
+      if (t.type === 'jobsep') return false;
+      return !containsContactInfo(raw);
+    });
+    while (filtered[0] && !(filtered[0].text || '').trim()) filtered.shift();
+    while (
+      filtered[filtered.length - 1] &&
+      !(filtered[filtered.length - 1].text || '').trim()
+    )
+      filtered.pop();
+    return filtered;
+  };
+
   summary.items = summary.items.filter((tokens) => {
-    if (isJobEntry(tokens)) {
-      work.items.push(tokens);
+    const sanitized = sanitizeTokens(tokens);
+    if (isJobEntry(sanitized)) {
+      if (sanitized.length) work.items.push(sanitized);
       return false;
     }
     return true;
