@@ -259,7 +259,7 @@ function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
       const formatted = profile.experience.map((exp, idx) => {
         const e = { ...exp };
         if (idx === 0 && jobTitle) e.title = jobTitle;
-        const datePart = e.startDate || e.endDate ? ` (${e.startDate || ''} - ${e.endDate || ''})` : '';
+        const datePart = e.startDate || e.endDate ? ` (${e.startDate || ''} – ${e.endDate || ''})` : '';
         const base = [e.title, e.company].filter(Boolean).join(' at ');
         return `${base}${datePart}`.trim();
       });
@@ -445,8 +445,9 @@ function ensureRequiredSections(
     linkedinExperience = [],
     resumeEducation = [],
     linkedinEducation = [],
+    jobTitle,
     skipRequiredSections = false
-  } = {}
+  } = {},
 ) {
   if (skipRequiredSections) {
     data.sections = data.sections.filter((s) => s.items && s.items.length);
@@ -463,16 +464,58 @@ function ensureRequiredSections(
     }
     if (!section.items || section.items.length === 0) {
       if (heading.toLowerCase() === 'work experience') {
+        const combined = [...resumeExperience, ...linkedinExperience];
+        const seen = new Set();
+        const unique = [];
+        combined.forEach((exp) => {
+          const key = [
+            exp.company || '',
+            exp.title || '',
+            exp.startDate || '',
+            exp.endDate || ''
+          ]
+            .map((s) => s.toLowerCase())
+            .join('|');
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push({ ...exp });
+          }
+        });
+        unique.sort((a, b) => {
+          const aDate = Date.parse(a.endDate || a.startDate || '');
+          const bDate = Date.parse(b.endDate || b.startDate || '');
+          return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
+        });
+        if (jobTitle && unique.length && unique[0]) {
+          unique[0].title = jobTitle;
+        }
         const format = (exp) => {
-          const datePart = exp.startDate || exp.endDate ? ` (${exp.startDate || ''} - ${exp.endDate || ''})` : '';
+          const datePart =
+            exp.startDate || exp.endDate
+              ? ` (${exp.startDate || ''} – ${exp.endDate || ''})`
+              : '';
           const base = [exp.title, exp.company].filter(Boolean).join(' at ');
           return `${base}${datePart}`.trim();
         };
-        const bullets = resumeExperience.length
-          ? resumeExperience.map(format)
-          : linkedinExperience.map(format);
-        if (bullets.length) {
-          section.items = bullets.map((b) => parseLine(String(b)));
+        if (unique.length) {
+          section.items = unique.map((exp) => {
+            const tokens = parseLine(format(exp));
+            if (!tokens.some((t) => t.type === 'bullet')) {
+              tokens.unshift({ type: 'bullet' });
+            }
+            if (exp.responsibilities && exp.responsibilities.length) {
+              exp.responsibilities.forEach((r) => {
+                tokens.push({ type: 'newline' });
+                tokens.push({ type: 'tab' });
+                let respTokens = parseLine(String(r));
+                if (!respTokens.some((t) => t.type === 'bullet')) {
+                  respTokens.unshift({ type: 'bullet' });
+                }
+                tokens.push(...respTokens);
+              });
+            }
+            return tokens;
+          });
         } else {
           section.items = [parseLine('Information not provided')];
         }
@@ -492,6 +535,7 @@ function ensureRequiredSections(
   });
   return data;
 }
+
 
 function normalizeName(name = 'Resume') {
   return String(name).replace(/[*_]/g, '');
@@ -975,7 +1019,7 @@ function extractExperience(source) {
     } else {
       title = text.trim();
     }
-    return { company, title, startDate, endDate };
+    return { company, title, startDate, endDate, responsibilities: [] };
   };
   if (Array.isArray(source)) {
     return source.map((s) => (typeof s === 'string' ? parseEntry(s) : s));
@@ -983,6 +1027,7 @@ function extractExperience(source) {
   const lines = String(source).split(/\r?\n/);
   const entries = [];
   let inSection = false;
+  let current = null;
   for (const line of lines) {
     const trimmed = line.trim();
     if (/^experience/i.test(trimmed)) {
@@ -991,11 +1036,20 @@ function extractExperience(source) {
     }
     if (inSection && /^\s*$/.test(trimmed)) {
       inSection = false;
+      current = null;
       continue;
     }
     if (inSection) {
-      const match = trimmed.match(/^[-*]\s+(.*)/);
-      if (match) entries.push(parseEntry(match[1].trim()));
+      const jobMatch = line.match(/^[-*]\s+(.*)/);
+      if (jobMatch) {
+        current = parseEntry(jobMatch[1].trim());
+        entries.push(current);
+        continue;
+      }
+      const respMatch = line.match(/^\s+[-*]\s+(.*)/);
+      if (current && respMatch) {
+        current.responsibilities.push(respMatch[1].trim());
+      }
     }
   }
   return entries;
@@ -1285,7 +1339,8 @@ app.post('/api/process-cv', (req, res, next) => {
           resumeExperience,
           linkedinExperience,
           resumeEducation,
-          linkedinEducation
+          linkedinEducation,
+          jobTitle
         };
         versionData.version1 = sanitizeGeneratedText(
           parsed.version1,
@@ -1364,7 +1419,8 @@ app.post('/api/process-cv', (req, res, next) => {
               resumeExperience,
               linkedinExperience,
               resumeEducation,
-              linkedinEducation
+              linkedinEducation,
+              jobTitle
             }
           : name === 'cover_letter1' || name === 'cover_letter2'
           ? { skipRequiredSections: true }

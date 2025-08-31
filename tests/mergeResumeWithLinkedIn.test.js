@@ -10,6 +10,8 @@ describe('mergeResumeWithLinkedIn', () => {
       ]
     };
     const merged = mergeResumeWithLinkedIn(resumeText, profile, 'Senior Engineer');
-    expect(merged).toContain('LinkedIn Experience: Senior Engineer at Acme (2020 - 2021); Intern at Beta (2019 - 2020)');
+    expect(merged).toContain(
+      'LinkedIn Experience: Senior Engineer at Acme (2020 – 2021); Intern at Beta (2019 – 2020)'
+    );
   });
 });
