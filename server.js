@@ -350,9 +350,14 @@ function ensureRequiredSections(
     resumeExperience = [],
     linkedinExperience = [],
     resumeEducation = [],
-    linkedinEducation = []
+    linkedinEducation = [],
+    skipRequiredSections = false
   } = {}
 ) {
+  if (skipRequiredSections) {
+    data.sections = data.sections.filter((s) => s.items && s.items.length);
+    return data;
+  }
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
     let section = data.sections.find(
@@ -1163,6 +1168,8 @@ app.post('/api/process-cv', (req, res, next) => {
               resumeEducation,
               linkedinEducation
             }
+          : name === 'cover_letter1' || name === 'cover_letter2'
+          ? { skipRequiredSections: true }
           : {};
       const pdfBuffer = await generatePdf(text, tpl, options);
       await s3.send(
