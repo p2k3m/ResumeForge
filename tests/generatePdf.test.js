@@ -27,7 +27,33 @@ describe('generatePdf and parsing', () => {
   test('parseContent creates multiple sections from headings', () => {
     const input = 'Jane Doe\n# Experience\n- Worked\n# Skills\n- JavaScript';
     const data = parseContent(input);
-    expect(data.sections.map((s) => s.heading)).toEqual(['Experience', 'Skills']);
+    expect(data.sections.map((s) => s.heading)).toEqual([
+      'Experience',
+      'Skills',
+      'Work Experience',
+      'Education'
+    ]);
+  });
+
+  test('parseContent adds required sections for markdown', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JavaScript');
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    const edu = data.sections.find((s) => s.heading === 'Education');
+    expect(work).toBeDefined();
+    expect(edu).toBeDefined();
+    expect(work.items).toEqual([]);
+    expect(edu.items).toEqual([]);
+  });
+
+  test('parseContent adds required sections for JSON', () => {
+    const json = { name: 'Jane', sections: [{ heading: 'Skills', items: ['JS'] }] };
+    const data = parseContent(JSON.stringify(json));
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    const edu = data.sections.find((s) => s.heading === 'Education');
+    expect(work).toBeDefined();
+    expect(edu).toBeDefined();
+    expect(work.items).toEqual([]);
+    expect(edu.items).toEqual([]);
   });
 
   test.each(TEMPLATE_IDS)('generatePdf creates PDF from %s template', async (tpl) => {
