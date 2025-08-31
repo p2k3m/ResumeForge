@@ -63,6 +63,31 @@ describe('generatePdf and parsing', () => {
     );
   });
 
+  test('line breaks and tabs retained for mixed bullet and paragraph content', () => {
+    const input = 'Jane Doe\n- First bullet\n\tContinuation paragraph\nFinal line';
+    const data = prepareTemplateData(input);
+    const [first, second] = data.sections[0].items;
+    expect(first).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ text: 'First bullet' }),
+        expect.objectContaining({ type: 'newline' }),
+        expect.objectContaining({ type: 'tab' }),
+        expect.objectContaining({ text: 'Continuation paragraph' })
+      ])
+    );
+    const rendered = first
+      .map((t) => {
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        return t.text;
+      })
+      .join('');
+    expect(rendered).toBe(
+      'First bullet<br><span class="tab"></span>Continuation paragraph'
+    );
+    expect(second.map((t) => t.text).join('')).toBe('Final line');
+  });
+
   test('single asterisk italic and bullet handling', () => {
     const data = prepareTemplateData(
       'Jane Doe\n* This has *italic* text'
