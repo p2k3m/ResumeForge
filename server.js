@@ -338,7 +338,12 @@ function parseEmphasis(segment) {
 
 function ensureRequiredSections(
   data,
-  { resumeExperience = [], linkedinExperience = [] } = {}
+  {
+    resumeExperience = [],
+    linkedinExperience = [],
+    resumeEducation = [],
+    linkedinEducation = []
+  } = {}
 ) {
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
@@ -354,6 +359,15 @@ function ensureRequiredSections(
         const bullets = resumeExperience.length
           ? resumeExperience
           : linkedinExperience;
+        if (bullets.length) {
+          section.items = bullets.map((b) => parseLine(String(b)));
+        } else {
+          section.items = [parseLine('Information not provided')];
+        }
+      } else if (heading.toLowerCase() === 'education') {
+        const bullets = resumeEducation.length
+          ? resumeEducation
+          : linkedinEducation;
         if (bullets.length) {
           section.items = bullets.map((b) => parseLine(String(b)));
         } else {
@@ -742,6 +756,34 @@ function extractExperience(source) {
   return bullets;
 }
 
+function extractEducation(source) {
+  if (!source) return [];
+  if (Array.isArray(source)) return source.map((s) => String(s));
+  const lines = String(source).split(/\r?\n/);
+  const entries = [];
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^education/i.test(trimmed)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && /^\s*$/.test(trimmed)) {
+      inSection = false;
+      continue;
+    }
+    if (inSection) {
+      const match = trimmed.match(/^[-*]\s+(.*)/);
+      if (match) {
+        entries.push(match[1].trim());
+      } else if (trimmed) {
+        entries.push(trimmed);
+      }
+    }
+  }
+  return entries;
+}
+
 function extractJsonBlock(text) {
   const fenced = text.match(/```json[\s\S]*?```/i);
   if (fenced) {
@@ -904,6 +946,8 @@ app.post('/api/process-cv', (req, res, next) => {
     const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData);
     const resumeExperience = extractExperience(text);
     const linkedinExperience = extractExperience(linkedinData.experience || []);
+    const resumeEducation = extractEducation(text);
+    const linkedinEducation = extractEducation(linkedinData.education || []);
 
     // Use GEMINI_API_KEY from environment or secrets
     const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
@@ -1011,7 +1055,12 @@ app.post('/api/process-cv', (req, res, next) => {
           : defaultTemplate;
       const options =
         name === 'version1' || name === 'version2'
-          ? { resumeExperience, linkedinExperience }
+          ? {
+              resumeExperience,
+              linkedinExperience,
+              resumeEducation,
+              linkedinEducation
+            }
           : {};
       const pdfBuffer = await generatePdf(text, tpl, options);
       await s3.send(
@@ -1080,6 +1129,7 @@ export {
   parseContent,
   parseLine,
   extractExperience,
+  extractEducation,
   TEMPLATE_IDS,
   selectTemplates
 };

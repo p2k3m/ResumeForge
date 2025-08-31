@@ -51,3 +51,25 @@ describe('parseContent experience fallbacks', () => {
   });
 });
 
+describe('parseContent education fallbacks', () => {
+  test('uses resume education when AI output lacks it', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JS', {
+      resumeEducation: ['B.S. in CS - MIT']
+    });
+    const edu = data.sections.find((s) => s.heading === 'Education');
+    expect(edu.items).toHaveLength(1);
+    expect(edu.items[0].map((t) => t.text).join('')).toBe('B.S. in CS - MIT');
+  });
+
+  test('uses linkedin education when resume lacks it', () => {
+    const data = parseContent('Jane Doe\n# Skills\n- JS', {
+      linkedinEducation: ['Stanford University, BSc']
+    });
+    const edu = data.sections.find((s) => s.heading === 'Education');
+    expect(edu.items).toHaveLength(1);
+    expect(edu.items[0].map((t) => t.text).join('')).toBe(
+      'Stanford University, BSc'
+    );
+  });
+});
+
