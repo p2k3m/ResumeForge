@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import { logEvent } from './logger.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
@@ -285,18 +286,82 @@ async function generatePdf(text, templateId = 'modern') {
   } catch (err) {
     // Fallback for environments without Chromium dependencies
     const { default: PDFDocument } = await import('pdfkit');
+    const styleMap = {
+      modern: {
+        font: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italic: 'Helvetica-Oblique',
+        headingColor: '#2a9d8f',
+        bullet: '•',
+        bulletColor: '#2a9d8f',
+        textColor: '#333'
+      },
+      professional: {
+        font: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italic: 'Helvetica-Oblique',
+        headingColor: '#1d3557',
+        bullet: '▹',
+        bulletColor: '#1d3557',
+        textColor: '#222'
+      },
+      ucmo: {
+        font: 'Times-Roman',
+        bold: 'Times-Bold',
+        italic: 'Times-Italic',
+        headingColor: '#990000',
+        bullet: '–',
+        bulletColor: '#990000',
+        textColor: '#222'
+      },
+      vibrant: {
+        font: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italic: 'Helvetica-Oblique',
+        headingColor: '#ff6b6b',
+        bullet: '✱',
+        bulletColor: '#4ecdc4',
+        textColor: '#333'
+      }
+    };
+    const style = styleMap[templateId] || styleMap.modern;
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
       doc.on('data', (d) => buffers.push(d));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
-      doc.font('Helvetica-Bold').fontSize(20).text(data.name, { paragraphGap: 10 });
+
+      // Optional font embedding if Roboto fonts exist
+      try {
+        const fontsDir = path.resolve('fonts');
+        const regular = path.join(fontsDir, 'Roboto-Regular.ttf');
+        const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
+        const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
+        if (fsSync.existsSync(regular)) doc.registerFont('Roboto', regular);
+        if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
+        if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
+      } catch {}
+
+      doc.font(style.bold)
+        .fillColor(style.headingColor)
+        .fontSize(20)
+        .text(data.name, { paragraphGap: 10, align: 'left' })
+        .fillColor(style.textColor);
+
       data.sections.forEach((sec) => {
-        doc.font('Helvetica-Bold').fontSize(14).text(sec.heading, { paragraphGap: 4 });
+        doc
+          .font(style.bold)
+          .fillColor(style.headingColor)
+          .fontSize(14)
+          .text(sec.heading, { paragraphGap: 4 });
         (sec.items || []).forEach((tokens) => {
-          doc.font('Helvetica').fontSize(12);
-          doc.text('• ', { continued: true });
+          doc
+            .font(style.font)
+            .fontSize(12)
+            .fillColor(style.bulletColor)
+            .text(`${style.bullet} `, { continued: true })
+            .fillColor(style.textColor);
           tokens.forEach((t, idx) => {
             if (t.type === 'newline') {
               doc.text('', { continued: false });
@@ -309,13 +374,15 @@ async function generatePdf(text, templateId = 'modern') {
               return;
             }
             if (t.type === 'link') {
+              doc.fillColor('blue');
               doc.text(t.text, { ...opts, link: t.href, underline: true });
+              doc.fillColor(style.textColor);
             } else {
-              if (t.style === 'bold') doc.font('Helvetica-Bold');
-              else if (t.style === 'italic') doc.font('Helvetica-Oblique');
-              else doc.font('Helvetica');
+              if (t.style === 'bold') doc.font(style.bold);
+              else if (t.style === 'italic') doc.font(style.italic);
+              else doc.font(style.font);
               doc.text(t.text, opts);
-              doc.font('Helvetica');
+              doc.font(style.font);
             }
           });
         });
