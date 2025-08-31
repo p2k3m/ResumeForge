@@ -223,6 +223,30 @@ describe('generatePdf and parsing', () => {
     }
   });
 
+  test('PDFKit fallback line spacing matches Puppeteer output', async () => {
+    const input = 'Jane Doe\n- First line\n- Second line';
+    const browserPdf = await generatePdf(input, 'modern');
+    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
+    const fallbackPdf = await generatePdf(input, 'modern');
+    const getSpacing = (pdf) => {
+      const start = pdf.indexOf(Buffer.from('stream')) + 6;
+      const nl = pdf.indexOf('\n', start) + 1;
+      const end = pdf.indexOf(Buffer.from('endstream'), nl);
+      let content = pdf.slice(nl, end);
+      try {
+        content = zlib.inflateSync(content).toString();
+      } catch {
+        content = content.toString();
+      }
+      const ys = [...content.matchAll(/1 0 0 1 [0-9.]+ ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
+      const uniq = [...new Set(ys)];
+      return uniq[2] - uniq[3];
+    };
+    const browserSpacing = getSpacing(browserPdf);
+    const fallbackSpacing = getSpacing(fallbackPdf);
+    expect(Math.abs(browserSpacing - fallbackSpacing)).toBeLessThan(0.5);
+  });
+
   test('generated PDF preserves line breaks within list items', async () => {
     const input = 'Jane Doe\n- First line\nSecond line';
     const pdf = await generatePdf(input, 'modern');

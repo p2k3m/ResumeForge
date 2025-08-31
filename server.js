@@ -355,7 +355,9 @@ async function generatePdf(text, templateId = 'modern') {
         headingColor: '#2a9d8f',
         bullet: '•',
         bulletColor: '#2a9d8f',
-        textColor: '#333'
+        textColor: '#333',
+        lineGap: 6,
+        paragraphGap: 10
       },
       professional: {
         font: 'Helvetica',
@@ -364,7 +366,9 @@ async function generatePdf(text, templateId = 'modern') {
         headingColor: '#1d3557',
         bullet: '▹',
         bulletColor: '#1d3557',
-        textColor: '#222'
+        textColor: '#222',
+        lineGap: 6,
+        paragraphGap: 10
       },
       ucmo: {
         font: 'Times-Roman',
@@ -373,7 +377,9 @@ async function generatePdf(text, templateId = 'modern') {
         headingColor: '#990000',
         bullet: '–',
         bulletColor: '#990000',
-        textColor: '#222'
+        textColor: '#222',
+        lineGap: 6,
+        paragraphGap: 10
       },
       vibrant: {
         font: 'Helvetica',
@@ -382,7 +388,9 @@ async function generatePdf(text, templateId = 'modern') {
         headingColor: '#ff6b6b',
         bullet: '✱',
         bulletColor: '#4ecdc4',
-        textColor: '#333'
+        textColor: '#333',
+        lineGap: 6,
+        paragraphGap: 10
       },
       '2025': {
         font: 'Helvetica',
@@ -391,32 +399,50 @@ async function generatePdf(text, templateId = 'modern') {
         headingColor: '#3f51b5',
         bullet: '•',
         bulletColor: '#3f51b5',
-        textColor: '#333'
+        textColor: '#333',
+        lineGap: 6,
+        paragraphGap: 8
       }
     };
-    const style = styleMap[templateId] || styleMap.modern;
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
       doc.on('data', (d) => buffers.push(d));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
-
-      // Optional font embedding if Roboto fonts exist
+      // Optional font embedding for Roboto/Helvetica families if available
+      let robotoAvailable = false;
       try {
         const fontsDir = path.resolve('fonts');
-        const regular = path.join(fontsDir, 'Roboto-Regular.ttf');
+        const reg = path.join(fontsDir, 'Roboto-Regular.ttf');
         const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
         const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
-        if (fsSync.existsSync(regular)) doc.registerFont('Roboto', regular);
+        if (fsSync.existsSync(reg)) {
+          doc.registerFont('Roboto', reg);
+          robotoAvailable = true;
+        }
         if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
         if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
+        const hReg = path.join(fontsDir, 'Helvetica.ttf');
+        const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
+        const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
+        if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
+        if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
+        if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
       } catch {}
+      if (robotoAvailable) {
+        ['modern', 'vibrant'].forEach((tpl) => {
+          styleMap[tpl].font = 'Roboto';
+          styleMap[tpl].bold = 'Roboto-Bold';
+          styleMap[tpl].italic = 'Roboto-Italic';
+        });
+      }
+      const style = styleMap[templateId] || styleMap.modern;
 
       doc.font(style.bold)
         .fillColor(style.headingColor)
         .fontSize(20)
-        .text(data.name, { paragraphGap: 10, align: 'left' })
+        .text(data.name, { paragraphGap: style.paragraphGap, align: 'left', lineGap: style.lineGap })
         .fillColor(style.textColor);
 
       data.sections.forEach((sec) => {
@@ -424,21 +450,21 @@ async function generatePdf(text, templateId = 'modern') {
           .font(style.bold)
           .fillColor(style.headingColor)
           .fontSize(14)
-          .text(sec.heading, { paragraphGap: 4 });
+          .text(sec.heading, { paragraphGap: style.paragraphGap, lineGap: style.lineGap });
         (sec.items || []).forEach((tokens) => {
           doc
             .font(style.font)
             .fontSize(12)
             .fillColor(style.bulletColor)
-            .text(`${style.bullet} `, { continued: true })
+            .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap, paragraphGap: style.paragraphGap })
             .fillColor(style.textColor);
           tokens.forEach((t, idx) => {
             if (t.type === 'newline') {
-              doc.text('', { continued: false });
-              doc.text('   ', { continued: true });
+              doc.text('', { continued: false, lineGap: style.lineGap, paragraphGap: style.paragraphGap });
+              doc.text('   ', { continued: true, lineGap: style.lineGap, paragraphGap: style.paragraphGap });
               return;
             }
-            const opts = { continued: idx < tokens.length - 1 };
+            const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap, paragraphGap: style.paragraphGap };
             if (t.type === 'tab') {
               doc.text('    ', opts);
               return;
