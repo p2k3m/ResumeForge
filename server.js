@@ -207,8 +207,13 @@ function mergeResumeWithLinkedIn(resumeText, profile) {
 }
 
 function parseLine(text) {
-  text = text.replace(/^\*\s+/, '');
+  let bullet = false;
+  text = text.replace(/^[\-*–]\s+/, () => {
+    bullet = true;
+    return '';
+  });
   const tokens = [];
+  if (bullet) tokens.push({ type: 'bullet' });
   const parts = text.split(/(\n|\t)/);
   for (const part of parts) {
     if (part === '\n') {
@@ -433,9 +438,15 @@ function parseContent(text, options = {}) {
       const items = [];
       const src = sec.items || sec.content;
       if (Array.isArray(src)) {
-        src.forEach((i) => items.push(parseLine(String(i))));
+        src.forEach((i) => {
+          const tokens = parseLine(String(i));
+          if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
+          items.push(tokens);
+        });
       } else if (src) {
-        items.push(parseLine(String(src)));
+        const tokens = parseLine(String(src));
+        if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
+        items.push(tokens);
       }
       return {
         heading,
@@ -488,10 +499,10 @@ function parseContent(text, options = {}) {
         sections.push(currentSection);
         continue;
       }
-      const bulletMatch = line.match(/^[-*]\s*(.*)/);
+      const bulletMatch = line.match(/^[\-*–]\s+/);
       if (bulletMatch) {
         if (current.length) currentSection.items.push(current);
-        current = parseLine(bulletMatch[1]);
+        current = parseLine(line);
         continue;
       }
       const indentMatch = line.match(/^\s+(.*)/);
@@ -570,6 +581,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             if (t.style === 'italic') return `<em>${text}</em>`;
             if (t.type === 'newline') return '<br>';
             if (t.type === 'tab') return '<span class="tab"></span>';
+            if (t.type === 'bullet') return '<span class="bullet">•</span>';
             return text;
           })
           .join('')
@@ -607,7 +619,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         bold: 'Helvetica-Bold',
         italic: 'Helvetica-Oblique',
         headingColor: '#1d3557',
-        bullet: '▹',
+        bullet: '•',
         bulletColor: '#1d3557',
         textColor: '#222',
         lineGap: 6,
@@ -618,7 +630,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         bold: 'Times-Bold',
         italic: 'Times-Italic',
         headingColor: '#990000',
-        bullet: '–',
+        bullet: '•',
         bulletColor: '#990000',
         textColor: '#222',
         lineGap: 6,
@@ -629,7 +641,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         bold: 'Helvetica-Bold',
         italic: 'Helvetica-Oblique',
         headingColor: '#ff6b6b',
-        bullet: '✱',
+        bullet: '•',
         bulletColor: '#4ecdc4',
         textColor: '#333',
         lineGap: 6,
@@ -696,13 +708,15 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
           .text(sec.heading, { paragraphGap: style.paragraphGap, lineGap: style.lineGap });
         (sec.items || []).forEach((tokens) => {
           const startY = doc.y;
-          doc
-            .font(style.font)
-            .fontSize(12)
-            .fillColor(style.bulletColor)
-            .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap })
-            .fillColor(style.textColor);
+          doc.font(style.font).fontSize(12);
           tokens.forEach((t, idx) => {
+            if (t.type === 'bullet') {
+              doc
+                .fillColor(style.bulletColor)
+                .text(`${style.bullet} `, { continued: true, lineGap: style.lineGap })
+                .fillColor(style.textColor);
+              return;
+            }
             if (t.type === 'newline') {
               const before = doc.y;
               doc.text('', { continued: false, lineGap: style.lineGap });

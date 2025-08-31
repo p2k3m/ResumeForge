@@ -66,15 +66,14 @@ li {
   /* preserve formatting for multi-line bullets */
   margin-bottom: 0.5rem;
   margin-left: 1.2em;
-  text-indent: -1.2em;
   white-space: pre-wrap;
   line-height: 1.5;
 }
 
-li::before {
-  content: '\2022';
+.bullet {
   display: inline-block;
   width: 1.2em;
+  margin-left: -1.2em;
   color: var(--accent);
 }
 
