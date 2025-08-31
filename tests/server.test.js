@@ -57,7 +57,9 @@ jest.unstable_mockModule('mammoth', () => ({
   }
 }));
 
-const { default: app, extractText } = await import('../server.js');
+const serverModule = await import('../server.js');
+const { default: app, extractText, setGeneratePdf } = serverModule;
+setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 describe('health check', () => {
   test('GET /healthz', async () => {
@@ -180,6 +182,55 @@ describe('/api/process-cv', () => {
       'version1',
       'version2'
     ]);
+  });
+
+  test('uses template1 and template2', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: { text: () => JSON.stringify({ version1: 'v1', version2: 'v2' }) }
+      })
+      .mockResolvedValue({
+        response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
+      });
+    serverModule.generatePdf.mockClear();
+
+    await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('template1', 'modern')
+      .field('template2', 'professional')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    const calls = serverModule.generatePdf.mock.calls;
+    const callV1 = calls.find((c) => c[0] === 'v1');
+    const callV2 = calls.find((c) => c[0] === 'v2');
+    expect(callV1[1]).toBe('modern');
+    expect(callV2[1]).toBe('professional');
+  });
+
+  test('uses templates array', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: { text: () => JSON.stringify({ version1: 'v1', version2: 'v2' }) }
+      })
+      .mockResolvedValue({
+        response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
+      });
+    serverModule.generatePdf.mockClear();
+
+    await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('templates', JSON.stringify(['ucmo', 'vibrant']))
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    const calls = serverModule.generatePdf.mock.calls;
+    const callV1 = calls.find((c) => c[0] === 'v1');
+    const callV2 = calls.find((c) => c[0] === 'v2');
+    expect(callV1[1]).toBe('ucmo');
+    expect(callV2[1]).toBe('vibrant');
   });
 
   test('missing file', async () => {
