@@ -67,46 +67,57 @@ async function getSecrets() {
 function parseLine(text) {
   text = text.replace(/^\*\s+/, '');
   const tokens = [];
-  const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
-  let lastIndex = 0;
-  let match;
-
-  function flushSegment(segment) {
-    if (!segment) return;
-    tokens.push(...parseEmphasis(segment));
-  }
-
-  while ((match = linkRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      flushSegment(text.slice(lastIndex, match.index));
+  const parts = text.split(/(\n|\t)/);
+  for (const part of parts) {
+    if (part === '\n') {
+      tokens.push({ type: 'newline' });
+      continue;
     }
-    if (match[1] && match[2]) {
-      tokens.push({
-        type: 'link',
-        text: match[1].replace(/[*_]/g, ''),
-        href: match[2],
-        continued: true
-      });
-    } else if (match[3]) {
-      const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
-      let label = match[3];
-      try {
-        const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
-        label = domainMap[hostname] || match[3];
-      } catch {
-        label = match[3];
+    if (part === '\t') {
+      tokens.push({ type: 'tab' });
+      continue;
+    }
+    const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
+    let lastIndex = 0;
+    let match;
+
+    function flushSegment(segment) {
+      if (!segment) return;
+      tokens.push(...parseEmphasis(segment));
+    }
+
+    while ((match = linkRegex.exec(part)) !== null) {
+      if (match.index > lastIndex) {
+        flushSegment(part.slice(lastIndex, match.index));
       }
-      tokens.push({
-        type: 'link',
-        text: label.replace(/[*_]/g, ''),
-        href: match[3],
-        continued: true
-      });
+      if (match[1] && match[2]) {
+        tokens.push({
+          type: 'link',
+          text: match[1].replace(/[*_]/g, ''),
+          href: match[2],
+          continued: true
+        });
+      } else if (match[3]) {
+        const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
+        let label = match[3];
+        try {
+          const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
+          label = domainMap[hostname] || match[3];
+        } catch {
+          label = match[3];
+        }
+        tokens.push({
+          type: 'link',
+          text: label.replace(/[*_]/g, ''),
+          href: match[3],
+          continued: true
+        });
+      }
+      lastIndex = linkRegex.lastIndex;
     }
-    lastIndex = linkRegex.lastIndex;
-  }
-  if (lastIndex < text.length) {
-    flushSegment(text.slice(lastIndex));
+    if (lastIndex < part.length) {
+      flushSegment(part.slice(lastIndex));
+    }
   }
   if (tokens.length === 0) {
     return [{ type: 'paragraph', text: text.replace(/[*_]/g, '') }];
