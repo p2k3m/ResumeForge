@@ -73,7 +73,9 @@ describe('parseContent summary reclassification', () => {
 describe('parseContent experience fallbacks', () => {
   test('uses resume experience when AI output lacks it', () => {
     const data = parseContent('Jane Doe\n# Skills\n- JS', {
-      resumeExperience: ['Did something']
+      resumeExperience: [
+        { title: 'Did something', company: '', startDate: '', endDate: '' }
+      ]
     });
     const work = data.sections.find((s) => s.heading === 'Work Experience');
     expect(work.items).toHaveLength(1);
@@ -82,7 +84,9 @@ describe('parseContent experience fallbacks', () => {
 
   test('uses linkedin experience when resume lacks it', () => {
     const data = parseContent('Jane Doe\n# Skills\n- JS', {
-      linkedinExperience: ['LinkedIn item']
+      linkedinExperience: [
+        { title: 'LinkedIn item', company: '', startDate: '', endDate: '' }
+      ]
     });
     const work = data.sections.find((s) => s.heading === 'Work Experience');
     expect(work.items).toHaveLength(1);
