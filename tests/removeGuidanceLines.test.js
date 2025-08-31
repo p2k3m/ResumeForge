@@ -5,8 +5,11 @@ describe('removeGuidanceLines', () => {
     const input = [
       'Professional Summary',
       '(Tailor this section)',
+      '[Customize this section]',
       'Add other relevant experience',
+      'Previous roles summarized above.',
       'List key skills.',
+      'Details omitted for brevity.',
       'Consolidate relevant experience',
       'Final line'
     ].join('\n');
