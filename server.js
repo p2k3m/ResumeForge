@@ -197,6 +197,17 @@ function parseEmphasis(segment) {
 }
 
 
+function ensureRequiredSections(data) {
+  const required = ['Work Experience', 'Education'];
+  required.forEach((heading) => {
+    if (!data.sections.some((s) => s.heading.toLowerCase() === heading.toLowerCase())) {
+      data.sections.push({ heading, items: [] });
+    }
+  });
+  return data;
+}
+
+
 function parseContent(text) {
   try {
     const data = JSON.parse(text);
@@ -233,7 +244,7 @@ function parseContent(text) {
         )
       };
     });
-    return { name, sections };
+    return ensureRequiredSections({ name, sections });
   } catch {
     const lines = text.split(/\r?\n/);
     const name = (lines.shift() || 'Resume').trim();
@@ -305,7 +316,7 @@ function parseContent(text) {
         }, [])
       );
     });
-    return { name, sections };
+    return ensureRequiredSections({ name, sections });
   }
 }
 
@@ -682,6 +693,7 @@ app.post('/api/process-cv', (req, res, next) => {
   4. Enhance content clarity and impact while preserving factual accuracy.
   5. Maintain an ATS-friendly format with appropriate keywords.
   6. Keep any URLs from the original CV unchanged.
+  7. Include "Work Experience" and "Education" sections in every resume, adding empty sections if necessary.
   `;
 
     const versionsPrompt = versionsTemplate
