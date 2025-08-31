@@ -55,9 +55,10 @@ describe('ensureRequiredSections certifications merging', () => {
       linkedinCertifications
     });
     const certSection = ensured.sections.find(
-      (s) => s.heading === 'Certifications'
+      (s) => s.heading === 'Certification'
     );
     expect(certSection).toBeTruthy();
+    expect(certSection.heading).toBe('Certification');
     expect(certSection.items).toHaveLength(2);
     certSection.items.forEach((tokens) => {
       expect(tokens[0].type).toBe('bullet');

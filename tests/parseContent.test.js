@@ -291,6 +291,36 @@ describe('parseContent duplicate section merging', () => {
   });
 });
 
+describe('parseContent certification normalization and pruning', () => {
+  test('standardizes certification headings and merges duplicates', () => {
+    const input = [
+      'Jane Doe',
+      '# Trainings',
+      '- AWS',
+      '# Certifications',
+      '- GCP',
+      '# TRAININGS/ CERTIFICATION',
+      '- Azure'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const cert = data.sections.find((s) => s.heading === 'Certification');
+    expect(cert).toBeTruthy();
+    const items = cert.items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['AWS', 'GCP', 'Azure']);
+    const headings = data.sections.map((s) => s.heading);
+    expect(headings.filter((h) => h === 'Certification')).toHaveLength(1);
+  });
+
+  test('prunes empty certification sections', () => {
+    const input = ['Jane Doe', '# Certifications', '-   ', '# Skills', '- JS'].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const cert = data.sections.find((s) => s.heading === 'Certification');
+    expect(cert).toBeUndefined();
+  });
+});
+
 describe('parseContent defaultHeading option', () => {
   test('omits summary heading when defaultHeading is empty', () => {
     const input = 'Jane Doe\nThis is a cover letter paragraph.';
