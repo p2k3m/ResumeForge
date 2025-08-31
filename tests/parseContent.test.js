@@ -31,6 +31,29 @@ describe('parseContent placeholders', () => {
   });
 });
 
+describe('parseContent summary reclassification', () => {
+  test('moves job-like lines from Summary to Work Experience', () => {
+    const input = [
+      'John Doe',
+      'Acme Corp | Developer | Jan 2020 - Present',
+      'Passionate engineer',
+      '# Skills',
+      '- JS'
+    ].join('\n');
+    const data = parseContent(input);
+    const summary = data.sections.find((s) => s.heading === 'Summary');
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0].map((t) => t.text).join('')).toBe(
+      'Passionate engineer'
+    );
+    expect(work.items).toHaveLength(1);
+    expect(work.items[0].map((t) => t.text).join('')).toBe(
+      'Acme Corp | Developer | Jan 2020 - Present'
+    );
+  });
+});
+
 describe('parseContent experience fallbacks', () => {
   test('uses resume experience when AI output lacks it', () => {
     const data = parseContent('Jane Doe\n# Skills\n- JS', {
