@@ -25,7 +25,7 @@ describe('generatePdf and parsing', () => {
     );
   });
 
-  test.each(['modern', 'ucmo', 'professional'])('generatePdf creates PDF from %s template', async (tpl) => {
+  test.each(['modern', 'ucmo', 'professional', 'vibrant'])('generatePdf creates PDF from %s template', async (tpl) => {
     const buffer = await generatePdf('Jane Doe\n- Loves testing', tpl);
     expect(Buffer.isBuffer(buffer)).toBe(true);
     expect(buffer.length).toBeGreaterThan(0);
