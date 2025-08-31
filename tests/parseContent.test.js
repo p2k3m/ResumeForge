@@ -68,6 +68,49 @@ describe('parseContent summary reclassification', () => {
       'Acme Corp Developer Jan 2020 - Present'
     );
   });
+
+  test('keeps contact details in Summary and out of Work Experience', () => {
+    const input = [
+      'John Doe',
+      'john@example.com | 555-123-4567 | https://github.com/jdoe',
+      'Acme Corp | Developer | Jan 2020 - Present',
+      '# Skills',
+      '- JS'
+    ].join('\n');
+    const data = parseContent(input);
+    const summary = data.sections.find((s) => s.heading === 'Summary');
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    const summaryText = summary.items
+      .map((tokens) => tokens.map((t) => t.text || t.href || '').join(''))
+      .join(' ');
+    expect(summaryText).toMatch(/john@example.com/);
+    expect(summaryText).toMatch(/555-123-4567/);
+    expect(summaryText).toMatch(/github/i);
+    const workText = work.items
+      .map((tokens) => tokens.map((t) => t.text || '').join(''))
+      .join(' ');
+    expect(workText).not.toMatch(/john@example.com/);
+    expect(workText).not.toMatch(/555-123-4567/);
+    expect(workText).not.toMatch(/github/);
+  });
+
+  test('drops contact details from job lines before moving to Work Experience', () => {
+    const input = [
+      'John Doe',
+      'Acme Corp | Developer | Jan 2020 - Present | john@example.com',
+      '# Skills',
+      '- JS'
+    ].join('\n');
+    const data = parseContent(input);
+    const summary = data.sections.find((s) => s.heading === 'Summary');
+    const work = data.sections.find((s) => s.heading === 'Work Experience');
+    expect(summary).toBeUndefined();
+    const workText = work.items
+      .map((tokens) => tokens.map((t) => t.text || '').join(''))
+      .join(' ');
+    expect(workText).toBe('Acme Corp Developer Jan 2020 - Present');
+    expect(workText).not.toMatch(/john@example.com/);
+  });
 });
 
 describe('parseContent skills list handling', () => {
