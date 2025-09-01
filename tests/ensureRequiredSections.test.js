@@ -69,4 +69,14 @@ describe('ensureRequiredSections certifications merging', () => {
     );
     expect(hasLink).toBe(true);
   });
+
+  test('prepends bullet to existing certification entries missing one', () => {
+    const data = {
+      sections: [{ heading: 'Certification', items: [parseLine('AWS Dev')] }]
+    };
+    const ensured = ensureRequiredSections(data, {});
+    const certSection = ensured.sections.find((s) => s.heading === 'Certification');
+    expect(certSection.items).toHaveLength(1);
+    expect(certSection.items[0][0].type).toBe('bullet');
+  });
 });
