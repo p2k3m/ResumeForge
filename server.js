@@ -1793,6 +1793,29 @@ function sanitizeGeneratedText(text, options = {}) {
   return lines.join('\n');
 }
 
+async function verifyResume(
+  text = '',
+  jobDescription = '',
+  generativeModel,
+  options = {}
+) {
+  if (!text || !generativeModel?.generateContent) return text;
+  try {
+    const prompt =
+      `You are an expert resume editor. Improve the style and structure of the ` +
+      `resume below so it aligns with the job description. Return only the ` +
+      `full revised resume text.\n\nResume:\n${text}\n\nJob Description:\n${jobDescription}`;
+    const result = await generativeModel.generateContent(prompt);
+    const improved = result?.response?.text?.();
+    if (improved) {
+      return sanitizeGeneratedText(improved, options);
+    }
+  } catch {
+    /* ignore */
+  }
+  return text;
+}
+
 function relocateProfileLinks(text) {
   if (!text) return text;
   const sentenceRegex = /[^.!?\n]*https?:\/\/\S*(?:linkedin\.com|github\.com)\S*[^.!?\n]*[.!?]?/gi;
@@ -2069,12 +2092,16 @@ app.post('/api/process-cv', (req, res, next) => {
           jobTitle,
           project: projectText
         };
-        versionData.version1 = sanitizeGeneratedText(
-          parsed.version1,
+        versionData.version1 = await verifyResume(
+          sanitizeGeneratedText(parsed.version1, sanitizeOptions),
+          jobDescription,
+          generativeModel,
           sanitizeOptions
         );
-        versionData.version2 = sanitizeGeneratedText(
-          parsed.version2,
+        versionData.version2 = await verifyResume(
+          sanitizeGeneratedText(parsed.version2, sanitizeOptions),
+          jobDescription,
+          generativeModel,
           sanitizeOptions
         );
       }
@@ -2327,5 +2354,6 @@ export {
   selectTemplates,
   removeGuidanceLines,
   sanitizeGeneratedText,
-  relocateProfileLinks
+  relocateProfileLinks,
+  verifyResume
 };
