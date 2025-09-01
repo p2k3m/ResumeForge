@@ -804,9 +804,22 @@ function ensureRequiredSections(
         return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
       });
 
-      section.items = all.length
-        ? all.map((e) => e.tokens)
-        : [parseLine('Information not provided')];
+      if (all.length) {
+        section.items = all.map((e) => e.tokens);
+      } else {
+        const otherExperienceHasItems = data.sections.some((s) => {
+          if (s === section) return false;
+          const heading = normalizeHeading(s.heading).toLowerCase();
+          return (
+            heading.includes('experience') &&
+            Array.isArray(s.items) &&
+            s.items.length > 0
+          );
+        });
+        section.items = otherExperienceHasItems
+          ? []
+          : [parseLine('Information not provided')];
+      }
     } else if (!section.items || section.items.length === 0) {
       if (normalized.toLowerCase() === 'education') {
         const bullets = resumeEducation.length
