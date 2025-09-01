@@ -1017,10 +1017,12 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
       ...sec,
       items: sec.items.map((tokens) =>
         tokens
-          .map((t) => {
+          .map((t, i) => {
             const text = t.text ? escapeHtml(t.text) : '';
             if (t.type === 'link') {
-              return `<a href="${t.href}">${text}</a>`;
+              const next = tokens[i + 1];
+              const space = next && next.text && !/^\s/.test(next.text) ? ' ' : '';
+              return `<a href="${t.href}">${text.trim()}</a>${space}`;
             }
             if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
             if (t.style === 'bold') return `<strong>${text}</strong>`;
@@ -1195,15 +1197,22 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             }
             if (t.type === 'link') {
               doc.fillColor('blue');
-              doc.text(t.text, { ...opts, link: t.href, underline: true });
+              doc.text(t.text, {
+                lineGap: style.lineGap,
+                link: t.href,
+                underline: true,
+                continued: false
+              });
+              if (idx < tokens.length - 1)
+                doc.text('', { continued: true, lineGap: style.lineGap });
               doc.fillColor(style.textColor);
-            } else {
-              if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
-              else if (t.style === 'italic') doc.font(style.italic);
-              else doc.font(style.font);
-              doc.text(t.text, opts);
-              doc.font(style.font);
+              return;
             }
+            if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
+            else if (t.style === 'italic') doc.font(style.italic);
+            else doc.font(style.font);
+            doc.text(t.text, opts);
+            doc.font(style.font);
           });
           if (doc.y === startY) doc.moveDown();
           const extra = style.paragraphGap / doc.currentLineHeight(true);
