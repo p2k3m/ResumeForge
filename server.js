@@ -309,6 +309,33 @@ async function fetchLinkedInProfile(url) {
   }
 }
 
+async function fetchCredlyProfile(url) {
+  try {
+    const { data: html } = await axios.get(url);
+    const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
+    const badgeRegex = /<div[^>]*class=["'][^"']*badge[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+    const badges = [];
+    let m;
+    while ((m = badgeRegex.exec(html)) !== null) {
+      const block = m[1];
+      const statusMatch = block.match(/<span[^>]*class=["'][^"']*(?:status|state)[^"']*["'][^>]*>(.*?)<\/span>/i);
+      if (statusMatch && !/active/i.test(strip(statusMatch[1]))) continue;
+      const nameMatch = block.match(/class=["'][^"']*badge-name[^"']*["'][^>]*>(.*?)<\/span>/i);
+      const providerMatch = block.match(/class=["'][^"']*(?:issuer-name|org|organization)[^"']*["'][^>]*>(.*?)<\/span>/i);
+      const urlMatch = block.match(/<a[^>]*href=["']([^"']+)["']/i);
+      badges.push({
+        name: nameMatch ? strip(nameMatch[1]) : '',
+        provider: providerMatch ? strip(providerMatch[1]) : '',
+        url: urlMatch ? strip(urlMatch[1]) : '',
+        source: 'credly'
+      });
+    }
+    return badges;
+  } catch {
+    return [];
+  }
+}
+
 function analyzeJobDescription(html) {
   const strip = (s) =>
     s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -632,6 +659,8 @@ function ensureRequiredSections(
     linkedinEducation = [],
     resumeCertifications = [],
     linkedinCertifications = [],
+    credlyCertifications = [],
+    credlyProfileUrl,
     jobTitle,
     skipRequiredSections = false
   } = {},
@@ -789,6 +818,7 @@ function ensureRequiredSections(
     : [];
 
   const allCerts = [
+    ...credlyCertifications,
     ...existingCerts,
     ...resumeCertifications,
     ...linkedinCertifications,
@@ -823,6 +853,13 @@ function ensureRequiredSections(
       if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
       return tokens;
     });
+    if (credlyProfileUrl) {
+      const profileTokens = [
+        { type: 'bullet' },
+        { type: 'link', text: 'Credly Profile', href: credlyProfileUrl }
+      ];
+      certSection.items.push(profileTokens);
+    }
   } else if (certSection) {
     data.sections = data.sections.filter((s) => s !== certSection);
   }
@@ -1779,7 +1816,7 @@ app.post('/api/process-cv', (req, res, next) => {
     return res.status(500).json({ error: 'failed to load configuration' });
   }
 
-  const { jobDescriptionUrl, linkedinProfileUrl } = req.body;
+  const { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
   const ipAddress =
     (req.headers['x-forwarded-for'] || '')
       .split(',')
@@ -1866,7 +1903,7 @@ app.post('/api/process-cv', (req, res, next) => {
       key: logKey,
       jobId,
       event: 'request_received',
-      message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}`
+      message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`
     });
     await logEvent({
       s3,
@@ -1907,6 +1944,30 @@ app.post('/api/process-cv', (req, res, next) => {
         level: 'error',
         message: err.message
       });
+    }
+
+    let credlyCertifications = [];
+    if (credlyProfileUrl) {
+      try {
+        credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'fetched_credly_profile'
+        });
+      } catch (err) {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'credly_profile_fetch_failed',
+          level: 'error',
+          message: err.message
+        });
+      }
     }
 
     const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData, jobTitle);
@@ -1981,6 +2042,8 @@ app.post('/api/process-cv', (req, res, next) => {
           linkedinEducation,
           resumeCertifications,
           linkedinCertifications,
+          credlyCertifications,
+          credlyProfileUrl,
           jobTitle,
           project: projectText
         };
@@ -2070,6 +2133,8 @@ app.post('/api/process-cv', (req, res, next) => {
               linkedinEducation,
               resumeCertifications,
               linkedinCertifications,
+              credlyCertifications,
+              credlyProfileUrl,
               jobTitle,
               jobSkills
             }
@@ -2209,6 +2274,7 @@ export {
   extractCertifications,
   splitSkills,
   fetchLinkedInProfile,
+  fetchCredlyProfile,
   mergeResumeWithLinkedIn,
   analyzeJobDescription,
   extractResumeSkills,

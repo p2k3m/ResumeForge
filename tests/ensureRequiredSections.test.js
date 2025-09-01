@@ -139,6 +139,47 @@ describe('ensureRequiredSections certifications merging', () => {
     expect(certSection.items).toHaveLength(1);
   });
 
+  test('includes credly certifications and profile link', () => {
+    const data = { sections: [] };
+    const credlyCertifications = [
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://credly.com/aws-dev'
+      }
+    ];
+    const ensured = ensureRequiredSections(data, {
+      credlyCertifications,
+      credlyProfileUrl: 'https://credly.com/user'
+    });
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certification'
+    );
+    expect(certSection).toBeTruthy();
+    expect(certSection.items).toHaveLength(2);
+    const first = certSection.items[0];
+    const hasLink = first.some(
+      (t) => t.type === 'link' && t.href === 'https://credly.com/aws-dev'
+    );
+    expect(hasLink).toBe(true);
+    const profile = certSection.items[1];
+    const profileLink = profile.find(
+      (t) => t.type === 'link' && t.href === 'https://credly.com/user'
+    );
+    expect(profileLink).toBeTruthy();
+  });
+
+  test('omits certification section when only credly profile link provided', () => {
+    const ensured = ensureRequiredSections(
+      { sections: [] },
+      { credlyCertifications: [], credlyProfileUrl: 'https://credly.com/user' }
+    );
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certification'
+    );
+    expect(certSection).toBeUndefined();
+  });
+
   test('removes certification section if no certificates remain', () => {
     const data = { sections: [{ heading: 'Certification', items: [] }] };
     const ensured = ensureRequiredSections(data, {});
