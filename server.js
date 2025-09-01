@@ -358,33 +358,40 @@ function parseLine(text) {
 
       while ((match = linkRegex.exec(piece)) !== null) {
         if (match.index > lastIndex) {
-          flushSegment(piece.slice(lastIndex, match.index));
+          let segment = piece.slice(lastIndex, match.index);
+          if (segment.endsWith('(')) segment = segment.slice(0, -1);
+          flushSegment(segment);
         }
         if (match[1] && match[2]) {
+          let href = match[2];
+          if (href.endsWith(')')) href = href.slice(0, -1);
           tokens.push({
             type: 'link',
             text: match[1].replace(/[*_]/g, ''),
-            href: match[2],
+            href,
             continued: true,
             ...(forceBold ? { style: 'bold' } : {})
           });
         } else if (match[3]) {
+          let href = match[3];
+          if (href.endsWith(')')) href = href.slice(0, -1);
           const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
-          let label = match[3];
+          let label = href;
           try {
-            const hostname = new URL(match[3]).hostname.replace(/^www\./, '');
-            label = domainMap[hostname] || match[3];
+            const hostname = new URL(href).hostname.replace(/^www\./, '');
+            label = domainMap[hostname] || href;
           } catch {
-            label = match[3];
+            label = href;
           }
           tokens.push({
             type: 'link',
             text: label.replace(/[*_]/g, ''),
-            href: match[3],
+            href,
             continued: true,
             ...(forceBold ? { style: 'bold' } : {})
           });
         }
+        if (piece[linkRegex.lastIndex] === ')') linkRegex.lastIndex++;
         lastIndex = linkRegex.lastIndex;
       }
       if (lastIndex < piece.length) {
@@ -1528,6 +1535,27 @@ function sanitizeGeneratedText(text, options = {}) {
   return reparseAndStringify(cleaned, options);
 }
 
+function relocateProfileLinks(text) {
+  if (!text) return text;
+  const sentenceRegex = /[^.!?\n]*https?:\/\/\S*(?:linkedin\.com|github\.com)\S*[^.!?\n]*[.!?]?/gi;
+  const matches = [];
+  let remaining = text.replace(sentenceRegex, (m) => {
+    matches.push(m.replace(/[()]/g, '').trim());
+    return '';
+  });
+  if (!matches.length) return text;
+  remaining = remaining
+    .replace(/[ \t]*\n[ \t]*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/ +/g, ' ')
+    .trim();
+  const paragraph = matches.join(' ');
+  if (/\nSincerely/i.test(remaining)) {
+    return remaining.replace(/\nSincerely/i, `\n\n${paragraph}\n\nSincerely`);
+  }
+  return `${remaining}\n\n${paragraph}`;
+}
+
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
@@ -1834,7 +1862,7 @@ app.post('/api/process-cv', (req, res, next) => {
           : {};
       const inputText =
         name === 'cover_letter1' || name === 'cover_letter2'
-          ? sanitizeGeneratedText(text, options)
+          ? relocateProfileLinks(sanitizeGeneratedText(text, options))
           : text;
       const pdfBuffer = await generatePdf(inputText, tpl, options);
       await s3.send(
@@ -1970,5 +1998,6 @@ export {
   CONTRASTING_PAIRS,
   selectTemplates,
   removeGuidanceLines,
-  sanitizeGeneratedText
+  sanitizeGeneratedText,
+  relocateProfileLinks
 };

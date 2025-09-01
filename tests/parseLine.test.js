@@ -46,4 +46,13 @@ describe('parseLine emphasis handling', () => {
     expect(bold.map((t) => t.text).join('')).toBe('Software Engineer, Acme Corp');
     expect(tokens.some((t) => t.type === 'jobsep')).toBe(true);
   });
+
+  test('strips surrounding parentheses from links', () => {
+    const tokens = parseLine('Check (https://github.com/user) for code');
+    const link = tokens.find((t) => t.type === 'link');
+    expect(link.href).toBe('https://github.com/user');
+    const texts = tokens.map((t) => t.text).join('');
+    expect(texts).not.toContain('(');
+    expect(texts).not.toContain(')');
+  });
 });
