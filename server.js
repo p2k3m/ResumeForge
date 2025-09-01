@@ -1331,12 +1331,15 @@ function extractExperience(source) {
       inSection = true;
       continue;
     }
-    if (inSection && /^\s*$/.test(trimmed)) {
-      inSection = false;
-      current = null;
-      continue;
-    }
     if (inSection) {
+      if (/^(education|skills|projects|certifications|summary|objective|awards|interests|languages)/i.test(trimmed)) {
+        inSection = false;
+        current = null;
+        continue;
+      }
+      if (/^\s*$/.test(trimmed)) {
+        continue;
+      }
       const jobMatch = line.match(/^[-*]\s+(.*)/);
       if (jobMatch) {
         current = parseEntry(jobMatch[1].trim());

@@ -58,6 +58,35 @@ describe('extractExperience', () => {
       }
     ]);
   });
+
+  test('retains multiple roles and responsibilities within the section', () => {
+    const text =
+      'Experience\n' +
+      '- Developer at Beta Corp (Mar 2018 - Apr 2019)\n' +
+      '  - Built API\n\n' +
+      '  - Improved UX\n\n' +
+      '- Manager at Gamma LLC (May 2019 - Jun 2020)\n' +
+      '  - Led team\n' +
+      '  - Managed budget\n' +
+      'Education\n' +
+      '- BSc Computer Science\n';
+    expect(extractExperience(text)).toEqual([
+      {
+        company: 'Beta Corp',
+        title: 'Developer',
+        startDate: 'Mar 2018',
+        endDate: 'Apr 2019',
+        responsibilities: ['Built API', 'Improved UX']
+      },
+      {
+        company: 'Gamma LLC',
+        title: 'Manager',
+        startDate: 'May 2019',
+        endDate: 'Jun 2020',
+        responsibilities: ['Led team', 'Managed budget']
+      }
+    ]);
+  });
 });
 
 describe('fetchLinkedInProfile', () => {
