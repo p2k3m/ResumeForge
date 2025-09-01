@@ -254,17 +254,52 @@ describe('generatePdf and parsing', () => {
     expect(rendered).not.toMatch(/[-–]/);
   });
 
-  test('education section uses alternate bullet glyph', () => {
+  test('education section uses alternate bullet glyph with spacing', () => {
     const input = 'Jane Doe\n# Education\n- Bachelor of Science';
     const data = parseContent(input);
     const edu = data.sections.find((s) => s.heading === 'Education');
     const rendered = edu.items[0]
       .map((t) => {
-        if (t.type === 'bullet') return '<span class="edu-bullet">–</span>';
+        if (t.type === 'bullet') return '<span class="edu-bullet">–</span> ';
         return t.text || '';
       })
       .join('');
-    expect(rendered).toBe('<span class="edu-bullet">–</span>Bachelor of Science');
+    expect(rendered).toBe('<span class="edu-bullet">–</span> Bachelor of Science');
+  });
+
+  test('education bullet PDF spacing snapshot', async () => {
+    const input = 'Jane Doe\n# Education\n- Bachelor of Science';
+    const browserPdf = await generatePdf(input, 'modern');
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockRejectedValue(new Error('no browser'));
+    const fallbackPdf = await generatePdf(input, 'modern');
+    launchSpy.mockRestore();
+    const extractText = async (pdf) => {
+      try {
+        return (await pdfParse(pdf)).text.trim();
+      } catch {
+        let idx = 0;
+        let text = '';
+        while ((idx = pdf.indexOf(Buffer.from('stream'), idx)) !== -1) {
+          const nl = pdf.indexOf('\n', idx) + 1;
+          const end = pdf.indexOf(Buffer.from('endstream'), nl);
+          let chunk = pdf.slice(nl, end);
+          try {
+            chunk = zlib.inflateSync(chunk).toString();
+          } catch {
+            chunk = chunk.toString();
+          }
+          text += chunk;
+          idx = end + 9;
+        }
+        return text.trim();
+      }
+    };
+    const browserText = await extractText(browserPdf);
+    const fallbackText = await extractText(fallbackPdf);
+    expect(browserText).toMatchSnapshot('browser');
+    expect(fallbackText).toMatchSnapshot('fallback');
   });
 
   test('single asterisk italic and bullet handling', () => {

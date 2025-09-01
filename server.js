@@ -1060,7 +1060,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             if (t.type === 'tab') return '<span class="tab"></span>';
             if (t.type === 'bullet') {
               if (sec.heading === 'Education') {
-                return '<span class="edu-bullet">–</span>';
+                return '<span class="edu-bullet">–</span> ';
               }
               return '<span class="bullet">•</span> ';
             }
