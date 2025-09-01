@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`headings are bold in HTML and PDF outputs: html 1`] = `
+exports[`all headings including Skills are bold in HTML and PDF outputs: html 1`] = `
 "<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -67,7 +67,7 @@ exports[`headings are bold in HTML and PDF outputs: html 1`] = `
 "
 `;
 
-exports[`headings are bold in HTML and PDF outputs: pdf 1`] = `
+exports[`all headings including Skills are bold in HTML and PDF outputs: pdf 1`] = `
 {
   "content": "1 0 0 -1 0 792 cm
 /DeviceRGB cs
