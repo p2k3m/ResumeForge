@@ -37,10 +37,13 @@ generateContentMock
       text: () =>
         JSON.stringify({
           version1: 'v1',
-          version2: 'v2'
+          version2: 'v2',
+          project: 'Example project'
         })
     }
   })
+  .mockResolvedValueOnce({ response: { text: () => '' } })
+  .mockResolvedValueOnce({ response: { text: () => '' } })
   .mockResolvedValue({
     response: {
       text: () =>
@@ -131,10 +134,13 @@ describe('/api/process-cv', () => {
           text: () =>
             JSON.stringify({
               version1: 'v1',
-              version2: 'v2'
+              version2: 'v2',
+              project: 'Example project'
             })
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -232,6 +238,8 @@ describe('/api/process-cv', () => {
             '```json\n{"version1":"v1","version2":"v2"}\n``` trailing'
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -262,6 +270,8 @@ describe('/api/process-cv', () => {
             'start {"version1":"v1","version2":"v2"} end'
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -287,8 +297,12 @@ describe('/api/process-cv', () => {
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
-        response: { text: () => JSON.stringify({ version1: 'v1', version2: 'v2' }) }
+        response: {
+          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
+        }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
       });
@@ -312,8 +326,12 @@ describe('/api/process-cv', () => {
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
-        response: { text: () => JSON.stringify({ version1: 'v1', version2: 'v2' }) }
+        response: {
+          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
+        }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
       });
@@ -346,6 +364,8 @@ describe('/api/process-cv', () => {
             })
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -382,9 +402,11 @@ describe('/api/process-cv', () => {
     generateContentMock
       .mockResolvedValueOnce({
         response: {
-          text: () => JSON.stringify({ version1: 'v1', version2: 'v2' })
+          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -415,6 +437,8 @@ describe('/api/process-cv', () => {
             })
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -448,9 +472,11 @@ describe('/api/process-cv', () => {
     generateContentMock
       .mockResolvedValueOnce({
         response: {
-          text: () => JSON.stringify({ version1: 'Name', version2: 'Name' })
+          text: () => JSON.stringify({ version1: 'Name', version2: 'Name', project: 'Example project' })
         }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -492,8 +518,12 @@ describe('/api/process-cv', () => {
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
-        response: { text: () => JSON.stringify({ version1: 'v1', version2: 'v2' }) }
+        response: {
+          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
+        }
       })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
