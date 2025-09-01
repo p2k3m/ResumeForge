@@ -84,18 +84,20 @@ li {
 
 .bullet {
   display: inline-block;
-  width: 1.2em;
-  margin-left: -1.2em;
-  margin-right: 0.4em;
+  width: 1em;
+  margin-left: -1em;
+  margin-right: 0.5em;
   color: var(--bullet);
+  font-weight: 700;
 }
 
 .edu-bullet {
   display: inline-block;
-  width: 1.2em;
-  margin-left: -1.2em;
-  margin-right: 0.4em;
+  width: 1em;
+  margin-left: -1em;
+  margin-right: 0.5em;
   color: var(--bullet);
+  font-weight: 700;
 }
 
 .tab {

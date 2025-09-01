@@ -1223,6 +1223,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
             if (t.style === 'bold') return `<strong>${text}</strong>`;
             if (t.style === 'italic') return `<em>${text}</em>`;
+            if (t.type === 'heading') return `<strong>${text}</strong>`;
             if (t.type === 'newline') return '<br>';
             if (t.type === 'tab') return '<span class="tab"></span>';
             if (t.type === 'bullet') {
@@ -1403,6 +1404,12 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
               if (idx < tokens.length - 1)
                 doc.text('', { continued: true, lineGap: style.lineGap });
               doc.fillColor(style.textColor);
+              return;
+            }
+            if (t.type === 'heading') {
+              doc.font(style.bold);
+              doc.text(t.text, opts);
+              doc.font(style.font);
               return;
             }
             if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
