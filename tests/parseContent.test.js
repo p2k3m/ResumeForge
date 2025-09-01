@@ -188,8 +188,12 @@ describe('parseContent experience fallbacks', () => {
     });
     const work = data.sections.find((s) => s.heading === 'Work Experience');
     expect(work.items).toHaveLength(2);
-    expect(work.items[0].map((t) => t.text).join('')).toBe('Senior Engineer at Acme (Jan 2020 – Feb 2021)');
-    expect(work.items[1].map((t) => t.text).join('')).toBe('Developer at Beta Corp (Mar 2018 – Apr 2019)Built things');
+    expect(work.items[0].map((t) => t.text).join('')).toBe(
+      'Senior Engineer at Acme (Jan 2020 – Feb 2021)'
+    );
+    expect(work.items[1].map((t) => t.text).join('')).toBe(
+      'Developer at Beta Corp (Mar 2018 – Apr 2019)'
+    );
   });
 });
 
