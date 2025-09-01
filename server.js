@@ -572,7 +572,26 @@ function ensureRequiredSections(
         .filter(Boolean);
 
       const seen = new Set(existing.map((e) => e.key));
-      const combined = [...resumeExperience, ...linkedinExperience];
+      const flatten = (arr = []) =>
+        arr.flatMap((exp) => {
+          if (Array.isArray(exp.roles) && exp.roles.length) {
+            return exp.roles.map((role) => {
+              const { roles, ...base } = exp;
+              return {
+                ...base,
+                ...role,
+                company: role.company || base.company || '',
+                responsibilities:
+                  role.responsibilities || base.responsibilities || [],
+              };
+            });
+          }
+          return exp;
+        });
+      const combined = [
+        ...flatten(resumeExperience),
+        ...flatten(linkedinExperience),
+      ];
       const additions = [];
       combined.forEach((exp) => {
         const key = [

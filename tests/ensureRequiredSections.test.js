@@ -26,6 +26,48 @@ describe('ensureRequiredSections work experience merging', () => {
     const ensured = ensureRequiredSections(data, { resumeExperience });
     expect(ensured.sections[0].items).toHaveLength(1);
   });
+
+  test('includes multiple roles from resumeExperience', () => {
+    const data = { sections: [{ heading: 'Work Experience', items: [] }] };
+    const resumeExperience = [
+      {
+        company: 'Acme',
+        roles: [
+          { title: 'Senior Dev', startDate: '2021', endDate: '2022' },
+          { title: 'Dev', startDate: '2019', endDate: '2021' }
+        ]
+      }
+    ];
+    const ensured = ensureRequiredSections(data, { resumeExperience });
+    const lines = ensured.sections[0].items.map((tokens) =>
+      tokens.map((t) => t.text || '').join('').trim()
+    );
+    expect(lines).toEqual([
+      'Senior Dev at Acme (2021 – 2022)',
+      'Dev at Acme (2019 – 2021)'
+    ]);
+  });
+
+  test('includes multiple roles from linkedinExperience', () => {
+    const data = { sections: [{ heading: 'Work Experience', items: [] }] };
+    const linkedinExperience = [
+      {
+        company: 'Beta',
+        roles: [
+          { title: 'Lead', startDate: '2022', endDate: '2023' },
+          { title: 'Engineer', startDate: '2020', endDate: '2022' }
+        ]
+      }
+    ];
+    const ensured = ensureRequiredSections(data, { linkedinExperience });
+    const lines = ensured.sections[0].items.map((tokens) =>
+      tokens.map((t) => t.text || '').join('').trim()
+    );
+    expect(lines).toEqual([
+      'Lead at Beta (2022 – 2023)',
+      'Engineer at Beta (2020 – 2022)'
+    ]);
+  });
 });
 
 describe('ensureRequiredSections certifications merging', () => {
