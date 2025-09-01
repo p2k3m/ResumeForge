@@ -1505,7 +1505,14 @@ function extractExperience(source) {
     }
     const jobMatch = line.match(/^[-*]\s+(.*)/) || (!line.match(/^\s/) ? [null, trimmed] : null);
     if (jobMatch) {
-      entries.push(parseEntry(jobMatch[1].trim()));
+      const text = jobMatch[1].trim();
+      const entry = parseEntry(text);
+      const hasCompanyTitleOrDate =
+        /\bat\b/i.test(text) ||
+        /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b\s+\d{4}\s*[\u2013-]\s*/i.test(text);
+      if (hasCompanyTitleOrDate && !(entry.company === '' && entry.startDate === '')) {
+        entries.push(entry);
+      }
     }
   }
   return entries;
