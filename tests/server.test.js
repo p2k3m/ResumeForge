@@ -472,7 +472,7 @@ describe('/api/process-cv', () => {
     generateContentMock
       .mockResolvedValueOnce({
         response: {
-          text: () => JSON.stringify({ version1: 'Name', version2: 'Name', project: 'Example project' })
+          text: () => JSON.stringify({ version1: 'Name', version2: 'Name' })
         }
       })
       .mockResolvedValueOnce({ response: { text: () => '' } })
@@ -505,11 +505,8 @@ describe('/api/process-cv', () => {
       (s) => s.heading === 'Projects'
     );
     expect(projectSection).toBeTruthy();
-    expect(
-      projectSection.items.some((tokens) =>
-        tokens.some((t) => t.type === 'bullet')
-      )
-    ).toBe(true);
+    expect(projectSection.items.length).toBeGreaterThan(0);
+    expect(projectSection.items.length).toBeLessThanOrEqual(2);
 
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
