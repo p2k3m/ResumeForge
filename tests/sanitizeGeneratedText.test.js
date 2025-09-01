@@ -17,6 +17,20 @@ describe('sanitizeGeneratedText', () => {
     expect(output).toBe(['John Doe', '# Experience', '- Did things'].join('\n'));
   });
 
+  test('removes guidance bullets with notes', () => {
+    const input = [
+      'John Doe',
+      '# Experience',
+      '- (Note: Remove this line)',
+      '- Kept bullet'
+    ].join('\n');
+
+    const output = sanitizeGeneratedText(input, { skipRequiredSections: true });
+    expect(output).toBe(
+      ['John Doe', '# Experience', '- Kept bullet'].join('\n')
+    );
+  });
+
   test('removes bracketed placeholders within cover letters', () => {
     const input = [
       'Dear [Hiring Manager],',
