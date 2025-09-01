@@ -83,7 +83,6 @@ const CONTRASTING_PAIRS = [
 ];
 
 function selectTemplates({
-  defaultCvTemplate = CV_TEMPLATES[0],
   defaultClTemplate = CL_TEMPLATES[0],
   template1,
   template2,
@@ -114,39 +113,25 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  if (!template1 && !template2) {
-    // Default to the classic "ucmo" template paired with a contrasting style
-    template1 = 'ucmo';
+  // Always start with the classic "ucmo" template when none is specified
+  template1 = template1 || 'ucmo';
+  if (!template2 || CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]) {
+    const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
+    if (pair) {
+      template2 = pair.find((t) => t !== template1);
+    }
+  }
+  if (
+    !template2 ||
+    template1 === template2 ||
+    CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
+  ) {
     const candidates = CV_TEMPLATES.filter(
-      (t) => t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS['ucmo']
+      (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
     );
     template2 =
       candidates[Math.floor(Math.random() * candidates.length)] ||
       CV_TEMPLATES[0];
-  } else {
-    template1 = template1 || defaultCvTemplate;
-    if (!template2) {
-      // Try to find a contrasting template for the specified template1
-      const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
-      if (pair) {
-        template2 = pair.find((t) => t !== template1);
-      } else {
-        template2 = CV_TEMPLATES.find(
-          (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
-        );
-      }
-    } else {
-      template2 = template2;
-    }
-  }
-  if (
-    template1 === template2 ||
-    CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
-  ) {
-    template2 =
-      CV_TEMPLATES.find(
-        (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
-      ) || CV_TEMPLATES[0];
   }
 
   if (!coverTemplate1 && !coverTemplate2) {
