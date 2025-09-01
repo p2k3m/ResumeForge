@@ -663,6 +663,7 @@ function ensureRequiredSections(
     credlyCertifications = [],
     credlyProfileUrl,
     jobTitle,
+    project,
     skipRequiredSections = false
   } = {},
 ) {
@@ -825,6 +826,27 @@ function ensureRequiredSections(
       }
     }
   });
+
+  const hasProjects = data.sections.some(
+    (s) => normalizeHeading(s.heading).toLowerCase() === 'projects'
+  );
+  if (!hasProjects && project) {
+    const sentences = String(project)
+      .replace(/\s+/g, ' ')
+      .split(/[.!?]\s+/)
+      .filter(Boolean)
+      .slice(0, 2);
+    if (sentences.length) {
+      const section = { heading: 'Projects', items: [] };
+      sentences.forEach((s) => {
+        const tokens = parseLine(s.trim());
+        if (!tokens.some((t) => t.type === 'bullet'))
+          tokens.unshift({ type: 'bullet' });
+        section.items.push(tokens);
+      });
+      data.sections.push(section);
+    }
+  }
 
   // Certifications section
   const certHeading = 'Certification';
@@ -2131,6 +2153,7 @@ app.post('/api/process-cv', (req, res, next) => {
         .replace('{{jobSkills}}', jobSkills.join(', ')) +
       '\n\nNote: The candidate performed duties matching the job description in their last role.';
 
+    let projectText = '';
     let versionData = {};
     try {
       const result = await generativeModel.generateContent(versionsPrompt);
@@ -2139,7 +2162,7 @@ app.post('/api/process-cv', (req, res, next) => {
       if (parsed) {
         const projectField =
           parsed.project || parsed.projects || parsed.Projects;
-        let projectText = Array.isArray(projectField)
+        projectText = Array.isArray(projectField)
           ? projectField[0]
           : projectField;
         if (!projectText) {
@@ -2255,7 +2278,8 @@ app.post('/api/process-cv', (req, res, next) => {
               credlyCertifications,
               credlyProfileUrl,
               jobTitle,
-              jobSkills
+              jobSkills,
+              project: projectText
             }
           : name === 'cover_letter1' || name === 'cover_letter2'
           ? { skipRequiredSections: true, defaultHeading: '' }
