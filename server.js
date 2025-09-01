@@ -113,13 +113,34 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  // Always start with the classic "ucmo" template when none is specified
-  template1 = template1 || 'ucmo';
-  if (!template2 || CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]) {
-    const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
-    if (pair) {
-      template2 = pair.find((t) => t !== template1);
+  // Ensure one of the templates is always "ucmo"
+  if (!template1 && !template2) {
+    template1 = 'ucmo';
+  } else if (template1 !== 'ucmo' && template2 !== 'ucmo') {
+    if (template1) {
+      template2 = 'ucmo';
+    } else {
+      template1 = 'ucmo';
     }
+  }
+  // Ensure the non-ucmo template contrasts with "ucmo"
+  if (template1 === 'ucmo') {
+    if (!template2 || template2 === 'ucmo') {
+      const pair = CONTRASTING_PAIRS.find((p) => p.includes('ucmo'));
+      template2 = pair ? pair.find((t) => t !== 'ucmo') : CV_TEMPLATES.find((t) => t !== 'ucmo');
+    }
+  } else if (template2 === 'ucmo') {
+    if (!template1 || template1 === 'ucmo') {
+      const pair = CONTRASTING_PAIRS.find((p) => p.includes('ucmo'));
+      template1 = pair ? pair.find((t) => t !== 'ucmo') : CV_TEMPLATES.find((t) => t !== 'ucmo');
+    }
+  } else if (
+    !template2 ||
+    template1 === template2 ||
+    CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
+  ) {
+    const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
+    if (pair) template2 = pair.find((t) => t !== template1);
   }
   if (
     !template2 ||
