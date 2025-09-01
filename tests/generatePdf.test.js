@@ -45,9 +45,8 @@ describe('generatePdf and parsing', () => {
     const input = 'Jane Doe\n# Experience\n- Worked\n# Skills\n- JavaScript';
     const data = parseContent(input);
     expect(data.sections.map((s) => s.heading)).toEqual([
-      'Experience',
-      'Skills',
       'Work Experience',
+      'Skills',
       'Education'
     ]);
   });

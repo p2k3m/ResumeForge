@@ -658,6 +658,9 @@ function normalizeHeading(heading = '') {
     .toLowerCase()
     .replace(/\b\w/g, (c) => c.toUpperCase());
   const lower = normalized.toLowerCase().replace(/\s+/g, ' ');
+  if (lower === 'experience') {
+    return 'Work Experience';
+  }
   if (
     /^certifications?$/.test(lower) ||
     /^trainings?$/.test(lower) ||
@@ -1143,12 +1146,18 @@ function parseContent(text, options = {}) {
     });
     splitSkills(sections, options.jobSkills);
     moveSummaryJobEntries(sections);
+    sections.forEach((sec) => {
+      sec.heading = normalizeHeading(sec.heading);
+    });
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
     const ensured = ensureRequiredSections(
       { name, sections: prunedSections },
       rest
     );
+    ensured.sections.forEach((sec) => {
+      sec.heading = normalizeHeading(sec.heading);
+    });
     ensured.sections = mergeDuplicateSections(ensured.sections);
     ensured.sections = pruneEmptySections(ensured.sections);
     return ensured;
@@ -1249,12 +1258,18 @@ function parseContent(text, options = {}) {
     });
     splitSkills(sections, options.jobSkills);
     moveSummaryJobEntries(sections);
+    sections.forEach((sec) => {
+      sec.heading = normalizeHeading(sec.heading);
+    });
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
     const ensured = ensureRequiredSections(
       { name, sections: prunedSections },
       rest
     );
+    ensured.sections.forEach((sec) => {
+      sec.heading = normalizeHeading(sec.heading);
+    });
     ensured.sections = mergeDuplicateSections(ensured.sections);
     ensured.sections = pruneEmptySections(ensured.sections);
     return ensured;

@@ -374,6 +374,25 @@ describe('parseContent duplicate section merging', () => {
     );
     expect(items).toEqual(['B.S. in CS']);
   });
+
+  test('merges Experience and Work Experience headings', () => {
+    const input = [
+      'Jane Doe',
+      '# Experience',
+      '- Job A',
+      '# Work Experience',
+      '- Job B'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const sections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'work experience'
+    );
+    expect(sections).toHaveLength(1);
+    const items = sections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['Job A', 'Job B']);
+  });
 });
 
 describe('parseContent certification normalization and pruning', () => {
