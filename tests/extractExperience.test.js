@@ -210,4 +210,39 @@ describe('ensureRequiredSections work experience listing', () => {
     ]);
     expect(lines.some((l) => /Built API|Led team/.test(l))).toBe(false);
   });
+
+  test('lists every position from multi-role resume and LinkedIn data', () => {
+    const data = { sections: [{ heading: 'Work Experience', items: [] }] };
+    const resumeExperience = [
+      {
+        company: 'Beta Corp',
+        roles: [
+          { title: 'Lead', startDate: '2020', endDate: '2021' },
+          { title: 'Developer', startDate: '2018', endDate: '2020' }
+        ]
+      }
+    ];
+    const linkedinExperience = [
+      {
+        company: 'Gamma LLC',
+        roles: [
+          { title: 'Manager', startDate: '2021', endDate: '2022' },
+          { title: 'Analyst', startDate: '2019', endDate: '2021' }
+        ]
+      }
+    ];
+    const ensured = ensureRequiredSections(data, {
+      resumeExperience,
+      linkedinExperience
+    });
+    const lines = ensured.sections[0].items.map((tokens) =>
+      tokens.map((t) => t.text || '').join('').trim()
+    );
+    expect(lines).toEqual([
+      'Manager at Gamma LLC (2021 – 2022)',
+      'Lead at Beta Corp (2020 – 2021)',
+      'Analyst at Gamma LLC (2019 – 2021)',
+      'Developer at Beta Corp (2018 – 2020)'
+    ]);
+  });
 });
