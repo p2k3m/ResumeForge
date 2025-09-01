@@ -114,13 +114,15 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
   "enhancedScore": 80,
   "table": [
     { "skill": "javascript", "matched": true },
-    { "skill": "aws", "matched": false }
+    { "skill": "aws", "matched": true },
+    { "skill": "python", "matched": false }
   ],
-  "newSkills": ["aws"]
+  "addedSkills": ["aws"],
+  "missingSkills": ["python"]
 }
 ```
 
-`originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, and `newSkills` lists skills from the job description not found in the enhanced resume.
+`originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
 S3 keys follow the pattern `sessions/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
 
