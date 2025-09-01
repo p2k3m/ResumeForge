@@ -874,13 +874,15 @@ function mergeDuplicateSections(sections = []) {
       result.push(copy);
     }
   });
-  return result;
+  return result.filter((sec) => (sec.items || []).length > 0);
 }
 
 function pruneEmptySections(sections = []) {
+  const hasVisibleText = (t) =>
+    typeof t.text === 'string' && /[^\s\u2022·\-–—]/.test(t.text);
   return sections.filter((sec) => {
     sec.items = (sec.items || []).filter((tokens) =>
-      tokens.some((t) => t.text && t.text.trim())
+      tokens.some(hasVisibleText)
     );
     return sec.items.length > 0;
   });
