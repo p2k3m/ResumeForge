@@ -5,7 +5,8 @@ import {
   CV_TEMPLATES,
   CL_TEMPLATES,
   selectTemplates,
-  CONTRASTING_PAIRS
+  CONTRASTING_PAIRS,
+  CV_TEMPLATE_GROUPS
 } from '../server.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
@@ -102,17 +103,13 @@ describe('generatePdf and parsing', () => {
     }
   );
 
-  test('selectTemplates picks contrasting defaults', () => {
+  test('selectTemplates defaults to ucmo and contrasting style', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
-    const contrasting = CONTRASTING_PAIRS.some(
-      ([a, b]) =>
-        (template1 === a && template2 === b) ||
-        (template1 === b && template2 === a)
-    );
-    expect(contrasting).toBe(true);
-    expect(coverTemplate1).not.toBe(coverTemplate2);
-    expect(CV_TEMPLATES).toContain(template1);
+    expect(template1).toBe('ucmo');
+    expect(template2).not.toBe('ucmo');
+    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
     expect(CV_TEMPLATES).toContain(template2);
+    expect(coverTemplate1).not.toBe(coverTemplate2);
     expect(CL_TEMPLATES).toContain(coverTemplate1);
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
