@@ -101,7 +101,7 @@ Any missing or invalid ID falls back to `modern`.
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
 
 ## API Response
-The `/api/process-cv` endpoint returns JSON containing an array of generated files:
+The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics:
 
 ```json
 {
@@ -109,9 +109,18 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
     { "type": "cover_letter1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cover_letter/cover_letter1.pdf" },
     { "type": "version1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cv/Jane_Doe.pdf" }
   ],
-  "applicantName": "Jane Doe"
+  "applicantName": "Jane Doe",
+  "originalScore": 50,
+  "enhancedScore": 80,
+  "table": [
+    { "skill": "javascript", "matched": true },
+    { "skill": "aws", "matched": false }
+  ],
+  "newSkills": ["aws"]
 }
 ```
+
+`originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, and `newSkills` lists skills from the job description not found in the enhanced resume.
 
 S3 keys follow the pattern `sessions/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
 

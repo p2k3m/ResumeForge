@@ -162,6 +162,8 @@ describe('/api/process-cv', () => {
       'version1',
       'version2'
     ]);
+    expect(typeof res2.body.originalScore).toBe('number');
+    expect(typeof res2.body.enhancedScore).toBe('number');
     expect(res2.body.applicantName).toBeTruthy();
 
     const sanitized = res2.body.applicantName
