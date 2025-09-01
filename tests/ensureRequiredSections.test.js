@@ -132,18 +132,18 @@ describe('ensureRequiredSections certifications merging', () => {
     expect(certSection.items).toHaveLength(2);
     certSection.items.forEach((tokens) => {
       expect(tokens[0].type).toBe('bullet');
+      const link = tokens[1];
+      expect(link.type).toBe('link');
+      expect(link.href).toBeDefined();
     });
-    const first = certSection.items[0];
-    const firstText = first
-      .filter((t) => t.text)
-      .map((t) => t.text)
-      .join(' ');
-    expect(firstText).toContain('AWS Certified Developer');
-    expect(firstText).toContain('Amazon');
-    const firstLink = first.find(
-      (t) => t.type === 'link' && t.href === 'https://www.credly.com/badges/aws-dev'
-    );
-    expect(firstLink).toBeTruthy();
+    expect(certSection.items[0][1]).toMatchObject({
+      text: 'AWS Certified Developer - Amazon',
+      href: 'https://www.credly.com/badges/aws-dev'
+    });
+    expect(certSection.items[1][1]).toMatchObject({
+      text: 'PMP - PMI',
+      href: 'https://example.com/pmp'
+    });
   });
 
   test('prepends bullet to existing certification entries missing one', () => {
@@ -154,6 +154,7 @@ describe('ensureRequiredSections certifications merging', () => {
     const certSection = ensured.sections.find((s) => s.heading === 'Certification');
     expect(certSection.items).toHaveLength(1);
     expect(certSection.items[0][0].type).toBe('bullet');
+    expect(certSection.items[0][1].type).toBe('link');
   });
 
   test('deduplicates existing certification entries', () => {
@@ -192,16 +193,20 @@ describe('ensureRequiredSections certifications merging', () => {
       expect(certSection).toBeTruthy();
       expect(certSection.items).toHaveLength(2);
       const first = certSection.items[0];
-      const link = first[1];
-      expect(link.type).toBe('link');
-      expect(link.text).toContain('AWS Certified Developer');
-      expect(link.text).toContain('Amazon');
-      expect(link.href).toBe('https://credly.com/aws-dev');
+      expect(first[0].type).toBe('bullet');
+      expect(first[1]).toMatchObject({
+        type: 'link',
+        text: expect.stringContaining('AWS Certified Developer'),
+        href: 'https://credly.com/aws-dev'
+      });
+      expect(first[1].text).toContain('Amazon');
       const profile = certSection.items[1];
-      const profileLink = profile.find(
-        (t) => t.type === 'link' && t.href === 'https://credly.com/user'
-      );
-      expect(profileLink).toBeTruthy();
+      expect(profile[0].type).toBe('bullet');
+      expect(profile[1]).toMatchObject({
+        type: 'link',
+        text: 'Credly Profile',
+        href: 'https://credly.com/user'
+      });
     });
 
   test('includes credly profile link when only profile URL is provided', () => {
@@ -214,8 +219,10 @@ describe('ensureRequiredSections certifications merging', () => {
     );
     expect(certSection).toBeTruthy();
     expect(certSection.items).toHaveLength(1);
-    const link = certSection.items[0].find((t) => t.type === 'link');
-    expect(link).toMatchObject({
+    const item = certSection.items[0];
+    expect(item[0].type).toBe('bullet');
+    expect(item[1]).toMatchObject({
+      type: 'link',
       text: 'Credly Profile',
       href: 'https://credly.com/user'
     });
