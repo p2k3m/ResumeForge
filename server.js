@@ -1409,7 +1409,7 @@ function extractExperience(source) {
     let endDate = '';
     const dateMatch = text.match(/\(([^)]+)\)/);
     if (dateMatch) {
-      const parts = dateMatch[1].split(/[-–to]+/);
+      const parts = dateMatch[1].split(/\s*[-–]\s*/);
       startDate = parts[0]?.trim() || '';
       endDate = parts[1]?.trim() || '';
       text = text.replace(dateMatch[0], '').trim();
@@ -1436,25 +1436,23 @@ function extractExperience(source) {
       inSection = true;
       continue;
     }
-    if (inSection) {
-      if (/^(education|skills|projects|certifications|summary|objective|awards|interests|languages)/i.test(trimmed)) {
-        inSection = false;
-        current = null;
-        continue;
-      }
-      if (/^\s*$/.test(trimmed)) {
-        continue;
-      }
-      const jobMatch = line.match(/^[-*]\s+(.*)/);
-      if (jobMatch) {
-        current = parseEntry(jobMatch[1].trim());
-        entries.push(current);
-        continue;
-      }
-      const respMatch = line.match(/^\s+[-*]\s+(.*)/);
-      if (current && respMatch) {
-        current.responsibilities.push(respMatch[1].trim());
-      }
+    if (!inSection) continue;
+    if (/^(education|skills|projects|certifications|summary|objective|awards|interests|languages)/i.test(trimmed)) {
+      break;
+    }
+    if (trimmed === '') {
+      continue;
+    }
+    const jobMatch = line.match(/^[-*]\s+(.*)/) || (!line.match(/^\s/) ? [null, trimmed] : null);
+    if (jobMatch) {
+      current = parseEntry(jobMatch[1].trim());
+      entries.push(current);
+      continue;
+    }
+    const respMatch = line.match(/^\s+[-*]\s+(.*)/) || line.match(/^\s+(.*)/);
+    if (current && respMatch) {
+      const resp = respMatch[1].trim();
+      if (resp) current.responsibilities.push(resp);
     }
   }
   return entries;

@@ -87,6 +87,42 @@ describe('extractExperience', () => {
       }
     ]);
   });
+
+  test('captures roles separated by blank lines until next heading', () => {
+    const text =
+      'Experience\n' +
+      'Developer at Beta Corp (Mar 2018 - Apr 2019)\n' +
+      '  - Built API\n\n' +
+      'Manager at Gamma LLC (May 2019 - Jun 2020)\n' +
+      '  - Led team\n\n' +
+      'Analyst at Delta Inc (Jul 2020 - Present)\n' +
+      '  - Analyzed data\n' +
+      'Skills\n' +
+      '- JavaScript\n';
+    expect(extractExperience(text)).toEqual([
+      {
+        company: 'Beta Corp',
+        title: 'Developer',
+        startDate: 'Mar 2018',
+        endDate: 'Apr 2019',
+        responsibilities: ['Built API']
+      },
+      {
+        company: 'Gamma LLC',
+        title: 'Manager',
+        startDate: 'May 2019',
+        endDate: 'Jun 2020',
+        responsibilities: ['Led team']
+      },
+      {
+        company: 'Delta Inc',
+        title: 'Analyst',
+        startDate: 'Jul 2020',
+        endDate: 'Present',
+        responsibilities: ['Analyzed data']
+      }
+    ]);
+  });
 });
 
 describe('fetchLinkedInProfile', () => {
