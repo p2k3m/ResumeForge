@@ -26,7 +26,7 @@ function escapeHtml(str = '') {
 
 describe('generatePdf and parsing', () => {
   test('parseContent handles markdown', () => {
-    const data = parseContent('Jane Doe\n# Education\n- Item 1\nText');
+    const data = parseContent('Jane Doe\n# EDUCATION\n- Item 1\nText');
     const education = data.sections.find((s) => s.heading === 'Education');
     expect(education).toBeDefined();
     expect(education.items[0].map((t) => t.text).join('')).toBe('Item 1');
@@ -255,11 +255,11 @@ describe('generatePdf and parsing', () => {
     expect(rendered).not.toMatch(/[-–]/);
   });
 
-  test('education section uses alternate bullet glyph with spacing', () => {
-    const input = 'Jane Doe\n# Education\n- Bachelor of Science';
+  test('education section uses alternate bullet glyph with spacing for uppercase heading', () => {
+    const input = 'Jane Doe\n# EDUCATION\n- Bachelor of Science';
     const data = parseContent(input);
     const edu = data.sections.find((s) => s.heading === 'Education');
-    edu.heading = 'EDUCATION';
+    edu.heading = edu.heading.toUpperCase();
     const rendered = edu.items[0]
       .map((t) => {
         if (t.type === 'bullet') {
