@@ -375,6 +375,72 @@ describe('/api/process-cv', () => {
     });
   });
 
+  test('resume prompt asks for a project matching job skills', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () => JSON.stringify({ version1: 'v1', version2: 'v2' })
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+        }
+      });
+
+    await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    const prompt = generateContentMock.mock.calls[0][0];
+    expect(prompt).toMatch(/fabricate or emphasize one project/i);
+  });
+
+  test('inserts project into resume text', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              version1: 'Name',
+              version2: 'Name',
+              project: 'Built a portfolio site using React'
+            })
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+        }
+      });
+
+    const texts = [];
+    setGeneratePdf(
+      jest.fn((text) => {
+        texts.push(text);
+        return Promise.resolve(Buffer.from('pdf'));
+      })
+    );
+
+    await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(texts.some((t) => /Built a portfolio site using React/.test(t))).toBe(
+      true
+    );
+
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
   test('cover letters omit placeholder sections', async () => {
     generateContentMock.mockReset();
     generateContentMock

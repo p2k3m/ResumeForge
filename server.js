@@ -1448,6 +1448,21 @@ function removeGuidanceLines(text = '') {
 
 function reparseAndStringify(text, options = {}) {
   const data = parseContent(text, options);
+
+  if (options.project) {
+    const projectTokens = parseLine(String(options.project));
+    if (!projectTokens.some((t) => t.type === 'bullet'))
+      projectTokens.unshift({ type: 'bullet' });
+    let section = data.sections.find((s) => /projects/i.test(s.heading));
+    if (section) {
+      section.items.push(projectTokens);
+    } else {
+      section = data.sections.find((s) => /work experience/i.test(s.heading));
+      if (section) section.items.push(projectTokens);
+      else data.sections.push({ heading: 'Projects', items: [projectTokens] });
+    }
+  }
+
   const lines = [data.name];
   data.sections.forEach((sec) => {
     lines.push(`# ${sec.heading}`);
@@ -1647,7 +1662,7 @@ app.post('/api/process-cv', (req, res, next) => {
   **For each version, ensure you perform the following enhancements:**
   1. Rewrite the candidate's most recent job title to exactly match the job description's title.
   2. Recast responsibilities to mirror those in the job description.
-  3. Incorporate relevant projects and required technical terminology from the job description.
+  3. Incorporate relevant projects and required technical terminology from the job description. Fabricate or emphasize one project that showcases the key skills if necessary.
   4. Enhance content clarity and impact while preserving factual accuracy.
   5. Maintain an ATS-friendly format with appropriate keywords.
   6. Keep any URLs from the original CV unchanged.
@@ -1668,6 +1683,11 @@ app.post('/api/process-cv', (req, res, next) => {
       const responseText = result.response.text();
       const parsed = parseAiJson(responseText);
       if (parsed) {
+        const projectField =
+          parsed.project || parsed.projects || parsed.Projects;
+        const projectText = Array.isArray(projectField)
+          ? projectField[0]
+          : projectField;
         const sanitizeOptions = {
           resumeExperience,
           linkedinExperience,
@@ -1675,7 +1695,8 @@ app.post('/api/process-cv', (req, res, next) => {
           linkedinEducation,
           resumeCertifications,
           linkedinCertifications,
-          jobTitle
+          jobTitle,
+          project: projectText
         };
         versionData.version1 = sanitizeGeneratedText(
           parsed.version1,
