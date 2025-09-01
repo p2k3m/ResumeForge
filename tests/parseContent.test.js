@@ -51,7 +51,7 @@ describe('parseContent summary reclassification', () => {
   test('moves job-like lines from Summary to Work Experience', () => {
     const input = [
       'John Doe',
-      'Acme Corp | Developer | Jan 2020 - Present',
+      'Developer at Acme Corp (Jan 2020 - Present)',
       'Passionate engineer',
       '# Skills',
       '- JS'
@@ -65,7 +65,7 @@ describe('parseContent summary reclassification', () => {
     );
     expect(work.items).toHaveLength(1);
     expect(work.items[0].map((t) => t.text).join('')).toBe(
-      'Acme Corp Developer Jan 2020 - Present'
+      'Developer at Acme Corp (Jan 2020 – Present)'
     );
   });
 
@@ -73,7 +73,7 @@ describe('parseContent summary reclassification', () => {
     const input = [
       'John Doe',
       'john@example.com | 555-123-4567 | https://github.com/jdoe',
-      'Acme Corp | Developer | Jan 2020 - Present',
+      'Developer at Acme Corp (Jan 2020 - Present)',
       '# Skills',
       '- JS'
     ].join('\n');
@@ -97,7 +97,7 @@ describe('parseContent summary reclassification', () => {
   test('drops contact details from job lines before moving to Work Experience', () => {
     const input = [
       'John Doe',
-      'Acme Corp | Developer | Jan 2020 - Present | john@example.com',
+      'Developer at Acme Corp (Jan 2020 - Present) | john@example.com',
       '# Skills',
       '- JS'
     ].join('\n');
@@ -108,7 +108,7 @@ describe('parseContent summary reclassification', () => {
     const workText = work.items
       .map((tokens) => tokens.map((t) => t.text || '').join(''))
       .join(' ');
-    expect(workText).toBe('Acme Corp Developer Jan 2020 - Present');
+    expect(workText).toBe('Developer at Acme Corp (Jan 2020 – Present)');
     expect(workText).not.toMatch(/john@example.com/);
   });
 });
