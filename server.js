@@ -1070,7 +1070,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
             if (t.type === 'tab') return '<span class="tab"></span>';
             if (t.type === 'bullet') {
               if (sec.heading.toLowerCase() === 'education') {
-                return '<span class="edu-bullet">–</span> ';
+                return '<span class="edu-bullet">-</span> ';
               }
               return '<span class="bullet">•</span> ';
             }
@@ -1102,7 +1102,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
-        eduBullet: '–',
+        eduBullet: '-',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -1114,7 +1114,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
-        eduBullet: '–',
+        eduBullet: '-',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -1126,7 +1126,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Times-Italic',
         headingColor: '#1f3c5d',
         bullet: '•',
-        eduBullet: '–',
+        eduBullet: '-',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -1138,7 +1138,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
-        eduBullet: '–',
+        eduBullet: '-',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
@@ -1150,7 +1150,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         italic: 'Helvetica-Oblique',
         headingColor: '#1f3c5d',
         bullet: '•',
-        eduBullet: '–',
+        eduBullet: '-',
         bulletColor: '#4a5568',
         textColor: '#333',
         lineGap: 6,
