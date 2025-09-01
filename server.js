@@ -744,7 +744,8 @@ function ensureRequiredSections(
       ...existing.map((e) => e.tokens),
       ...certAdditions.map((c) => c.tokens),
     ];
-    if (!certSection.items.length) {
+
+    if (certSection.items.length === 0) {
       data.sections = data.sections.filter((s) => s !== certSection);
     }
   }

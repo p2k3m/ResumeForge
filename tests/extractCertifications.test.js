@@ -1,4 +1,4 @@
-import { extractCertifications } from '../server.js';
+import { extractCertifications, ensureRequiredSections } from '../server.js';
 
 describe('extractCertifications', () => {
   test('parses certification line with provider and credly link', () => {
@@ -51,5 +51,19 @@ describe('extractCertifications', () => {
         url: 'https://www.credly.com/cka'
       }
     ]);
+  });
+
+  test('omits certification heading when no certifications are present', () => {
+    const text = `No credentials listed here.`;
+    const certs = extractCertifications(text);
+    expect(certs).toEqual([]);
+    const ensured = ensureRequiredSections(
+      { sections: [{ heading: 'Certification', items: [] }] },
+      { resumeCertifications: certs }
+    );
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certification'
+    );
+    expect(certSection).toBeUndefined();
   });
 });
