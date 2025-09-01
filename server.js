@@ -906,10 +906,15 @@ function ensureRequiredSections(
   });
 
   if (credlyProfileUrl) {
-    certItems.push([
-      { type: 'bullet' },
-      { type: 'link', text: 'Credly Profile', href: credlyProfileUrl },
-    ]);
+    const alreadyHasProfile = certItems.some((item) =>
+      item.some((t) => t.type === 'link' && t.href === credlyProfileUrl)
+    );
+    if (!alreadyHasProfile) {
+      certItems.push([
+        { type: 'bullet' },
+        { type: 'link', text: 'Credly Profile', href: credlyProfileUrl },
+      ]);
+    }
   }
 
   if (certItems.length) {
