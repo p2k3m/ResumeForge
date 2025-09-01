@@ -856,45 +856,50 @@ function ensureRequiredSections(
     ...linkedinCertifications,
   ];
 
-  const deduped = [];
-  const seenCerts = new Set();
-  allCerts.forEach((cert) => {
-    const key = [cert.name || '', cert.provider || '']
-      .map((s) => s.toLowerCase())
-      .join('|');
-    if (!(cert.name || cert.provider) || seenCerts.has(key)) return;
-    seenCerts.add(key);
-    deduped.push(cert);
-  });
-
-  if (deduped.length) {
-    if (!certSection) {
-      certSection = { heading: certHeading, items: [] };
-      data.sections.push(certSection);
-    }
-    certSection.heading = certHeading;
-    certSection.items = deduped.map((cert) => {
-      const tokens = [{ type: 'bullet' }];
-      if (cert.url) {
-        tokens.push({
-          type: 'link',
-          text: cert.name,
-          href: cert.url,
-          continued: !!cert.provider
-        });
-      } else {
-          tokens.push({
-            type: 'paragraph',
-            text: cert.name,
-            continued: !!cert.provider
-          });
-      }
-      if (cert.provider) {
-        tokens.push({ type: 'paragraph', text: ` - ${cert.provider}` });
-      }
-      return tokens;
+    const deduped = [];
+    const seenCerts = new Set();
+    allCerts.forEach((cert) => {
+      const key = [cert.name || '', cert.provider || '']
+        .map((s) => s.toLowerCase())
+        .join('|');
+      if (!(cert.name || cert.provider) || seenCerts.has(key)) return;
+      seenCerts.add(key);
+      deduped.push(cert);
     });
-    if (credlyProfileUrl) {
+
+    const getCertDate = (cert = {}) =>
+      new Date(
+        cert.date ||
+          cert.issueDate ||
+          cert.issued ||
+          cert.startDate ||
+          cert.endDate ||
+          0
+      ).getTime();
+
+    const limitedCerts = deduped
+      .sort((a, b) => getCertDate(b) - getCertDate(a))
+      .slice(0, 5);
+
+    if (limitedCerts.length) {
+      if (!certSection) {
+        certSection = { heading: certHeading, items: [] };
+        data.sections.push(certSection);
+      }
+      certSection.heading = certHeading;
+      certSection.items = limitedCerts.map((cert) => {
+        const tokens = [{ type: 'bullet' }];
+        const text = cert.provider
+          ? `${cert.name} - ${cert.provider}`
+          : cert.name;
+        if (cert.url) {
+          tokens.push({ type: 'link', text, href: cert.url });
+        } else {
+          tokens.push({ type: 'paragraph', text });
+        }
+        return tokens;
+      });
+      if (credlyProfileUrl) {
       const profileTokens = [
         { type: 'bullet' },
         { type: 'link', text: 'Credly Profile', href: credlyProfileUrl }
