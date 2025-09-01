@@ -149,57 +149,29 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  // Ensure one template is 'ucmo' and the other is from a different group
-  const pickNonUcmo = (tpl) => {
-    if (tpl && tpl !== 'ucmo' && CV_TEMPLATE_GROUPS[tpl] !== CV_TEMPLATE_GROUPS['ucmo']) {
-      return tpl;
+  // Ensure one template is always 'ucmo'
+  if (template1 !== 'ucmo' && template2 !== 'ucmo') {
+    if (template1) {
+      template2 = 'ucmo';
+    } else if (template2) {
+      template1 = 'ucmo';
+    } else {
+      template1 = 'ucmo';
     }
-    const candidates = CV_TEMPLATES.filter(
-      (t) => t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS['ucmo']
-    );
-    return candidates[Math.floor(Math.random() * candidates.length)] || CV_TEMPLATES.find((t) => t !== 'ucmo');
-  };
-
-  if (template1 === 'ucmo') {
-    template2 = pickNonUcmo(template2);
-  } else if (template2 === 'ucmo') {
-    template1 = pickNonUcmo(template1);
-  } else if (template1 && !template2) {
-    template1 = pickNonUcmo(template1);
-    template2 = 'ucmo';
-  } else if (!template1 && template2) {
-    template2 = pickNonUcmo(template2);
-    template1 = 'ucmo';
-  } else if (template1 && template2) {
-    template1 = pickNonUcmo(template1);
-    template2 = 'ucmo';
-  } else {
-    template1 = 'ucmo';
-    template2 = pickNonUcmo();
+  }
+  if (!template1) template1 = 'ucmo';
+  if (!template2) {
+    // pick a random template other than template1
+    const candidates = CV_TEMPLATES.filter((t) => t !== template1);
+    template2 = candidates[Math.floor(Math.random() * candidates.length)];
   }
 
-  if (
-    !template2 ||
-    template1 === template2 ||
-    CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
-  ) {
+  // Ensure templates come from different style groups; re-draw template2 if needed
+  if (CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]) {
     const candidates = CV_TEMPLATES.filter(
       (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
     );
-    template2 =
-      candidates[Math.floor(Math.random() * candidates.length)] ||
-      CV_TEMPLATES[0];
-  }
-
-  // Final sanity check: ensure one template is 'ucmo' and the other is from a different group
-  const isValidPair = () =>
-    template1 &&
-    template2 &&
-    (template1 === 'ucmo' || template2 === 'ucmo') &&
-    CV_TEMPLATE_GROUPS[template1] !== CV_TEMPLATE_GROUPS[template2];
-  while (!isValidPair()) {
-    template1 = 'ucmo';
-    template2 = pickNonUcmo();
+    template2 = candidates[Math.floor(Math.random() * candidates.length)] || template2;
   }
 
   if (!coverTemplate1 && !coverTemplate2) {
