@@ -323,12 +323,25 @@ function analyzeJobDescription(html) {
 
   const lower = text.toLowerCase();
   const skills = [];
+  const termCounts = [];
   for (const term of TECHNICAL_TERMS) {
     const regex = new RegExp(`\\b${term}\\b`, 'g');
     const matches = lower.match(regex);
-    if (matches && matches.length > 1) {
-      skills.push(term.replace(/\\+\\+/g, '++'));
+    const count = matches ? matches.length : 0;
+    const normalized = term.replace(/\\+\\+/g, '++');
+    if (count > 0) {
+      skills.push(normalized);
     }
+    termCounts.push({ term: normalized, count });
+  }
+
+  if (skills.length < 5) {
+    const remaining = termCounts
+      .filter(({ term }) => !skills.includes(term))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5 - skills.length)
+      .map(({ term }) => term);
+    skills.push(...remaining);
   }
 
   return { title, skills, text };
@@ -2068,6 +2081,7 @@ export {
   splitSkills,
   fetchLinkedInProfile,
   mergeResumeWithLinkedIn,
+  analyzeJobDescription,
   extractResumeSkills,
   calculateMatchScore,
   TEMPLATE_IDS,
