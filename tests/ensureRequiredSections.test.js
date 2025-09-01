@@ -204,7 +204,7 @@ describe('ensureRequiredSections certifications merging', () => {
       expect(profileLink).toBeTruthy();
     });
 
-  test('omits certification section when only credly profile link provided', () => {
+  test('includes credly profile link when only profile URL is provided', () => {
     const ensured = ensureRequiredSections(
       { sections: [] },
       { credlyCertifications: [], credlyProfileUrl: 'https://credly.com/user' }
@@ -212,7 +212,13 @@ describe('ensureRequiredSections certifications merging', () => {
     const certSection = ensured.sections.find(
       (s) => s.heading === 'Certification'
     );
-    expect(certSection).toBeUndefined();
+    expect(certSection).toBeTruthy();
+    expect(certSection.items).toHaveLength(1);
+    const link = certSection.items[0].find((t) => t.type === 'link');
+    expect(link).toMatchObject({
+      text: 'Credly Profile',
+      href: 'https://credly.com/user'
+    });
   });
 
     test('removes certification section if no certificates remain', () => {
