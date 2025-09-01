@@ -1558,7 +1558,9 @@ function extractExperience(source) {
     return { company, title, startDate, endDate };
   };
   if (Array.isArray(source)) {
-    return source.map((s) => (typeof s === 'string' ? parseEntry(s) : s));
+    return source
+      .map((s) => (typeof s === 'string' ? parseEntry(s) : s))
+      .filter((e) => e.company || e.startDate || e.endDate);
   }
   const lines = String(source).split(/\r?\n/);
   const entries = [];

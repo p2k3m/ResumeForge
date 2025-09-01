@@ -14,7 +14,7 @@ jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: sampleHtml }) }
 }));
 
-const { extractExperience, fetchLinkedInProfile } = await import('../server.js');
+const { extractExperience, fetchLinkedInProfile, ensureRequiredSections } = await import('../server.js');
 
 describe('extractExperience', () => {
   test('parses company and dates from resume text, ignoring responsibilities', () => {
@@ -130,6 +130,28 @@ describe('extractExperience', () => {
       }
     ]);
   });
+
+  test('skips array entries without company or dates', () => {
+    const entries = [
+      'Developer at Beta Corp (Mar 2018 - Apr 2019)',
+      'Built API',
+      'Manager at Gamma LLC (May 2019 - Jun 2020)'
+    ];
+    expect(extractExperience(entries)).toEqual([
+      {
+        company: 'Beta Corp',
+        title: 'Developer',
+        startDate: 'Mar 2018',
+        endDate: 'Apr 2019'
+      },
+      {
+        company: 'Gamma LLC',
+        title: 'Manager',
+        startDate: 'May 2019',
+        endDate: 'Jun 2020'
+      }
+    ]);
+  });
 });
 
 describe('fetchLinkedInProfile', () => {
@@ -143,5 +165,49 @@ describe('fetchLinkedInProfile', () => {
         endDate: 'Feb 2021'
       }
     ]);
+  });
+});
+
+describe('ensureRequiredSections work experience listing', () => {
+  test('lists all roles from resume and LinkedIn without responsibilities', () => {
+    const data = { sections: [{ heading: 'Work Experience', items: [] }] };
+    const resumeExperience = [
+      {
+        company: 'Beta Corp',
+        roles: [
+          {
+            title: 'Developer',
+            startDate: '2018',
+            endDate: '2019',
+            responsibilities: ['Built API']
+          }
+        ]
+      }
+    ];
+    const linkedinExperience = [
+      {
+        company: 'Gamma LLC',
+        roles: [
+          {
+            title: 'Manager',
+            startDate: '2019',
+            endDate: '2020',
+            responsibilities: ['Led team']
+          }
+        ]
+      }
+    ];
+    const ensured = ensureRequiredSections(data, {
+      resumeExperience,
+      linkedinExperience
+    });
+    const lines = ensured.sections[0].items.map((tokens) =>
+      tokens.map((t) => t.text || '').join('').trim()
+    );
+    expect(lines).toEqual([
+      'Manager at Gamma LLC (2019 – 2020)',
+      'Developer at Beta Corp (2018 – 2019)'
+    ]);
+    expect(lines.some((l) => /Built API|Led team/.test(l))).toBe(false);
   });
 });
