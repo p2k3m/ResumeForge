@@ -756,85 +756,58 @@ function ensureRequiredSections(
   });
 
   // Certifications section
-  const certHeading = normalizeHeading('Certification');
+  const certHeading = 'Certification';
   let certSection = data.sections.find(
-    (s) => normalizeHeading(s.heading).toLowerCase() ===
-      certHeading.toLowerCase()
+    (s) => normalizeHeading(s.heading).toLowerCase() === certHeading.toLowerCase()
   );
-  const existingEntries = certSection
+
+  const existingCerts = certSection
     ? certSection.items.map((tokens) => {
-        if (tokens[0]?.type !== 'bullet') {
-          const idx = tokens.findIndex((t) => t.type === 'bullet');
-          if (idx > -1) {
-            const [bullet] = tokens.splice(idx, 1);
-            tokens.unshift(bullet);
-          } else {
-            tokens.unshift({ type: 'bullet' });
-          }
-        }
         const text = tokens
           .map((t) => t.text || t.href || '')
           .join(' ')
           .trim();
-        const parsed = extractCertifications([text])[0] || {};
-        const key = [
-          parsed.name || '',
-          parsed.provider || '',
-          parsed.url || ''
-        ]
-          .map((s) => s.toLowerCase())
-          .join('|');
-        return { key, tokens };
+        return extractCertifications([text])[0] || {};
       })
     : [];
 
+  const allCerts = [
+    ...existingCerts,
+    ...resumeCertifications,
+    ...linkedinCertifications,
+  ];
+
+  const deduped = [];
   const seenCerts = new Set();
-  const existing = [];
-  existingEntries.forEach((e) => {
-    if (seenCerts.has(e.key)) return;
-    seenCerts.add(e.key);
-    existing.push(e);
-  });
-  const combinedCerts = [...resumeCertifications, ...linkedinCertifications];
-  const certAdditions = [];
-  combinedCerts.forEach((cert) => {
-    const key = [cert.name || '', cert.provider || '', cert.url || '']
+  allCerts.forEach((cert) => {
+    const key = [cert.name || '', cert.provider || '']
       .map((s) => s.toLowerCase())
       .join('|');
-    if (seenCerts.has(key)) return;
+    if (!(cert.name || cert.provider) || seenCerts.has(key)) return;
     seenCerts.add(key);
-    let line = cert.name || '';
-    if (cert.provider) line += ` - ${cert.provider}`;
-    if (cert.url) line += ` ${cert.url}`;
-    let tokens = parseLine(line);
-    if (tokens[0]?.type !== 'bullet') {
-      tokens.unshift({ type: 'bullet' });
-    }
-    certAdditions.push({ key, tokens });
+    deduped.push(cert);
   });
 
-  if (!certSection && (existing.length || certAdditions.length)) {
-    certSection = { heading: certHeading, items: [] };
-    data.sections.push(certSection);
-  }
-
-  if (certSection) {
-    certSection.heading = normalizeHeading(certSection.heading || certHeading);
-    certSection.items = [
-      ...existing.map((e) => e.tokens),
-      ...certAdditions.map((c) => c.tokens),
-    ].filter((tokens) => {
-      const text = tokens
-        .map((t) => t.text || t.href || '')
-        .join(' ')
-        .trim();
-      const parsed = extractCertifications([text])[0] || {};
-      return parsed.name || parsed.provider;
-    });
-
-    if (certSection.items.length === 0) {
-      data.sections = data.sections.filter((s) => s !== certSection);
+  if (deduped.length) {
+    if (!certSection) {
+      certSection = { heading: certHeading, items: [] };
+      data.sections.push(certSection);
     }
+    certSection.heading = certHeading;
+    certSection.items = deduped.map((cert) => {
+      const base = [cert.name, cert.provider].filter(Boolean).join(' - ');
+      const tokens = parseLine(base);
+      if (cert.url) {
+        if (tokens.length) tokens[tokens.length - 1].continued = true;
+        tokens.push({ type: 'paragraph', text: ' (', continued: true });
+        tokens.push({ type: 'link', text: 'Credly', href: cert.url, continued: true });
+        tokens.push({ type: 'paragraph', text: ')' });
+      }
+      if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+      return tokens;
+    });
+  } else if (certSection) {
+    data.sections = data.sections.filter((s) => s !== certSection);
   }
 
   return data;

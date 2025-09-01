@@ -66,4 +66,58 @@ describe('extractCertifications', () => {
     );
     expect(certSection).toBeUndefined();
   });
+
+  test('deduplicates certifications by name and provider before rendering', () => {
+    const resumeCertifications = [
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://www.credly.com/badges/abc'
+      },
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://example.com/other'
+      }
+    ];
+    const ensured = ensureRequiredSections(
+      { sections: [] },
+      { resumeCertifications }
+    );
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certification'
+    );
+    expect(certSection).toBeTruthy();
+    expect(certSection.items).toHaveLength(1);
+    const link = certSection.items[0].find((t) => t.type === 'link');
+    expect(link).toMatchObject({
+      text: 'Credly',
+      href: 'https://www.credly.com/badges/abc'
+    });
+  });
+
+  test('renders credential URLs in (Credly) format', () => {
+    const resumeCertifications = [
+      {
+        name: 'PMP',
+        provider: 'PMI',
+        url: 'https://www.credly.com/pmp'
+      }
+    ];
+    const ensured = ensureRequiredSections(
+      { sections: [] },
+      { resumeCertifications }
+    );
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certification'
+    );
+    const tokens = certSection.items[0];
+    const link = tokens.find((t) => t.type === 'link');
+    expect(link).toMatchObject({
+      text: 'Credly',
+      href: 'https://www.credly.com/pmp'
+    });
+    const text = tokens.filter((t) => t.text).map((t) => t.text).join('');
+    expect(text).toContain('(Credly)');
+  });
 });
