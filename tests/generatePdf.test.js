@@ -264,25 +264,25 @@ describe('generatePdf and parsing', () => {
       .map((t) => {
         if (t.type === 'bullet') {
           if (edu.heading.toLowerCase() === 'education') {
-            return '<span class="edu-bullet">-</span> ';
+            return '<span class="edu-bullet">•</span> ';
           }
           return '<span class="bullet">•</span> ';
         }
         return t.text || '';
       })
       .join('');
-    expect(rendered).toBe('<span class="edu-bullet">-</span> Bachelor of Science');
+    expect(rendered).toBe('<span class="edu-bullet">•</span> Bachelor of Science');
   });
 
-  test('PDFKit fallback uses hyphen for EDUCATION heading', () => {
+  test('PDFKit fallback uses bullet for EDUCATION heading', () => {
     const sec = {
       heading: 'EDUCATION',
       items: [[{ type: 'bullet' }, { text: 'Bachelor of Science' }]]
     };
-    const style = { bullet: '•', eduBullet: '-' };
+    const style = { bullet: '•', eduBullet: '•' };
     const glyph =
       sec.heading.toLowerCase() === 'education' ? style.eduBullet : style.bullet;
-    expect(glyph).toBe('-');
+    expect(glyph).toBe('•');
   });
 
   test('single asterisk italic and bullet handling', () => {
