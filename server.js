@@ -639,7 +639,7 @@ function ensureRequiredSections(
           ]
             .map((s) => s.toLowerCase())
             .join('|');
-          return { key, exp: parsed, tokens };
+          return { key, exp: parsed };
         })
         .filter(Boolean);
 
@@ -698,26 +698,20 @@ function ensureRequiredSections(
         return `${base}${datePart}`.trim();
       };
 
-      const formattedAdditions = additions.map((exp) => {
+      const toTokens = (exp, key) => {
         const tokens = parseLine(format(exp));
         if (!tokens.some((t) => t.type === 'bullet')) {
           tokens.unshift({ type: 'bullet' });
         }
-        if (exp.responsibilities && exp.responsibilities.length) {
-          exp.responsibilities.forEach((r) => {
-            tokens.push({ type: 'newline' });
-            tokens.push({ type: 'tab' });
-            let respTokens = parseLine(String(r));
-            if (!respTokens.some((t) => t.type === 'bullet')) {
-              respTokens.unshift({ type: 'bullet' });
-            }
-            tokens.push(...respTokens);
-          });
-        }
-        return { key: exp.key, exp, tokens };
-      });
+        return { key, exp, tokens };
+      };
 
-      const all = [...existing, ...formattedAdditions];
+      const formattedExisting = existing.map((e) => toTokens(e.exp, e.key));
+      const formattedAdditions = additions.map((exp) =>
+        toTokens(exp, exp.key)
+      );
+
+      const all = [...formattedExisting, ...formattedAdditions];
       all.sort((a, b) => {
         const aDate = Date.parse(a.exp.endDate || a.exp.startDate || '');
         const bDate = Date.parse(b.exp.endDate || b.exp.startDate || '');
@@ -1490,7 +1484,7 @@ function extractExperience(source) {
     } else {
       title = text.trim();
     }
-    return { company, title, startDate, endDate, responsibilities: [] };
+    return { company, title, startDate, endDate };
   };
   if (Array.isArray(source)) {
     return source.map((s) => (typeof s === 'string' ? parseEntry(s) : s));
@@ -1498,7 +1492,6 @@ function extractExperience(source) {
   const lines = String(source).split(/\r?\n/);
   const entries = [];
   let inSection = false;
-  let current = null;
   for (const line of lines) {
     const trimmed = line.trim();
     if (/^(work|professional)?\s*experience/i.test(trimmed)) {
@@ -1514,14 +1507,7 @@ function extractExperience(source) {
     }
     const jobMatch = line.match(/^[-*]\s+(.*)/) || (!line.match(/^\s/) ? [null, trimmed] : null);
     if (jobMatch) {
-      current = parseEntry(jobMatch[1].trim());
-      entries.push(current);
-      continue;
-    }
-    const respMatch = line.match(/^\s+[-*]\s+(.*)/) || line.match(/^\s+(.*)/);
-    if (current && respMatch) {
-      const resp = respMatch[1].trim();
-      if (resp) current.responsibilities.push(resp);
+      entries.push(parseEntry(jobMatch[1].trim()));
     }
   }
   return entries;

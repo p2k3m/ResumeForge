@@ -17,7 +17,7 @@ jest.unstable_mockModule('axios', () => ({
 const { extractExperience, fetchLinkedInProfile } = await import('../server.js');
 
 describe('extractExperience', () => {
-  test('parses company, dates, and responsibilities from resume text', () => {
+  test('parses company and dates from resume text, ignoring responsibilities', () => {
     const text =
       'Experience\n- Developer at Beta Corp (Mar 2018 - Apr 2019)\n  - Built API\n';
     expect(extractExperience(text)).toEqual([
@@ -25,8 +25,7 @@ describe('extractExperience', () => {
         company: 'Beta Corp',
         title: 'Developer',
         startDate: 'Mar 2018',
-        endDate: 'Apr 2019',
-        responsibilities: ['Built API']
+        endDate: 'Apr 2019'
       }
     ]);
   });
@@ -39,8 +38,7 @@ describe('extractExperience', () => {
         company: 'Beta Corp',
         title: 'Developer',
         startDate: 'Mar 2018',
-        endDate: 'Apr 2019',
-        responsibilities: []
+        endDate: 'Apr 2019'
       }
     ]);
   });
@@ -53,13 +51,12 @@ describe('extractExperience', () => {
         company: 'Beta Corp',
         title: 'Developer',
         startDate: 'Mar 2018',
-        endDate: 'Apr 2019',
-        responsibilities: []
+        endDate: 'Apr 2019'
       }
     ]);
   });
 
-  test('retains multiple roles and responsibilities within the section', () => {
+  test('retains multiple roles within the section', () => {
     const text =
       'Experience\n' +
       '- Developer at Beta Corp (Mar 2018 - Apr 2019)\n' +
@@ -75,15 +72,13 @@ describe('extractExperience', () => {
         company: 'Beta Corp',
         title: 'Developer',
         startDate: 'Mar 2018',
-        endDate: 'Apr 2019',
-        responsibilities: ['Built API', 'Improved UX']
+        endDate: 'Apr 2019'
       },
       {
         company: 'Gamma LLC',
         title: 'Manager',
         startDate: 'May 2019',
-        endDate: 'Jun 2020',
-        responsibilities: ['Led team', 'Managed budget']
+        endDate: 'Jun 2020'
       }
     ]);
   });
@@ -104,22 +99,19 @@ describe('extractExperience', () => {
         company: 'Beta Corp',
         title: 'Developer',
         startDate: 'Mar 2018',
-        endDate: 'Apr 2019',
-        responsibilities: ['Built API']
+        endDate: 'Apr 2019'
       },
       {
         company: 'Gamma LLC',
         title: 'Manager',
         startDate: 'May 2019',
-        endDate: 'Jun 2020',
-        responsibilities: ['Led team']
+        endDate: 'Jun 2020'
       },
       {
         company: 'Delta Inc',
         title: 'Analyst',
         startDate: 'Jul 2020',
-        endDate: 'Present',
-        responsibilities: ['Analyzed data']
+        endDate: 'Present'
       }
     ]);
   });
