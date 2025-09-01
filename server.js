@@ -505,7 +505,10 @@ function normalizeHeading(heading = '') {
     .trim()
     .replace(/[-–—:.;,!?]+$/g, '')
     .trim();
-  const lower = base.toLowerCase().replace(/\s+/g, ' ');
+  const normalized = base
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+  const lower = normalized.toLowerCase().replace(/\s+/g, ' ');
   if (
     /^certifications?$/.test(lower) ||
     /^trainings?$/.test(lower) ||
@@ -513,7 +516,7 @@ function normalizeHeading(heading = '') {
   ) {
     return 'Certification';
   }
-  return base;
+  return normalized;
 }
 
 
@@ -536,17 +539,18 @@ function ensureRequiredSections(
   }
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
-    const key = normalizeHeading(heading).toLowerCase();
+    const normalized = normalizeHeading(heading);
+    const key = normalized.toLowerCase();
     let section = data.sections.find(
       (s) => normalizeHeading(s.heading).toLowerCase() === key
     );
     if (!section) {
-      section = { heading: normalizeHeading(heading), items: [] };
+      section = { heading: normalized, items: [] };
       data.sections.push(section);
     } else {
       section.heading = normalizeHeading(section.heading);
     }
-    if (heading.toLowerCase() === 'work experience') {
+    if (normalized.toLowerCase() === 'work experience') {
       section.items = section.items || [];
       const existing = section.items
         .map((tokens) => {
@@ -656,7 +660,7 @@ function ensureRequiredSections(
         ? all.map((e) => e.tokens)
         : [parseLine('Information not provided')];
     } else if (!section.items || section.items.length === 0) {
-      if (heading.toLowerCase() === 'education') {
+      if (normalized.toLowerCase() === 'education') {
         const bullets = resumeEducation.length
           ? resumeEducation
           : linkedinEducation;
@@ -672,9 +676,10 @@ function ensureRequiredSections(
   });
 
   // Certifications section
-  const certHeading = 'Certification';
+  const certHeading = normalizeHeading('Certification');
   let certSection = data.sections.find(
-    (s) => normalizeHeading(s.heading).toLowerCase() === certHeading.toLowerCase()
+    (s) => normalizeHeading(s.heading).toLowerCase() ===
+      certHeading.toLowerCase()
   );
   const existingEntries = certSection
     ? certSection.items.map((tokens) => {
@@ -776,7 +781,7 @@ function isJobEntry(tokens = []) {
 
 function splitSkills(sections = []) {
   sections.forEach((sec) => {
-    if (!sec.heading || sec.heading.toLowerCase() !== 'skills') return;
+    if (normalizeHeading(sec.heading || '').toLowerCase() !== 'skills') return;
     const expanded = [];
     sec.items.forEach((tokens) => {
       const text = tokens
@@ -812,14 +817,15 @@ function splitSkills(sections = []) {
 
 function moveSummaryJobEntries(sections = []) {
   const summary = sections.find(
-    (s) => s.heading && s.heading.toLowerCase() === 'summary'
+    (s) => normalizeHeading(s.heading || '').toLowerCase() === 'summary'
   );
   if (!summary) return;
   let work = sections.find(
-    (s) => s.heading && s.heading.toLowerCase() === 'work experience'
+    (s) => normalizeHeading(s.heading || '').toLowerCase() ===
+      'work experience'
   );
   if (!work) {
-    work = { heading: 'Work Experience', items: [] };
+    work = { heading: normalizeHeading('Work Experience'), items: [] };
     sections.push(work);
   }
   const sanitizeTokens = (tokens = []) => {
