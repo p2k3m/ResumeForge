@@ -22,30 +22,19 @@ import puppeteer from 'puppeteer';
 import JSON5 from 'json5';
 
 async function parseUserAgent(ua) {
-  let browser = '', os = '', device = '';
-  if (!ua) return { browser, os, device };
+  const fallback = { browser: ua || '', os: ua || '', device: ua || '' };
+  if (!ua) return fallback;
   try {
     const { default: UAParser } = await import('ua-parser-js');
     const result = new UAParser(ua).getResult();
-    browser = result.browser?.name || '';
-    os = result.os?.name || '';
-    device = result.device?.model || '';
+    return {
+      browser: result.browser?.name || ua,
+      os: result.os?.name || ua,
+      device: result.device?.model || ua
+    };
   } catch {
-    const lower = ua.toLowerCase();
-    if (lower.includes('chrome')) browser = 'Chrome';
-    else if (lower.includes('safari')) browser = 'Safari';
-    else if (lower.includes('firefox')) browser = 'Firefox';
-
-    if (lower.includes('windows')) os = 'Windows';
-    else if (lower.includes('android')) os = 'Android';
-    else if (lower.includes('iphone') || lower.includes('ios')) os = 'iOS';
-    else if (lower.includes('mac os x') || lower.includes('macintosh')) os = 'Mac OS';
-
-    if (lower.includes('iphone')) device = 'iPhone';
-    else if (lower.includes('ipad')) device = 'iPad';
-    else if (lower.includes('android')) device = 'Android';
+    return fallback;
   }
-  return { browser, os, device };
 }
 
 const app = express();

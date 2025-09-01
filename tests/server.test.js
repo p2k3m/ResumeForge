@@ -203,7 +203,7 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.userAgent.S).toContain('iPhone');
     expect(putCall[0].input.Item.os.S).toBe('iOS');
     expect(putCall[0].input.Item.device.S).toBe('iPhone');
-    expect(putCall[0].input.Item.browser.S).toBe('Safari');
+    expect(putCall[0].input.Item.browser.S).toBe('Mobile Safari');
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual(['DescribeTableCommand', 'PutItemCommand']);
   });
