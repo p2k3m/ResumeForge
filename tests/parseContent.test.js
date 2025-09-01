@@ -289,6 +289,50 @@ describe('parseContent duplicate section merging', () => {
     expect(items).toEqual(['B.S. in CS']);
     expect(educationSections[0].heading).toBe('Education');
   });
+
+  test('drops empty education section in favor of later populated markdown section', () => {
+    const input = [
+      'Jane Doe',
+      '# Education',
+      '# Skills',
+      '- JS',
+      '# Education',
+      '- B.S. in CS'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const headings = data.sections.map((s) => s.heading);
+    expect(headings).toEqual(['Skills', 'Education']);
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS']);
+  });
+
+  test('drops empty education section in favor of later populated JSON section', () => {
+    const json = {
+      name: 'Jane',
+      sections: [
+        { heading: 'Education', items: [] },
+        { heading: 'Skills', items: ['JS'] },
+        { heading: 'Education', items: ['B.S. in CS'] }
+      ]
+    };
+    const data = parseContent(JSON.stringify(json), { skipRequiredSections: true });
+    const headings = data.sections.map((s) => s.heading);
+    expect(headings).toEqual(['Skills', 'Education']);
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS']);
+  });
 });
 
 describe('parseContent certification normalization and pruning', () => {

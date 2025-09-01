@@ -829,11 +829,20 @@ function mergeDuplicateSections(sections = []) {
   sections.forEach((sec) => {
     const heading = normalizeHeading(sec.heading || '');
     const key = heading.toLowerCase();
+    const items = [...(sec.items || [])];
     if (seen.has(key)) {
       const existing = seen.get(key);
-      existing.items = existing.items.concat(sec.items || []);
+      if ((existing.items || []).length === 0 && items.length > 0) {
+        const copy = { ...sec, heading, items };
+        const idx = result.indexOf(existing);
+        if (idx !== -1) result.splice(idx, 1);
+        seen.set(key, copy);
+        result.push(copy);
+      } else {
+        existing.items = existing.items.concat(items);
+      }
     } else {
-      const copy = { ...sec, heading, items: [...(sec.items || [])] };
+      const copy = { ...sec, heading, items };
       seen.set(key, copy);
       result.push(copy);
     }
@@ -988,6 +997,7 @@ function parseContent(text, options = {}) {
       rest
     );
     ensured.sections = mergeDuplicateSections(ensured.sections);
+    ensured.sections = pruneEmptySections(ensured.sections);
     return ensured;
   }
 }
