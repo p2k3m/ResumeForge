@@ -30,6 +30,34 @@ describe('extractExperience', () => {
       }
     ]);
   });
+
+  test('handles "Work Experience" section header', () => {
+    const text =
+      'Work Experience\n- Developer at Beta Corp (Mar 2018 - Apr 2019)\n';
+    expect(extractExperience(text)).toEqual([
+      {
+        company: 'Beta Corp',
+        title: 'Developer',
+        startDate: 'Mar 2018',
+        endDate: 'Apr 2019',
+        responsibilities: []
+      }
+    ]);
+  });
+
+  test('handles "Professional Experience" section header', () => {
+    const text =
+      'Professional Experience\n- Developer at Beta Corp (Mar 2018 - Apr 2019)\n';
+    expect(extractExperience(text)).toEqual([
+      {
+        company: 'Beta Corp',
+        title: 'Developer',
+        startDate: 'Mar 2018',
+        endDate: 'Apr 2019',
+        responsibilities: []
+      }
+    ]);
+  });
 });
 
 describe('fetchLinkedInProfile', () => {
