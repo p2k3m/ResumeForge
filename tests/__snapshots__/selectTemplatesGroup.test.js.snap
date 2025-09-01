@@ -13,7 +13,7 @@ exports[`selectTemplates enforces ucmo presence heading styles are bold across t
   }",
   "modern": "h2 { font-size: 20px; margin: 24px 0 12px; border-bottom: 1px solid #2a9d8f; padding-bottom: 4px; font-weight: 700; }",
   "professional": "h2 { font-size: 20px; color: #1d3557; margin: 30px 0 16px; border-bottom: 1px solid #1d3557; padding-bottom: 4px; font-weight: 700; }",
-  "ucmo": "h2 { font-size: 18px; margin: 30px 0 12px; background: #f2f2f2; padding: 6px 10px; color: #990000; font-weight: 700; }",
+  "ucmo": "h2 { font-size: 18px; margin: 30px 0 12px; background: #f2f2f2; padding: 6px 10px; color: #990000; font-weight: 700; text-transform: uppercase; }",
   "vibrant": "h2 { font-size: 20px; color: #ff6b6b; margin: 24px 0 12px; border-bottom: 2px solid #ff6b6b; padding-bottom: 4px; font-weight: 700; }",
 }
 `;

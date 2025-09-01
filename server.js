@@ -382,14 +382,31 @@ function generateProjectSummary(
   const skills = resumeSkills.length ? resumeSkills : jobSkills;
   if (!jobDescription && !skills.length) return '';
   const skillList = skills.slice(0, 3).join(', ');
-  const focus = jobDescription.split(/\n|\.\s*/)[0].trim().toLowerCase();
+
+  // Strip code blocks, symbols, and parentheses/braces from the job description
+  const cleaned = jobDescription
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/[<>\[\]{}()]/g, ' ')
+    .replace(/[;#]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const focus = cleaned.split(/[\n.!?]/)[0].trim().toLowerCase();
+
+  let summary = '';
   if (skillList && focus) {
-    return `Implemented a project using ${skillList} to address ${focus}`;
+    summary = `Led a project using ${skillList} to ${focus}`;
+  } else if (skillList) {
+    summary = `Led a project using ${skillList} to achieve key objectives`;
+  } else if (focus) {
+    summary = `Led a project to ${focus}`;
+  } else {
+    summary = 'Led a project to achieve key objectives';
   }
-  if (skillList) {
-    return `Implemented a project using ${skillList} to meet role requirements`;
-  }
-  return 'Implemented a project aligned with the job description';
+
+  summary = summary.replace(/[(){}]/g, '');
+  return `${summary}.`;
 }
 
 function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
