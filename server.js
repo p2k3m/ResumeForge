@@ -82,6 +82,42 @@ const CONTRASTING_PAIRS = [
   ['professional', 'vibrant']
 ];
 
+const TECHNICAL_TERMS = [
+  'javascript',
+  'typescript',
+  'python',
+  'java',
+  'c\\+\\+',
+  'c#',
+  'go',
+  'ruby',
+  'php',
+  'swift',
+  'kotlin',
+  'react',
+  'angular',
+  'vue',
+  'node',
+  'express',
+  'next.js',
+  'docker',
+  'kubernetes',
+  'aws',
+  'gcp',
+  'azure',
+  'sql',
+  'mysql',
+  'postgresql',
+  'mongodb',
+  'git',
+  'graphql',
+  'linux',
+  'bash',
+  'redis',
+  'jenkins',
+  'terraform',
+  'ansible'
+];
 function selectTemplates({
   defaultClTemplate = CL_TEMPLATES[0],
   template1,
@@ -285,46 +321,9 @@ function analyzeJobDescription(html) {
     html.match(/"title"\s*:\s*"([^\"]+)"/i);
   if (titleMatch) title = strip(titleMatch[1]);
 
-  const technicalTerms = [
-    'javascript',
-    'typescript',
-    'python',
-    'java',
-    'c\\+\\+',
-    'c#',
-    'go',
-    'ruby',
-    'php',
-    'swift',
-    'kotlin',
-    'react',
-    'angular',
-    'vue',
-    'node',
-    'express',
-    'next.js',
-    'docker',
-    'kubernetes',
-    'aws',
-    'gcp',
-    'azure',
-    'sql',
-    'mysql',
-    'postgresql',
-    'mongodb',
-    'git',
-    'graphql',
-    'linux',
-    'bash',
-    'redis',
-    'jenkins',
-    'terraform',
-    'ansible'
-  ];
-
   const lower = text.toLowerCase();
   const skills = [];
-  for (const term of technicalTerms) {
+  for (const term of TECHNICAL_TERMS) {
     const regex = new RegExp(`\\b${term}\\b`, 'g');
     const matches = lower.match(regex);
     if (matches && matches.length > 1) {
@@ -333,6 +332,33 @@ function analyzeJobDescription(html) {
   }
 
   return { title, skills, text };
+}
+
+function extractResumeSkills(text = '') {
+  const lower = text.toLowerCase();
+  const skills = [];
+  for (const term of TECHNICAL_TERMS) {
+    const regex = new RegExp(`\\b${term}\\b`, 'g');
+    if (regex.test(lower)) {
+      skills.push(term.replace(/\\+\\+/g, '++'));
+    }
+  }
+  return skills;
+}
+
+function calculateMatchScore(jobSkills = [], resumeSkills = []) {
+  const table = jobSkills.map((skill) => {
+    const matched = resumeSkills.some(
+      (s) => s.toLowerCase() === skill.toLowerCase()
+    );
+    return { skill, matched };
+  });
+  const matchedCount = table.filter((r) => r.matched).length;
+  const score = jobSkills.length
+    ? Math.round((matchedCount / jobSkills.length) * 100)
+    : 0;
+  const newSkills = table.filter((r) => !r.matched).map((r) => r.skill);
+  return { score, table, newSkills };
 }
 
 function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
@@ -1733,6 +1759,8 @@ app.post('/api/process-cv', (req, res, next) => {
       skills: jobSkills,
       text: jobDescription
     } = analyzeJobDescription(jobDescriptionHtml);
+    const resumeSkills = extractResumeSkills(text);
+    const match = calculateMatchScore(jobSkills, resumeSkills);
 
     let linkedinData = {};
     try {
@@ -2005,7 +2033,7 @@ app.post('/api/process-cv', (req, res, next) => {
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
-    res.json({ urls, applicantName });
+    res.json({ urls, applicantName, match });
   } catch (err) {
     console.error('processing failed', err);
     if (bucket) {
@@ -2040,6 +2068,8 @@ export {
   splitSkills,
   fetchLinkedInProfile,
   mergeResumeWithLinkedIn,
+  extractResumeSkills,
+  calculateMatchScore,
   TEMPLATE_IDS,
   CV_TEMPLATES,
   CL_TEMPLATES,

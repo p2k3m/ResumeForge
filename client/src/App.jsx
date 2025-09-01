@@ -6,6 +6,7 @@ function App() {
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
+  const [match, setMatch] = useState(null)
   const [error, setError] = useState('')
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -31,6 +32,7 @@ function App() {
   const handleSubmit = async () => {
     setIsProcessing(true)
     setError('')
+    setMatch(null)
 
     try {
       const formData = new FormData()
@@ -64,6 +66,7 @@ function App() {
       const data = await response.json()
 
       setOutputFiles(data.urls || [])
+      setMatch(data.match || null)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -131,6 +134,41 @@ function App() {
       )}
 
       {error && <p className="mt-4 text-red-600">{error}</p>}
+
+      {match && (
+        <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
+          <h2 className="text-xl font-bold mb-2 text-purple-800">
+            Skill Match Score: {match.score}%
+          </h2>
+          <table className="w-full mb-2">
+            <thead>
+              <tr>
+                <th className="text-left text-purple-800">Skill</th>
+                <th className="text-right text-purple-800">Match</th>
+              </tr>
+            </thead>
+            <tbody>
+              {match.table.map((row) => (
+                <tr key={row.skill}>
+                  <td className="py-1 text-purple-800">{row.skill}</td>
+                  <td className="py-1 text-right">
+                    {row.matched ? '✓' : '✗'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {match.newSkills.length > 0 && (
+            <p className="text-purple-700 mb-2">
+              Newly added skills: {match.newSkills.join(', ')}
+            </p>
+          )}
+          <p className="font-semibold text-purple-800">
+            Selection Likelihood:{' '}
+            {match.score >= 80 ? 'High' : match.score >= 50 ? 'Medium' : 'Low'}
+          </p>
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
         {outputFiles.map((file) => {
