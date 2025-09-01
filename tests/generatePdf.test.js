@@ -515,6 +515,59 @@ describe('generatePdf and parsing', () => {
     launchSpy.mockRestore();
   });
 
+  test('bullet list HTML spacing snapshot', () => {
+    const input = 'Jane Doe\n- First bullet';
+    const [tokens] = parseContent(input).sections[0].items;
+    const rendered = tokens
+      .map((t) => {
+        if (t.type === 'link') return `<a href="${t.href}">${t.text}</a>`;
+        if (t.style === 'bolditalic') return `<strong><em>${t.text}</em></strong>`;
+        if (t.style === 'bold') return `<strong>${t.text}</strong>`;
+        if (t.style === 'italic') return `<em>${t.text}</em>`;
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        if (t.type === 'bullet') return '<span class="bullet">•</span> ';
+        return t.text || '';
+      })
+      .join('');
+    expect(rendered).toMatchSnapshot();
+  });
+
+  test('bullet list PDF spacing snapshot', async () => {
+    const input = 'Jane Doe\n- First bullet';
+    const browserPdf = await generatePdf(input, 'modern');
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockRejectedValue(new Error('no browser'));
+    const fallbackPdf = await generatePdf(input, 'modern');
+    launchSpy.mockRestore();
+    const extractText = async (pdf) => {
+      try {
+        return (await pdfParse(pdf)).text.trim();
+      } catch {
+        let idx = 0;
+        let text = '';
+        while ((idx = pdf.indexOf(Buffer.from('stream'), idx)) !== -1) {
+          const nl = pdf.indexOf('\n', idx) + 1;
+          const end = pdf.indexOf(Buffer.from('endstream'), nl);
+          let chunk = pdf.slice(nl, end);
+          try {
+            chunk = zlib.inflateSync(chunk).toString();
+          } catch {
+            chunk = chunk.toString();
+          }
+          text += chunk;
+          idx = end + 9;
+        }
+        return text.trim();
+      }
+    };
+    const browserText = await extractText(browserPdf);
+    const fallbackText = await extractText(fallbackPdf);
+    expect(browserText).toMatchSnapshot('browser');
+    expect(fallbackText).toMatchSnapshot('fallback');
+  });
+
   test('2025 template renders expected HTML snapshot', async () => {
     const input = 'Jane Doe\n# Skills\n- Testing';
     const data = parseContent(input);

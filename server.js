@@ -1033,7 +1033,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
               if (sec.heading === 'Education') {
                 return '<span class="edu-bullet">–</span>';
               }
-              return '<span class="bullet">•</span>';
+              return '<span class="bullet">•</span> ';
             }
             if (t.type === 'jobsep') return '';
             return text;
@@ -1177,6 +1177,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
               doc
                 .fillColor(style.bulletColor)
                 .text(`${glyph} `, { continued: true, lineGap: style.lineGap })
+                .text('', { continued: true })
                 .fillColor(style.textColor);
               return;
             }

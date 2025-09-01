@@ -17,7 +17,7 @@ function tokensToHtml(tokens) {
       if (t.style === 'italic') return `<em>${text}</em>`;
       if (t.type === 'newline') return '<br>';
       if (t.type === 'tab') return '<span class="tab"></span>';
-      if (t.type === 'bullet') return '<span class="bullet">•</span>';
+      if (t.type === 'bullet') return '<span class="bullet">•</span> ';
       return text;
     })
     .join('');
