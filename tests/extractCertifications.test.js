@@ -13,6 +13,18 @@ describe('extractCertifications', () => {
     ]);
   });
 
+  test('detects credly link outside certification section', () => {
+    const text = `- AWS Certified Developer (Amazon) https://www.credly.com/badges/abc`;
+    const certs = extractCertifications(text);
+    expect(certs).toEqual([
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://www.credly.com/badges/abc'
+      }
+    ]);
+  });
+
   test('parses LinkedIn style objects', () => {
     const src = [
       {
