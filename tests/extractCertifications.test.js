@@ -72,17 +72,19 @@ describe('extractCertifications', () => {
       {
         name: 'AWS Certified Developer',
         provider: 'Amazon',
-        url: 'https://www.credly.com/badges/abc'
-      },
+        url: 'https://example.com/other'
+      }
+    ];
+    const credlyCertifications = [
       {
         name: 'AWS Certified Developer',
         provider: 'Amazon',
-        url: 'https://example.com/other'
+        url: 'https://www.credly.com/badges/abc'
       }
     ];
     const ensured = ensureRequiredSections(
       { sections: [] },
-      { resumeCertifications }
+      { resumeCertifications, credlyCertifications }
     );
     const certSection = ensured.sections.find(
       (s) => s.heading === 'Certification'
@@ -90,10 +92,10 @@ describe('extractCertifications', () => {
     expect(certSection).toBeTruthy();
     expect(certSection.items).toHaveLength(1);
     const link = certSection.items[0].find((t) => t.type === 'link');
-      expect(link).toMatchObject({
-        text: 'AWS Certified Developer - Amazon',
-        href: 'https://www.credly.com/badges/abc'
-      });
+    expect(link).toMatchObject({
+      text: 'AWS Certified Developer - Amazon',
+      href: 'https://www.credly.com/badges/abc'
+    });
   });
 
   test('consolidates training headings and links certificate names to their URLs', () => {

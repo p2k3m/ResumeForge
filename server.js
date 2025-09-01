@@ -849,56 +849,58 @@ function ensureRequiredSections(
     ...linkedinCertifications,
   ];
 
-    const deduped = [];
-    const seenCerts = new Set();
-    allCerts.forEach((cert) => {
-      const key = [cert.name || '', cert.provider || '']
-        .map((s) => s.toLowerCase())
-        .join('|');
-      if (!(cert.name || cert.provider) || seenCerts.has(key)) return;
-      seenCerts.add(key);
-      deduped.push(cert);
-    });
+  const deduped = [];
+  const seenCerts = new Set();
+  allCerts.forEach((cert) => {
+    const key = [cert.name || '', cert.provider || '']
+      .map((s) => s.toLowerCase())
+      .join('|');
+    if (!(cert.name || cert.provider) || seenCerts.has(key)) return;
+    seenCerts.add(key);
+    deduped.push(cert);
+  });
 
-    const getCertDate = (cert = {}) =>
-      new Date(
-        cert.date ||
-          cert.issueDate ||
-          cert.issued ||
-          cert.startDate ||
-          cert.endDate ||
-          0
-      ).getTime();
+  const getCertDate = (cert = {}) =>
+    new Date(
+      cert.date ||
+        cert.issueDate ||
+        cert.issued ||
+        cert.startDate ||
+        cert.endDate ||
+        0
+    ).getTime();
 
-    const limitedCerts = deduped
-      .sort((a, b) => getCertDate(b) - getCertDate(a))
-      .slice(0, 5);
+  const limitedCerts = deduped
+    .sort((a, b) => getCertDate(b) - getCertDate(a))
+    .slice(0, 5);
 
-    if (limitedCerts.length) {
-      if (!certSection) {
-        certSection = { heading: certHeading, items: [] };
-        data.sections.push(certSection);
-      }
-      certSection.heading = certHeading;
-      certSection.items = limitedCerts.map((cert) => {
-        const tokens = [{ type: 'bullet' }];
-        const text = cert.provider
-          ? `${cert.name} - ${cert.provider}`
-          : cert.name;
-        if (cert.url) {
-          tokens.push({ type: 'link', text, href: cert.url });
-        } else {
-          tokens.push({ type: 'paragraph', text });
-        }
-        return tokens;
-      });
-      if (credlyProfileUrl) {
-      const profileTokens = [
-        { type: 'bullet' },
-        { type: 'link', text: 'Credly Profile', href: credlyProfileUrl }
-      ];
-      certSection.items.push(profileTokens);
+  const certItems = limitedCerts.map((cert) => {
+    const tokens = [{ type: 'bullet' }];
+    const text = cert.provider
+      ? `${cert.name} - ${cert.provider}`
+      : cert.name;
+    if (cert.url) {
+      tokens.push({ type: 'link', text, href: cert.url });
+    } else {
+      tokens.push({ type: 'paragraph', text });
     }
+    return tokens;
+  });
+
+  if (credlyProfileUrl) {
+    certItems.push([
+      { type: 'bullet' },
+      { type: 'link', text: 'Credly Profile', href: credlyProfileUrl },
+    ]);
+  }
+
+  if (certItems.length) {
+    if (!certSection) {
+      certSection = { heading: certHeading, items: [] };
+      data.sections.push(certSection);
+    }
+    certSection.heading = certHeading;
+    certSection.items = certItems;
   } else if (certSection) {
     data.sections = data.sections.filter((s) => s !== certSection);
   }
