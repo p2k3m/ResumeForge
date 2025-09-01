@@ -384,6 +384,103 @@ function calculateMatchScore(jobSkills = [], resumeSkills = []) {
   return { score, table, newSkills };
 }
 
+function collectSectionText(resumeText = '', linkedinData = {}, credlyCertifications = []) {
+  const parsed = parseContent(resumeText, { skipRequiredSections: true });
+  const sectionMap = {};
+  parsed.sections.forEach((sec) => {
+    const key = normalizeHeading(sec.heading).toLowerCase();
+    const lines = sec.items
+      .map((tokens) => tokens.map((t) => t.text || '').join('').trim())
+      .filter(Boolean)
+      .join('\n');
+    sectionMap[key] = lines;
+  });
+
+  const fmtExp = (exp = {}) => {
+    const datePart = exp.startDate || exp.endDate ? ` (${exp.startDate || ''} – ${exp.endDate || ''})` : '';
+    const base = [exp.title, exp.company].filter(Boolean).join(' at ');
+    return `${base}${datePart}`.trim();
+  };
+  const fmtCert = (c = {}) => (c.provider ? `${c.name} - ${c.provider}` : c.name);
+
+  const summary = [sectionMap.summary || '', linkedinData.headline || '']
+    .filter(Boolean)
+    .join('\n');
+  const experience = [
+    extractExperience(resumeText).map(fmtExp).join('\n'),
+    extractExperience(linkedinData.experience || []).map(fmtExp).join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const education = [
+    extractEducation(resumeText).join('\n'),
+    extractEducation(linkedinData.education || []).join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const certifications = [
+    extractCertifications(resumeText).map(fmtCert).join('\n'),
+    extractCertifications(linkedinData.certifications || []).map(fmtCert).join('\n'),
+    (credlyCertifications || []).map(fmtCert).join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n');
+  const skills = [
+    extractResumeSkills(resumeText).join(', '),
+    (linkedinData.skills || []).join(', '),
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const projects = sectionMap.projects || '';
+
+  return { summary, experience, education, certifications, skills, projects };
+}
+
+async function rewriteSectionsWithGemini(
+  name,
+  sections,
+  jobDescription,
+  generativeModel,
+  sanitizeOptions = {}
+) {
+  if (!generativeModel?.generateContent) {
+    const text = [name].join('\n');
+    return { text: sanitizeGeneratedText(text, sanitizeOptions), project: '' };
+  }
+  try {
+    const prompt =
+      `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
+      `Return only JSON with keys summary, experience, education, certifications, skills, projects (arrays of strings) and projectSnippet (string).` +
+      `\nSections: ${JSON.stringify(sections)}\nJob Description: ${jobDescription}`;
+    const result = await generativeModel.generateContent(prompt);
+    const parsed = parseAiJson(result?.response?.text?.());
+    if (parsed) {
+      const mk = (heading, arr) =>
+        arr?.length ? [`# ${heading}`, ...arr.map((b) => `- ${b}`)] : [];
+      const lines = [name];
+      lines.push(...mk('Summary', parsed.summary));
+      lines.push(...mk('Work Experience', parsed.experience));
+      lines.push(...mk('Education', parsed.education));
+      lines.push(...mk('Certifications', parsed.certifications));
+      lines.push(...mk('Skills', parsed.skills));
+      lines.push(...mk('Projects', parsed.projects));
+      const raw = lines.join('\n');
+      const cleaned = sanitizeGeneratedText(
+        sanitizeGeneratedText(raw, sanitizeOptions),
+        sanitizeOptions
+      );
+      return {
+        text: cleaned,
+        project: parsed.projectSnippet || parsed.project || '',
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  const fallback = [name].join('\n');
+  return { text: sanitizeGeneratedText(fallback, sanitizeOptions), project: '' };
+}
+
 async function generateProjectSummary(
   jobDescription = '',
   resumeSkills = [],
@@ -1989,7 +2086,7 @@ app.post('/api/process-cv', (req, res, next) => {
     return res.status(400).json({ error: 'linkedinProfileUrl required' });
   }
 
-  const text = await extractText(req.file);
+  let text = await extractText(req.file);
   if (!isResume(text)) {
     return res
       .status(400)
@@ -2107,7 +2204,6 @@ app.post('/api/process-cv', (req, res, next) => {
       }
     }
 
-    const combinedProfile = mergeResumeWithLinkedIn(text, linkedinData, jobTitle);
     const resumeExperience = extractExperience(text);
     const linkedinExperience = extractExperience(linkedinData.experience || []);
     const resumeEducation = extractEducation(text);
@@ -2121,6 +2217,39 @@ app.post('/api/process-cv', (req, res, next) => {
     const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    let projectText = '';
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const sectionTexts = collectSectionText(
+          text,
+          linkedinData,
+          credlyCertifications
+        );
+        const enhanced = await rewriteSectionsWithGemini(
+          applicantName,
+          sectionTexts,
+          jobDescription,
+          generativeModel,
+          {
+            resumeExperience,
+            linkedinExperience,
+            resumeEducation,
+            linkedinEducation,
+            resumeCertifications,
+            linkedinCertifications,
+            credlyCertifications,
+            credlyProfileUrl,
+          }
+        );
+        text = enhanced.text;
+        projectText = enhanced.project;
+      } catch (e) {
+        console.error('section rewrite failed', e);
+      }
+    }
+
+    const combinedProfile = text;
 
     const versionsTemplate = `
   You are an expert resume writer and career coach. Your task is to analyze a candidate's CV and a job description to generate two distinct, highly optimized resumes.
@@ -2154,7 +2283,6 @@ app.post('/api/process-cv', (req, res, next) => {
         .replace('{{jobSkills}}', jobSkills.join(', ')) +
       '\n\nNote: The candidate performed duties matching the job description in their last role.';
 
-    let projectText = '';
     let versionData = {};
     try {
       const result = await generativeModel.generateContent(versionsPrompt);
@@ -2437,6 +2565,8 @@ export {
   fetchLinkedInProfile,
   fetchCredlyProfile,
   mergeResumeWithLinkedIn,
+  collectSectionText,
+  rewriteSectionsWithGemini,
   analyzeJobDescription,
   extractResumeSkills,
   generateProjectSummary,
