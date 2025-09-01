@@ -9,6 +9,7 @@ describe('selectTemplates enforces ucmo and distinct groups', () => {
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );
+    expect(template1).not.toBe(template2);
   });
 
   test('overrides when neither input is ucmo', () => {
@@ -20,6 +21,7 @@ describe('selectTemplates enforces ucmo and distinct groups', () => {
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );
+    expect(template1).not.toBe(template2);
   });
 
   test('random selection yields ucmo and distinct groups', () => {
@@ -29,6 +31,7 @@ describe('selectTemplates enforces ucmo and distinct groups', () => {
       expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
         CV_TEMPLATE_GROUPS[template2]
       );
+      expect(template1).not.toBe(template2);
     }
   });
 

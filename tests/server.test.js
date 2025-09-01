@@ -318,8 +318,8 @@ describe('/api/process-cv', () => {
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
-    expect(resumeCalls[0][1]).toBe('modern');
-    expect(resumeCalls[1][1]).toBe('ucmo');
+    expect(resumeCalls[0][1]).toBe('ucmo');
+    expect(resumeCalls[1][1]).toBe('modern');
   });
 
   test('uses templates array', async () => {
