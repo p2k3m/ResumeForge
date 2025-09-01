@@ -1620,7 +1620,18 @@ function sanitizeGeneratedText(text, options = {}) {
   if (!text) return text;
   const cleaned = removeGuidanceLines(text);
   if (options.defaultHeading === '') return cleaned;
-  return reparseAndStringify(cleaned, options);
+  const reparsed = reparseAndStringify(cleaned, options);
+  const data = parseContent(reparsed, { ...options, skipRequiredSections: true });
+  const merged = mergeDuplicateSections(data.sections);
+  const pruned = pruneEmptySections(merged);
+  const lines = [data.name];
+  pruned.forEach((sec) => {
+    lines.push(`# ${sec.heading}`);
+    sec.items.forEach((tokens) => {
+      lines.push(tokens.map((t) => t.text || '').join(''));
+    });
+  });
+  return lines.join('\n');
 }
 
 function relocateProfileLinks(text) {
