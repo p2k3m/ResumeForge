@@ -1110,6 +1110,7 @@ function mergeDuplicateSections(sections = []) {
     const items = [...(sec.items || [])];
     if (seen.has(key)) {
       const existing = seen.get(key);
+      existing.heading = normalizeHeading(existing.heading || '');
       if ((existing.items || []).length === 0 && items.length > 0) {
         const copy = { ...sec, heading, items };
         const idx = result.indexOf(existing);
@@ -1119,7 +1120,7 @@ function mergeDuplicateSections(sections = []) {
       } else {
         existing.items = existing.items.concat(items);
       }
-    } else {
+    } else if (items.length > 0) {
       const copy = { ...sec, heading, items };
       seen.set(key, copy);
       result.push(copy);
