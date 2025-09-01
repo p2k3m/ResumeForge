@@ -374,6 +374,24 @@ function calculateMatchScore(jobSkills = [], resumeSkills = []) {
   return { score, table, newSkills };
 }
 
+function generateProjectSummary(
+  jobDescription = '',
+  resumeSkills = [],
+  jobSkills = []
+) {
+  const skills = resumeSkills.length ? resumeSkills : jobSkills;
+  if (!jobDescription && !skills.length) return '';
+  const skillList = skills.slice(0, 3).join(', ');
+  const focus = jobDescription.split(/\n|\.\s*/)[0].trim().toLowerCase();
+  if (skillList && focus) {
+    return `Implemented a project using ${skillList} to address ${focus}`;
+  }
+  if (skillList) {
+    return `Implemented a project using ${skillList} to meet role requirements`;
+  }
+  return 'Implemented a project aligned with the job description';
+}
+
 function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
   const parts = [resumeText];
   if (profile && typeof profile === 'object') {
@@ -1670,20 +1688,22 @@ function reparseAndStringify(text, options = {}) {
     if (!projectTokens.some((t) => t.type === 'bullet'))
       projectTokens.unshift({ type: 'bullet' });
     let section = data.sections.find((s) => /projects/i.test(s.heading));
-    if (section) {
-      section.items.push(projectTokens);
-    } else {
-      section = data.sections.find((s) => /work experience/i.test(s.heading));
-      if (section) section.items.push(projectTokens);
-      else data.sections.push({ heading: 'Projects', items: [projectTokens] });
+    if (!section) {
+      section = { heading: 'Projects', items: [] };
+      data.sections.push(section);
     }
+    section.items.push(projectTokens);
   }
 
   const lines = [data.name];
   data.sections.forEach((sec) => {
     lines.push(`# ${sec.heading}`);
     sec.items.forEach((tokens) => {
-      lines.push(tokens.map((t) => t.text || '').join(''));
+      lines.push(
+        tokens
+          .map((t) => (t.type === 'bullet' ? '- ' : t.text || ''))
+          .join('')
+      );
     });
   });
   return lines.join('\n');
@@ -1701,7 +1721,11 @@ function sanitizeGeneratedText(text, options = {}) {
   pruned.forEach((sec) => {
     lines.push(`# ${sec.heading}`);
     sec.items.forEach((tokens) => {
-      lines.push(tokens.map((t) => t.text || '').join(''));
+      lines.push(
+        tokens
+          .map((t) => (t.type === 'bullet' ? '- ' : t.text || ''))
+          .join('')
+      );
     });
   });
   return lines.join('\n');
@@ -1936,9 +1960,16 @@ app.post('/api/process-cv', (req, res, next) => {
       if (parsed) {
         const projectField =
           parsed.project || parsed.projects || parsed.Projects;
-        const projectText = Array.isArray(projectField)
+        let projectText = Array.isArray(projectField)
           ? projectField[0]
           : projectField;
+        if (!projectText) {
+          projectText = generateProjectSummary(
+            jobDescription,
+            resumeSkills,
+            jobSkills
+          );
+        }
         const sanitizeOptions = {
           resumeExperience,
           linkedinExperience,
@@ -2177,6 +2208,7 @@ export {
   mergeResumeWithLinkedIn,
   analyzeJobDescription,
   extractResumeSkills,
+  generateProjectSummary,
   calculateMatchScore,
   TEMPLATE_IDS,
   CV_TEMPLATES,
