@@ -1034,11 +1034,12 @@ function parseContent(text, options = {}) {
     let current = [];
     for (const raw of lines) {
       const line = raw.replace(/\t/g, '\u0009');
-      if (!line.trim()) {
+      const trimmed = line.trim();
+      if (!trimmed) {
         if (current.length) current.push({ type: 'newline' });
         continue;
       }
-      const headingMatch = line.trim().match(/^#{1,6}\s+(.*)/);
+      const headingMatch = trimmed.match(/^#{1,6}\s+(.*)/);
       if (headingMatch) {
         if (current.length) {
           currentSection.items.push(current);
@@ -1052,6 +1053,25 @@ function parseContent(text, options = {}) {
         }
         currentSection = { heading: headingMatch[1].trim(), items: [] };
         sections.push(currentSection);
+        continue;
+      }
+      const plainHeadingMatch = trimmed.match(
+        /^((?:work|professional)\s*experience|education|skills|projects|certification|summary)$/i
+      );
+      if (plainHeadingMatch) {
+        if (current.length) currentSection.items.push(current);
+        if (
+          currentSection.items.length === 0 &&
+          currentSection.heading === defaultHeading
+        ) {
+          sections.pop();
+        }
+        currentSection = {
+          heading: normalizeHeading(plainHeadingMatch[0]),
+          items: []
+        };
+        sections.push(currentSection);
+        current = [];
         continue;
       }
       const bulletMatch = line.match(/^[\-*–]\s+/);
