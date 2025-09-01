@@ -1757,7 +1757,7 @@ function parseAiJson(text) {
 
 function removeGuidanceLines(text = '') {
   const guidanceRegex =
-    /^\s*(?:\([^)]*\)|\[[^\]]*\])\s*$|\b(?:consolidate relevant experience|add other relevant experience|list key skills|previous roles summarized|for brevity)\b/i;
+    /^\s*(?:-\s*\([^)]*\)|\([^)]*\)|\[[^\]]*\])\s*$|\b(?:consolidate relevant experience|add other relevant experience|list key skills|previous roles summarized|for brevity)\b/i;
   return text
     .split(/\r?\n/)
     .map((line) =>
@@ -1833,7 +1833,9 @@ async function verifyResume(
     const result = await generativeModel.generateContent(prompt);
     const improved = result?.response?.text?.();
     if (improved) {
-      return sanitizeGeneratedText(improved, options);
+      // Run sanitization twice so any guidance bullets introduced by the AI
+      // are stripped before the text is reparsed and stringified
+      return sanitizeGeneratedText(sanitizeGeneratedText(improved, options), options);
     }
   } catch {
     /* ignore */
