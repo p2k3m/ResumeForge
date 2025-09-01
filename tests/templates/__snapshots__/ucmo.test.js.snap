@@ -1,4 +1,7 @@
-<!DOCTYPE html>
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ucmo template renders with contact bar and logo: html 1`] = `
+"<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -6,7 +9,7 @@
   <style>
     body { font-family: 'Times New Roman', serif; margin: 50px; color: #222; line-height: 1.5; }
     .top-bar { display: flex; justify-content: space-between; align-items: center; font-size: 14px; margin-bottom: 10px; }
-    .contact span:not(:last-child)::after { content: ' \2022 '; }
+    .contact span:not(:last-child)::after { content: ' \\2022 '; }
     .logo { height: 40px; }
     header { text-align: center; background: #990000; color: #fff; padding: 20px 0; margin-bottom: 20px; }
     h1 { font-size: 36px; margin: 0 0 12px; font-weight: 700; }
@@ -52,19 +55,35 @@
     <img src="https://resumeforge.s3.amazonaws.com/ucmo-logo.png" alt="UCMO logo" class="logo" />
   </div>
   <header>
-    <h1>{{name}}</h1>
+    <h1>Jane Doe</h1>
   </header>
-  {{#each sections}}
+  
   <section>
-    {{#if heading}}<h2>{{heading}}</h2>{{/if}}
+    <h2>Experience</h2>
     {{#if items}}
       <ul>
         {{#each items}}
           <li>{{{this}}}</li>
-        {{/each}}
+        
+  <section>
+    <h2>Education</h2>
+    {{#if items}}
+      <ul>
+        {{#each items}}
+          <li>{{{this}}}</li>
+        
+  <section>
+    <h2>Work Experience</h2>
+    {{#if items}}
+      <ul>
+        {{#each items}}
+          <li>{{{this}}}</li>
+        
       </ul>
     {{/if}}
   </section>
   {{/each}}
 </body>
 </html>
+"
+`;
