@@ -68,6 +68,27 @@ describe('ensureRequiredSections work experience merging', () => {
       'Engineer at Beta (2020 – 2022)'
     ]);
   });
+
+  test('skips placeholder when another experience section has items', () => {
+    const data = {
+      sections: [
+        {
+          heading: 'Professional Experience',
+          items: [parseLine('- Engineer at Acme (2020 – 2021)')]
+        }
+      ]
+    };
+    const ensured = ensureRequiredSections(data, {});
+    const work = ensured.sections.find((s) => s.heading === 'Work Experience');
+    expect(work).toBeTruthy();
+    expect(work.items).toHaveLength(0);
+    const placeholders = ensured.sections
+      .filter((s) => s.heading.toLowerCase().includes('experience'))
+      .flatMap((s) =>
+        (s.items || []).flatMap((tokens) => tokens.map((t) => t.text || ''))
+      );
+    expect(placeholders).not.toContain('Information not provided');
+  });
 });
 
 describe('ensureRequiredSections certifications merging', () => {
