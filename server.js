@@ -953,7 +953,8 @@ const SKILL_CATEGORY_MAP = {
 function splitSkills(sections = [], jobSkills = []) {
   const jobSet = new Set((jobSkills || []).map((s) => s.toLowerCase()));
   sections.forEach((sec) => {
-    if (!((sec.heading || '').toLowerCase().includes('skill'))) return;
+    const heading = (sec.heading || '').toLowerCase();
+    if (!heading.includes('skill')) return;
     if (jobSet.size === 0) {
       const expanded = [];
       sec.items.forEach((tokens) => {
