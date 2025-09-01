@@ -115,6 +115,21 @@ describe('extractExperience', () => {
       }
     ]);
   });
+
+  test('ignores technology bullet lines following a role', () => {
+    const text =
+      'Experience\n' +
+      '- Developer at Beta Corp (Mar 2018 - Apr 2019)\n' +
+      '- React, Node, AWS\n';
+    expect(extractExperience(text)).toEqual([
+      {
+        company: 'Beta Corp',
+        title: 'Developer',
+        startDate: 'Mar 2018',
+        endDate: 'Apr 2019'
+      }
+    ]);
+  });
 });
 
 describe('fetchLinkedInProfile', () => {
