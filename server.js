@@ -661,11 +661,7 @@ function normalizeHeading(heading = '') {
   if (lower === 'experience') {
     return 'Work Experience';
   }
-  if (
-    /^certifications?$/.test(lower) ||
-    /^trainings?$/.test(lower) ||
-    /^trainings?\s*[\/&]\s*certifications?$/.test(lower)
-  ) {
+  if (lower.includes('training') || lower.includes('certification')) {
     return 'Certification';
   }
   return normalized;
@@ -688,7 +684,8 @@ function ensureRequiredSections(
   } = {},
 ) {
   if (skipRequiredSections) {
-    data.sections = data.sections.filter((s) => s.items && s.items.length);
+    data.sections = pruneEmptySections(data.sections || []);
+    data.sections = mergeDuplicateSections(data.sections);
     return data;
   }
   const required = ['Work Experience', 'Education'];
@@ -877,15 +874,24 @@ function ensureRequiredSections(
     }
     certSection.heading = certHeading;
     certSection.items = deduped.map((cert) => {
-      const base = [cert.name, cert.provider].filter(Boolean).join(' - ');
-      const tokens = parseLine(base);
+      const tokens = [{ type: 'bullet' }];
       if (cert.url) {
-        if (tokens.length) tokens[tokens.length - 1].continued = true;
-        tokens.push({ type: 'paragraph', text: ' (', continued: true });
-        tokens.push({ type: 'link', text: 'Credly', href: cert.url, continued: true });
-        tokens.push({ type: 'paragraph', text: ')' });
+        tokens.push({
+          type: 'link',
+          text: cert.name,
+          href: cert.url,
+          continued: !!cert.provider
+        });
+      } else {
+          tokens.push({
+            type: 'paragraph',
+            text: cert.name,
+            continued: !!cert.provider
+          });
       }
-      if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+      if (cert.provider) {
+        tokens.push({ type: 'paragraph', text: ` - ${cert.provider}` });
+      }
       return tokens;
     });
     if (credlyProfileUrl) {
@@ -898,6 +904,9 @@ function ensureRequiredSections(
   } else if (certSection) {
     data.sections = data.sections.filter((s) => s !== certSection);
   }
+
+  data.sections = pruneEmptySections(data.sections);
+  data.sections = mergeDuplicateSections(data.sections);
 
   return data;
 }

@@ -91,33 +91,43 @@ describe('extractCertifications', () => {
     expect(certSection.items).toHaveLength(1);
     const link = certSection.items[0].find((t) => t.type === 'link');
     expect(link).toMatchObject({
-      text: 'Credly',
+      text: 'AWS Certified Developer',
       href: 'https://www.credly.com/badges/abc'
     });
   });
 
-  test('renders credential URLs in (Credly) format', () => {
+  test('consolidates training headings and links certificate names to their URLs', () => {
     const resumeCertifications = [
       {
         name: 'PMP',
         provider: 'PMI',
         url: 'https://www.credly.com/pmp'
+      },
+      {
+        name: 'CKA',
+        provider: 'CNCF',
+        url: 'https://www.credly.com/cka'
       }
     ];
-    const ensured = ensureRequiredSections(
-      { sections: [] },
-      { resumeCertifications }
-    );
-    const certSection = ensured.sections.find(
+    const data = {
+      sections: [
+        { heading: 'Trainings', items: [] },
+        { heading: 'Certifications', items: [] }
+      ]
+    };
+    const ensured = ensureRequiredSections(data, { resumeCertifications });
+    const certSections = ensured.sections.filter(
       (s) => s.heading === 'Certification'
     );
-    const tokens = certSection.items[0];
-    const link = tokens.find((t) => t.type === 'link');
-    expect(link).toMatchObject({
-      text: 'Credly',
-      href: 'https://www.credly.com/pmp'
+    expect(certSections).toHaveLength(1);
+    const items = certSections[0].items;
+    expect(items).toHaveLength(2);
+    items.forEach((tokens, idx) => {
+      const link = tokens.find((t) => t.type === 'link');
+      expect(link).toMatchObject({
+        text: resumeCertifications[idx].name,
+        href: resumeCertifications[idx].url
+      });
     });
-    const text = tokens.filter((t) => t.text).map((t) => t.text).join('');
-    expect(text).toContain('(Credly)');
   });
 });

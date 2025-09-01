@@ -80,8 +80,7 @@ describe('ensureRequiredSections work experience merging', () => {
     };
     const ensured = ensureRequiredSections(data, {});
     const work = ensured.sections.find((s) => s.heading === 'Work Experience');
-    expect(work).toBeTruthy();
-    expect(work.items).toHaveLength(0);
+    expect(work).toBeUndefined();
     const placeholders = ensured.sections
       .filter((s) => s.heading.toLowerCase().includes('experience'))
       .flatMap((s) =>
