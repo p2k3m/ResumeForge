@@ -714,6 +714,7 @@ function ensureRequiredSections(
     }
     if (normalized.toLowerCase() === 'work experience') {
       section.items = section.items || [];
+      const unparsedItems = [];
       const existing = section.items
         .map((tokens) => {
           const parts = [];
@@ -722,9 +723,15 @@ function ensureRequiredSections(
             if (t.text) parts.push(t.text);
           }
           const line = parts.join('').trim();
-          if (!line) return null;
+          if (!line) {
+            unparsedItems.push(tokens);
+            return null;
+          }
           const parsed = extractExperience([line])[0];
-          if (!parsed) return null;
+          if (!parsed) {
+            unparsedItems.push(tokens);
+            return null;
+          }
           const key = [
             parsed.company || '',
             parsed.title || '',
@@ -812,8 +819,11 @@ function ensureRequiredSections(
         return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
       });
 
-      if (all.length) {
-        section.items = all.map((e) => e.tokens);
+      if (all.length || unparsedItems.length) {
+        section.items = [
+          ...all.map((e) => e.tokens),
+          ...unparsedItems
+        ];
       } else {
         const otherExperienceHasItems = data.sections.some((s) => {
           if (s === section) return false;
@@ -1657,7 +1667,8 @@ function extractExperience(source) {
     if (trimmed === '') {
       continue;
     }
-    const jobMatch = line.match(/^[-*]\s+(.*)/) || (!line.match(/^\s/) ? [null, trimmed] : null);
+    const jobMatch =
+      line.match(/^\s*[-*]\s+(.*)/) || (!line.match(/^\s/) ? [null, trimmed] : null);
     if (jobMatch) {
       const text = jobMatch[1].trim();
       const entry = parseEntry(text);
