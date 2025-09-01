@@ -1334,7 +1334,7 @@ function extractExperience(source) {
   let current = null;
   for (const line of lines) {
     const trimmed = line.trim();
-    if (/^experience/i.test(trimmed)) {
+    if (/^(work|professional)?\s*experience/i.test(trimmed)) {
       inSection = true;
       continue;
     }
