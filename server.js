@@ -1356,10 +1356,12 @@ let generatePdf = async function (
                   : '';
                 return `<a href="${t.href}">${text.trim()}</a>${space}`;
               }
+              if (t.type === 'heading') {
+                return `<strong>${text}</strong>`;
+              }
               if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
               if (t.style === 'bold') return `<strong>${text}</strong>`;
               if (t.style === 'italic') return `<em>${text}</em>`;
-              if (t.type === 'heading') return `<strong>${text}</strong>`;
               if (t.type === 'newline') return '<br>';
               if (t.type === 'tab') return '<span class="tab"></span>';
               if (t.type === 'bullet') {
@@ -1544,6 +1546,7 @@ let generatePdf = async function (
               return;
             }
             if (t.type === 'heading') {
+              // Render heading tokens using the bold font
               doc.font(style.bold);
               doc.text(t.text, opts);
               doc.font(style.font);
