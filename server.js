@@ -2239,8 +2239,25 @@ app.post('/api/process-cv', (req, res, next) => {
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
     const originalScore = originalMatch.score;
     const enhancedScore = bestMatch.score;
-    const { table, newSkills } = bestMatch;
-    res.json({ urls, applicantName, originalScore, enhancedScore, table, newSkills });
+    const { table, newSkills: missingSkills } = bestMatch;
+    const addedSkills = table
+      .filter(
+        (r) =>
+          r.matched &&
+          originalMatch.table.some(
+            (o) => o.skill === r.skill && !o.matched
+          )
+      )
+      .map((r) => r.skill);
+    res.json({
+      urls,
+      applicantName,
+      originalScore,
+      enhancedScore,
+      table,
+      addedSkills,
+      missingSkills
+    });
   } catch (err) {
     console.error('processing failed', err);
     if (bucket) {

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { formatMatchMessage } from './formatMatchMessage.js'
 
 function App() {
   const [profileUrl, setProfileUrl] = useState('')
@@ -70,7 +71,8 @@ function App() {
       setOutputFiles(data.urls || [])
       setMatch({
         table: data.table || [],
-        newSkills: data.newSkills || [],
+        addedSkills: data.addedSkills || [],
+        missingSkills: data.missingSkills || [],
         originalScore: data.originalScore || 0,
         enhancedScore: data.enhancedScore || 0,
         originalTitle: data.originalTitle || '',
@@ -155,7 +157,8 @@ function App() {
       {match && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <h2 className="text-xl font-bold mb-2 text-purple-800">
-            Skill Match Score: {match.enhancedScore}% (Original: {match.originalScore}%)
+            Skill Match Score: {match.enhancedScore}%
+            {match.enhancedScore !== match.originalScore && ` (Original: ${match.originalScore}%)`}
           </h2>
           <p className="text-purple-700 mb-2">Original Title: {match.originalTitle || 'N/A'}</p>
           <p className="text-purple-700 mb-2">Modified Title: {match.modifiedTitle || 'N/A'}</p>
@@ -180,21 +183,19 @@ function App() {
             </tbody>
           </table>
           <p className="text-purple-700 mb-2">
-            Newly added skills:{' '}
-            {match.newSkills.length > 0
-              ? match.newSkills.join(', ')
+            Added skills:{' '}
+            {match.addedSkills.length > 0
+              ? match.addedSkills.join(', ')
               : 'None'}
+            {match.missingSkills.length > 0 && (
+              <>
+                <br />
+                Missing skills: {match.missingSkills.join(', ')}
+              </>
+            )}
           </p>
           <p className="font-semibold text-purple-800">
-            {(() => {
-              const likelihood =
-                match.enhancedScore >= 80
-                  ? 'High'
-                  : match.enhancedScore >= 50
-                  ? 'Medium'
-                  : 'Low'
-              return `Your score improved from ${match.originalScore}% to ${match.enhancedScore}%, indicating a ${likelihood} selection likelihood.`
-            })()}
+            {formatMatchMessage(match.originalScore, match.enhancedScore)}
           </p>
         </div>
       )}
