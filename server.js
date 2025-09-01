@@ -666,8 +666,14 @@ function ensureRequiredSections(
   );
   const existing = certSection
     ? certSection.items.map((tokens) => {
-        if (!tokens.some((t) => t.type === 'bullet')) {
-          tokens.unshift({ type: 'bullet' });
+        if (tokens[0]?.type !== 'bullet') {
+          const idx = tokens.findIndex((t) => t.type === 'bullet');
+          if (idx > -1) {
+            const [bullet] = tokens.splice(idx, 1);
+            tokens.unshift(bullet);
+          } else {
+            tokens.unshift({ type: 'bullet' });
+          }
         }
         const text = tokens
           .map((t) => t.text || t.href || '')
@@ -698,7 +704,7 @@ function ensureRequiredSections(
     if (cert.provider) line += ` - ${cert.provider}`;
     if (cert.url) line += ` ${cert.url}`;
     let tokens = parseLine(line);
-    if (!tokens.some((t) => t.type === 'bullet')) {
+    if (tokens[0]?.type !== 'bullet') {
       tokens.unshift({ type: 'bullet' });
     }
     certAdditions.push({ key, tokens });
@@ -761,12 +767,21 @@ function splitSkills(sections = []) {
         const skills = text.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
         skills.forEach((skill) => {
           const skillTokens = parseLine(skill);
-          if (!skillTokens.some((t) => t.type === 'bullet')) {
+          if (skillTokens[0]?.type !== 'bullet') {
             skillTokens.unshift({ type: 'bullet' });
           }
           expanded.push(skillTokens);
         });
       } else {
+        if (tokens[0]?.type !== 'bullet') {
+          const idx = tokens.findIndex((t) => t.type === 'bullet');
+          if (idx > -1) {
+            const [bullet] = tokens.splice(idx, 1);
+            tokens.unshift(bullet);
+          } else {
+            tokens.unshift({ type: 'bullet' });
+          }
+        }
         expanded.push(tokens);
       }
     });
@@ -1871,6 +1886,7 @@ export {
   extractExperience,
   extractEducation,
   extractCertifications,
+  splitSkills,
   fetchLinkedInProfile,
   mergeResumeWithLinkedIn,
   TEMPLATE_IDS,
