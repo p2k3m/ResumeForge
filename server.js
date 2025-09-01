@@ -1773,7 +1773,7 @@ app.post('/api/process-cv', (req, res, next) => {
       text: jobDescription
     } = analyzeJobDescription(jobDescriptionHtml);
     const resumeSkills = extractResumeSkills(text);
-    const match = calculateMatchScore(jobSkills, resumeSkills);
+    const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
 
     let linkedinData = {};
     try {
@@ -1882,6 +1882,12 @@ app.post('/api/process-cv', (req, res, next) => {
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'invalid_ai_response', level: 'error', message: 'AI response invalid' });
       return res.status(500).json({ error: 'AI response invalid' });
     }
+
+    const version1Skills = extractResumeSkills(versionData.version1);
+    const match1 = calculateMatchScore(jobSkills, version1Skills);
+    const version2Skills = extractResumeSkills(versionData.version2);
+    const match2 = calculateMatchScore(jobSkills, version2Skills);
+    const bestMatch = match1.score >= match2.score ? match1 : match2;
 
     const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nOfficial Job Title: {{jobTitle}}\nKey Skills: {{jobSkills}}\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
 
@@ -2046,7 +2052,10 @@ app.post('/api/process-cv', (req, res, next) => {
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
-    res.json({ urls, applicantName, match });
+    const originalScore = originalMatch.score;
+    const enhancedScore = bestMatch.score;
+    const { table, newSkills } = bestMatch;
+    res.json({ urls, applicantName, originalScore, enhancedScore, table, newSkills });
   } catch (err) {
     console.error('processing failed', err);
     if (bucket) {
