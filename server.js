@@ -126,10 +126,14 @@ function selectTemplates({
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
   if (!template1 && !template2) {
-    // Randomly pick from contrasting pairs when no templates are specified
-    const pair =
-      CONTRASTING_PAIRS[Math.floor(Math.random() * CONTRASTING_PAIRS.length)];
-    [template1, template2] = pair;
+    // Default to the classic "ucmo" template paired with a contrasting style
+    template1 = 'ucmo';
+    const candidates = CV_TEMPLATES.filter(
+      (t) => t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS['ucmo']
+    );
+    template2 =
+      candidates[Math.floor(Math.random() * candidates.length)] ||
+      CV_TEMPLATES[0];
   } else {
     template1 = template1 || defaultCvTemplate;
     if (!template2) {
