@@ -1,0 +1,156 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`headings are bold in HTML and PDF outputs: html 1`] = `
+"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resume</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 40px; color: #333; line-height: 1.5; }
+    header { background: #2a9d8f; color: #fff; padding: 20px; margin-bottom: 20px; text-align: center; }
+    h1 { font-size: 32px; margin: 0 0 12px; }
+    h2 { font-size: 20px; margin: 24px 0 12px; border-bottom: 1px solid #2a9d8f; padding-bottom: 4px; font-weight: bold; }
+    section { margin-bottom: 16px; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    li {
+      margin-bottom: 10px;
+      margin-left: 1.2em;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-weight: 400;
+    }
+    .bullet, .edu-bullet {
+      display: inline-block;
+      width: 1.2em;
+      margin-left: -1.2em;
+      color: #2a9d8f;
+    }
+    .tab { display:inline-block; width:1.5em; }
+    .tab + p { margin-top: 0; }
+    strong { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Jane Doe</h1>
+  </header>
+  
+  <section>
+    <h2>Skills</h2>
+    {{#if items}}
+      <ul>
+        {{#each items}}
+          <li>{{{this}}}</li>
+        
+  <section>
+    <h2>Work Experience</h2>
+    {{#if items}}
+      <ul>
+        {{#each items}}
+          <li>{{{this}}}</li>
+        
+  <section>
+    <h2>Education</h2>
+    {{#if items}}
+      <ul>
+        {{#each items}}
+          <li>{{{this}}}</li>
+        
+      </ul>
+    {{/if}}
+  </section>
+  {{/each}}
+</body>
+</html>
+"
+`;
+
+exports[`headings are bold in HTML and PDF outputs: pdf 1`] = `
+{
+  "content": "1 0 0 -1 0 792 cm
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 727.64 Tm
+/F2 20 Tf
+[<4a616e6520446f65> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2 0.2 0.2 scn
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 692.148 Tm
+/F2 14 Tf
+[<536b696c6c73> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2901960784313726 0.3333333333333333 0.40784313725490196 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 660.924 Tm
+/F1 12 Tf
+[<9520> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2 0.2 0.2 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 57.536 660.924 Tm
+/F1 12 Tf
+[<54> 120 <657374696e67> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 615.744 Tm
+/F2 14 Tf
+[<57> 60 <6f726b20457870657269656e6365> 0] TJ
+ET
+Q
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 584.52 Tm
+/F1 12 Tf
+[<496e66> 30 <6f72> -25 <6d6174696f6e206e6f742070726f> 15 <7669646564> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 539.34 Tm
+/F2 14 Tf
+[<456475636174696f6e> 0] TJ
+ET
+Q
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 508.116 Tm
+/F1 12 Tf
+[<496e66> 30 <6f72> -25 <6d6174696f6e206e6f742070726f> 15 <7669646564> 0] TJ
+ET
+Q
+",
+  "fontMap": {
+    "F1": "Helvetica",
+    "F2": "Helvetica-Bold",
+  },
+}
+`;
