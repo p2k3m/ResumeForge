@@ -333,6 +333,25 @@ describe('parseContent duplicate section merging', () => {
     );
     expect(items).toEqual(['B.S. in CS']);
   });
+
+  test('merges education sections when the first has only a bullet', () => {
+    const input = [
+      'Jane Doe',
+      '# Education',
+      '- ',
+      '# Education',
+      '- B.S. in CS'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const educationSections = data.sections.filter(
+      (s) => s.heading.toLowerCase() === 'education'
+    );
+    expect(educationSections).toHaveLength(1);
+    const items = educationSections[0].items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['B.S. in CS']);
+  });
 });
 
 describe('parseContent certification normalization and pruning', () => {
