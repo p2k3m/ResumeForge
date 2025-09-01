@@ -23,7 +23,7 @@ function tokensToHtml(tokens) {
     .join('');
 }
 
-test('headings are bold in HTML and PDF outputs', async () => {
+test('all headings including Skills are bold in HTML and PDF outputs', async () => {
   const input = 'Jane Doe\n# Skills\n- Testing';
   const data = parseContent(input);
 
