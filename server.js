@@ -218,6 +218,21 @@ async function fetchLinkedInProfile(url) {
             startDate,
             endDate
           });
+        } else if (id === 'licenses_and_certifications') {
+          const nameMatch =
+            itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
+            itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
+          const providerMatch =
+            itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
+            itemHtml.match(/"issuer"\s*:\s*"(.*?)"/i);
+          const urlMatch =
+            itemHtml.match(/href=["']([^"']+)["']/i) ||
+            itemHtml.match(/"url"\s*:\s*"(.*?)"/i);
+          items.push({
+            name: nameMatch ? strip(nameMatch[1]) : '',
+            provider: providerMatch ? strip(providerMatch[1]) : '',
+            url: urlMatch ? strip(urlMatch[1]) : '',
+          });
         } else {
           items.push(text);
         }
@@ -229,7 +244,8 @@ async function fetchLinkedInProfile(url) {
       headline,
       experience: extractList('experience'),
       education: extractList('education'),
-      skills: extractList('skills')
+      skills: extractList('skills'),
+      certifications: extractList('licenses_and_certifications'),
     };
   } catch (err) {
     throw new Error('LinkedIn profile fetch failed');
@@ -735,7 +751,14 @@ function ensureRequiredSections(
     certSection.items = [
       ...existing.map((e) => e.tokens),
       ...certAdditions.map((c) => c.tokens),
-    ];
+    ].filter((tokens) => {
+      const text = tokens
+        .map((t) => t.text || t.href || '')
+        .join(' ')
+        .trim();
+      const parsed = extractCertifications([text])[0] || {};
+      return parsed.name || parsed.provider;
+    });
 
     if (certSection.items.length === 0) {
       data.sections = data.sections.filter((s) => s !== certSection);
