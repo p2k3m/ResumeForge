@@ -66,7 +66,14 @@ function App() {
       const data = await response.json()
 
       setOutputFiles(data.urls || [])
-      setMatch(data.match || null)
+      setMatch({
+        table: data.table || [],
+        newSkills: data.newSkills || [],
+        originalScore: data.originalScore || 0,
+        enhancedScore: data.enhancedScore || 0,
+        originalTitle: data.originalTitle || '',
+        modifiedTitle: data.modifiedTitle || ''
+      })
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -138,8 +145,10 @@ function App() {
       {match && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <h2 className="text-xl font-bold mb-2 text-purple-800">
-            Skill Match Score: {match.score}%
+            Skill Match Score: {match.enhancedScore}% (Original: {match.originalScore}%)
           </h2>
+          <p className="text-purple-700 mb-2">Original Title: {match.originalTitle || 'N/A'}</p>
+          <p className="text-purple-700 mb-2">Modified Title: {match.modifiedTitle || 'N/A'}</p>
           <table className="w-full mb-2">
             <thead>
               <tr>
@@ -148,24 +157,34 @@ function App() {
               </tr>
             </thead>
             <tbody>
-              {match.table.map((row) => (
-                <tr key={row.skill}>
-                  <td className="py-1 text-purple-800">{row.skill}</td>
-                  <td className="py-1 text-right">
-                    {row.matched ? '✓' : '✗'}
-                  </td>
-                </tr>
-              ))}
+              {(() => {
+                const rows = [...(match.table || [])]
+                while (rows.length < 5) rows.push({ skill: '—', matched: false })
+                return rows.slice(0, 5).map((row, idx) => (
+                  <tr key={`${row.skill}-${idx}`}>
+                    <td className="py-1 text-purple-800">{row.skill}</td>
+                    <td className="py-1 text-right">{row.matched ? '✓' : '✗'}</td>
+                  </tr>
+                ))
+              })()}
             </tbody>
           </table>
-          {match.newSkills.length > 0 && (
-            <p className="text-purple-700 mb-2">
-              Newly added skills: {match.newSkills.join(', ')}
-            </p>
-          )}
+          <p className="text-purple-700 mb-2">
+            Newly added skills:{' '}
+            {match.newSkills.length > 0
+              ? match.newSkills.join(', ')
+              : 'None'}
+          </p>
           <p className="font-semibold text-purple-800">
-            Selection Likelihood:{' '}
-            {match.score >= 80 ? 'High' : match.score >= 50 ? 'Medium' : 'Low'}
+            {(() => {
+              const likelihood =
+                match.enhancedScore >= 80
+                  ? 'High'
+                  : match.enhancedScore >= 50
+                  ? 'Medium'
+                  : 'Low'
+              return `Your score improved from ${match.originalScore}% to ${match.enhancedScore}%, indicating a ${likelihood} selection likelihood.`
+            })()}
           </p>
         </div>
       )}
