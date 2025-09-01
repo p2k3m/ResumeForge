@@ -781,7 +781,7 @@ function isJobEntry(tokens = []) {
 
 function splitSkills(sections = []) {
   sections.forEach((sec) => {
-    if (normalizeHeading(sec.heading || '').toLowerCase() !== 'skills') return;
+    if (!((sec.heading || '').toLowerCase().includes('skill'))) return;
     const expanded = [];
     sec.items.forEach((tokens) => {
       const text = tokens
