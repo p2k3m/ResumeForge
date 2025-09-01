@@ -401,10 +401,11 @@ function calculateMatchScore(jobSkills = [], resumeSkills = []) {
   return { score, table, newSkills };
 }
 
-function generateProjectSummary(
+async function generateProjectSummary(
   jobDescription = '',
   resumeSkills = [],
-  jobSkills = []
+  jobSkills = [],
+  generativeModel
 ) {
   const skills = resumeSkills.length ? resumeSkills : jobSkills;
   if (!jobDescription && !skills.length) return '';
@@ -420,6 +421,24 @@ function generateProjectSummary(
     .trim();
 
   const focus = cleaned.split(/[\n.!?]/)[0].trim().toLowerCase();
+
+  if (generativeModel?.generateContent) {
+    try {
+      const prompt =
+        `You are a resume assistant. Using the job description and top skills, ` +
+        `write one concise sentence that begins with "Led a project" and ` +
+        `describes a project using those skills.\nJob Description: ${cleaned}\n` +
+        `Top Skills: ${skillList}`;
+      const result = await generativeModel.generateContent(prompt);
+      const text = result?.response?.text?.().trim() || '';
+      if (text) {
+        const aiSummary = text.replace(/[(){}]/g, '');
+        return aiSummary.endsWith('.') ? aiSummary : `${aiSummary}.`;
+      }
+    } catch {
+      // Fall back to manual generation
+    }
+  }
 
   let summary = '';
   if (skillList && focus) {
@@ -2029,10 +2048,11 @@ app.post('/api/process-cv', (req, res, next) => {
           ? projectField[0]
           : projectField;
         if (!projectText) {
-          projectText = generateProjectSummary(
+          projectText = await generateProjectSummary(
             jobDescription,
             resumeSkills,
-            jobSkills
+            jobSkills,
+            generativeModel
           );
         }
         const sanitizeOptions = {
