@@ -855,39 +855,108 @@ function isJobEntry(tokens = []) {
   return monthRange.test(lower) || yearRange.test(lower);
 }
 
-function splitSkills(sections = []) {
+const SKILL_CATEGORY_MAP = {
+  database: [
+    'mysql',
+    'postgres',
+    'postgresql',
+    'oracle',
+    'sqlite',
+    'mongodb',
+    'sql'
+  ]
+};
+
+function splitSkills(sections = [], jobSkills = []) {
+  const jobSet = new Set((jobSkills || []).map((s) => s.toLowerCase()));
   sections.forEach((sec) => {
     if (!((sec.heading || '').toLowerCase().includes('skill'))) return;
-    const expanded = [];
+    if (jobSet.size === 0) {
+      const expanded = [];
+      sec.items.forEach((tokens) => {
+        const text = tokens
+          .filter((t) => t.text)
+          .map((t) => t.text)
+          .join('')
+          .trim();
+        if (/[;,]/.test(text)) {
+          const skills = text.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+          skills.forEach((skill) => {
+            const skillTokens = parseLine(skill);
+            if (skillTokens[0]?.type !== 'bullet') {
+              skillTokens.unshift({ type: 'bullet' });
+            }
+            expanded.push(skillTokens);
+          });
+        } else {
+          if (tokens[0]?.type !== 'bullet') {
+            const idx = tokens.findIndex((t) => t.type === 'bullet');
+            if (idx > -1) {
+              const [bullet] = tokens.splice(idx, 1);
+              tokens.unshift(bullet);
+            } else {
+              tokens.unshift({ type: 'bullet' });
+            }
+          }
+          expanded.push(tokens);
+        }
+      });
+      sec.items = expanded;
+      return;
+    }
+    const collected = [];
     sec.items.forEach((tokens) => {
       const text = tokens
         .filter((t) => t.text)
         .map((t) => t.text)
         .join('')
         .trim();
-      if (/[;,]/.test(text)) {
-        const skills = text.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
-        skills.forEach((skill) => {
-          const skillTokens = parseLine(skill);
-          if (skillTokens[0]?.type !== 'bullet') {
-            skillTokens.unshift({ type: 'bullet' });
-          }
-          expanded.push(skillTokens);
+      if (!text) return;
+      const parts = /[;,]/.test(text) ? text.split(/[;,]/) : [text];
+      parts
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .forEach((skill) => {
+          collected.push(skill);
         });
-      } else {
-        if (tokens[0]?.type !== 'bullet') {
-          const idx = tokens.findIndex((t) => t.type === 'bullet');
-          if (idx > -1) {
-            const [bullet] = tokens.splice(idx, 1);
-            tokens.unshift(bullet);
-          } else {
-            tokens.unshift({ type: 'bullet' });
-          }
+    });
+    const uniqMap = new Map();
+    collected.forEach((skill) => {
+      const lower = skill.toLowerCase();
+      if (!uniqMap.has(lower)) uniqMap.set(lower, skill);
+    });
+    let filtered = Array.from(uniqMap.entries());
+    if (jobSet.size) {
+      filtered = filtered.filter(([lower]) => jobSet.has(lower));
+    }
+    const groupMap = new Map();
+    filtered.forEach(([lower, display]) => {
+      let label = null;
+      for (const [cat, members] of Object.entries(SKILL_CATEGORY_MAP)) {
+        const all = [cat, ...members];
+        if (all.includes(lower)) {
+          label = cat;
+          break;
         }
-        expanded.push(tokens);
+      }
+      if (label) {
+        if (!groupMap.has(label)) groupMap.set(label, new Set([label]));
+        if (lower !== label) groupMap.get(label).add(display);
+      } else {
+        groupMap.set(display.toLowerCase(), new Set([display]));
       }
     });
-    sec.items = expanded;
+    const grouped = Array.from(groupMap.values()).map((set) =>
+      Array.from(set)
+        .slice(0, 4)
+        .join(', ')
+    );
+    const top = grouped.slice(0, 5);
+    sec.items = top.map((text) => {
+      const tokens = parseLine(text);
+      if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+      return tokens;
+    });
   });
 }
 
@@ -1014,7 +1083,7 @@ function parseContent(text, options = {}) {
         )
       };
     });
-    splitSkills(sections);
+    splitSkills(sections, options.jobSkills);
     moveSummaryJobEntries(sections);
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
@@ -1120,7 +1189,7 @@ function parseContent(text, options = {}) {
         }, [])
       );
     });
-    splitSkills(sections);
+    splitSkills(sections, options.jobSkills);
     moveSummaryJobEntries(sections);
     const mergedSections = mergeDuplicateSections(sections);
     const prunedSections = pruneEmptySections(mergedSections);
@@ -1980,7 +2049,8 @@ app.post('/api/process-cv', (req, res, next) => {
               linkedinEducation,
               resumeCertifications,
               linkedinCertifications,
-              jobTitle
+              jobTitle,
+              jobSkills
             }
           : name === 'cover_letter1' || name === 'cover_letter2'
           ? { skipRequiredSections: true, defaultHeading: '' }
