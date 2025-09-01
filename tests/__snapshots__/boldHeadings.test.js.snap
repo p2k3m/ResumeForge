@@ -24,6 +24,7 @@ exports[`headings are bold in HTML and PDF outputs: html 1`] = `
       display: inline-block;
       width: 1.2em;
       margin-left: -1.2em;
+      margin-right: 0.4em;
       color: #2a9d8f;
     }
     .tab { display:inline-block; width:1.5em; }
@@ -106,7 +107,7 @@ Q
 q
 1 0 0 -1 0 792 cm
 BT
-1 0 0 1 57.536 660.924 Tm
+1 0 0 1 65.072 660.924 Tm
 /F1 12 Tf
 [<54> 120 <657374696e67> 0] TJ
 ET
