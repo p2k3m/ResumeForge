@@ -191,6 +191,17 @@ function selectTemplates({
       CV_TEMPLATES[0];
   }
 
+  // Final sanity check: ensure one template is 'ucmo' and the other is from a different group
+  const isValidPair = () =>
+    template1 &&
+    template2 &&
+    (template1 === 'ucmo' || template2 === 'ucmo') &&
+    CV_TEMPLATE_GROUPS[template1] !== CV_TEMPLATE_GROUPS[template2];
+  while (!isValidPair()) {
+    template1 = 'ucmo';
+    template2 = pickNonUcmo();
+  }
+
   if (!coverTemplate1 && !coverTemplate2) {
     coverTemplate1 = CL_TEMPLATES[0];
     coverTemplate2 = CL_TEMPLATES.find((t) => t !== coverTemplate1) || CL_TEMPLATES[0];
