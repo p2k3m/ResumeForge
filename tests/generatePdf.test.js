@@ -306,6 +306,35 @@ describe('generatePdf and parsing', () => {
     );
   });
 
+  test('HTML mapping only hyperlinks link text', () => {
+    const tokens = parseContent(
+      'Jane Doe\n- Visit [OpenAI](https://openai.com) for more'
+    ).sections[0].items[0];
+    const rendered = tokens
+      .map((t, i) => {
+        const text = t.text ? escapeHtml(t.text) : '';
+        if (t.type === 'link') {
+          const next = tokens[i + 1];
+          const space = next && next.text && !/^\s/.test(next.text) ? ' ' : '';
+          return `<a href="${t.href}">${text.trim()}</a>${space}`;
+        }
+        if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+        if (t.style === 'bold') return `<strong>${text}</strong>`;
+        if (t.style === 'italic') return `<em>${text}</em>`;
+        if (t.type === 'newline') return '<br>';
+        if (t.type === 'tab') return '<span class="tab"></span>';
+        if (t.type === 'bullet') return '<span class="bullet">•</span>';
+        return text;
+      })
+      .join('');
+    expect(rendered).toContain(
+      '<a href="https://openai.com">OpenAI</a> for more'
+    );
+    expect(rendered).not.toContain(
+      '<a href="https://openai.com">OpenAI for more'
+    );
+  });
+
   test('generated PDF contains clickable links without HTML anchors', async () => {
     jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
     const input =
@@ -334,6 +363,18 @@ describe('generatePdf and parsing', () => {
     expect(raw).toContain('https://www.linkedin.com/in/johndoe');
     expect(raw).toContain('https://github.com/johndoe');
     expect(raw).not.toMatch(/<a[\s>]/);
+  });
+
+  test('PDFKit link annotations stop before following text', async () => {
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockRejectedValue(new Error('no browser'));
+    const input = 'John Doe\n- Visit [OpenAI](https://openai.com) for more';
+    const buffer = await generatePdf(input);
+    const raw = buffer.toString();
+    const matches = raw.match(/\/URI \(https:\/\/openai\.com\)/g) || [];
+    expect(matches).toHaveLength(1);
+    launchSpy.mockRestore();
   });
 
   test('sanitizes markdown from name in PDF', async () => {
