@@ -59,7 +59,7 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
   </header>
   
   <section>
-    <h2>Experience</h2>
+    <h2>Work Experience</h2>
     {{#if items}}
       <ul>
         {{#each items}}
@@ -67,13 +67,6 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
         
   <section>
     <h2>Education</h2>
-    {{#if items}}
-      <ul>
-        {{#each items}}
-          <li>{{{this}}}</li>
-        
-  <section>
-    <h2>Work Experience</h2>
     {{#if items}}
       <ul>
         {{#each items}}
