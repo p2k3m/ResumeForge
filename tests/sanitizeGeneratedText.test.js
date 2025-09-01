@@ -14,7 +14,7 @@ describe('sanitizeGeneratedText', () => {
     ].join('\n');
 
     const output = sanitizeGeneratedText(input, { skipRequiredSections: true });
-    expect(output).toBe(['John Doe', '# Experience', 'Did things'].join('\n'));
+    expect(output).toBe(['John Doe', '# Experience', '- Did things'].join('\n'));
   });
 
   test('removes bracketed placeholders within cover letters', () => {
@@ -46,7 +46,7 @@ describe('sanitizeGeneratedText', () => {
 
     const output = sanitizeGeneratedText(input, { skipRequiredSections: true });
     expect(output).toBe(
-      ['John Doe', '# Education', 'High School', 'College'].join('\n')
+      ['John Doe', '# Education', '- High School', '- College'].join('\n')
     );
   });
 

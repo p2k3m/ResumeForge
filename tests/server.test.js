@@ -443,6 +443,51 @@ describe('/api/process-cv', () => {
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
 
+  test('adds project section when job description provided', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () => JSON.stringify({ version1: 'Name', version2: 'Name' })
+        }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+        }
+      });
+
+    const texts = [];
+    setGeneratePdf(
+      jest.fn((text) => {
+        texts.push(text);
+        return Promise.resolve(Buffer.from('pdf'));
+      })
+    );
+
+    await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    const resumeText = texts.find((t) => /# Projects/.test(t));
+    expect(resumeText).toBeTruthy();
+    const parsed = parseContent(resumeText);
+    const projectSection = parsed.sections.find(
+      (s) => s.heading === 'Projects'
+    );
+    expect(projectSection).toBeTruthy();
+    expect(
+      projectSection.items.some((tokens) =>
+        tokens.some((t) => t.type === 'bullet')
+      )
+    ).toBe(true);
+
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
   test('cover letters omit placeholder sections', async () => {
     generateContentMock.mockReset();
     generateContentMock
