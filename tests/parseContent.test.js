@@ -125,6 +125,24 @@ describe('parseContent skills list handling', () => {
   });
 });
 
+describe('parseContent bare heading detection', () => {
+  test('creates sections for common headings without hashes and avoids summary', () => {
+    const input = [
+      'John Doe',
+      'Work Experience',
+      'Acme Corp | Developer | Jan 2020 - Present',
+      'Education',
+      'MIT',
+      'Skills',
+      'JavaScript, Python'
+    ].join('\n');
+    const data = parseContent(input);
+    const headings = data.sections.map((s) => s.heading);
+    expect(headings).toEqual(['Work Experience', 'Education', 'Skills']);
+    expect(data.sections.find((s) => s.heading === 'Summary')).toBeUndefined();
+  });
+});
+
 describe('parseContent experience fallbacks', () => {
   test('uses resume experience when AI output lacks it', () => {
     const data = parseContent('Jane Doe\n# Skills\n- JS', {
