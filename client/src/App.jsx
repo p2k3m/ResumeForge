@@ -3,6 +3,7 @@ import { useState, useCallback } from 'react'
 function App() {
   const [profileUrl, setProfileUrl] = useState('')
   const [jobUrl, setJobUrl] = useState('')
+  const [credlyUrl, setCredlyUrl] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
@@ -39,6 +40,7 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('linkedinProfileUrl', profileUrl)
       formData.append('jobDescriptionUrl', jobUrl)
+      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
 
       const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
@@ -125,6 +127,14 @@ function App() {
         placeholder="Job Description URL"
         value={jobUrl}
         onChange={(e) => setJobUrl(e.target.value)}
+        className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+      />
+
+      <input
+        type="url"
+        placeholder="Credly Profile URL (optional)"
+        value={credlyUrl}
+        onChange={(e) => setCredlyUrl(e.target.value)}
         className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
       />
 
