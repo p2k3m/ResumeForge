@@ -1388,7 +1388,7 @@ let generatePdf = async function (
               if (t.type === 'newline') return '<br>';
               if (t.type === 'tab') return '<span class="tab"></span>';
               if (t.type === 'bullet') {
-                if (sec.heading.toLowerCase() === 'education') {
+                if (sec.heading?.toLowerCase() === 'education') {
                   return '<span class="edu-bullet">•</span> ';
                 }
                 return '<span class="bullet">•</span> ';
@@ -1530,7 +1530,7 @@ let generatePdf = async function (
           tokens.forEach((t, idx) => {
             if (t.type === 'bullet') {
               const glyph =
-                sec.heading.toLowerCase() === 'education'
+                sec.heading?.toLowerCase() === 'education'
                   ? style.eduBullet || style.bullet
                   : style.bullet;
               doc
