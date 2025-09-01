@@ -24,6 +24,14 @@ describe('selectTemplates enforces ucmo presence', () => {
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(CV_TEMPLATE_GROUPS[template2]);
   });
 
+  test('random selection yields ucmo and distinct groups', () => {
+    for (let i = 0; i < 20; i++) {
+      const { template1, template2 } = selectTemplates();
+      expect([template1, template2]).toContain('ucmo');
+      expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(CV_TEMPLATE_GROUPS[template2]);
+    }
+  });
+
   test('heading styles are bold across templates', async () => {
     const styles = {};
     for (const tpl of CV_TEMPLATES) {
