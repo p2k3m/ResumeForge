@@ -149,35 +149,35 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  // Ensure one of the templates is always "ucmo"
-  if (!template1 && !template2) {
-    template1 = 'ucmo';
-  } else if (template1 !== 'ucmo' && template2 !== 'ucmo') {
-    if (template1) {
-      template2 = 'ucmo';
-    } else {
-      template1 = 'ucmo';
+  // Ensure one template is 'ucmo' and the other is from a different group
+  const pickNonUcmo = (tpl) => {
+    if (tpl && tpl !== 'ucmo' && CV_TEMPLATE_GROUPS[tpl] !== CV_TEMPLATE_GROUPS['ucmo']) {
+      return tpl;
     }
-  }
-  // Ensure the non-ucmo template contrasts with "ucmo"
+    const candidates = CV_TEMPLATES.filter(
+      (t) => t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS['ucmo']
+    );
+    return candidates[Math.floor(Math.random() * candidates.length)] || CV_TEMPLATES.find((t) => t !== 'ucmo');
+  };
+
   if (template1 === 'ucmo') {
-    if (!template2 || template2 === 'ucmo') {
-      const pair = CONTRASTING_PAIRS.find((p) => p.includes('ucmo'));
-      template2 = pair ? pair.find((t) => t !== 'ucmo') : CV_TEMPLATES.find((t) => t !== 'ucmo');
-    }
+    template2 = pickNonUcmo(template2);
   } else if (template2 === 'ucmo') {
-    if (!template1 || template1 === 'ucmo') {
-      const pair = CONTRASTING_PAIRS.find((p) => p.includes('ucmo'));
-      template1 = pair ? pair.find((t) => t !== 'ucmo') : CV_TEMPLATES.find((t) => t !== 'ucmo');
-    }
-  } else if (
-    !template2 ||
-    template1 === template2 ||
-    CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
-  ) {
-    const pair = CONTRASTING_PAIRS.find((p) => p.includes(template1));
-    if (pair) template2 = pair.find((t) => t !== template1);
+    template1 = pickNonUcmo(template1);
+  } else if (template1 && !template2) {
+    template1 = pickNonUcmo(template1);
+    template2 = 'ucmo';
+  } else if (!template1 && template2) {
+    template2 = pickNonUcmo(template2);
+    template1 = 'ucmo';
+  } else if (template1 && template2) {
+    template1 = pickNonUcmo(template1);
+    template2 = 'ucmo';
+  } else {
+    template1 = 'ucmo';
+    template2 = pickNonUcmo();
   }
+
   if (
     !template2 ||
     template1 === template2 ||
