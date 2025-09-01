@@ -149,29 +149,33 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  // Ensure one template is always 'ucmo'
-  if (template1 !== 'ucmo' && template2 !== 'ucmo') {
-    if (template1) {
-      template2 = 'ucmo';
-    } else if (template2) {
-      template1 = 'ucmo';
-    } else {
-      template1 = 'ucmo';
-    }
-  }
-  if (!template1) template1 = 'ucmo';
-  if (!template2) {
-    // pick a random template other than template1
-    const candidates = CV_TEMPLATES.filter((t) => t !== template1);
-    template2 = candidates[Math.floor(Math.random() * candidates.length)];
+  // Always include 'ucmo' and ensure the other template is from a different group
+  const UCMO_GROUP = CV_TEMPLATE_GROUPS['ucmo'];
+  const pickOther = (exclude = []) => {
+    const candidates = CV_TEMPLATES.filter(
+      (t) =>
+        t !== 'ucmo' &&
+        !exclude.includes(t) &&
+        CV_TEMPLATE_GROUPS[t] !== UCMO_GROUP
+    );
+    return candidates[Math.floor(Math.random() * candidates.length)] || 'modern';
+  };
+
+  const userOther = [template1, template2].find(
+    (t) => t && t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== UCMO_GROUP
+  );
+
+  if (template1 === 'ucmo') {
+    template2 = userOther || pickOther([template1]);
+  } else if (template2 === 'ucmo') {
+    template1 = userOther || pickOther([template2]);
+  } else {
+    template1 = 'ucmo';
+    template2 = userOther || pickOther([template1]);
   }
 
-  // Ensure templates come from different style groups; re-draw template2 if needed
-  if (CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]) {
-    const candidates = CV_TEMPLATES.filter(
-      (t) => t !== template1 && CV_TEMPLATE_GROUPS[t] !== CV_TEMPLATE_GROUPS[template1]
-    );
-    template2 = candidates[Math.floor(Math.random() * candidates.length)] || template2;
+  if (template1 === template2) {
+    template2 = pickOther([template1]);
   }
 
   if (!coverTemplate1 && !coverTemplate2) {
@@ -1437,6 +1441,10 @@ let generatePdf = async function (
 ) {
   if (!ALL_TEMPLATES.includes(templateId)) templateId = 'modern';
   const data = parseContent(text, options);
+  data.sections.forEach((sec) => {
+    sec.heading = normalizeHeading(sec.heading);
+  });
+  data.sections = mergeDuplicateSections(data.sections);
   let html;
   if (templateId === 'ucmo' && generativeModel?.generateContent) {
     try {
