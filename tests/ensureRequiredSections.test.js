@@ -121,4 +121,28 @@ describe('ensureRequiredSections certifications merging', () => {
     expect(certSection.items).toHaveLength(1);
     expect(certSection.items[0][0].type).toBe('bullet');
   });
+
+  test('deduplicates existing certification entries', () => {
+    const data = {
+      sections: [
+        {
+          heading: 'Certification',
+          items: [
+            parseLine('AWS Certified Developer (Amazon) https://www.credly.com/badges/aws-dev'),
+            parseLine('AWS Certified Developer (Amazon) https://www.credly.com/badges/aws-dev')
+          ]
+        }
+      ]
+    };
+    const ensured = ensureRequiredSections(data, {});
+    const certSection = ensured.sections.find((s) => s.heading === 'Certification');
+    expect(certSection.items).toHaveLength(1);
+  });
+
+  test('removes certification section if no certificates remain', () => {
+    const data = { sections: [{ heading: 'Certification', items: [] }] };
+    const ensured = ensureRequiredSections(data, {});
+    const certSection = ensured.sections.find((s) => s.heading === 'Certification');
+    expect(certSection).toBeUndefined();
+  });
 });

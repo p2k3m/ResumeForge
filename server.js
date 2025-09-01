@@ -676,7 +676,7 @@ function ensureRequiredSections(
   let certSection = data.sections.find(
     (s) => normalizeHeading(s.heading).toLowerCase() === certHeading.toLowerCase()
   );
-  const existing = certSection
+  const existingEntries = certSection
     ? certSection.items.map((tokens) => {
         if (tokens[0]?.type !== 'bullet') {
           const idx = tokens.findIndex((t) => t.type === 'bullet');
@@ -703,7 +703,13 @@ function ensureRequiredSections(
       })
     : [];
 
-  const seenCerts = new Set(existing.map((e) => e.key));
+  const seenCerts = new Set();
+  const existing = [];
+  existingEntries.forEach((e) => {
+    if (seenCerts.has(e.key)) return;
+    seenCerts.add(e.key);
+    existing.push(e);
+  });
   const combinedCerts = [...resumeCertifications, ...linkedinCertifications];
   const certAdditions = [];
   combinedCerts.forEach((cert) => {
@@ -729,9 +735,12 @@ function ensureRequiredSections(
 
   if (certSection) {
     certSection.heading = normalizeHeading(certSection.heading || certHeading);
-    certSection.items = [...existing.map((e) => e.tokens), ...certAdditions.map((c) => c.tokens)];
+    certSection.items = [
+      ...existing.map((e) => e.tokens),
+      ...certAdditions.map((c) => c.tokens),
+    ];
     if (!certSection.items.length) {
-      certSection.items = [parseLine('Information not provided')];
+      data.sections = data.sections.filter((s) => s !== certSection);
     }
   }
 
@@ -1408,8 +1417,14 @@ function extractCertifications(source) {
         item.issuer ||
         item.organization ||
         '';
-      const url =
+      let url =
         item.url || item.credentialUrl || item.link || item.certUrl || '';
+      if (!url) {
+        const found = Object.values(item).find(
+          (v) => typeof v === 'string' && /credly\.com/i.test(v)
+        );
+        if (found) url = found;
+      }
       if (url || name || provider) return { name, provider, url };
       return parseEntry(String(item));
     });
@@ -1420,6 +1435,12 @@ function extractCertifications(source) {
   let inSection = false;
   for (const line of lines) {
     const trimmed = line.trim();
+    const credly = trimmed.match(/https?:\/\/\S*credly\.com\/\S*/i);
+    if (credly) {
+      const clean = trimmed.replace(/^[-*]\s+/, '');
+      entries.push(parseEntry(clean));
+      continue;
+    }
     if (/^certifications?/i.test(trimmed)) {
       inSection = true;
       continue;
