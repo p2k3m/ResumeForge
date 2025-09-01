@@ -173,38 +173,36 @@ describe('ensureRequiredSections certifications merging', () => {
     expect(certSection.items).toHaveLength(1);
   });
 
-  test('includes credly certifications and profile link', () => {
-    const data = { sections: [] };
-    const credlyCertifications = [
-      {
-        name: 'AWS Certified Developer',
-        provider: 'Amazon',
-        url: 'https://credly.com/aws-dev'
-      }
-    ];
-    const ensured = ensureRequiredSections(data, {
-      credlyCertifications,
-      credlyProfileUrl: 'https://credly.com/user'
+    test('includes credly certifications and profile link', () => {
+      const data = { sections: [] };
+      const credlyCertifications = [
+        {
+          name: 'AWS Certified Developer',
+          provider: 'Amazon',
+          url: 'https://credly.com/aws-dev'
+        }
+      ];
+      const ensured = ensureRequiredSections(data, {
+        credlyCertifications,
+        credlyProfileUrl: 'https://credly.com/user'
+      });
+      const certSection = ensured.sections.find(
+        (s) => s.heading === 'Certification'
+      );
+      expect(certSection).toBeTruthy();
+      expect(certSection.items).toHaveLength(2);
+      const first = certSection.items[0];
+      const link = first[1];
+      expect(link.type).toBe('link');
+      expect(link.text).toContain('AWS Certified Developer');
+      expect(link.text).toContain('Amazon');
+      expect(link.href).toBe('https://credly.com/aws-dev');
+      const profile = certSection.items[1];
+      const profileLink = profile.find(
+        (t) => t.type === 'link' && t.href === 'https://credly.com/user'
+      );
+      expect(profileLink).toBeTruthy();
     });
-    const certSection = ensured.sections.find(
-      (s) => s.heading === 'Certification'
-    );
-    expect(certSection).toBeTruthy();
-    expect(certSection.items).toHaveLength(2);
-    const first = certSection.items[0];
-    const text = first.filter((t) => t.text).map((t) => t.text).join(' ');
-    expect(text).toContain('AWS Certified Developer');
-    expect(text).toContain('Amazon');
-    const hasLink = first.some(
-      (t) => t.type === 'link' && t.href === 'https://credly.com/aws-dev'
-    );
-    expect(hasLink).toBe(true);
-    const profile = certSection.items[1];
-    const profileLink = profile.find(
-      (t) => t.type === 'link' && t.href === 'https://credly.com/user'
-    );
-    expect(profileLink).toBeTruthy();
-  });
 
   test('omits certification section when only credly profile link provided', () => {
     const ensured = ensureRequiredSections(
@@ -217,10 +215,39 @@ describe('ensureRequiredSections certifications merging', () => {
     expect(certSection).toBeUndefined();
   });
 
-  test('removes certification section if no certificates remain', () => {
-    const data = { sections: [{ heading: 'Certification', items: [] }] };
-    const ensured = ensureRequiredSections(data, {});
-    const certSection = ensured.sections.find((s) => s.heading === 'Certification');
-    expect(certSection).toBeUndefined();
+    test('removes certification section if no certificates remain', () => {
+      const data = { sections: [{ heading: 'Certification', items: [] }] };
+      const ensured = ensureRequiredSections(data, {});
+      const certSection = ensured.sections.find((s) => s.heading === 'Certification');
+      expect(certSection).toBeUndefined();
+    });
+
+    test('limits certification list to five most recent entries with clickable names', () => {
+      const resumeCertifications = [
+        { name: 'Cert1', provider: 'P1', url: 'https://c1', date: '2024-01-01' },
+        { name: 'Cert2', provider: 'P2', url: 'https://c2', date: '2023-01-01' },
+        { name: 'Cert3', provider: 'P3', url: 'https://c3', date: '2022-01-01' },
+        { name: 'Cert4', provider: 'P4', url: 'https://c4', date: '2021-01-01' },
+        { name: 'Cert5', provider: 'P5', url: 'https://c5', date: '2020-01-01' },
+        { name: 'Cert6', provider: 'P6', url: 'https://c6', date: '2019-01-01' }
+      ];
+      const ensured = ensureRequiredSections(
+        { sections: [] },
+        { resumeCertifications }
+      );
+      const certSection = ensured.sections.find(
+        (s) => s.heading === 'Certification'
+      );
+      expect(certSection.items).toHaveLength(5);
+      const texts = certSection.items.map((tokens) => tokens[1].text);
+      expect(texts.join(' ')).not.toMatch(/Cert6/);
+      expect(texts[0]).toContain('Cert1');
+      expect(texts[4]).toContain('Cert5');
+      certSection.items.forEach((tokens, idx) => {
+        expect(tokens[0].type).toBe('bullet');
+        const link = tokens[1];
+        expect(link.type).toBe('link');
+        expect(link.href).toBe(resumeCertifications[idx].url);
+      });
+    });
   });
-});
