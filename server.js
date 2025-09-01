@@ -1435,7 +1435,10 @@ function removeGuidanceLines(text = '') {
     /^\s*(?:\([^)]*\)|\[[^\]]*\])\s*$|\b(?:consolidate relevant experience|add other relevant experience|list key skills|previous roles summarized|for brevity)\b/i;
   return text
     .split(/\r?\n/)
-    .filter((line) => !guidanceRegex.test(line))
+    .map((line) =>
+      line.replace(/\[[^\]]+\]/g, '').replace(/\s{2,}/g, ' ').trim()
+    )
+    .filter((line) => line && !guidanceRegex.test(line))
     .join('\n');
 }
 
@@ -1469,6 +1472,7 @@ function reparseAndStringify(text, options = {}) {
 function sanitizeGeneratedText(text, options = {}) {
   if (!text) return text;
   const cleaned = removeGuidanceLines(text);
+  if (options.defaultHeading === '') return cleaned;
   return reparseAndStringify(cleaned, options);
 }
 
@@ -1776,7 +1780,11 @@ app.post('/api/process-cv', (req, res, next) => {
           : name === 'cover_letter1' || name === 'cover_letter2'
           ? { skipRequiredSections: true, defaultHeading: '' }
           : {};
-      const pdfBuffer = await generatePdf(text, tpl, options);
+      const inputText =
+        name === 'cover_letter1' || name === 'cover_letter2'
+          ? sanitizeGeneratedText(text, options)
+          : text;
+      const pdfBuffer = await generatePdf(inputText, tpl, options);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,

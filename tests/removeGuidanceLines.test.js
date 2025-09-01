@@ -17,4 +17,10 @@ describe('removeGuidanceLines', () => {
     const output = removeGuidanceLines(input);
     expect(output).toBe(['Professional Summary', 'Final line'].join('\n'));
   });
+
+  test('removes bracketed phrases within lines', () => {
+    const input = ['Hello [World]', 'Keep [Placeholder] text'].join('\n');
+    const output = removeGuidanceLines(input);
+    expect(output).toBe(['Hello', 'Keep text'].join('\n'));
+  });
 });
