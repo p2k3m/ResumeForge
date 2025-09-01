@@ -1270,51 +1270,76 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
-let generatePdf = async function (text, templateId = 'modern', options = {}) {
+let generatePdf = async function (
+  text,
+  templateId = 'modern',
+  options = {},
+  generativeModel
+) {
   if (!ALL_TEMPLATES.includes(templateId)) templateId = 'modern';
   const data = parseContent(text, options);
-  const templatePath = path.resolve('templates', `${templateId}.html`);
-  const templateSource = await fs.readFile(templatePath, 'utf-8');
-  let css = '';
-  try {
-    css = await fs.readFile(path.resolve('templates', `${templateId}.css`), 'utf-8');
-  } catch {}
-  // Convert token-based data to HTML for Handlebars templates
-  const htmlData = {
-    ...data,
-    sections: data.sections.map((sec) => ({
-      ...sec,
-      items: sec.items.map((tokens) =>
-        tokens
-          .map((t, i) => {
-            const text = t.text ? escapeHtml(t.text) : '';
-            if (t.type === 'link') {
-              const next = tokens[i + 1];
-              const space = next && next.text && !/^\s/.test(next.text) ? ' ' : '';
-              return `<a href="${t.href}">${text.trim()}</a>${space}`;
-            }
-            if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
-            if (t.style === 'bold') return `<strong>${text}</strong>`;
-            if (t.style === 'italic') return `<em>${text}</em>`;
-            if (t.type === 'heading') return `<strong>${text}</strong>`;
-            if (t.type === 'newline') return '<br>';
-            if (t.type === 'tab') return '<span class="tab"></span>';
-            if (t.type === 'bullet') {
-              if (sec.heading.toLowerCase() === 'education') {
-                return '<span class="edu-bullet">-</span> ';
+  let html;
+  if (templateId === 'ucmo' && generativeModel?.generateContent) {
+    try {
+      const prompt =
+        `Using the resume text below, output complete HTML with inline CSS ` +
+        `that matches the University of Central Missouri sample layout, ` +
+        `including a contact info table at the top with the UCMO logo on the ` +
+        `right, Times New Roman fonts, and similar spacing. Return only ` +
+        `the HTML and CSS.\n\nResume Text:\n${text}`;
+      const result = await generativeModel.generateContent(prompt);
+      const generated = result?.response?.text?.();
+      if (generated) html = generated;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!html) {
+    const templatePath = path.resolve('templates', `${templateId}.html`);
+    const templateSource = await fs.readFile(templatePath, 'utf-8');
+    let css = '';
+    try {
+      css = await fs.readFile(path.resolve('templates', `${templateId}.css`), 'utf-8');
+    } catch {}
+    // Convert token-based data to HTML for Handlebars templates
+    const htmlData = {
+      ...data,
+      sections: data.sections.map((sec) => ({
+        ...sec,
+        items: sec.items.map((tokens) =>
+          tokens
+            .map((t, i) => {
+              const text = t.text ? escapeHtml(t.text) : '';
+              if (t.type === 'link') {
+                const next = tokens[i + 1];
+                const space = next && next.text && !/^\s/.test(next.text)
+                  ? ' '
+                  : '';
+                return `<a href="${t.href}">${text.trim()}</a>${space}`;
               }
-              return '<span class="bullet">•</span> ';
-            }
-            if (t.type === 'jobsep') return '';
-            return text;
-          })
-          .join('')
-      )
-    }))
-  };
-  let html = Handlebars.compile(templateSource)(htmlData);
-  if (css) {
-    html = html.replace('</head>', `<style>${css}</style></head>`);
+              if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+              if (t.style === 'bold') return `<strong>${text}</strong>`;
+              if (t.style === 'italic') return `<em>${text}</em>`;
+              if (t.type === 'heading') return `<strong>${text}</strong>`;
+              if (t.type === 'newline') return '<br>';
+              if (t.type === 'tab') return '<span class="tab"></span>';
+              if (t.type === 'bullet') {
+                if (sec.heading.toLowerCase() === 'education') {
+                  return '<span class="edu-bullet">-</span> ';
+                }
+                return '<span class="bullet">•</span> ';
+              }
+              if (t.type === 'jobsep') return '';
+              return text;
+            })
+            .join('')
+        )
+      }))
+    };
+    html = Handlebars.compile(templateSource)(htmlData);
+    if (css) {
+      html = html.replace('</head>', `<style>${css}</style></head>`);
+    }
   }
   try {
     const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
@@ -2194,7 +2219,7 @@ app.post('/api/process-cv', (req, res, next) => {
         name === 'cover_letter1' || name === 'cover_letter2'
           ? relocateProfileLinks(sanitizeGeneratedText(text, options))
           : text;
-      const pdfBuffer = await generatePdf(inputText, tpl, options);
+      const pdfBuffer = await generatePdf(inputText, tpl, options, generativeModel);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,

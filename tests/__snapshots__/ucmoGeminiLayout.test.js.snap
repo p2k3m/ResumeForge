@@ -1,0 +1,3 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ucmo template uses Gemini layout markup 1`] = `"<html><body><table id="top"><tr><td>contact</td><td><img src="logo.png"/></td></tr></table></body></html>"`;
