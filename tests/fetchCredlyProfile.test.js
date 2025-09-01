@@ -36,7 +36,7 @@ describe('fetchCredlyProfile', () => {
     ]);
   });
 
-  test('integrates with ensureRequiredSections to render certification details', async () => {
+  test('integrates with ensureRequiredSections to render certification hyperlink and profile link', async () => {
     const html = `
       <div class="badge">
         <a href="https://credly.com/aws-dev"><span class="badge-name">AWS Certified Developer</span></a>
@@ -46,14 +46,31 @@ describe('fetchCredlyProfile', () => {
     `;
     mockGet.mockResolvedValueOnce({ data: html });
     const certs = await fetchCredlyProfile('http://example.com');
-    const ensured = ensureRequiredSections({ sections: [] }, { credlyCertifications: certs });
+    const ensured = ensureRequiredSections(
+      { sections: [] },
+      {
+        credlyCertifications: certs,
+        credlyProfileUrl: 'https://credly.com/user'
+      }
+    );
     const certSection = ensured.sections.find((s) => s.heading === 'Certification');
     expect(certSection).toBeTruthy();
+    expect(certSection.items).toHaveLength(2);
     const first = certSection.items[0];
-    const text = first.filter((t) => t.text).map((t) => t.text).join(' ');
+    expect(first[0].type).toBe('bullet');
+    expect(first[1]).toMatchObject({
+      type: 'link',
+      href: 'https://credly.com/aws-dev'
+    });
+    const text = first[1].text;
     expect(text).toContain('AWS Certified Developer');
     expect(text).toContain('Amazon');
-    const link = first.find((t) => t.type === 'link');
-    expect(link?.href).toBe('https://credly.com/aws-dev');
+    const profile = certSection.items[1];
+    expect(profile[0].type).toBe('bullet');
+    expect(profile[1]).toMatchObject({
+      type: 'link',
+      text: 'Credly Profile',
+      href: 'https://credly.com/user'
+    });
   });
 });

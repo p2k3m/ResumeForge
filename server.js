@@ -901,11 +901,7 @@ function ensureRequiredSections(
     const text = cert.provider
       ? `${cert.name} - ${cert.provider}`
       : cert.name;
-    if (cert.url) {
-      tokens.push({ type: 'link', text, href: cert.url });
-    } else {
-      tokens.push({ type: 'paragraph', text });
-    }
+    tokens.push({ type: 'link', text, href: cert.url });
     return tokens;
   });
 
