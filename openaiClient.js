@@ -2,6 +2,8 @@ import OpenAI from 'openai';
 import { File } from 'node:buffer';
 import { getSecrets } from './server.js';
 
+const preferredModels = ['gpt-5', 'gpt-4.1', 'gpt-4o-mini'];
+
 let clientPromise;
 async function getClient() {
   if (!clientPromise) {
@@ -65,15 +67,29 @@ export async function requestEnhancedCV({
       'improvement_summary',
     ],
   };
-  const response = await client.responses.create({
-    model: 'gpt-4.1-mini',
-    input: [{ role: 'user', content }],
-    text: {
-      format: {
-        type: 'json_schema',
-        json_schema: { name: 'cv_enhancement', schema, strict: true },
-      },
-    },
-  });
-  return response.output_text;
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await client.responses.create({
+        model,
+        input: [{ role: 'user', content }],
+        text: {
+          format: {
+            type: 'json_schema',
+            json_schema: { name: 'cv_enhancement', schema, strict: true },
+          },
+        },
+      });
+      console.log(`Using model: ${model}`);
+      return response.output_text;
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') {
+        console.warn(`Model not found: ${model}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
 }
