@@ -4,7 +4,6 @@ import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import {
   DynamoDBClient,
   CreateTableCommand,
@@ -18,6 +17,7 @@ import { uploadFile as openaiUploadFile, requestEnhancedCV } from './openaiClien
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
+import { getSecrets } from './config/secrets.js';
 import puppeteer from 'puppeteer';
 import JSON5 from 'json5';
 
@@ -57,9 +57,6 @@ const upload = multer({
 });
 
 const uploadResume = upload.single('resume');
-
-const DEFAULT_SECRET_ID = 'ResumeForge';
-const DEFAULT_AWS_REGION = 'ap-south-1';
 
 const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
@@ -191,31 +188,7 @@ function selectTemplates({
   return { template1, template2, coverTemplate1, coverTemplate2 };
 }
 
-process.env.SECRET_ID = process.env.SECRET_ID || DEFAULT_SECRET_ID;
-process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
-
 const region = process.env.AWS_REGION || 'ap-south-1';
-const secretsClient = new SecretsManagerClient({ region });
-
-let secretCache;
-async function getSecrets() {
-  if (secretCache) return secretCache;
-  const secretId = process.env.SECRET_ID;
-  if (!secretId) {
-    try {
-      const data = await fs.readFile(path.resolve('local-secrets.json'), 'utf-8');
-      secretCache = JSON.parse(data);
-      return secretCache;
-    } catch (err) {
-      throw new Error('SECRET_ID environment variable is required');
-    }
-  }
-  const { SecretString } = await secretsClient.send(
-    new GetSecretValueCommand({ SecretId: secretId })
-  );
-  secretCache = JSON.parse(SecretString ?? '{}');
-  return secretCache;
-}
 
 async function fetchLinkedInProfile(url) {
   try {
@@ -2596,6 +2569,5 @@ export {
   removeGuidanceLines,
   sanitizeGeneratedText,
   relocateProfileLinks,
-  verifyResume,
-  getSecrets
+  verifyResume
 };

@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { File } from 'node:buffer';
-import { getSecrets } from './server.js';
+import { getSecrets } from './config/secrets.js';
 
 // Ordered list of supported models. Unavailable or experimental models should
 // be placed at the end or removed to avoid unnecessary `model_not_found`
