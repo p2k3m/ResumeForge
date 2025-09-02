@@ -78,7 +78,7 @@ export async function requestEnhancedCV({
         input: [{ role: 'user', content }],
         text: {
           format: {
-            type: 'json_schema',
+            name: 'json_schema',
             json_schema: { name: 'cv_enhancement', schema, strict: true },
           },
         },
