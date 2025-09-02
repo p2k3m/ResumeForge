@@ -1621,31 +1621,38 @@ let generatePdf = async function (
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
       // Optional font embedding for Roboto/Helvetica families if available
-      let robotoAvailable = false;
       try {
         const fontsDir = path.resolve('fonts');
-        const reg = path.join(fontsDir, 'Roboto-Regular.ttf');
-        const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
-        const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
-        if (fsSync.existsSync(reg)) {
-          doc.registerFont('Roboto', reg);
-          robotoAvailable = true;
+        const rReg = path.join(fontsDir, 'Roboto-Regular.ttf');
+        const rBold = path.join(fontsDir, 'Roboto-Bold.ttf');
+        const rItalic = path.join(fontsDir, 'Roboto-Italic.ttf');
+        const haveRoboto = [rReg, rBold, rItalic].every((p) => fsSync.existsSync(p));
+        if (haveRoboto) {
+          doc.registerFont('Roboto', rReg);
+          doc.registerFont('Roboto-Bold', rBold);
+          doc.registerFont('Roboto-Italic', rItalic);
+          ['modern', 'vibrant'].forEach((tpl) => {
+            styleMap[tpl].font = 'Roboto';
+            styleMap[tpl].bold = 'Roboto-Bold';
+            styleMap[tpl].italic = 'Roboto-Italic';
+          });
+        } else {
+          const missing = [rReg, rBold, rItalic].filter((p) => !fsSync.existsSync(p));
+          if (missing.length) console.warn('Roboto fonts missing:', missing.map((m) => path.basename(m)));
         }
-        if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
-        if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
+
         const hReg = path.join(fontsDir, 'Helvetica.ttf');
         const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
         const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
-        if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
-        if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
-        if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
-      } catch {}
-      if (robotoAvailable) {
-        ['modern', 'vibrant'].forEach((tpl) => {
-          styleMap[tpl].font = 'Roboto';
-          styleMap[tpl].bold = 'Roboto-Bold';
-          styleMap[tpl].italic = 'Roboto-Italic';
+        [
+          [hReg, 'Helvetica'],
+          [hBold, 'Helvetica-Bold'],
+          [hItalic, 'Helvetica-Oblique']
+        ].forEach(([p, name]) => {
+          if (fsSync.existsSync(p)) doc.registerFont(name, p);
         });
+      } catch (err) {
+        console.warn('Font registration error', err);
       }
       const style = styleMap[templateId] || styleMap.modern;
 
