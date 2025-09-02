@@ -15,12 +15,15 @@ export const requestEnhancedCV = jest.fn(async () =>
   })
 );
 
+// Track calls to responses.create so tests can inspect model selection.
+export const createResponse = jest.fn(async (options) => ({
+  output_text: await requestEnhancedCV(options),
+}));
+
 export default class OpenAI {
   constructor() {
     this.files = { create: uploadFile };
-    this.responses = {
-      create: async () => ({ output_text: await requestEnhancedCV() }),
-    };
+    this.responses = { create: createResponse };
   }
 }
 
