@@ -2488,7 +2488,11 @@ app.post('/api/process-cv', (req, res, next) => {
           userAgent: { S: userAgent },
           os: { S: os },
           browser: { S: browser },
-          device: { S: device }
+          device: { S: device },
+          aiOriginalScore: { N: aiOriginalScore.toString() },
+          aiEnhancedScore: { N: aiEnhancedScore.toString() },
+          aiSkillsAdded: { L: aiSkillsAdded.map((s) => ({ S: s })) },
+          improvementSummary: { S: improvementSummary }
         }
       })
     );
