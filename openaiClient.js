@@ -39,11 +39,11 @@ export async function requestEnhancedCV({
   const client = await getClient();
   const content = [
     { type: 'input_text', text: instructions },
-    { type: 'file_reference', file_id: cvFileId },
-    { type: 'file_reference', file_id: jobDescFileId },
+    { type: 'input_file', file_id: cvFileId },
+    { type: 'input_file', file_id: jobDescFileId },
   ];
-  if (linkedInFileId) content.push({ type: 'file_reference', file_id: linkedInFileId });
-  if (credlyFileId) content.push({ type: 'file_reference', file_id: credlyFileId });
+  if (linkedInFileId) content.push({ type: 'input_file', file_id: linkedInFileId });
+  if (credlyFileId) content.push({ type: 'input_file', file_id: credlyFileId });
   const schema = {
     type: 'object',
     properties: {
