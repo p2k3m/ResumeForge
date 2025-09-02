@@ -449,12 +449,17 @@ async function rewriteSectionsWithGemini(
 ) {
   if (!generativeModel?.generateContent) {
     const text = [name].join('\n');
-    return { text: sanitizeGeneratedText(text, sanitizeOptions), project: '' };
+    return {
+      text: sanitizeGeneratedText(text, sanitizeOptions),
+      project: '',
+      modifiedTitle: '',
+      addedSkills: [],
+    };
   }
   try {
     const prompt =
       `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
-      `Return only JSON with keys summary, experience, education, certifications, skills, projects (arrays of strings) and projectSnippet (string).` +
+      `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills.` +
       `\nSections: ${JSON.stringify(sections)}\nJob Description: ${jobDescription}`;
     const result = await generativeModel.generateContent(prompt);
     const parsed = parseAiJson(result?.response?.text?.());
@@ -463,10 +468,30 @@ async function rewriteSectionsWithGemini(
         arr?.length ? [`# ${heading}`, ...arr.map((b) => `- ${b}`)] : [];
       const lines = [name];
       lines.push(...mk('Summary', parsed.summary));
-      lines.push(...mk('Work Experience', parsed.experience));
+
+      const expItems = [];
+      if (parsed.latestRoleTitle || parsed.latestRoleDescription) {
+        const combined = [
+          parsed.latestRoleTitle,
+          parsed.latestRoleDescription,
+        ]
+          .filter(Boolean)
+          .join(': ');
+        expItems.push(`- ${combined}`.trim());
+      }
+      if (Array.isArray(parsed.experience)) {
+        expItems.push(...parsed.experience.map((b) => `- ${b}`));
+      }
+      if (expItems.length) {
+        lines.push('# Work Experience', ...expItems);
+      }
+
       lines.push(...mk('Education', parsed.education));
       lines.push(...mk('Certifications', parsed.certifications));
-      lines.push(...mk('Skills', parsed.skills));
+      const skillsList = Array.from(
+        new Set([...(parsed.skills || []), ...(parsed.mandatorySkills || [])])
+      );
+      lines.push(...mk('Skills', skillsList));
       lines.push(...mk('Projects', parsed.projects));
       const raw = lines.join('\n');
       const cleaned = sanitizeGeneratedText(
@@ -476,13 +501,20 @@ async function rewriteSectionsWithGemini(
       return {
         text: cleaned,
         project: parsed.projectSnippet || parsed.project || '',
+        modifiedTitle: parsed.latestRoleTitle || '',
+        addedSkills: parsed.addedSkills || [],
       };
     }
   } catch {
     /* ignore */
   }
   const fallback = [name].join('\n');
-  return { text: sanitizeGeneratedText(fallback, sanitizeOptions), project: '' };
+  return {
+    text: sanitizeGeneratedText(fallback, sanitizeOptions),
+    project: '',
+    modifiedTitle: '',
+    addedSkills: [],
+  };
 }
 
 async function generateProjectSummary(
@@ -2221,12 +2253,17 @@ app.post('/api/process-cv', (req, res, next) => {
       linkedinData.certifications || []
     );
 
+    const originalTitle =
+      resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
+
     // Use GEMINI_API_KEY from environment or secrets
     const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     let projectText = '';
+    let modifiedTitle = '';
+    let geminiAddedSkills = [];
     if (process.env.NODE_ENV !== 'test') {
       try {
         const sectionTexts = collectSectionText(
@@ -2252,6 +2289,8 @@ app.post('/api/process-cv', (req, res, next) => {
         );
         text = enhanced.text;
         projectText = enhanced.project;
+        modifiedTitle = enhanced.modifiedTitle || '';
+        geminiAddedSkills = enhanced.addedSkills || [];
       } catch (e) {
         console.error('section rewrite failed', e);
       }
@@ -2520,15 +2559,20 @@ app.post('/api/process-cv', (req, res, next) => {
     const originalScore = originalMatch.score;
     const enhancedScore = bestMatch.score;
     const { table, newSkills: missingSkills } = bestMatch;
-    const addedSkills = table
-      .filter(
-        (r) =>
-          r.matched &&
-          originalMatch.table.some(
-            (o) => o.skill === r.skill && !o.matched
+    const addedSkills = Array.from(
+      new Set(
+        table
+          .filter(
+            (r) =>
+              r.matched &&
+              originalMatch.table.some(
+                (o) => o.skill === r.skill && !o.matched
+              )
           )
+          .map((r) => r.skill)
+          .concat(geminiAddedSkills)
       )
-      .map((r) => r.skill);
+    );
     res.json({
       urls,
       applicantName,
@@ -2536,7 +2580,9 @@ app.post('/api/process-cv', (req, res, next) => {
       enhancedScore,
       table,
       addedSkills,
-      missingSkills
+      missingSkills,
+      originalTitle,
+      modifiedTitle: modifiedTitle || originalTitle,
     });
   } catch (err) {
     console.error('processing failed', err);
