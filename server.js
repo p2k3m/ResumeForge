@@ -3,7 +3,6 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import {
@@ -15,6 +14,7 @@ import {
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import { logEvent } from './logger.js';
+import { uploadFile as openaiUploadFile, requestEnhancedCV } from './openaiClient.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
@@ -2256,130 +2256,92 @@ app.post('/api/process-cv', (req, res, next) => {
     const originalTitle =
       resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
 
-    // Use GEMINI_API_KEY from environment or secrets
-    const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     let projectText = '';
     let modifiedTitle = '';
-    let geminiAddedSkills = [];
-    if (process.env.NODE_ENV !== 'test') {
-      try {
-        const sectionTexts = collectSectionText(
-          text,
-          linkedinData,
-          credlyCertifications
-        );
-        const enhanced = await rewriteSectionsWithGemini(
-          applicantName,
-          sectionTexts,
-          jobDescription,
-          generativeModel,
-          {
-            resumeExperience,
-            linkedinExperience,
-            resumeEducation,
-            linkedinEducation,
-            resumeCertifications,
-            linkedinCertifications,
-            credlyCertifications,
-            credlyProfileUrl,
-          }
-        );
-        text = enhanced.text;
-        projectText = enhanced.project;
-        modifiedTitle = enhanced.modifiedTitle || '';
-        geminiAddedSkills = enhanced.addedSkills || [];
-      } catch (e) {
-        console.error('section rewrite failed', e);
-      }
-    }
-
-    const combinedProfile = text;
-
-    const versionsTemplate = `
-  You are an expert resume writer and career coach. Your task is to analyze a candidate's CV and a job description to generate two distinct, highly optimized resumes.
-
-  **Goal:** Maximize the candidate's chances of passing ATS screenings and impressing hiring managers.
-
-  **Input Data:**
-  - **Raw CV Text:** {{cvText}}
-  - **Job Description Text:** {{jdText}}
-  - **Official Job Title:** {{jobTitle}}
-  - **Key Skills from Job Description:** {{jobSkills}}
-
-  **Instructions:**
-  Return ONLY a valid JSON object with two keys: \`version1\` and \`version2\`. Each value must be a full resume string.
-
-  **For each version, ensure you perform the following enhancements:**
-  1. Rewrite the candidate's most recent job title to exactly match the job description's title.
-  2. Recast responsibilities to mirror those in the job description.
-  3. Incorporate relevant projects and required technical terminology from the job description. Fabricate or emphasize one project that showcases the key skills if necessary.
-  4. Enhance content clarity and impact while preserving factual accuracy.
-  5. Maintain an ATS-friendly format with appropriate keywords.
-  6. Keep any URLs from the original CV unchanged.
-  7. Include "Work Experience" and "Education" sections in every resume, adding empty sections if necessary.
-  `;
-
-    const versionsPrompt =
-      versionsTemplate
-        .replace('{{cvText}}', combinedProfile)
-        .replace('{{jdText}}', jobDescription)
-        .replace('{{jobTitle}}', jobTitle)
-        .replace('{{jobSkills}}', jobSkills.join(', ')) +
-      '\n\nNote: The candidate performed duties matching the job description in their last role.';
-
     let versionData = {};
+    let coverData = {};
+    let aiOriginalScore = 0;
+    let aiEnhancedScore = 0;
+    let improvementNotes = '';
+    const sanitizeOptions = {
+      resumeExperience,
+      linkedinExperience,
+      resumeEducation,
+      linkedinEducation,
+      resumeCertifications,
+      linkedinCertifications,
+      credlyCertifications,
+      credlyProfileUrl,
+      jobTitle,
+      project: projectText,
+    };
     try {
-      const result = await generativeModel.generateContent(versionsPrompt);
-      const responseText = result.response.text();
+      const cvFile = await openaiUploadFile(
+        Buffer.from(text, 'utf-8'),
+        'cv.txt'
+      );
+      const jdFile = await openaiUploadFile(
+        Buffer.from(jobDescription, 'utf-8'),
+        'job.txt'
+      );
+      let liFile;
+      if (Object.keys(linkedinData).length) {
+        liFile = await openaiUploadFile(
+          Buffer.from(JSON.stringify(linkedinData), 'utf-8'),
+          'linkedin.json'
+        );
+      }
+      let credlyFile;
+      if (credlyCertifications.length) {
+        credlyFile = await openaiUploadFile(
+          Buffer.from(JSON.stringify(credlyCertifications), 'utf-8'),
+          'credly.json'
+        );
+      }
+      const instructions =
+        'You are an expert resume writer and career coach. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, improvement_notes.';
+      const responseText = await requestEnhancedCV({
+        cvFileId: cvFile.id,
+        jobDescFileId: jdFile.id,
+        linkedInFileId: liFile?.id,
+        credlyFileId: credlyFile?.id,
+        instructions,
+      });
       const parsed = parseAiJson(responseText);
       if (parsed) {
-        const projectField =
-          parsed.project || parsed.projects || parsed.Projects;
-        projectText = Array.isArray(projectField)
-          ? projectField[0]
-          : projectField;
-        if (!projectText) {
-          projectText = await generateProjectSummary(
-            jobDescription,
-            resumeSkills,
-            jobSkills,
-            generativeModel
-          );
-        }
-        const sanitizeOptions = {
-          resumeExperience,
-          linkedinExperience,
-          resumeEducation,
-          linkedinEducation,
-          resumeCertifications,
-          linkedinCertifications,
-          credlyCertifications,
-          credlyProfileUrl,
-          jobTitle,
-          project: projectText
-        };
-        versionData.version1 = await verifyResume(
-          sanitizeGeneratedText(parsed.version1, sanitizeOptions),
-          jobDescription,
-          generativeModel,
+        versionData.version1 = sanitizeGeneratedText(
+          parsed.cv_version1,
           sanitizeOptions
         );
-        versionData.version2 = await verifyResume(
-          sanitizeGeneratedText(parsed.version2, sanitizeOptions),
-          jobDescription,
-          generativeModel,
+        versionData.version2 = sanitizeGeneratedText(
+          parsed.cv_version2,
           sanitizeOptions
         );
+        coverData.cover_letter1 = parsed.cover_letter1;
+        coverData.cover_letter2 = parsed.cover_letter2;
+        aiOriginalScore = parsed.original_score;
+        aiEnhancedScore = parsed.enhanced_score;
+        improvementNotes = parsed.improvement_notes;
       }
     } catch (e) {
-      console.error('Failed to generate resume versions:', e);
+      console.error('Failed to generate enhanced CV:', e);
     }
 
-    if (!versionData.version1 || !versionData.version2) {
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'invalid_ai_response', level: 'error', message: 'AI response invalid' });
+    if (
+      !versionData.version1 ||
+      !versionData.version2 ||
+      !coverData.cover_letter1 ||
+      !coverData.cover_letter2
+    ) {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'invalid_ai_response',
+        level: 'error',
+        message: 'AI response invalid',
+      });
       return res.status(500).json({ error: 'AI response invalid' });
     }
 
@@ -2388,24 +2350,6 @@ app.post('/api/process-cv', (req, res, next) => {
     const version2Skills = extractResumeSkills(versionData.version2);
     const match2 = calculateMatchScore(jobSkills, version2Skills);
     const bestMatch = match1.score >= match2.score ? match1 : match2;
-
-    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nOfficial Job Title: {{jobTitle}}\nKey Skills: {{jobSkills}}\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
-
-    const coverPrompt = coverTemplate
-      .replace('{{cvText}}', combinedProfile)
-      .replace('{{jdText}}', jobDescription)
-      .replace('{{jobTitle}}', jobTitle)
-      .replace('{{jobSkills}}', jobSkills.join(', '));
-
-    let coverData = {};
-    try {
-      const coverResult = await generativeModel.generateContent(coverPrompt);
-      const coverText = coverResult.response.text();
-      const parsed = parseAiJson(coverText);
-      if (parsed) coverData = parsed;
-    } catch (e) {
-      console.error('Failed to generate cover letters:', e);
-    }
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
 
@@ -2464,7 +2408,7 @@ app.post('/api/process-cv', (req, res, next) => {
         name === 'cover_letter1' || name === 'cover_letter2'
           ? relocateProfileLinks(sanitizeGeneratedText(text, options))
           : text;
-      const pdfBuffer = await generatePdf(inputText, tpl, options, generativeModel);
+      const pdfBuffer = await generatePdf(inputText, tpl, options);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -2570,7 +2514,6 @@ app.post('/api/process-cv', (req, res, next) => {
               )
           )
           .map((r) => r.skill)
-          .concat(geminiAddedSkills)
       )
     );
     res.json({
@@ -2583,6 +2526,7 @@ app.post('/api/process-cv', (req, res, next) => {
       missingSkills,
       originalTitle,
       modifiedTitle: modifiedTitle || originalTitle,
+      improvementNotes,
     });
   } catch (err) {
     console.error('processing failed', err);
@@ -2634,5 +2578,6 @@ export {
   removeGuidanceLines,
   sanitizeGeneratedText,
   relocateProfileLinks,
-  verifyResume
+  verifyResume,
+  getSecrets
 };
