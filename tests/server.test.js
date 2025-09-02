@@ -559,6 +559,73 @@ describe('/api/process-cv', () => {
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
 
+  test('final CV includes updated title, project, and skills', async () => {
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Sum'],
+              experience: ['Other exp'],
+              education: [],
+              certifications: [],
+              skills: ['Skill A'],
+              projects: [],
+              projectSnippet: 'Project bullet.',
+              latestRoleTitle: 'Revised Title',
+              latestRoleDescription: 'Did stuff',
+              mandatorySkills: ['Skill A', 'Skill B'],
+              addedSkills: ['Skill B'],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              version1:
+                'Revised Title\n# Projects\n- Project bullet.\n# Skills\n- Skill A\n- Skill B',
+              version2: 'v2',
+              project: 'Project bullet.',
+            }),
+        },
+      })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }),
+        },
+      });
+
+    const pdfTexts = [];
+    setGeneratePdf(
+      jest.fn((text) => {
+        pdfTexts.push(text);
+        return Promise.resolve(Buffer.from('pdf'));
+      })
+    );
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(200);
+    const resumeText = pdfTexts.find((t) => t.includes('Revised Title')) || '';
+    expect(resumeText).toContain('Revised Title');
+    expect(resumeText).toContain('Project bullet.');
+    expect(resumeText).toContain('Skill B');
+    expect(res.body.addedSkills).toContain('Skill B');
+    expect(res.body.modifiedTitle).toBe('Revised Title');
+    process.env.NODE_ENV = 'test';
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')

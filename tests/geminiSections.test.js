@@ -27,11 +27,15 @@ describe('rewriteSectionsWithGemini', () => {
             skills: ['Skill B'],
             projects: ['Proj C'],
             projectSnippet: 'Led project.',
+            latestRoleTitle: 'Updated Title',
+            latestRoleDescription: 'Improved desc',
+            mandatorySkills: ['Skill B', 'Skill C'],
+            addedSkills: ['Skill C'],
           }),
       },
     });
     const generativeModel = { generateContent: generateContentMock };
-    const { text } = await rewriteSectionsWithGemini(
+    const { text, modifiedTitle, addedSkills } = await rewriteSectionsWithGemini(
       'John Doe',
       sections,
       'JD text',
@@ -44,6 +48,10 @@ describe('rewriteSectionsWithGemini', () => {
     expect(text).toContain('Studied Y');
     expect(text).toContain('Cert A');
     expect(text).toContain('Skill B');
+    expect(text).toContain('Skill C');
     expect(text).toContain('Proj C');
+    expect(text).toContain('Updated Title');
+    expect(modifiedTitle).toBe('Updated Title');
+    expect(addedSkills).toEqual(['Skill C']);
   });
 });
