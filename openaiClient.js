@@ -68,7 +68,12 @@ export async function requestEnhancedCV({
   const response = await client.responses.create({
     model: 'gpt-4.1-mini',
     input: [{ role: 'user', content }],
-    response_format: { type: 'json_schema', json_schema: { name: 'cv_enhancement', schema, strict: true } },
+    text: {
+      format: {
+        type: 'json_schema',
+        json_schema: { name: 'cv_enhancement', schema, strict: true },
+      },
+    },
   });
   return response.output_text;
 }
