@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
-import { responsesCreate } from 'openai';
+import { uploadFile, requestEnhancedCV } from './mocks/openai.js';
 
 const mockS3Send = jest.fn().mockResolvedValue({});
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
@@ -13,7 +13,7 @@ jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
 jest.unstable_mockModule('@aws-sdk/client-secrets-manager', () => ({
   SecretsManagerClient: jest.fn(() => ({
     send: jest.fn().mockResolvedValue({
-      SecretString: JSON.stringify({ BUCKET: 'test-bucket', GEMINI_API_KEY: 'test-key' })
+      SecretString: JSON.stringify({ BUCKET: 'test-bucket', OPENAI_API_KEY: 'test-key' })
     })
   })),
   GetSecretValueCommand: jest.fn()
@@ -31,6 +31,11 @@ jest.unstable_mockModule('../logger.js', () => ({
   logEvent: jest.fn().mockResolvedValue(undefined)
 }));
 import { generateContentMock } from './mocks/generateContentMock.js';
+
+jest.unstable_mockModule('../openaiClient.js', () => ({
+  uploadFile,
+  requestEnhancedCV,
+}));
 
 generateContentMock
   .mockResolvedValueOnce({
@@ -86,9 +91,11 @@ setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 beforeEach(() => {
   setupDefaultDynamoMock();
-  responsesCreate.mockReset();
-  responsesCreate.mockResolvedValue({
-    output_text: JSON.stringify({
+  uploadFile.mockReset();
+  uploadFile.mockResolvedValue({ id: 'file-id' });
+  requestEnhancedCV.mockReset();
+  requestEnhancedCV.mockResolvedValue(
+    JSON.stringify({
       cv_version1: 'v1',
       cv_version2: 'v2',
       cover_letter1: 'cl1',
@@ -96,9 +103,9 @@ beforeEach(() => {
       original_score: 40,
       enhanced_score: 80,
       skills_added: ['skill1'],
-      improvement_summary: 'summary'
+      improvement_summary: 'summary',
     })
-  });
+  );
 });
 
 describe('health check', () => {
@@ -239,7 +246,7 @@ describe('/api/process-cv', () => {
   });
 
   test('malformed AI response', async () => {
-    responsesCreate.mockResolvedValueOnce({ output_text: 'not json' });
+    requestEnhancedCV.mockResolvedValueOnce('not json');
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
