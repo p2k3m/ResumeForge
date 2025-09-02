@@ -80,7 +80,8 @@ export async function requestEnhancedCV({
           format: {
             type: 'json_schema',
             name: 'EnhancedCV',
-            json_schema: { schema, strict: true },
+            schema,
+            strict: true,
           },
         },
       });
