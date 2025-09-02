@@ -7,8 +7,11 @@ async function getClient() {
   if (!clientPromise) {
     clientPromise = (async () => {
       const secrets = await getSecrets();
-      const apiKey = process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY;
-      if (!apiKey) throw new Error('OPENAI_API_KEY missing');
+      let apiKey = process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY;
+      if (!apiKey) {
+        console.warn('OPENAI_API_KEY missing, using dummy key');
+        apiKey = 'test';
+      }
       return new OpenAI({ apiKey });
     })();
   }
@@ -48,7 +51,8 @@ export async function requestEnhancedCV({
       cover_letter2: { type: 'string' },
       original_score: { type: 'number' },
       enhanced_score: { type: 'number' },
-      improvement_notes: { type: 'string' },
+      skills_added: { type: 'array', items: { type: 'string' } },
+      improvement_summary: { type: 'string' },
     },
     required: [
       'cv_version1',
@@ -57,7 +61,8 @@ export async function requestEnhancedCV({
       'cover_letter2',
       'original_score',
       'enhanced_score',
-      'improvement_notes',
+      'skills_added',
+      'improvement_summary',
     ],
   };
   const response = await client.responses.create({

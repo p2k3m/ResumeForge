@@ -2262,7 +2262,8 @@ app.post('/api/process-cv', (req, res, next) => {
     let coverData = {};
     let aiOriginalScore = 0;
     let aiEnhancedScore = 0;
-    let improvementNotes = '';
+    let aiSkillsAdded = [];
+    let improvementSummary = '';
     const sanitizeOptions = {
       resumeExperience,
       linkedinExperience,
@@ -2299,7 +2300,7 @@ app.post('/api/process-cv', (req, res, next) => {
         );
       }
       const instructions =
-        'You are an expert resume writer and career coach. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, improvement_notes.';
+        'You are an expert resume writer and career coach. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, improvement_summary.';
       const responseText = await requestEnhancedCV({
         cvFileId: cvFile.id,
         jobDescFileId: jdFile.id,
@@ -2321,7 +2322,10 @@ app.post('/api/process-cv', (req, res, next) => {
         coverData.cover_letter2 = parsed.cover_letter2;
         aiOriginalScore = parsed.original_score;
         aiEnhancedScore = parsed.enhanced_score;
-        improvementNotes = parsed.improvement_notes;
+        aiSkillsAdded = Array.isArray(parsed.skills_added)
+          ? parsed.skills_added
+          : [];
+        improvementSummary = parsed.improvement_summary;
       }
     } catch (e) {
       console.error('Failed to generate enhanced CV:', e);
@@ -2526,7 +2530,10 @@ app.post('/api/process-cv', (req, res, next) => {
       missingSkills,
       originalTitle,
       modifiedTitle: modifiedTitle || originalTitle,
-      improvementNotes,
+      aiOriginalScore,
+      aiEnhancedScore,
+      aiSkillsAdded,
+      improvementSummary,
     });
   } catch (err) {
     console.error('processing failed', err);

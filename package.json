@@ -36,7 +36,8 @@
     "transform": {},
     "moduleNameMapper": {
       "^@google/generative-ai$": "<rootDir>/tests/mocks/google-generative-ai.js",
-      "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js"
+      "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js",
+      "^openai$": "<rootDir>/tests/mocks/openai.js"
     }
   }
 }
