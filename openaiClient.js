@@ -2,7 +2,10 @@ import OpenAI from 'openai';
 import { File } from 'node:buffer';
 import { getSecrets } from './server.js';
 
-const preferredModels = ['gpt-5', 'gpt-4.1', 'gpt-4o-mini'];
+// Ordered list of supported models. Unavailable or experimental models should
+// be placed at the end or removed to avoid unnecessary `model_not_found`
+// warnings during résumé generation.
+const preferredModels = ['gpt-4.1', 'gpt-4o-mini'];
 
 let clientPromise;
 async function getClient() {
