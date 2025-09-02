@@ -69,6 +69,7 @@ export async function requestEnhancedCV({
       'skills_added',
       'improvement_summary',
     ],
+    additionalProperties: false,
   };
   let lastError;
   for (const model of preferredModels) {
