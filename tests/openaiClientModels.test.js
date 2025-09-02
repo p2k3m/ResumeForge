@@ -27,5 +27,6 @@ test('uses supported model without model_not_found warnings', async () => {
     schema: expect.any(Object),
     strict: true,
   });
+  expect(options.text.format.schema).toHaveProperty('additionalProperties', false);
   expect(warnSpy).not.toHaveBeenCalledWith(expect.stringMatching(/Model not found/));
 });
