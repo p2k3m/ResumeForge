@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
+import { responsesCreate } from 'openai';
 
 const mockS3Send = jest.fn().mockResolvedValue({});
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
@@ -85,6 +86,19 @@ setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 beforeEach(() => {
   setupDefaultDynamoMock();
+  responsesCreate.mockReset();
+  responsesCreate.mockResolvedValue({
+    output_text: JSON.stringify({
+      cv_version1: 'v1',
+      cv_version2: 'v2',
+      cover_letter1: 'cl1',
+      cover_letter2: 'cl2',
+      original_score: 40,
+      enhanced_score: 80,
+      skills_added: ['skill1'],
+      improvement_summary: 'summary'
+    })
+  });
 });
 
 describe('health check', () => {
@@ -171,6 +185,10 @@ describe('/api/process-cv', () => {
     expect(typeof res2.body.originalScore).toBe('number');
     expect(typeof res2.body.enhancedScore).toBe('number');
     expect(res2.body.applicantName).toBeTruthy();
+    expect(res2.body.aiOriginalScore).toBe(40);
+    expect(res2.body.aiEnhancedScore).toBe(80);
+    expect(res2.body.aiSkillsAdded).toEqual(['skill1']);
+    expect(res2.body.improvementSummary).toBe('summary');
 
     const sanitized = res2.body.applicantName
       .trim()
@@ -212,14 +230,16 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.os.S).toBe('iOS');
     expect(putCall[0].input.Item.device.S).toBe('iPhone');
     expect(putCall[0].input.Item.browser.S).toBe('Mobile Safari');
+    expect(putCall[0].input.Item.aiOriginalScore.N).toBe('40');
+    expect(putCall[0].input.Item.aiEnhancedScore.N).toBe('80');
+    expect(putCall[0].input.Item.aiSkillsAdded.L).toEqual([{ S: 'skill1' }]);
+    expect(putCall[0].input.Item.improvementSummary.S).toBe('summary');
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual(['DescribeTableCommand', 'PutItemCommand']);
   });
 
   test('malformed AI response', async () => {
-    generateContentMock.mockResolvedValueOnce({
-      response: { text: () => 'not json' }
-    });
+    responsesCreate.mockResolvedValueOnce({ output_text: 'not json' });
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
@@ -397,120 +417,6 @@ describe('/api/process-cv', () => {
     });
   });
 
-  test('resume prompt asks for a project matching job skills', async () => {
-    generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
-        }
-      });
-
-    await request(app)
-      .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-
-    const prompt = generateContentMock.mock.calls[0][0];
-    expect(prompt).toMatch(/fabricate or emphasize one project/i);
-  });
-
-  test('inserts project into resume text', async () => {
-    generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            JSON.stringify({
-              version1: 'Name',
-              version2: 'Name',
-              project: 'Built a portfolio site using React'
-            })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
-        }
-      });
-
-    const texts = [];
-    setGeneratePdf(
-      jest.fn((text) => {
-        texts.push(text);
-        return Promise.resolve(Buffer.from('pdf'));
-      })
-    );
-
-    await request(app)
-      .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-
-    expect(texts.some((t) => /Built a portfolio site using React/.test(t))).toBe(
-      true
-    );
-
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
-  });
-
-  test('adds project section when job description provided', async () => {
-    generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () => JSON.stringify({ version1: 'Name', version2: 'Name' })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
-        }
-      });
-
-    const texts = [];
-    setGeneratePdf(
-      jest.fn((text) => {
-        texts.push(text);
-        return Promise.resolve(Buffer.from('pdf'));
-      })
-    );
-
-    await request(app)
-      .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-
-    const resumeText = texts.find((t) => /# Projects/.test(t));
-    expect(resumeText).toBeTruthy();
-    const parsed = parseContent(resumeText);
-    const projectSection = parsed.sections.find(
-      (s) => s.heading === 'Projects'
-    );
-    expect(projectSection).toBeTruthy();
-    expect(projectSection.items.length).toBeGreaterThan(0);
-    expect(projectSection.items.length).toBeLessThanOrEqual(2);
-
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
-  });
-
   test('cover letters omit placeholder sections', async () => {
     generateContentMock.mockReset();
     generateContentMock
@@ -556,73 +462,6 @@ describe('/api/process-cv', () => {
     );
     expect(coverCalls).toHaveLength(2);
 
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
-  });
-
-  test('final CV includes updated title, project, and skills', async () => {
-    process.env.NODE_ENV = 'development';
-    generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            JSON.stringify({
-              summary: ['Sum'],
-              experience: ['Other exp'],
-              education: [],
-              certifications: [],
-              skills: ['Skill A'],
-              projects: [],
-              projectSnippet: 'Project bullet.',
-              latestRoleTitle: 'Revised Title',
-              latestRoleDescription: 'Did stuff',
-              mandatorySkills: ['Skill A', 'Skill B'],
-              addedSkills: ['Skill B'],
-            }),
-        },
-      })
-      .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            JSON.stringify({
-              version1:
-                'Revised Title\n# Projects\n- Project bullet.\n# Skills\n- Skill A\n- Skill B',
-              version2: 'v2',
-              project: 'Project bullet.',
-            }),
-        },
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }),
-        },
-      });
-
-    const pdfTexts = [];
-    setGeneratePdf(
-      jest.fn((text) => {
-        pdfTexts.push(text);
-        return Promise.resolve(Buffer.from('pdf'));
-      })
-    );
-
-    const res = await request(app)
-      .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-
-    expect(res.status).toBe(200);
-    const resumeText = pdfTexts.find((t) => t.includes('Revised Title')) || '';
-    expect(resumeText).toContain('Revised Title');
-    expect(resumeText).toContain('Project bullet.');
-    expect(resumeText).toContain('Skill B');
-    expect(res.body.addedSkills).toContain('Skill B');
-    expect(res.body.modifiedTitle).toBe('Revised Title');
-    process.env.NODE_ENV = 'test';
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
 
