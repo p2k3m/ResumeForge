@@ -20,7 +20,11 @@ test('uses supported model without model_not_found warnings', async () => {
 
   expect(createResponse).toHaveBeenCalledTimes(1);
   expect(createResponse.mock.calls[0][0].model).toBe('gpt-4.1');
-  expect(createResponse.mock.calls[0][0].text.format.name).toBe('json_schema');
-  expect(createResponse.mock.calls[0][0].text.format.type).toBeUndefined();
+  expect(createResponse.mock.calls[0][0].text.format.type).toBe('json_schema');
+  expect(createResponse.mock.calls[0][0].text.format.name).toBe('EnhancedCV');
+  expect(createResponse.mock.calls[0][0].text.format.json_schema).toMatchObject({
+    schema: expect.any(Object),
+    strict: true,
+  });
   expect(warnSpy).not.toHaveBeenCalledWith(expect.stringMatching(/Model not found/));
 });
