@@ -2522,10 +2522,10 @@ app.post('/api/process-cv', (req, res, next) => {
             new CreateTableCommand({
               TableName: tableName,
               AttributeDefinitions: [
-                { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
+                { AttributeName: 'jobId', AttributeType: 'S' }
               ],
               KeySchema: [
-                { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
+                { AttributeName: 'jobId', KeyType: 'HASH' }
               ],
               BillingMode: 'PAY_PER_REQUEST'
             })
@@ -2548,6 +2548,7 @@ app.post('/api/process-cv', (req, res, next) => {
       new PutItemCommand({
         TableName: tableName,
         Item: {
+          jobId: { S: jobId },
           linkedinProfileUrl: { S: linkedinProfileUrl },
           candidateName: { S: applicantName },
           timestamp: { S: new Date().toISOString() },
