@@ -251,6 +251,26 @@ describe('ensureRequiredSections certifications merging', () => {
     });
   });
 
+  test('deduplicates credly profile link when URLs differ only by trailing slash', () => {
+    const resumeCertifications = [
+      { name: 'Credly Profile', url: 'https://credly.com/user/' }
+    ];
+    const ensured = ensureRequiredSections(
+      { sections: [] },
+      { resumeCertifications, credlyProfileUrl: 'https://credly.com/user' }
+    );
+    const certSection = ensured.sections.find(
+      (s) => s.heading === 'Certification'
+    );
+    expect(certSection.items).toHaveLength(1);
+    const link = certSection.items[0][1];
+    expect(link).toMatchObject({
+      type: 'link',
+      text: 'Credly Profile',
+      href: 'https://credly.com/user/'
+    });
+  });
+
     test('removes certification section if no certificates remain', () => {
       const data = { sections: [{ heading: 'Certification', items: [] }] };
       const ensured = ensureRequiredSections(data, {});
