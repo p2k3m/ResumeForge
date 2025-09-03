@@ -207,7 +207,7 @@ describe('/api/process-cv', () => {
       .toLowerCase();
 
     res2.body.urls.forEach(({ type, url }) => {
-      expect(url).toContain('/first/');
+      expect(url).toContain('/sessions/');
       expect(url).toContain(`/${sanitized}/`);
       if (type.startsWith('cover_letter')) {
         expect(url).toContain('/generated/cover_letter/');
@@ -221,7 +221,7 @@ describe('/api/process-cv', () => {
       .filter((k) => k && k.endsWith('.pdf'));
     expect(pdfKeys).toHaveLength(5);
     pdfKeys.forEach((k) => {
-      expect(k).toContain('first/');
+      expect(k).toContain('sessions/');
       expect(k).toContain(`/${sanitized}/`);
     });
 

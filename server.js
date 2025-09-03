@@ -2128,7 +2128,6 @@ app.post('/api/process-cv', (req, res, next) => {
   });
 }, async (req, res) => {
   const jobId = Date.now().toString();
-  const date = new Date().toISOString().slice(0, 10);
   const s3 = new S3Client({ region });
   let bucket;
   let secrets;
@@ -2184,9 +2183,10 @@ app.post('/api/process-cv', (req, res, next) => {
       .json({ error: `Uploaded document classified as ${docType}; please upload a resume` });
   }
   const applicantName = extractName(text);
-  const sanitizedName = sanitizeName(applicantName);
+  let sanitizedName = sanitizeName(applicantName);
+  if (!sanitizedName) sanitizedName = 'candidate';
   const ext = path.extname(req.file.originalname).toLowerCase();
-  const prefix = `first/${date}/${sanitizedName}/`;
+  const prefix = `sessions/${sanitizedName}/${jobId}/`;
   const logKey = `${prefix}logs/processing.jsonl`;
 
   // Store raw file to configured bucket
