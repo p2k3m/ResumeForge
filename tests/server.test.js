@@ -96,7 +96,7 @@ beforeEach(() => {
   requestEnhancedCV.mockReset();
   requestEnhancedCV.mockResolvedValue(
     JSON.stringify({
-      cv_version1: 'v1',
+      cv_version1: 'Experienced in javascript',
       cv_version2: 'v2',
       cover_letter1: 'cl1',
       cover_letter2: 'cl2',
@@ -254,6 +254,28 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('AI response invalid');
+  });
+
+  test('returns 422 when score not improved', async () => {
+    requestEnhancedCV.mockResolvedValueOnce(
+      JSON.stringify({
+        cv_version1: 'v1',
+        cv_version2: 'v2',
+        cover_letter1: 'cl1',
+        cover_letter2: 'cl2',
+        original_score: 40,
+        enhanced_score: 40,
+        skills_added: [],
+        improvement_summary: 'none',
+      })
+    );
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe('score was not improved');
   });
 
   test('handles code-fenced JSON with extra text', async () => {
