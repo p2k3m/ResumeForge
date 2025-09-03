@@ -20,6 +20,7 @@ import mammoth from 'mammoth';
 import { getSecrets } from './config/secrets.js';
 import puppeteer from 'puppeteer';
 import JSON5 from 'json5';
+import { convertToPdf } from './lib/convertToPdf.js';
 
 async function parseUserAgent(ua) {
   const fallback = { browser: ua || '', os: ua || '', device: ua || '' };
@@ -2263,26 +2264,30 @@ app.post('/api/process-cv', (req, res, next) => {
       project: projectText,
     };
     try {
+      const cvBuffer = await convertToPdf(text);
       const cvFile = await openaiUploadFile(
-        Buffer.from(text, 'utf-8'),
-        'cv.txt'
+        cvBuffer,
+        'cv.pdf'
       );
+      const jdBuffer = await convertToPdf(jobDescription);
       const jdFile = await openaiUploadFile(
-        Buffer.from(jobDescription, 'utf-8'),
-        'job.txt'
+        jdBuffer,
+        'job.pdf'
       );
       let liFile;
       if (Object.keys(linkedinData).length) {
+        const liBuffer = await convertToPdf(linkedinData);
         liFile = await openaiUploadFile(
-          Buffer.from(JSON.stringify(linkedinData), 'utf-8'),
-          'linkedin.json'
+          liBuffer,
+          'linkedin.pdf'
         );
       }
       let credlyFile;
       if (credlyCertifications.length) {
+        const credlyBuffer = await convertToPdf(credlyCertifications);
         credlyFile = await openaiUploadFile(
-          Buffer.from(JSON.stringify(credlyCertifications), 'utf-8'),
-          'credly.json'
+          credlyBuffer,
+          'credly.pdf'
         );
       }
       const instructions =
