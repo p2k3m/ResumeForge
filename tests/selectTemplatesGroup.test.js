@@ -1,38 +1,27 @@
-import { selectTemplates, CV_TEMPLATES, CV_TEMPLATE_GROUPS } from '../server.js';
+import { selectTemplates, CV_TEMPLATES } from '../server.js';
 import fs from 'fs/promises';
 import path from 'path';
 
-describe('selectTemplates enforces ucmo and distinct groups', () => {
-  test.each(CV_TEMPLATES)('includes ucmo when both templates are %s', (tpl) => {
-    const { template1, template2 } = selectTemplates({ template1: tpl, template2: tpl });
-    expect([template1, template2]).toContain('ucmo');
-    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
-      CV_TEMPLATE_GROUPS[template2]
-    );
-    expect(template1).not.toBe(template2);
+describe('selectTemplates defaults and overrides', () => {
+  test('defaults to 2025 when no templates provided', () => {
+    const { template1, template2 } = selectTemplates();
+    expect(template1).toBe('2025');
+    expect(template2).toBe('2025');
   });
 
-  test('overrides when neither input is ucmo', () => {
+  test('overrides when templates are provided', () => {
     const { template1, template2 } = selectTemplates({
       template1: 'modern',
       template2: 'professional'
     });
-    expect([template1, template2]).toContain('ucmo');
-    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
-      CV_TEMPLATE_GROUPS[template2]
-    );
-    expect(template1).not.toBe(template2);
+    expect(template1).toBe('modern');
+    expect(template2).toBe('professional');
   });
 
-  test('random selection yields ucmo and distinct groups', () => {
-    for (let i = 0; i < 20; i++) {
-      const { template1, template2 } = selectTemplates();
-      expect([template1, template2]).toContain('ucmo');
-      expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
-        CV_TEMPLATE_GROUPS[template2]
-      );
-      expect(template1).not.toBe(template2);
-    }
+  test('single template defaults the other to 2025', () => {
+    const { template1, template2 } = selectTemplates({ template1: 'modern' });
+    expect(template1).toBe('modern');
+    expect(template2).toBe('2025');
   });
 
   test('heading styles are bold across templates', async () => {

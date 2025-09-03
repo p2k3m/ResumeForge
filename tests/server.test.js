@@ -342,7 +342,7 @@ describe('/api/process-cv', () => {
     ]);
   });
 
-  test('uses provided template and ucmo', async () => {
+  test('uses provided templates', async () => {
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
@@ -367,8 +367,8 @@ describe('/api/process-cv', () => {
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
-    expect(resumeCalls[0][1]).toBe('ucmo');
-    expect(resumeCalls[1][1]).toBe('modern');
+    expect(resumeCalls[0][1]).toBe('modern');
+    expect(resumeCalls[1][1]).toBe('professional');
   });
 
   test('uses templates array', async () => {
@@ -390,12 +390,12 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .field('templates', JSON.stringify(['ucmo', 'vibrant']))
+      .field('templates', JSON.stringify(['modern', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
-    expect(resumeCalls[0][1]).toBe('ucmo');
+    expect(resumeCalls[0][1]).toBe('modern');
     expect(resumeCalls[1][1]).toBe('vibrant');
   });
 
