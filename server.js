@@ -355,7 +355,10 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     const base = [exp.title, exp.company].filter(Boolean).join(' at ');
     return `${base}${datePart}`.trim();
   };
-  const fmtCert = (c = {}) => (c.provider ? `${c.name} - ${c.provider}` : c.name);
+  const fmtCert = (c = {}) => ({
+    text: c.provider ? `${c.name} - ${c.provider}` : c.name,
+    url: c.url || ''
+  });
 
   const summary = [sectionMap.summary || '', linkedinData.headline || '']
     .filter(Boolean)
@@ -372,13 +375,13 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
   ]
     .filter(Boolean)
     .join('\n');
-  const certifications = [
-    extractCertifications(resumeText).map(fmtCert).join('\n'),
-    extractCertifications(linkedinData.certifications || []).map(fmtCert).join('\n'),
-    (credlyCertifications || []).map(fmtCert).join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const certObjs = [
+    ...extractCertifications(resumeText),
+    ...extractCertifications(linkedinData.certifications || []),
+    ...(credlyCertifications || [])
+  ].map(fmtCert);
+  const certifications = certObjs.map((c) => c.text).join('\n');
+  const certificationUrls = certObjs.map((c) => c.url);
   const skills = [
     extractResumeSkills(resumeText).join(', '),
     (linkedinData.skills || []).join(', '),
@@ -387,7 +390,15 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     .join(', ');
   const projects = sectionMap.projects || '';
 
-  return { summary, experience, education, certifications, skills, projects };
+  return {
+    summary,
+    experience,
+    education,
+    certifications,
+    certificationUrls,
+    skills,
+    projects
+  };
 }
 
 async function rewriteSectionsWithGemini(
@@ -397,6 +408,7 @@ async function rewriteSectionsWithGemini(
   generativeModel,
   sanitizeOptions = {}
 ) {
+  const { certificationUrls = [], ...sectionData } = sections || {};
   if (!generativeModel?.generateContent) {
     const text = [name].join('\n');
     return {
@@ -410,7 +422,7 @@ async function rewriteSectionsWithGemini(
     const prompt =
       `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
       `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills.` +
-      `\nSections: ${JSON.stringify(sections)}\nJob Description: ${jobDescription}`;
+      `\nSections: ${JSON.stringify(sectionData)}\nJob Description: ${jobDescription}`;
     const result = await generativeModel.generateContent(prompt);
     const parsed = parseAiJson(result?.response?.text?.());
     if (parsed) {
@@ -437,7 +449,11 @@ async function rewriteSectionsWithGemini(
       }
 
       lines.push(...mk('Education', parsed.education));
-      lines.push(...mk('Certifications', parsed.certifications));
+      const certWithLinks = (parsed.certifications || []).map((c, i) => {
+        const url = certificationUrls[i];
+        return url ? `[${c}](${url})` : c;
+      });
+      lines.push(...mk('Certifications', certWithLinks));
       const skillsList = Array.from(
         new Set([...(parsed.skills || []), ...(parsed.mandatorySkills || [])])
       );
@@ -2014,7 +2030,10 @@ function removeGuidanceLines(text = '') {
   return text
     .split(/\r?\n/)
     .map((line) =>
-      line.replace(/\[[^\]]+\]/g, '').replace(/\s{2,}/g, ' ').trim()
+      line
+        .replace(/\[[^\]]+\](?!\()/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
     )
     .filter((line) => line && !guidanceRegex.test(line))
     .join('\n');
@@ -2041,7 +2060,13 @@ function reparseAndStringify(text, options = {}) {
     sec.items.forEach((tokens) => {
       lines.push(
         tokens
-          .map((t) => (t.type === 'bullet' ? '- ' : t.text || ''))
+          .map((t) =>
+            t.type === 'bullet'
+              ? '- '
+              : t.href
+              ? `[${t.text}](${t.href})`
+              : t.text || ''
+          )
           .join('')
       );
     });
@@ -2063,7 +2088,13 @@ function sanitizeGeneratedText(text, options = {}) {
     sec.items.forEach((tokens) => {
       lines.push(
         tokens
-          .map((t) => (t.type === 'bullet' ? '- ' : t.text || ''))
+          .map((t) =>
+            t.type === 'bullet'
+              ? '- '
+              : t.href
+              ? `[${t.text}](${t.href})`
+              : t.text || ''
+          )
           .join('')
       );
     });

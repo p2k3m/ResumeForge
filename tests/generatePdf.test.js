@@ -378,6 +378,22 @@ describe('generatePdf and parsing', () => {
     expect(raw).not.toMatch(/<a[\s>]/);
   });
 
+  test('generated PDF contains certification hyperlinks', async () => {
+    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
+    const options = {
+      resumeCertifications: [
+        {
+          name: 'Cert A',
+          provider: 'Org',
+          url: 'https://example.com/cert'
+        }
+      ]
+    };
+    const buffer = await generatePdf('John Doe', 'modern', options);
+    const raw = buffer.toString();
+    expect(raw).toContain('https://example.com/cert');
+  });
+
   test('PDFKit link annotations stop before following text', async () => {
     const launchSpy = jest
       .spyOn(puppeteer, 'launch')

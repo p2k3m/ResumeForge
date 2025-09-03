@@ -12,7 +12,9 @@ describe('rewriteSectionsWithGemini', () => {
       experience: ['Engineer at Acme (2020-2021)'],
       education: ['BS University'],
       skills: ['Node.js'],
-      certifications: [],
+      certifications: [
+        { name: 'Cert A', provider: 'Org', url: 'https://example.com/cert' },
+      ],
     };
     const sections = collectSectionText(resumeText, linkedinData, []);
     generateContentMock.mockReset();
@@ -23,7 +25,7 @@ describe('rewriteSectionsWithGemini', () => {
             summary: ['Polished summary'],
             experience: ['Did X'],
             education: ['Studied Y'],
-            certifications: ['Cert A'],
+            certifications: ['Cert A - Org'],
             skills: ['Skill B'],
             projects: ['Proj C'],
             projectSnippet: 'Led project.',
@@ -46,7 +48,7 @@ describe('rewriteSectionsWithGemini', () => {
     expect(text).toContain('Polished summary');
     expect(text).toContain('Did X');
     expect(text).toContain('Studied Y');
-    expect(text).toContain('Cert A');
+    expect(text).toContain('[Cert A - Org](https://example.com/cert)');
     expect(text).toContain('Skill B');
     expect(text).toContain('Skill C');
     expect(text).toContain('Proj C');
