@@ -757,6 +757,12 @@ function normalizeHeading(heading = '') {
   return normalized;
 }
 
+function normalizeUrl(url = '') {
+  let result = String(url).trim();
+  while (result.endsWith('/')) result = result.slice(0, -1);
+  return result;
+}
+
 
 function ensureRequiredSections(
   data,
@@ -1013,8 +1019,11 @@ function ensureRequiredSections(
   });
 
   if (credlyProfileUrl) {
+    const normalizedProfile = normalizeUrl(credlyProfileUrl);
     const alreadyHasProfile = certItems.some((item) =>
-      item.some((t) => t.type === 'link' && t.href === credlyProfileUrl)
+      item.some(
+        (t) => t.type === 'link' && normalizeUrl(t.href) === normalizedProfile
+      )
     );
     if (!alreadyHasProfile) {
       certItems.push([
