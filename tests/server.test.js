@@ -79,6 +79,8 @@ jest.unstable_mockModule('pdf-parse/lib/pdf-parse.js', () => ({
   default: jest.fn().mockResolvedValue({ text: 'Education\nExperience\nSkills' })
 }));
 
+const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
+
 jest.unstable_mockModule('mammoth', () => ({
   default: {
     extractRawText: jest.fn().mockResolvedValue({ value: 'Docx text' })
@@ -529,6 +531,17 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('linkedinProfileUrl required');
+  });
+
+  test('rejects non-resume uploads with detected type', async () => {
+    pdfParse.mockResolvedValueOnce({ text: 'Dear hiring manager, I am writing to...' });
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/cover letter/);
   });
 });
 
