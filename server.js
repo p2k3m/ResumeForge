@@ -2344,7 +2344,10 @@ app.post('/api/process-cv', (req, res, next) => {
     const match1 = calculateMatchScore(jobSkills, version1Skills);
     const version2Skills = extractResumeSkills(versionData.version2);
     const match2 = calculateMatchScore(jobSkills, version2Skills);
-    const bestMatch = match1.score >= match2.score ? match1 : match2;
+    const bestMatch = [originalMatch, match1, match2].reduce(
+      (best, current) => (current.score > best.score ? current : best),
+      originalMatch
+    );
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
 
@@ -2500,7 +2503,11 @@ app.post('/api/process-cv', (req, res, next) => {
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
     const originalScore = originalMatch.score;
-    const enhancedScore = bestMatch.score;
+    const enhancedScore = Math.max(
+      originalMatch.score,
+      match1.score,
+      match2.score
+    );
     const { table, newSkills: missingSkills } = bestMatch;
     const addedSkills = Array.from(
       new Set(
