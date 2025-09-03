@@ -30,7 +30,7 @@ describe('match messaging and skills', () => {
     expect(addedSkills).toEqual([]);
     expect(best.newSkills).toEqual(['a']);
     expect(formatMatchMessage(original.score, best.score)).toBe(
-      'Your score remains at 50%, indicating a Medium selection likelihood.'
+      'Unable to improve score'
     );
   });
 });

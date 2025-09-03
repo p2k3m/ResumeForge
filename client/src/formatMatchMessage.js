@@ -4,8 +4,5 @@ export function formatMatchMessage(originalScore = 0, enhancedScore = 0) {
   if (enhancedScore > originalScore) {
     return `Your score improved from ${originalScore}% to ${enhancedScore}%, indicating a ${likelihood} selection likelihood.`;
   }
-  if (enhancedScore < originalScore) {
-    return `Your score decreased from ${originalScore}% to ${enhancedScore}%, indicating a ${likelihood} selection likelihood.`;
-  }
-  return `Your score remains at ${enhancedScore}%, indicating a ${likelihood} selection likelihood.`;
+  return 'Unable to improve score';
 }
