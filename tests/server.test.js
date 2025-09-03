@@ -146,6 +146,15 @@ describe('/api/process-cv', () => {
       'DescribeTableCommand',
       'PutItemCommand'
     ]);
+    const createCall = mockDynamoSend.mock.calls.find(
+      ([cmd]) => cmd.__type === 'CreateTableCommand'
+    );
+    expect(createCall[0].input.AttributeDefinitions).toEqual([
+      { AttributeName: 'jobId', AttributeType: 'S' }
+    ]);
+    expect(createCall[0].input.KeySchema).toEqual([
+      { AttributeName: 'jobId', KeyType: 'HASH' }
+    ]);
 
     setupDefaultDynamoMock();
     mockDynamoSend.mockClear();
@@ -228,6 +237,7 @@ describe('/api/process-cv', () => {
     );
     expect(putCall).toBeTruthy();
     expect(putCall[0].input.TableName).toBe('ResumeForge');
+    expect(putCall[0].input.Item.jobId.S).toMatch(/\d+/);
     expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
       'http://linkedin.com/in/example'
     );
