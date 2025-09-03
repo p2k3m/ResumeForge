@@ -224,6 +224,12 @@ function App() {
             <div key={file.type} className="p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow text-center">
               <p className="mb-2 font-semibold text-purple-800">{label}</p>
               <a href={file.url} className="text-purple-700 hover:underline">Download PDF</a>
+              <p className="mt-1 text-xs text-purple-600">
+                Link expires in one hour
+                {file.expiresAt && (
+                  <> (expires at {new Date(file.expiresAt).toLocaleString()})</>
+                )}
+              </p>
             </div>
           )
         })}
