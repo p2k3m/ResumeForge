@@ -1777,10 +1777,23 @@ async function extractText(file) {
   return file.buffer.toString();
 }
 
-function isResume(text) {
-  const indicators = ['education', 'experience', 'skills'];
+function classifyDocument(text) {
   const lower = text.toLowerCase();
-  return indicators.some((i) => lower.includes(i));
+  const resumeIndicators = [
+    'education',
+    'experience',
+    'skills',
+    'work history',
+    'professional summary',
+  ];
+  const coverLetterIndicators = ['dear', 'sincerely', 'cover letter'];
+
+  const resumeScore = resumeIndicators.filter((i) => lower.includes(i)).length;
+  const coverLetterScore = coverLetterIndicators.filter((i) => lower.includes(i)).length;
+
+  if (resumeScore >= 2) return 'resume';
+  if (coverLetterScore >= 1 && resumeScore === 0) return 'cover letter';
+  return 'unknown';
 }
 
 function extractName(text) {
@@ -2164,10 +2177,11 @@ app.post('/api/process-cv', (req, res, next) => {
   }
 
   let text = await extractText(req.file);
-  if (!isResume(text)) {
+  const docType = classifyDocument(text);
+  if (docType !== 'resume') {
     return res
       .status(400)
-      .json({ error: 'It does not look like your CV, please upload a CV' });
+      .json({ error: `Uploaded document classified as ${docType}; please upload a resume` });
   }
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName);
@@ -2645,5 +2659,6 @@ export {
   removeGuidanceLines,
   sanitizeGeneratedText,
   relocateProfileLinks,
-  verifyResume
+  verifyResume,
+  classifyDocument
 };
