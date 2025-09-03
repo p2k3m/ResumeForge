@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { File } from 'node:buffer';
+import path from 'path';
 import { getSecrets } from './config/secrets.js';
 
 // Ordered list of supported models. Unavailable or experimental models should
@@ -23,9 +24,13 @@ async function getClient() {
 }
 
 export async function uploadFile(buffer, filename, purpose = 'assistants') {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext !== '.pdf') {
+    throw new Error('Only .pdf files are allowed');
+  }
   const client = await getClient();
   const file = await client.files.create({
-    file: new File([buffer], filename),
+    file: new File([buffer], filename, { type: 'application/pdf' }),
     purpose,
   });
   return file;
