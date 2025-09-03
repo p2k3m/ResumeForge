@@ -3,7 +3,8 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import axios from 'axios';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   DynamoDBClient,
   CreateTableCommand,
@@ -2477,7 +2478,8 @@ app.post('/api/process-cv', (req, res, next) => {
         })
       );
       await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
-      const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+      const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+      const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
       urls.push({ type: name, url });
     }
 
