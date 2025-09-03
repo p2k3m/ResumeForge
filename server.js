@@ -785,6 +785,52 @@ function ensureRequiredSections(
     data.sections = mergeDuplicateSections(data.sections);
     return data;
   }
+  // Assemble contact tokens for the summary/header
+  let summarySection = data.sections.find(
+    (s) => normalizeHeading(s.heading).toLowerCase() === 'summary'
+  );
+  let contactTokens;
+  if (summarySection?.items?.length) {
+    const first = summarySection.items[0];
+    const text = first
+      .map((t) => `${t.text || ''} ${t.href || ''}`)
+      .join(' ');
+    if (containsContactInfo(text)) contactTokens = [...first];
+  }
+
+  if (credlyProfileUrl) {
+    contactTokens = contactTokens || [];
+    const normalizedCredly = normalizeUrl(credlyProfileUrl);
+    const hasCredly = contactTokens.some(
+      (t) => t.type === 'link' && normalizeUrl(t.href) === normalizedCredly
+    );
+    if (!hasCredly) {
+      if (contactTokens.length)
+        contactTokens.push({ type: 'paragraph', text: ' | ' });
+      contactTokens.push({
+        type: 'link',
+        text: 'Credly Profile',
+        href: credlyProfileUrl,
+      });
+    }
+  }
+
+  if (contactTokens && contactTokens.length) {
+    if (!summarySection) {
+      summarySection = { heading: 'Summary', items: [] };
+      data.sections.unshift(summarySection);
+    }
+    summarySection.items = summarySection.items || [];
+    const first = summarySection.items[0];
+    const firstText = first
+      ? first.map((t) => `${t.text || ''} ${t.href || ''}`).join(' ')
+      : '';
+    if (first && containsContactInfo(firstText))
+      summarySection.items[0] = contactTokens;
+    else summarySection.items.unshift(contactTokens);
+    data.contactTokens = contactTokens;
+  }
+
   const required = ['Work Experience', 'Education'];
   required.forEach((heading) => {
     const normalized = normalizeHeading(heading);
