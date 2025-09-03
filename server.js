@@ -775,6 +775,7 @@ function ensureRequiredSections(
     linkedinCertifications = [],
     credlyCertifications = [],
     credlyProfileUrl,
+    linkedinProfileUrl,
     jobTitle,
     project,
     skipRequiredSections = false
@@ -811,6 +812,24 @@ function ensureRequiredSections(
         type: 'link',
         text: 'Credly Profile',
         href: credlyProfileUrl,
+      });
+    }
+  }
+
+  if (linkedinProfileUrl) {
+    contactTokens = contactTokens || [];
+    const hasLinkedIn = contactTokens.some(
+      (t) =>
+        t.type === 'link' &&
+        /linkedin\.com/i.test(normalizeUrl(t.href || ''))
+    );
+    if (!hasLinkedIn) {
+      if (contactTokens.length)
+        contactTokens.push({ type: 'paragraph', text: ' | ' });
+      contactTokens.push({
+        type: 'link',
+        text: 'LinkedIn Profile',
+        href: linkedinProfileUrl,
       });
     }
   }

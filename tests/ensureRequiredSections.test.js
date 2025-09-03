@@ -327,4 +327,23 @@ describe('ensureRequiredSections contact tokens', () => {
       ])
     );
   });
+
+  test('adds LinkedIn profile link to contact tokens', () => {
+    const data = {
+      sections: [{ heading: 'Summary', items: [parseLine('john@example.com')] }]
+    };
+    const ensured = ensureRequiredSections(data, {
+      linkedinProfileUrl: 'https://linkedin.com/in/user'
+    });
+    const summary = ensured.sections.find((s) => s.heading === 'Summary');
+    const tokens = summary.items[0];
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          href: 'https://linkedin.com/in/user'
+        }),
+      ])
+    );
+  });
 });
