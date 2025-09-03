@@ -38,6 +38,7 @@
     "moduleNameMapper": {
       "^@google/generative-ai$": "<rootDir>/tests/mocks/google-generative-ai.js",
       "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js",
+      "^@aws-sdk/s3-request-presigner$": "<rootDir>/tests/mocks/aws-sdk-s3-request-presigner.js",
       "^openai$": "<rootDir>/tests/mocks/openai.js"
     }
   }

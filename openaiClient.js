@@ -43,6 +43,9 @@ export async function requestEnhancedCV({
   credlyFileId,
   instructions,
 }) {
+  if (typeof instructions !== 'string' || !instructions.trim()) {
+    throw new Error('instructions must be a non-empty string');
+  }
   const client = await getClient();
   const content = [
     { type: 'input_text', text: instructions },
