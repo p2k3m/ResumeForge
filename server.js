@@ -1924,16 +1924,22 @@ function extractJsonBlock(text) {
   return null;
 }
 
+function snippet(text, maxLength = 200) {
+  if (!text) return '';
+  const clean = String(text).replace(/\s+/g, ' ').trim();
+  return clean.length > maxLength ? clean.slice(0, maxLength) + '...' : clean;
+}
+
 function parseAiJson(text) {
   const block = extractJsonBlock(text);
   if (!block) {
-    console.error('No JSON object found in AI response:', text);
+    console.error('No JSON object found in AI response:', snippet(text));
     return null;
   }
   try {
     return JSON5.parse(block);
   } catch (e) {
-    console.error('Failed to parse AI JSON:', text);
+    console.error('Failed to parse AI JSON:', snippet(text));
     return null;
   }
 }
@@ -2546,6 +2552,7 @@ export {
   setGeneratePdf,
   parseContent,
   parseLine,
+  parseAiJson,
   ensureRequiredSections,
   extractExperience,
   extractEducation,
