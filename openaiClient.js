@@ -12,10 +12,9 @@ async function getClient() {
   if (!clientPromise) {
     clientPromise = (async () => {
       const secrets = await getSecrets();
-      let apiKey = process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY;
+      const apiKey = process.env.OPENAI_API_KEY || secrets.OPENAI_API_KEY;
       if (!apiKey) {
-        console.warn('OPENAI_API_KEY missing, using dummy key');
-        apiKey = 'test';
+        throw new Error('OPENAI_API_KEY is required');
       }
       return new OpenAI({ apiKey });
     })();

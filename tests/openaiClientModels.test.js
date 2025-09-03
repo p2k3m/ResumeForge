@@ -1,5 +1,8 @@
 import { jest } from '@jest/globals';
 
+// Ensure tests don't depend on a real environment key
+delete process.env.OPENAI_API_KEY;
+
 // Mock getSecrets to avoid loading full server and external services
 jest.unstable_mockModule('../config/secrets.js', () => ({
   getSecrets: jest.fn().mockResolvedValue({ OPENAI_API_KEY: 'test-key' }),
