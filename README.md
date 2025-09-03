@@ -106,8 +106,8 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
 ```json
 {
   "urls": [
-    { "type": "cover_letter1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cover_letter/cover_letter1.pdf" },
-    { "type": "version1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cv/Jane_Doe.pdf" }
+    { "type": "cover_letter1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/Jane_Doe/<id>/generated/cover_letter/cover_letter1.pdf" },
+    { "type": "version1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/Jane_Doe/<id>/generated/cv/Jane_Doe.pdf" }
   ],
   "applicantName": "Jane Doe",
   "originalScore": 50,
@@ -124,10 +124,10 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `sessions/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
+S3 keys follow the pattern `sessions/<name>/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
 
 ```
-sessions/<id>/generated/
+sessions/Jane_Doe/<id>/generated/
 ├── cover_letter/
 │   ├── cover_letter1.pdf
 │   └── cover_letter2.pdf
