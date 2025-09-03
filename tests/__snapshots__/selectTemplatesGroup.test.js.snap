@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`selectTemplates enforces ucmo and distinct groups heading styles are bold across templates 1`] = `
+exports[`selectTemplates defaults and overrides heading styles are bold across templates 1`] = `
 {
   "2025": "h2 {\n    font-size: 1.5rem;\n    font-weight: 700;\n    margin-top: 2.5rem;\n    margin-bottom: 0.75rem;\n    color: var(--accent);\n    border-bottom: 2px solid var(--accent);\n    padding-bottom: 0.25rem;\n  }",
   "modern": "h2 { font-size: 20px; margin: 24px 0 12px; border-bottom: 1px solid #2a9d8f; padding-bottom: 4px; font-weight: 700; }",

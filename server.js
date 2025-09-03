@@ -147,34 +147,9 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  // Always include 'ucmo' and ensure the other template is from a different group
-  const UCMO_GROUP = CV_TEMPLATE_GROUPS['ucmo'];
-  const pickOther = (exclude = []) => {
-    const candidates = CV_TEMPLATES.filter(
-      (t) =>
-        t !== 'ucmo' &&
-        !exclude.includes(t) &&
-        CV_TEMPLATE_GROUPS[t] !== UCMO_GROUP
-    );
-    return candidates[Math.floor(Math.random() * candidates.length)] || 'modern';
-  };
-
-  const userOther = [template1, template2].find(
-    (t) => t && t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== UCMO_GROUP
-  );
-
-  if (template1 === 'ucmo') {
-    template2 = userOther || pickOther([template1]);
-  } else if (template2 === 'ucmo') {
-    template1 = userOther || pickOther([template2]);
-  } else {
-    template1 = 'ucmo';
-    template2 = userOther || pickOther([template1]);
-  }
-
-  if (template1 === template2) {
-    template2 = pickOther([template1]);
-  }
+  // Default CV templates to '2025' unless explicitly provided
+  if (!template1) template1 = '2025';
+  if (!template2) template2 = '2025';
 
   if (!coverTemplate1 && !coverTemplate2) {
     coverTemplate1 = CL_TEMPLATES[0];

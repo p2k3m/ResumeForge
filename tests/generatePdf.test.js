@@ -4,9 +4,7 @@ import {
   parseContent,
   CV_TEMPLATES,
   CL_TEMPLATES,
-  selectTemplates,
-  CONTRASTING_PAIRS,
-  CV_TEMPLATE_GROUPS
+  selectTemplates
 } from '../server.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
@@ -102,29 +100,26 @@ describe('generatePdf and parsing', () => {
     }
   );
 
-  test('selectTemplates defaults to ucmo and contrasting style', () => {
+  test('selectTemplates defaults to 2025 templates', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
-    expect(template1).toBe('ucmo');
-    expect(template2).not.toBe('ucmo');
-    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
+    expect(template1).toBe('2025');
+    expect(template2).toBe('2025');
+    expect(CV_TEMPLATES).toContain(template1);
     expect(CV_TEMPLATES).toContain(template2);
     expect(coverTemplate1).not.toBe(coverTemplate2);
     expect(CL_TEMPLATES).toContain(coverTemplate1);
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
-  test('providing one template still includes ucmo', () => {
+  test('providing one template defaults the other to 2025', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates({
       template1: CV_TEMPLATES[0],
       coverTemplate1: CL_TEMPLATES[0]
     });
-    expect([template1, template2]).toContain('ucmo');
-    const other = template1 === 'ucmo' ? template2 : template1;
-    expect(other).toBe(CV_TEMPLATES[0]);
-    expect(CV_TEMPLATE_GROUPS[other]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
+    expect(template1).toBe(CV_TEMPLATES[0]);
+    expect(template2).toBe('2025');
     expect(coverTemplate1).toBe(CL_TEMPLATES[0]);
     expect(coverTemplate2).not.toBe(coverTemplate1);
-    expect(CV_TEMPLATES).toContain(template1);
     expect(CV_TEMPLATES).toContain(template2);
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
