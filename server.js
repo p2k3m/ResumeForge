@@ -2258,6 +2258,7 @@ app.post('/api/process-cv', (req, res, next) => {
     } = analyzeJobDescription(jobDescriptionHtml);
     const resumeSkills = extractResumeSkills(text);
     const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
+    const originalScore = originalMatch.score;
 
     let linkedinData = {};
     try {
@@ -2422,7 +2423,8 @@ app.post('/api/process-cv', (req, res, next) => {
       (best, current) => (current.score > best.score ? current : best),
       match1
     );
-    if (bestImproved.score <= originalMatch.score && originalMatch.score > 0) {
+    const enhancedScore = bestImproved.score;
+    if (enhancedScore <= originalScore) {
       await logEvent({
         s3,
         bucket,
@@ -2430,7 +2432,7 @@ app.post('/api/process-cv', (req, res, next) => {
         jobId,
         event: 'unable_to_improve'
       });
-      return res.status(200).json({ error: 'unable to improve' });
+      return res.status(422).json({ error: 'score was not improved' });
     }
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
@@ -2586,8 +2588,6 @@ app.post('/api/process-cv', (req, res, next) => {
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
-    const originalScore = originalMatch.score;
-    const enhancedScore = bestImproved.score;
     const { table, newSkills: missingSkills } = bestImproved;
     const addedSkills = Array.from(
       new Set(
