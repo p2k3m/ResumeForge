@@ -295,15 +295,36 @@ describe('ensureRequiredSections certifications merging', () => {
         (s) => s.heading === 'Certification'
       );
       expect(certSection.items).toHaveLength(5);
-      const texts = certSection.items.map((tokens) => tokens[1].text);
-      expect(texts.join(' ')).not.toMatch(/Cert6/);
-      expect(texts[0]).toContain('Cert1');
-      expect(texts[4]).toContain('Cert5');
-      certSection.items.forEach((tokens, idx) => {
-        expect(tokens[0].type).toBe('bullet');
-        const link = tokens[1];
-        expect(link.type).toBe('link');
-        expect(link.href).toBe(resumeCertifications[idx].url);
-      });
+    const texts = certSection.items.map((tokens) => tokens[1].text);
+    expect(texts.join(' ')).not.toMatch(/Cert6/);
+    expect(texts[0]).toContain('Cert1');
+    expect(texts[4]).toContain('Cert5');
+    certSection.items.forEach((tokens, idx) => {
+      expect(tokens[0].type).toBe('bullet');
+      const link = tokens[1];
+      expect(link.type).toBe('link');
+      expect(link.href).toBe(resumeCertifications[idx].url);
     });
   });
+});
+
+describe('ensureRequiredSections contact tokens', () => {
+  test('adds Credly profile link to contact tokens', () => {
+    const data = {
+      sections: [{ heading: 'Summary', items: [parseLine('john@example.com')] }]
+    };
+    const ensured = ensureRequiredSections(data, {
+      credlyProfileUrl: 'https://credly.com/user'
+    });
+    const summary = ensured.sections.find((s) => s.heading === 'Summary');
+    const tokens = summary.items[0];
+    expect(tokens).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          href: 'https://credly.com/user'
+        }),
+      ])
+    );
+  });
+});
