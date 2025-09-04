@@ -951,9 +951,6 @@ function ensureRequiredSections(
         const bDate = Date.parse(b.endDate || b.startDate || '');
         return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
       });
-      if (jobTitle && additions.length && existing.length === 0) {
-        additions[0].title = jobTitle;
-      }
 
       const format = (exp) => {
         const datePart =
@@ -983,6 +980,19 @@ function ensureRequiredSections(
         const bDate = Date.parse(b.exp.endDate || b.exp.startDate || '');
         return (isNaN(bDate) ? 0 : bDate) - (isNaN(aDate) ? 0 : aDate);
       });
+
+      if (jobTitle && all.length) {
+        all[0].exp.title = jobTitle;
+        const key = [
+          all[0].exp.company || '',
+          all[0].exp.title || '',
+          all[0].exp.startDate || '',
+          all[0].exp.endDate || ''
+        ]
+          .map((s) => s.toLowerCase())
+          .join('|');
+        all[0] = toTokens(all[0].exp, key);
+      }
 
       if (all.length || unparsedItems.length) {
         section.items = [
