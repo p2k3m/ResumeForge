@@ -12,7 +12,8 @@ The server relies on the following environment variables:
   "SECRET_ID": "your-secret-id",
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
-  "S3_BUCKET": "resume-forge-data"
+  "S3_BUCKET": "resume-forge-data",
+  "REQUEST_TIMEOUT_MS": "5000"
 }
 ```
 
@@ -22,6 +23,8 @@ JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the 
 
 `S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
 `resume-forge-data`, which is suitable for local development.
+
+`REQUEST_TIMEOUT_MS` sets the timeout in milliseconds for outbound HTTP requests when fetching external profiles and job descriptions. It defaults to `5000`.
 
 `GEMINI_API_KEY` supplies the Google Gemini API key. Set it directly in your environment for development or include it in the
 secret.

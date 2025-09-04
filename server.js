@@ -184,12 +184,13 @@ function selectTemplates({
 }
 
 const region = process.env.AWS_REGION || 'ap-south-1';
+const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
 
 async function fetchLinkedInProfile(url) {
   const valid = validateUrl(url, ['linkedin.com']);
   if (!valid) throw new Error('Invalid LinkedIn URL');
   try {
-    const { data: html } = await axios.get(valid);
+    const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
     const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
     const headlineMatch =
       html.match(/<title>([^<]*)<\/title>/i) || html.match(/"headline":"(.*?)"/i);
@@ -270,7 +271,7 @@ async function fetchCredlyProfile(url) {
   const valid = validateUrl(url, ['credly.com']);
   if (!valid) throw new Error('Invalid Credly URL');
   try {
-    const { data: html } = await axios.get(valid);
+    const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
     const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
     const badgeRegex = /<div[^>]*class=["'][^"']*badge[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
     const badges = [];
@@ -2316,7 +2317,9 @@ app.post('/api/process-cv', (req, res, next) => {
       message: `template1=${template1}; template2=${template2}`
     });
 
-    const { data: jobDescriptionHtml } = await axios.get(jobDescriptionUrl);
+    const { data: jobDescriptionHtml } = await axios.get(jobDescriptionUrl, {
+      timeout: REQUEST_TIMEOUT_MS
+    });
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
     const {
       title: jobTitle,
