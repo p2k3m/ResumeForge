@@ -1,5 +1,10 @@
 import { jest } from '@jest/globals';
-import { CV_TEMPLATES, CL_TEMPLATES, selectTemplates } from '../server.js';
+import {
+  CV_TEMPLATES,
+  CL_TEMPLATES,
+  selectTemplates,
+  CV_TEMPLATE_GROUPS
+} from '../server.js';
 import { generatePdf } from '../services/generatePdf.js';
 import { parseContent } from '../services/parseContent.js';
 import puppeteer from 'puppeteer';
@@ -96,24 +101,29 @@ describe('generatePdf and parsing', () => {
     }
   );
 
-  test('selectTemplates defaults to 2025 templates', () => {
+  test('selectTemplates returns contrasting templates by default', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
-    expect(template1).toBe('2025');
-    expect(template2).toBe('2025');
     expect(CV_TEMPLATES).toContain(template1);
     expect(CV_TEMPLATES).toContain(template2);
+    expect(template1).not.toBe(template2);
+    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
+      CV_TEMPLATE_GROUPS[template2]
+    );
     expect(coverTemplate1).not.toBe(coverTemplate2);
     expect(CL_TEMPLATES).toContain(coverTemplate1);
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
-  test('providing one template defaults the other to 2025', () => {
+  test('providing one template yields a contrasting default', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates({
       template1: CV_TEMPLATES[0],
       coverTemplate1: CL_TEMPLATES[0]
     });
     expect(template1).toBe(CV_TEMPLATES[0]);
-    expect(template2).toBe('2025');
+    expect(template2).not.toBe(template1);
+    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
+      CV_TEMPLATE_GROUPS[template2]
+    );
     expect(coverTemplate1).toBe(CL_TEMPLATES[0]);
     expect(coverTemplate2).not.toBe(coverTemplate1);
     expect(CV_TEMPLATES).toContain(template2);
