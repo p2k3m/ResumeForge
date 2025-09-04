@@ -31,6 +31,7 @@ jest.unstable_mockModule('../logger.js', () => ({
   logEvent: jest.fn().mockResolvedValue(undefined)
 }));
 import { generateContentMock } from './mocks/generateContentMock.js';
+import { parseContent } from '../services/parseContent.js';
 
 jest.unstable_mockModule('../openaiClient.js', () => ({
   uploadFile,
@@ -88,7 +89,7 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 const serverModule = await import('../server.js');
-const { default: app, extractText, setGeneratePdf, parseContent } = serverModule;
+const { default: app, extractText, setGeneratePdf } = serverModule;
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 beforeEach(() => {

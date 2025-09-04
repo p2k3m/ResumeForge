@@ -1,8 +1,5 @@
-import {
-  sanitizeGeneratedText,
-  parseContent,
-  ensureRequiredSections
-} from '../server.js';
+import { sanitizeGeneratedText, ensureRequiredSections } from '../server.js';
+import { parseContent } from '../services/parseContent.js';
 
 describe('sanitizeGeneratedText', () => {
   test('removes bracketed guidance lines', () => {
