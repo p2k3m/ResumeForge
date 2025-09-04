@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { generatePdf } from '../server.js';
+import { generatePdf } from '../services/generatePdf.js';
 import { parseContent } from '../services/parseContent.js';
 import puppeteer from 'puppeteer';
 import fs from 'fs/promises';
