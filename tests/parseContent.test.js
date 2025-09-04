@@ -141,6 +141,23 @@ describe('parseContent bare heading detection', () => {
     expect(headings).toEqual(['Work Experience', 'Education', 'Skills']);
     expect(data.sections.find((s) => s.heading === 'Summary')).toBeUndefined();
   });
+
+  test('recognizes Certifications heading without hashes', () => {
+    const input = [
+      'John Doe',
+      'Certifications',
+      'AWS Certified Developer',
+      'Skills',
+      'JavaScript'
+    ].join('\n');
+    const data = parseContent(input, { skipRequiredSections: true });
+    const cert = data.sections.find((s) => s.heading === 'Certification');
+    expect(cert).toBeTruthy();
+    const items = cert.items.map((tokens) =>
+      tokens.filter((t) => t.text).map((t) => t.text).join('')
+    );
+    expect(items).toEqual(['AWS Certified Developer']);
+  });
 });
 
 describe('parseContent experience fallbacks', () => {
