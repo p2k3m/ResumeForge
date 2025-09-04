@@ -88,6 +88,37 @@ describe('ensureRequiredSections work experience merging', () => {
       );
     expect(placeholders).not.toContain('Information not provided');
   });
+
+  test('overwrites latest existing role title with jobTitle', () => {
+    const latest = parseLine('- Dev at Beta (2022 – 2023)');
+    const older = parseLine('- Engineer at Acme (2020 – 2022)');
+    const data = {
+      sections: [{ heading: 'Work Experience', items: [latest, older] }]
+    };
+    const ensured = ensureRequiredSections(data, { jobTitle: 'Senior Dev' });
+    const lines = ensured.sections[0].items.map((tokens) =>
+      tokens.map((t) => t.text || '').join('').trim()
+    );
+    expect(lines[0]).toBe('Senior Dev at Beta (2022 – 2023)');
+    expect(lines[1]).toBe('Engineer at Acme (2020 – 2022)');
+  });
+
+  test('overwrites latest merged role title with jobTitle', () => {
+    const existingToken = parseLine('- Engineer at Acme (2020 – 2021)');
+    const data = { sections: [{ heading: 'Work Experience', items: [existingToken] }] };
+    const resumeExperience = [
+      { company: 'Beta', title: 'Developer', startDate: '2022', endDate: '2023' }
+    ];
+    const ensured = ensureRequiredSections(data, {
+      resumeExperience,
+      jobTitle: 'Lead Developer'
+    });
+    const lines = ensured.sections[0].items.map((tokens) =>
+      tokens.map((t) => t.text || '').join('').trim()
+    );
+    expect(lines[0]).toBe('Lead Developer at Beta (2022 – 2023)');
+    expect(lines[1]).toBe('Engineer at Acme (2020 – 2021)');
+  });
 });
 
 describe('ensureRequiredSections certifications merging', () => {
