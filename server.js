@@ -175,9 +175,28 @@ function selectTemplates({
     if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
     if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
   }
-  // Default CV templates to '2025' unless explicitly provided
-  if (!template1) template1 = '2025';
-  if (!template2) template2 = '2025';
+  // Helper to pick a contrasting template based on group
+  const pickContrasting = (tpl) => {
+    const group = CV_TEMPLATE_GROUPS[tpl];
+    const options = CV_TEMPLATES.filter(
+      (t) => t !== tpl && CV_TEMPLATE_GROUPS[t] !== group
+    );
+    return options[Math.floor(Math.random() * options.length)] || tpl;
+  };
+
+  if (!template1 && !template2) {
+    [template1, template2] =
+      CONTRASTING_PAIRS[Math.floor(Math.random() * CONTRASTING_PAIRS.length)];
+  } else {
+    if (!template1) template1 = '2025';
+    if (!template2) template2 = pickContrasting(template1);
+    if (
+      template1 === template2 ||
+      CV_TEMPLATE_GROUPS[template1] === CV_TEMPLATE_GROUPS[template2]
+    ) {
+      template2 = pickContrasting(template1);
+    }
+  }
 
   if (!coverTemplate1 && !coverTemplate2) {
     coverTemplate1 = CL_TEMPLATES[0];

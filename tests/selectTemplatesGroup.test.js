@@ -1,12 +1,16 @@
-import { selectTemplates, CV_TEMPLATES } from '../server.js';
+import { selectTemplates, CV_TEMPLATES, CV_TEMPLATE_GROUPS } from '../server.js';
 import fs from 'fs/promises';
 import path from 'path';
 
 describe('selectTemplates defaults and overrides', () => {
-  test('defaults to 2025 when no templates provided', () => {
+  test('defaults to contrasting templates when none provided', () => {
     const { template1, template2 } = selectTemplates();
-    expect(template1).toBe('2025');
-    expect(template2).toBe('2025');
+    expect(CV_TEMPLATES).toContain(template1);
+    expect(CV_TEMPLATES).toContain(template2);
+    expect(template1).not.toBe(template2);
+    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
+      CV_TEMPLATE_GROUPS[template2]
+    );
   });
 
   test('overrides when templates are provided', () => {
@@ -18,10 +22,13 @@ describe('selectTemplates defaults and overrides', () => {
     expect(template2).toBe('professional');
   });
 
-  test('single template defaults the other to 2025', () => {
+  test('single template defaults the other to a contrasting template', () => {
     const { template1, template2 } = selectTemplates({ template1: 'modern' });
     expect(template1).toBe('modern');
-    expect(template2).toBe('2025');
+    expect(template2).not.toBe('modern');
+    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
+      CV_TEMPLATE_GROUPS[template2]
+    );
   });
 
   test('heading styles are bold across templates', async () => {
