@@ -22,7 +22,7 @@ describe('fetchLinkedInProfile certifications', () => {
       </section>
     `;
     mockGet.mockResolvedValueOnce({ data: html });
-    const profile = await fetchLinkedInProfile('http://example.com');
+    const profile = await fetchLinkedInProfile('https://linkedin.com/in/example');
     expect(profile.certifications).toEqual([
       {
         name: 'AWS Certified Developer',
@@ -48,7 +48,7 @@ describe('fetchLinkedInProfile certifications', () => {
       </section>
     `;
     mockGet.mockResolvedValueOnce({ data: html });
-    const profile = await fetchLinkedInProfile('http://example.com');
+    const profile = await fetchLinkedInProfile('https://linkedin.com/in/example');
     expect(profile.certifications).toEqual([
       { name: '', provider: '', url: 'https://credly.com/aws-dev' }
     ]);

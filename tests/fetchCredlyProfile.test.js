@@ -25,7 +25,7 @@ describe('fetchCredlyProfile', () => {
       </div>
     `;
     mockGet.mockResolvedValueOnce({ data: html });
-    const certs = await fetchCredlyProfile('http://example.com');
+    const certs = await fetchCredlyProfile('https://credly.com/user');
     expect(certs).toEqual([
       {
         name: 'AWS Certified Developer',
@@ -45,7 +45,7 @@ describe('fetchCredlyProfile', () => {
       </div>
     `;
     mockGet.mockResolvedValueOnce({ data: html });
-    const certs = await fetchCredlyProfile('http://example.com');
+    const certs = await fetchCredlyProfile('https://credly.com/user');
     const ensured = ensureRequiredSections(
       { sections: [] },
       {
