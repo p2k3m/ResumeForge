@@ -320,6 +320,22 @@ export default function registerProcessCv(app) {
           improvementSummary = parsed.improvement_summary;
         }
       } catch (e) {
+        const responseMeta = e.response
+          ? `; status=${e.response.status}; data=${JSON.stringify(e.response.data)}`
+          : '';
+        try {
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'ai_generation_failed',
+            level: 'error',
+            message: `Failed to generate enhanced CV: ${e.message}${responseMeta}`,
+          });
+        } catch (logErr) {
+          console.error('failed to log ai generation error', logErr);
+        }
         console.error('Failed to generate enhanced CV:', e);
       }
 
