@@ -356,7 +356,14 @@ export default function registerProcessCv(app) {
           bucket,
           key: logKey,
           jobId,
-          event: 'unable_to_improve'
+          event: 'unable_to_improve',
+          message: `originalScore=${originalScore}, match1Score=${match1.score}, match2Score=${match2.score}, aiEnhancedScore=${aiEnhancedScore}`
+        });
+        console.error('Unable to improve score', {
+          originalScore,
+          match1Score: match1.score,
+          match2Score: match2.score,
+          aiEnhancedScore
         });
         return res.status(422).json({ error: 'score was not improved' });
       }
