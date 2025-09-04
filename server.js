@@ -1445,7 +1445,7 @@ function parseContent(text, options = {}) {
         continue;
       }
       const plainHeadingMatch = trimmed.match(
-        /^((?:work|professional)\s*experience|education|skills|projects|certification|summary)$/i
+        /^((?:work|professional)\s*experience|education|skills|projects|certifications?|summary)$/i
       );
       if (plainHeadingMatch) {
         if (current.length) currentSection.items.push(current);
