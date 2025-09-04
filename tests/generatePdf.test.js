@@ -1,11 +1,11 @@
 import { jest } from '@jest/globals';
 import {
   generatePdf,
-  parseContent,
   CV_TEMPLATES,
   CL_TEMPLATES,
   selectTemplates
 } from '../server.js';
+import { parseContent } from '../services/parseContent.js';
 import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import zlib from 'zlib';

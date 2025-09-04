@@ -1,4 +1,4 @@
-import { parseContent } from '../../server.js';
+import { parseContent } from '../../services/parseContent.js';
 import Handlebars from '../../lib/handlebars.js';
 import fs from 'fs/promises';
 import path from 'path';
