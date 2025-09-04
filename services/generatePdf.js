@@ -3,6 +3,7 @@ import fsSync from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
 import Handlebars from '../lib/handlebars.js';
+import fontkit from 'fontkit';
 import {
   parseContent,
   mergeDuplicateSections,
@@ -180,40 +181,66 @@ export async function generatePdf(
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
+      const fontPaths = {};
+
+      function registerFontSafe(name, p) {
+        if (!fsSync.existsSync(p)) {
+          console.warn('Font file missing:', p);
+          return false;
+        }
+        try {
+          fontkit.openSync(p); // Validate font file
+        } catch (err) {
+          console.warn(`Invalid font file ${p}:`, err.message);
+          return false;
+        }
+        try {
+          doc.registerFont(name, p);
+          fontPaths[name] = p;
+          return true;
+        } catch (err) {
+          console.warn(`Failed to register font ${name} (${p}):`, err.message);
+          return false;
+        }
+      }
+
       doc.on('data', (d) => buffers.push(d));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
+      doc.on('warning', (w) => {
+        const currentName = doc._font?.name;
+        const fp = currentName && fontPaths[currentName];
+        if (fp) console.warn('PDFKit warning:', w, 'Font file:', fp);
+        else console.warn('PDFKit warning:', w, 'Font:', currentName || 'unknown');
+      });
+
       // Optional font embedding for Roboto/Helvetica families if available
       try {
         const fontsDir = path.resolve('fonts');
         const rReg = path.join(fontsDir, 'Roboto-Regular.ttf');
         const rBold = path.join(fontsDir, 'Roboto-Bold.ttf');
         const rItalic = path.join(fontsDir, 'Roboto-Italic.ttf');
-        const haveRoboto = [rReg, rBold, rItalic].every((p) => fsSync.existsSync(p));
+        const haveRoboto = [
+          ['Roboto', rReg],
+          ['Roboto-Bold', rBold],
+          ['Roboto-Italic', rItalic]
+        ].map(([name, p]) => registerFontSafe(name, p)).every(Boolean);
         if (haveRoboto) {
-          doc.registerFont('Roboto', rReg);
-          doc.registerFont('Roboto-Bold', rBold);
-          doc.registerFont('Roboto-Italic', rItalic);
           ['modern', 'vibrant'].forEach((tpl) => {
             styleMap[tpl].font = 'Roboto';
             styleMap[tpl].bold = 'Roboto-Bold';
             styleMap[tpl].italic = 'Roboto-Italic';
           });
-        } else {
-          const missing = [rReg, rBold, rItalic].filter((p) => !fsSync.existsSync(p));
-          if (missing.length) console.warn('Roboto fonts missing:', missing.map((m) => path.basename(m)));
         }
 
         const hReg = path.join(fontsDir, 'Helvetica.ttf');
         const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
         const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
         [
-          [hReg, 'Helvetica'],
-          [hBold, 'Helvetica-Bold'],
-          [hItalic, 'Helvetica-Oblique']
-        ].forEach(([p, name]) => {
-          if (fsSync.existsSync(p)) doc.registerFont(name, p);
-        });
+          ['Helvetica', hReg],
+          ['Helvetica-Bold', hBold],
+          ['Helvetica-Oblique', hItalic]
+        ].forEach(([name, p]) => registerFontSafe(name, p));
       } catch (err) {
         console.warn('Font registration error', err);
       }
