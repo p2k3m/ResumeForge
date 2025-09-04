@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
+import net from 'net';
 import axios from 'axios';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -48,16 +49,30 @@ async function parseUserAgent(ua) {
   }
 }
 
-function validateUrl(input, allowedDomains = []) {
+const allowedDomains = ['indeed.com', 'linkedin.com'];
+
+function validateUrl(input, whitelist = []) {
   try {
     const url = new URL(String(input));
     if (url.protocol !== 'https:') return null;
     const host = url.hostname.toLowerCase();
     if (
-      allowedDomains.length &&
-      !allowedDomains.some(
-        (d) => host === d || host.endsWith(`.${d}`)
-      )
+      net.isIP(host) ||
+      host === 'localhost' ||
+      /^10\./.test(host) ||
+      /^127\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
+      /^fc00:/i.test(host) ||
+      /^fd00:/i.test(host) ||
+      /^fe80:/i.test(host) ||
+      host === '::1'
+    )
+      return null;
+    if (
+      whitelist.length &&
+      !whitelist.some((d) => host === d || host.endsWith(`.${d}`))
     )
       return null;
     return url.toString();
@@ -868,6 +883,7 @@ export {
   uploadResume,
   parseUserAgent,
   validateUrl,
+  allowedDomains,
   extractName,
   sanitizeName,
   region,
