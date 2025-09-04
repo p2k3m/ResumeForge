@@ -138,7 +138,7 @@ describe('/api/process-cv', () => {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
       )
       .set('X-Forwarded-For', '203.0.113.42')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res1.status).toBe(200);
@@ -192,7 +192,7 @@ describe('/api/process-cv', () => {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
       )
       .set('X-Forwarded-For', '203.0.113.42')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res2.status).toBe(200);
@@ -262,7 +262,7 @@ describe('/api/process-cv', () => {
     requestEnhancedCV.mockResolvedValueOnce('not json');
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(500);
@@ -284,7 +284,7 @@ describe('/api/process-cv', () => {
     );
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(422);
@@ -311,7 +311,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
@@ -343,7 +343,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
@@ -372,7 +372,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('template1', 'modern')
       .field('template2', 'professional')
@@ -401,7 +401,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('templates', JSON.stringify(['modern', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -438,7 +438,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -494,7 +494,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -509,7 +509,7 @@ describe('/api/process-cv', () => {
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('resume file required');
@@ -518,7 +518,7 @@ describe('/api/process-cv', () => {
   test('unsupported file type', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
@@ -537,7 +537,7 @@ describe('/api/process-cv', () => {
   test('missing linkedin profile URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('linkedinProfileUrl required');
@@ -546,7 +546,7 @@ describe('/api/process-cv', () => {
   test('invalid linkedin profile URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
@@ -557,7 +557,7 @@ describe('/api/process-cv', () => {
     pdfParse.mockResolvedValueOnce({ text: 'Dear hiring manager, I am writing to...' });
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);

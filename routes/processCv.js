@@ -17,6 +17,7 @@ import {
   uploadResume,
   parseUserAgent,
   validateUrl,
+  allowedDomains,
   extractText,
   classifyDocument,
   extractName,
@@ -94,7 +95,7 @@ export default function registerProcessCv(app) {
     if (!linkedinProfileUrl) {
       return res.status(400).json({ error: 'linkedinProfileUrl required' });
     }
-    jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+    jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
     if (!jobDescriptionUrl) {
       return res.status(400).json({ error: 'invalid jobDescriptionUrl' });
     }
