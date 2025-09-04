@@ -90,7 +90,9 @@ jest.unstable_mockModule('mammoth', () => ({
 
 const serverModule = await import('../server.js');
 const { default: app, extractText, setGeneratePdf } = serverModule;
-setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+const { generatePdf } = await import('../services/generatePdf.js');
+const generatePdfMock = jest.fn().mockResolvedValue(Buffer.from('pdf'));
+setGeneratePdf(generatePdfMock);
 
 beforeEach(() => {
   setupDefaultDynamoMock();
@@ -366,7 +368,7 @@ describe('/api/process-cv', () => {
       .mockResolvedValue({
         response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
       });
-    serverModule.generatePdf.mockClear();
+    generatePdfMock.mockClear();
 
     await request(app)
       .post('/api/process-cv')
@@ -376,7 +378,7 @@ describe('/api/process-cv', () => {
       .field('template2', 'professional')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    const calls = serverModule.generatePdf.mock.calls;
+    const calls = generatePdfMock.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
     expect(resumeCalls[0][1]).toBe('modern');
     expect(resumeCalls[1][1]).toBe('professional');
@@ -395,7 +397,7 @@ describe('/api/process-cv', () => {
       .mockResolvedValue({
         response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
       });
-    serverModule.generatePdf.mockClear();
+    generatePdfMock.mockClear();
 
     await request(app)
       .post('/api/process-cv')
@@ -404,7 +406,7 @@ describe('/api/process-cv', () => {
       .field('templates', JSON.stringify(['modern', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    const calls = serverModule.generatePdf.mock.calls;
+    const calls = generatePdfMock.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
     expect(resumeCalls[0][1]).toBe('modern');
     expect(resumeCalls[1][1]).toBe('vibrant');
@@ -432,7 +434,7 @@ describe('/api/process-cv', () => {
             JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
         }
       });
-    serverModule.generatePdf.mockClear();
+    generatePdfMock.mockClear();
 
     const res = await request(app)
       .post('/api/process-cv')
@@ -442,7 +444,7 @@ describe('/api/process-cv', () => {
 
     expect(res.status).toBe(200);
 
-    const resumeCalls = serverModule.generatePdf.mock.calls.filter(
+    const resumeCalls = generatePdfMock.mock.calls.filter(
       ([, , opts]) => opts && opts.resumeExperience
     );
     expect(resumeCalls).toHaveLength(2);
@@ -474,22 +476,21 @@ describe('/api/process-cv', () => {
         }
       });
 
-    setGeneratePdf(
-      jest.fn((text, tpl, options) => {
-        const data = parseContent(text, options);
-        const combined = data.sections
-          .flatMap((s) =>
-            s.items.map((tokens) => tokens.map((t) => t.text || '').join(''))
-          )
-          .join('\n');
-        if (options && options.skipRequiredSections) {
-          const headings = data.sections.map((s) => s.heading);
-          expect(headings).not.toContain('Work Experience');
-          expect(combined).not.toContain('Information not provided');
-        }
-        return Promise.resolve(Buffer.from('pdf'));
-      })
-    );
+    const customGeneratePdf = jest.fn((text, tpl, options) => {
+      const data = parseContent(text, options);
+      const combined = data.sections
+        .flatMap((s) =>
+          s.items.map((tokens) => tokens.map((t) => t.text || '').join(''))
+        )
+        .join('\n');
+      if (options && options.skipRequiredSections) {
+        const headings = data.sections.map((s) => s.heading);
+        expect(headings).not.toContain('Work Experience');
+        expect(combined).not.toContain('Information not provided');
+      }
+      return Promise.resolve(Buffer.from('pdf'));
+    });
+    setGeneratePdf(customGeneratePdf);
 
     await request(app)
       .post('/api/process-cv')
@@ -497,12 +498,12 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    const coverCalls = serverModule.generatePdf.mock.calls.filter(
+    const coverCalls = customGeneratePdf.mock.calls.filter(
       ([, , opts]) => opts && opts.skipRequiredSections
     );
     expect(coverCalls).toHaveLength(2);
 
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+    setGeneratePdf(generatePdfMock);
   });
 
   test('missing file', async () => {
