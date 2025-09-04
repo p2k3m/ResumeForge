@@ -156,7 +156,7 @@ describe('extractExperience', () => {
 
 describe('fetchLinkedInProfile', () => {
   test('extracts structured experience details', async () => {
-    const profile = await fetchLinkedInProfile('http://example.com');
+    const profile = await fetchLinkedInProfile('https://linkedin.com/in/example');
     expect(profile.experience).toEqual([
       {
         company: 'Acme Corp',

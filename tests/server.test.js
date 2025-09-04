@@ -135,8 +135,8 @@ describe('/api/process-cv', () => {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
       )
       .set('X-Forwarded-For', '203.0.113.42')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res1.status).toBe(200);
     let types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
@@ -189,8 +189,8 @@ describe('/api/process-cv', () => {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
       )
       .set('X-Forwarded-For', '203.0.113.42')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res2.status).toBe(200);
     expect(res2.body.urls).toHaveLength(4);
@@ -239,7 +239,7 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.TableName).toBe('ResumeForge');
     expect(putCall[0].input.Item.jobId.S).toMatch(/\d+/);
     expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
-      'http://linkedin.com/in/example'
+      'https://linkedin.com/in/example'
     );
     expect(putCall[0].input.Item.candidateName.S).toBe(res2.body.applicantName);
     expect(putCall[0].input.Item.ipAddress.S).toBe('203.0.113.42');
@@ -259,8 +259,8 @@ describe('/api/process-cv', () => {
     requestEnhancedCV.mockResolvedValueOnce('not json');
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('AI response invalid');
@@ -281,8 +281,8 @@ describe('/api/process-cv', () => {
     );
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(422);
     expect(res.body.error).toBe('score was not improved');
@@ -308,8 +308,8 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -340,8 +340,8 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -369,8 +369,8 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('template1', 'modern')
       .field('template2', 'professional')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -398,8 +398,8 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('templates', JSON.stringify(['modern', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -435,8 +435,8 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(200);
@@ -492,8 +492,8 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const coverCalls = serverModule.generatePdf.mock.calls.filter(
@@ -507,8 +507,8 @@ describe('/api/process-cv', () => {
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example');
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('resume file required');
   });
@@ -516,8 +516,8 @@ describe('/api/process-cv', () => {
   test('unsupported file type', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Only .pdf, .doc, .docx files are allowed');
@@ -526,7 +526,7 @@ describe('/api/process-cv', () => {
   test('missing job description URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('jobDescriptionUrl required');
@@ -535,18 +535,28 @@ describe('/api/process-cv', () => {
   test('missing linkedin profile URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('jobDescriptionUrl', 'https://example.com')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('linkedinProfileUrl required');
+  });
+
+  test('invalid linkedin profile URL', async () => {
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('invalid linkedinProfileUrl');
   });
 
   test('rejects non-resume uploads with detected type', async () => {
     pdfParse.mockResolvedValueOnce({ text: 'Dear hiring manager, I am writing to...' });
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://example.com')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/cover letter/);

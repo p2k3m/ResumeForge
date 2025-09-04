@@ -39,6 +39,24 @@ async function parseUserAgent(ua) {
   }
 }
 
+function validateUrl(input, allowedDomains = []) {
+  try {
+    const url = new URL(String(input));
+    if (url.protocol !== 'https:') return null;
+    const host = url.hostname.toLowerCase();
+    if (
+      allowedDomains.length &&
+      !allowedDomains.some(
+        (d) => host === d || host.endsWith(`.${d}`)
+      )
+    )
+      return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -168,8 +186,10 @@ function selectTemplates({
 const region = process.env.AWS_REGION || 'ap-south-1';
 
 async function fetchLinkedInProfile(url) {
+  const valid = validateUrl(url, ['linkedin.com']);
+  if (!valid) throw new Error('Invalid LinkedIn URL');
   try {
-    const { data: html } = await axios.get(url);
+    const { data: html } = await axios.get(valid);
     const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
     const headlineMatch =
       html.match(/<title>([^<]*)<\/title>/i) || html.match(/"headline":"(.*?)"/i);
@@ -247,8 +267,10 @@ async function fetchLinkedInProfile(url) {
 }
 
 async function fetchCredlyProfile(url) {
+  const valid = validateUrl(url, ['credly.com']);
+  if (!valid) throw new Error('Invalid Credly URL');
   try {
-    const { data: html } = await axios.get(url);
+    const { data: html } = await axios.get(valid);
     const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
     const badgeRegex = /<div[^>]*class=["'][^"']*badge[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
     const badges = [];
@@ -2170,7 +2192,7 @@ app.post('/api/process-cv', (req, res, next) => {
     return res.status(500).json({ error: 'failed to load configuration' });
   }
 
-  const { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
+  let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
   const ipAddress =
     (req.headers['x-forwarded-for'] || '')
       .split(',')
@@ -2204,6 +2226,20 @@ app.post('/api/process-cv', (req, res, next) => {
   }
   if (!linkedinProfileUrl) {
     return res.status(400).json({ error: 'linkedinProfileUrl required' });
+  }
+  jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+  if (!jobDescriptionUrl) {
+    return res.status(400).json({ error: 'invalid jobDescriptionUrl' });
+  }
+  linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+  if (!linkedinProfileUrl) {
+    return res.status(400).json({ error: 'invalid linkedinProfileUrl' });
+  }
+  if (credlyProfileUrl) {
+    credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+    if (!credlyProfileUrl) {
+      return res.status(400).json({ error: 'invalid credlyProfileUrl' });
+    }
   }
 
   let text = await extractText(req.file);
