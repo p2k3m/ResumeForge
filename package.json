@@ -27,7 +27,8 @@
     "puppeteer": "^22.9.0",
     "json5": "^2.2.3",
     "openai": "^4.0.0",
-    "ua-parser-js": "^1.0.35"
+    "ua-parser-js": "^1.0.35",
+    "fontkit": "^1.9.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",

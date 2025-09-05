@@ -677,4 +677,16 @@ describe('generatePdf and parsing', () => {
     expect(css).toMatch(/li\s*{[^}]*line-height:\s*[0-9.]+/);
   });
 
+  test('PDFKit fallback emits no warnings for valid fonts', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockRejectedValue(new Error('no chromium'));
+    const buffer = await generatePdf('Jane Doe\n- test', 'modern');
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(warnSpy).not.toHaveBeenCalled();
+    launchSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
 });
