@@ -136,7 +136,7 @@ describe('generatePdf and parsing', () => {
     const rendered = tokens
       .map((t) => {
         const text = t.text ? escapeHtml(t.text) : '';
-        if (t.type === 'link') return `<a href="${t.href}">${text}</a>`;
+        if (t.type === 'link') return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
         if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
         if (t.style === 'bold') return `<strong>${text}</strong>`;
         if (t.style === 'italic') return `<em>${text}</em>`;
@@ -154,7 +154,7 @@ describe('generatePdf and parsing', () => {
     const rendered = tokens
       .map((t) => {
         const text = t.text ? escapeHtml(t.text) : '';
-        if (t.type === 'link') return `<a href="${t.href}">${text}</a>`;
+        if (t.type === 'link') return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
         if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
         if (t.style === 'bold') return `<strong>${text}</strong>`;
         if (t.style === 'italic') return `<em>${text}</em>`;
@@ -335,7 +335,7 @@ describe('generatePdf and parsing', () => {
         if (t.type === 'link') {
           const next = tokens[i + 1];
           const space = next && next.text && !/^\s/.test(next.text) ? ' ' : '';
-          return `<a href="${t.href}">${text.trim()}</a>${space}`;
+          return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>${space}`;
         }
         if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
         if (t.style === 'bold') return `<strong>${text}</strong>`;
@@ -347,10 +347,34 @@ describe('generatePdf and parsing', () => {
       })
       .join('');
     expect(rendered).toContain(
-      '<a href="https://openai.com">OpenAI</a> for more'
+      '<a href="https://openai.com" target="_blank" rel="noopener noreferrer">OpenAI</a> for more'
     );
     expect(rendered).not.toContain(
-      '<a href="https://openai.com">OpenAI for more'
+      '<a href="https://openai.com" target="_blank" rel="noopener noreferrer">OpenAI for more'
+    );
+  });
+
+  test('certification links include target and rel attributes', () => {
+    const tokens = [
+      { type: 'bullet' },
+      { type: 'link', text: 'AWS Certification', href: 'https://example.com' }
+    ];
+    const rendered = tokens
+      .map((t, i) => {
+        const text = t.text ? escapeHtml(t.text) : '';
+        if (t.type === 'link') {
+          const next = tokens[i + 1];
+          const space = next && next.text && !/^\s/.test(next.text)
+            ? ' '
+            : '';
+          return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>${space}`;
+        }
+        if (t.type === 'bullet') return '<span class="bullet">•</span> ';
+        return text;
+      })
+      .join('');
+    expect(rendered).toContain(
+      '<a href="https://example.com" target="_blank" rel="noopener noreferrer">AWS Certification</a>'
     );
   });
 
@@ -555,7 +579,7 @@ describe('generatePdf and parsing', () => {
     const [tokens] = parseContent(input).sections[0].items;
     const rendered = tokens
       .map((t) => {
-        if (t.type === 'link') return `<a href="${t.href}">${t.text}</a>`;
+        if (t.type === 'link') return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${t.text}</a>`;
         if (t.style === 'bolditalic') return `<strong><em>${t.text}</em></strong>`;
         if (t.style === 'bold') return `<strong>${t.text}</strong>`;
         if (t.style === 'italic') return `<em>${t.text}</em>`;
@@ -615,7 +639,7 @@ describe('generatePdf and parsing', () => {
         items: sec.items.map((tokens) =>
           tokens
             .map((t) => {
-              if (t.type === 'link') return `<a href="${t.href}">${t.text}</a>`;
+              if (t.type === 'link') return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${t.text}</a>`;
               if (t.style === 'bolditalic') return `<strong><em>${t.text}</em></strong>`;
               if (t.style === 'bold') return `<strong>${t.text}</strong>`;
               if (t.style === 'italic') return `<em>${t.text}</em>`;
