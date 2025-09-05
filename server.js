@@ -501,6 +501,7 @@ async function rewriteSectionsWithGemini(
   try {
     const prompt =
       `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
+      `Emphasize that the most recent role should explicitly reference keywords and mandatory skills from the job description. ` +
       `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills. ` +
       `For experience, respond with an array of roles, each having a title and a responsibilities array of bullet points.` +
       `\nSections: ${JSON.stringify(sectionData)}\nJob Description: ${jobDescription}`;
@@ -514,13 +515,25 @@ async function rewriteSectionsWithGemini(
 
       const expItems = [];
       if (Array.isArray(parsed.experience)) {
-        parsed.experience.forEach((role) => {
+        const mandatory = Array.isArray(parsed.mandatorySkills)
+          ? parsed.mandatorySkills
+          : [];
+        parsed.experience.forEach((role, idx) => {
           if (!role?.title) return;
+          let responsibilities = Array.isArray(role.responsibilities)
+            ? role.responsibilities
+            : [];
+          if (idx === 0 && mandatory.length) {
+            const existing = responsibilities.join(' ').toLowerCase();
+            mandatory.forEach((skill) => {
+              if (!existing.includes(String(skill).toLowerCase())) {
+                responsibilities.push(`Applied ${skill}`);
+              }
+            });
+          }
           expItems.push(`- ${role.title}`);
-          if (Array.isArray(role.responsibilities)) {
-            expItems.push(
-              ...role.responsibilities.map((r) => `  - ${r}`)
-            );
+          if (responsibilities.length) {
+            expItems.push(...responsibilities.map((r) => `  - ${r}`));
           }
         });
       }
