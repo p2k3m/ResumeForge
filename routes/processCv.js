@@ -42,23 +42,47 @@ import {
   REQUEST_TIMEOUT_MS
 } from '../server.js';
 
+const createError = (status, message) => {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+};
+
+async function withRetry(fn, retries = 3, delay = 500) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt === retries) break;
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 export default function registerProcessCv(app) {
-  app.post('/api/process-cv', (req, res, next) => {
-    uploadResume(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message });
-      next();
-    });
-  }, async (req, res) => {
+  app.post(
+    '/api/process-cv',
+    (req, res, next) => {
+      uploadResume(req, res, (err) => {
+        if (err) return next(createError(400, err.message));
+        next();
+      });
+    },
+    async (req, res, next) => {
     const jobId = crypto.randomUUID();
     const s3 = new S3Client({ region });
     let bucket;
     let secrets;
     try {
       secrets = await getSecrets();
-      bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+      bucket =
+        process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
     } catch (err) {
       console.error('failed to load configuration', err);
-      return res.status(500).json({ error: 'failed to load configuration' });
+      return next(createError(500, 'failed to load configuration'));
     }
 
     let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
@@ -68,7 +92,13 @@ export default function registerProcessCv(app) {
         .map((s) => s.trim())
         .filter(Boolean)[0] || req.ip;
     const userAgent = req.headers['user-agent'] || '';
-    const { browser, os, device } = await parseUserAgent(userAgent);
+    let browser, os, device;
+    try {
+      ({ browser, os, device } = await parseUserAgent(userAgent));
+    } catch (err) {
+      console.error('User agent parsing failed', err);
+      return next(createError(500, 'Failed to parse user agent'));
+    }
     const defaultCvTemplate =
       req.body.template || req.query.template || CV_TEMPLATES[0];
     const defaultClTemplate =
@@ -88,26 +118,26 @@ export default function registerProcessCv(app) {
       `Selected templates: template1=${template1}, template2=${template2}, coverTemplate1=${coverTemplate1}, coverTemplate2=${coverTemplate2}`
     );
     if (!req.file) {
-      return res.status(400).json({ error: 'resume file required' });
+      return next(createError(400, 'resume file required'));
     }
     if (!jobDescriptionUrl) {
-      return res.status(400).json({ error: 'jobDescriptionUrl required' });
+      return next(createError(400, 'jobDescriptionUrl required'));
     }
     if (!linkedinProfileUrl) {
-      return res.status(400).json({ error: 'linkedinProfileUrl required' });
+      return next(createError(400, 'linkedinProfileUrl required'));
     }
     jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
     if (!jobDescriptionUrl) {
-      return res.status(400).json({ error: 'invalid jobDescriptionUrl' });
+      return next(createError(400, 'invalid jobDescriptionUrl'));
     }
     linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
     if (!linkedinProfileUrl) {
-      return res.status(400).json({ error: 'invalid linkedinProfileUrl' });
+      return next(createError(400, 'invalid linkedinProfileUrl'));
     }
     if (credlyProfileUrl) {
       credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
       if (!credlyProfileUrl) {
-        return res.status(400).json({ error: 'invalid credlyProfileUrl' });
+        return next(createError(400, 'invalid credlyProfileUrl'));
       }
     }
 
@@ -116,9 +146,12 @@ export default function registerProcessCv(app) {
       text = await extractText(req.file);
       docType = classifyDocument(text);
       if (docType !== 'resume') {
-        return res
-          .status(400)
-          .json({ error: `Uploaded document classified as ${docType}; please upload a resume` });
+        return next(
+          createError(
+            400,
+            `Uploaded document classified as ${docType}; please upload a resume`
+          )
+        );
       }
       applicantName = extractName(text);
       sanitizedName = sanitizeName(applicantName);
@@ -128,7 +161,7 @@ export default function registerProcessCv(app) {
       logKey = `${prefix}logs/processing.jsonl`;
     } catch (err) {
       console.error('Failed to extract text from PDF', err);
-      return res.status(500).json({ error: 'Failed to extract text from PDF' });
+      return next(createError(500, 'Failed to extract text from PDF'));
     }
 
     // Store raw file to configured bucket
@@ -139,7 +172,7 @@ export default function registerProcessCv(app) {
           Bucket: bucket,
           Key: `${prefix}${sanitizedName}${ext}`,
           Body: req.file.buffer,
-          ContentType: req.file.mimetype
+          ContentType: req.file.mimetype,
         })
       );
     } catch (e) {
@@ -153,50 +186,80 @@ export default function registerProcessCv(app) {
           jobId,
           event: 'initial_upload_failed',
           level: 'error',
-          message: `Failed to upload to bucket ${bucket}: ${message}`
+          message: `Failed to upload to bucket ${bucket}: ${message}`,
         });
       } catch (logErr) {
         console.error('failed to log initial upload error', logErr);
       }
-      return res
-        .status(500)
-        .json({ error: `Initial S3 upload to bucket ${bucket} failed: ${message}` });
+      return next(
+        createError(
+          500,
+          `Initial S3 upload to bucket ${bucket} failed: ${message}`
+        )
+      );
     }
 
     try {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'request_received',
-        message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`
-      });
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'selected_templates',
-        message: `template1=${template1}; template2=${template2}`
-      });
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'request_received',
+          message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`,
+        });
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'selected_templates',
+          message: `template1=${template1}; template2=${template2}`,
+        });
+      } catch (err) {
+        console.error('initial logging failed', err);
+      }
 
-      const { data: jobDescriptionHtml } = await axios.get(jobDescriptionUrl, {
-        timeout: REQUEST_TIMEOUT_MS
-      });
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
-      const {
-        title: jobTitle,
-        skills: jobSkills,
-        text: jobDescription
-      } = analyzeJobDescription(jobDescriptionHtml);
+      let jobDescriptionHtml;
+      try {
+        const { data } = await withRetry(
+          () => axios.get(jobDescriptionUrl, { timeout: REQUEST_TIMEOUT_MS }),
+          2
+        );
+        jobDescriptionHtml = data;
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'fetched_job_description'
+        });
+      } catch (err) {
+        console.error('Job description fetch failed', err);
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'job_description_fetch_failed',
+          level: 'error',
+          message: err.message
+        });
+        return next(createError(500, 'Job description fetch failed'));
+      }
+      const { title: jobTitle, skills: jobSkills, text: jobDescription } =
+        analyzeJobDescription(jobDescriptionHtml);
       const resumeSkills = extractResumeSkills(text);
       const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
       const originalScore = originalMatch.score;
 
       let linkedinData = {};
       try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+        linkedinData = await withRetry(
+          () => fetchLinkedInProfile(linkedinProfileUrl),
+          2
+        );
         await logEvent({
           s3,
           bucket,
@@ -205,6 +268,7 @@ export default function registerProcessCv(app) {
           event: 'fetched_linkedin_profile'
         });
       } catch (err) {
+        console.error('LinkedIn profile fetch failed', err);
         await logEvent({
           s3,
           bucket,
@@ -219,7 +283,10 @@ export default function registerProcessCv(app) {
       let credlyCertifications = [];
       if (credlyProfileUrl) {
         try {
-          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+          credlyCertifications = await withRetry(
+            () => fetchCredlyProfile(credlyProfileUrl),
+            2
+          );
           await logEvent({
             s3,
             bucket,
@@ -228,6 +295,7 @@ export default function registerProcessCv(app) {
             event: 'fetched_credly_profile'
           });
         } catch (err) {
+          console.error('Credly profile fetch failed', err);
           await logEvent({
             s3,
             bucket,
@@ -274,30 +342,18 @@ export default function registerProcessCv(app) {
       };
       try {
         const cvBuffer = await convertToPdf(text);
-        const cvFile = await openaiUploadFile(
-          cvBuffer,
-          'cv.pdf'
-        );
+        const cvFile = await openaiUploadFile(cvBuffer, 'cv.pdf');
         const jdBuffer = await convertToPdf(jobDescription);
-        const jdFile = await openaiUploadFile(
-          jdBuffer,
-          'job.pdf'
-        );
+        const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
         let liFile;
         if (Object.keys(linkedinData).length) {
           const liBuffer = await convertToPdf(linkedinData);
-          liFile = await openaiUploadFile(
-            liBuffer,
-            'linkedin.pdf'
-          );
+          liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
         }
         let credlyFile;
         if (credlyCertifications.length) {
           const credlyBuffer = await convertToPdf(credlyCertifications);
-          credlyFile = await openaiUploadFile(
-            credlyBuffer,
-            'credly.pdf'
-          );
+          credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
         }
         const instructions =
           'You are an expert resume writer and career coach. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, improvement_summary.';
@@ -351,6 +407,7 @@ export default function registerProcessCv(app) {
           console.error('failed to log ai generation error', logErr);
         }
         console.error('Failed to generate enhanced CV:', e);
+        return next(createError(500, 'AI generation failed'));
       }
 
       if (
@@ -368,7 +425,8 @@ export default function registerProcessCv(app) {
           level: 'error',
           message: 'AI response invalid',
         });
-        return res.status(500).json({ error: 'AI response invalid' });
+        console.error('AI response invalid');
+        return next(createError(500, 'AI response invalid'));
       }
 
       const version1Skills = extractResumeSkills(versionData.version1);
@@ -393,9 +451,9 @@ export default function registerProcessCv(app) {
           originalScore,
           match1Score: match1.score,
           match2Score: match2.score,
-          aiEnhancedScore
+          aiEnhancedScore,
         });
-        return res.status(422).json({ error: 'score was not improved' });
+        return next(createError(422, 'score was not improved'));
       }
 
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
@@ -410,64 +468,75 @@ export default function registerProcessCv(app) {
       const urls = [];
       for (const [name, text] of Object.entries(outputs)) {
         if (!text) continue;
-        let fileName;
-        if (name === 'version1') {
-          fileName = sanitizedName;
-        } else if (name === 'version2') {
-          fileName = `${sanitizedName}_2`;
-        } else {
-          fileName = name;
+        try {
+          let fileName;
+          if (name === 'version1') {
+            fileName = sanitizedName;
+          } else if (name === 'version2') {
+            fileName = `${sanitizedName}_2`;
+          } else {
+            fileName = name;
+          }
+          const subdir =
+            name === 'version1' || name === 'version2'
+              ? 'cv/'
+              : name === 'cover_letter1' || name === 'cover_letter2'
+              ? 'cover_letter/'
+              : '';
+          const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
+          const tpl =
+            name === 'version1'
+              ? template1
+              : name === 'version2'
+              ? template2
+              : name === 'cover_letter1'
+              ? coverTemplate1
+              : coverTemplate2;
+          const options =
+            name === 'version1' || name === 'version2'
+              ? {
+                  resumeExperience,
+                  linkedinExperience,
+                  resumeEducation,
+                  linkedinEducation,
+                  resumeCertifications,
+                  linkedinCertifications,
+                  credlyCertifications,
+                  credlyProfileUrl,
+                  jobTitle,
+                  jobSkills,
+                  project: projectText,
+                }
+              : name === 'cover_letter1' || name === 'cover_letter2'
+              ? { skipRequiredSections: true, defaultHeading: '' }
+              : {};
+          const inputText =
+            name === 'cover_letter1' || name === 'cover_letter2'
+              ? relocateProfileLinks(sanitizeGeneratedText(text, options))
+              : text;
+          const pdfBuffer = await generatePdf(inputText, tpl, options);
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: key,
+              Body: pdfBuffer,
+              ContentType: 'application/pdf',
+            })
+          );
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: `uploaded_${name}_pdf`,
+          });
+          const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+          const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
+          urls.push({ type: name, url });
+        } catch (err) {
+          console.error(`${name} generation or upload failed`, err);
+          return next(createError(500, `${name} generation failed`));
         }
-        const subdir =
-          name === 'version1' || name === 'version2'
-            ? 'cv/'
-            : name === 'cover_letter1' || name === 'cover_letter2'
-            ? 'cover_letter/'
-            : '';
-        const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-        const tpl =
-          name === 'version1'
-            ? template1
-            : name === 'version2'
-            ? template2
-            : name === 'cover_letter1'
-            ? coverTemplate1
-            : coverTemplate2;
-        const options =
-          name === 'version1' || name === 'version2'
-            ? {
-                resumeExperience,
-                linkedinExperience,
-                resumeEducation,
-                linkedinEducation,
-                resumeCertifications,
-                linkedinCertifications,
-                credlyCertifications,
-                credlyProfileUrl,
-                jobTitle,
-                jobSkills,
-                project: projectText
-              }
-            : name === 'cover_letter1' || name === 'cover_letter2'
-            ? { skipRequiredSections: true, defaultHeading: '' }
-            : {};
-        const inputText =
-          name === 'cover_letter1' || name === 'cover_letter2'
-            ? relocateProfileLinks(sanitizeGeneratedText(text, options))
-            : text;
-        const pdfBuffer = await generatePdf(inputText, tpl, options);
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: pdfBuffer,
-            ContentType: 'application/pdf'
-          })
-        );
-        await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
-        const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-        const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        urls.push({ type: name, url });
       }
 
       if (urls.length === 0) {
@@ -478,9 +547,10 @@ export default function registerProcessCv(app) {
           jobId,
           event: 'invalid_ai_response',
           level: 'error',
-          message: 'AI response invalid'
+          message: 'AI response invalid',
         });
-        return res.status(500).json({ error: 'AI response invalid' });
+        console.error('AI response invalid: no URLs generated');
+        return next(createError(500, 'AI response invalid'));
       }
 
       const dynamo = new DynamoDBClient({ region });
@@ -495,12 +565,12 @@ export default function registerProcessCv(app) {
               new CreateTableCommand({
                 TableName: tableName,
                 AttributeDefinitions: [
-                  { AttributeName: 'jobId', AttributeType: 'S' }
+                  { AttributeName: 'jobId', AttributeType: 'S' },
                 ],
                 KeySchema: [
-                  { AttributeName: 'jobId', KeyType: 'HASH' }
+                  { AttributeName: 'jobId', KeyType: 'HASH' },
                 ],
-                BillingMode: 'PAY_PER_REQUEST'
+                BillingMode: 'PAY_PER_REQUEST',
               })
             );
           } catch (createErr) {
@@ -515,44 +585,68 @@ export default function registerProcessCv(app) {
           }
         }
       }
-      await ensureTableExists();
-      const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
-      await dynamo.send(
-        new PutItemCommand({
-          TableName: tableName,
-          Item: {
-            jobId: { S: jobId },
-            linkedinProfileUrl: { S: linkedinProfileUrl },
-            candidateName: { S: applicantName },
-            timestamp: { S: new Date().toISOString() },
-            cv1Url: { S: urlMap.version1 || '' },
-            cv2Url: { S: urlMap.version2 || '' },
-            coverLetter1Url: { S: urlMap.cover_letter1 || '' },
-            coverLetter2Url: { S: urlMap.cover_letter2 || '' },
-            ipAddress: { S: ipAddress },
-            userAgent: { S: userAgent },
-            os: { S: os },
-            browser: { S: browser },
-            device: { S: device },
-            aiOriginalScore: { N: aiOriginalScore.toString() },
-            aiEnhancedScore: { N: aiEnhancedScore.toString() },
-            aiSkillsAdded: { L: aiSkillsAdded.map((s) => ({ S: s })) },
-            improvementSummary: { S: improvementSummary }
-          }
-        })
-      );
+      try {
+        await ensureTableExists();
+        const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
+        await dynamo.send(
+          new PutItemCommand({
+            TableName: tableName,
+            Item: {
+              jobId: { S: jobId },
+              linkedinProfileUrl: { S: linkedinProfileUrl },
+              candidateName: { S: applicantName },
+              timestamp: { S: new Date().toISOString() },
+              cv1Url: { S: urlMap.version1 || '' },
+              cv2Url: { S: urlMap.version2 || '' },
+              coverLetter1Url: { S: urlMap.cover_letter1 || '' },
+              coverLetter2Url: { S: urlMap.cover_letter2 || '' },
+              ipAddress: { S: ipAddress },
+              userAgent: { S: userAgent },
+              os: { S: os },
+              browser: { S: browser },
+              device: { S: device },
+              aiOriginalScore: { N: aiOriginalScore.toString() },
+              aiEnhancedScore: { N: aiEnhancedScore.toString() },
+              aiSkillsAdded: { L: aiSkillsAdded.map((s) => ({ S: s })) },
+              improvementSummary: { S: improvementSummary },
+            },
+          })
+        );
+      } catch (err) {
+        console.error('DynamoDB operation failed', err);
+        return next(createError(500, 'Failed to store job data'));
+      }
 
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: `${prefix}log.json`,
-          Body: JSON.stringify({ jobDescriptionUrl, linkedinProfileUrl, applicantName }),
-          ContentType: 'application/json'
-        })
-      );
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'uploaded_metadata' });
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: `${prefix}log.json`,
+            Body: JSON.stringify({
+              jobDescriptionUrl,
+              linkedinProfileUrl,
+              applicantName,
+            }),
+            ContentType: 'application/json',
+          })
+        );
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'uploaded_metadata',
+        });
+      } catch (err) {
+        console.error('Metadata upload failed', err);
+        return next(createError(500, 'Metadata upload failed'));
+      }
 
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
+      try {
+        await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
+      } catch (err) {
+        console.error('final log failed', err);
+      }
       const { table, newSkills: missingSkills } = bestImproved;
       const addedSkills = Array.from(
         new Set(
@@ -586,12 +680,20 @@ export default function registerProcessCv(app) {
       console.error('processing failed', err);
       if (bucket) {
         try {
-          await logEvent({ s3, bucket, key: logKey, jobId, event: 'error', level: 'error', message: err.message });
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'error',
+            level: 'error',
+            message: err.message,
+          });
         } catch (e) {
           console.error('failed to log error', e);
         }
       }
-      res.status(500).json({ error: 'processing failed' });
+      return next(createError(500, 'processing failed'));
     }
   });
 }
