@@ -65,6 +65,20 @@ export async function requestEnhancedCV({
       enhanced_score: { type: 'number' },
       skills_added: { type: 'array', items: { type: 'string' } },
       improvement_summary: { type: 'string' },
+      metrics: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            metric: { type: 'string' },
+            original: { type: 'number' },
+            improved: { type: 'number' },
+            improvement: { type: 'number' }
+          },
+          required: ['metric', 'original', 'improved', 'improvement'],
+          additionalProperties: false
+        }
+      }
     },
     required: [
       'cv_version1',

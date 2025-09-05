@@ -50,9 +50,7 @@ exports[`all headings including Skills are bold in HTML and PDF outputs: html 1`
     <h2>Skills</h2>
     
       <ul>
-        
-          <li><span class="bullet">•</span> Testing</li>
-        
+        <li><span class="bullet">•</span> Testing</li>
       </ul>
     
   </section>
@@ -61,9 +59,7 @@ exports[`all headings including Skills are bold in HTML and PDF outputs: html 1`
     <h2>Work Experience</h2>
     
       <ul>
-        
-          <li>Information not provided</li>
-        
+        <li>Information not provided</li>
       </ul>
     
   </section>
@@ -72,9 +68,7 @@ exports[`all headings including Skills are bold in HTML and PDF outputs: html 1`
     <h2>Education</h2>
     
       <ul>
-        
-          <li>Information not provided</li>
-        
+        <li>Information not provided</li>
       </ul>
     
   </section>
