@@ -186,8 +186,11 @@ export async function generatePdf(
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
       const fontPaths = {};
+      const fontsDir = path.resolve('fonts');
+      const fontsDirExists = fsSync.existsSync(fontsDir);
 
       function registerFontSafe(name, p) {
+        if (!fontsDirExists) return false;
         if (!fsSync.existsSync(p)) {
           console.warn('Font file missing:', p);
           return false;
@@ -220,31 +223,32 @@ export async function generatePdf(
 
       // Optional font embedding for Roboto/Helvetica families if available
       try {
-        const fontsDir = path.resolve('fonts');
-        const rReg = path.join(fontsDir, 'Roboto-Regular.ttf');
-        const rBold = path.join(fontsDir, 'Roboto-Bold.ttf');
-        const rItalic = path.join(fontsDir, 'Roboto-Italic.ttf');
-        const haveRoboto = [
-          ['Roboto', rReg],
-          ['Roboto-Bold', rBold],
-          ['Roboto-Italic', rItalic]
-        ].map(([name, p]) => registerFontSafe(name, p)).every(Boolean);
-        if (haveRoboto) {
-          ['modern', 'vibrant'].forEach((tpl) => {
-            styleMap[tpl].font = 'Roboto';
-            styleMap[tpl].bold = 'Roboto-Bold';
-            styleMap[tpl].italic = 'Roboto-Italic';
-          });
-        }
+        if (fontsDirExists) {
+          const rReg = path.join(fontsDir, 'Roboto-Regular.ttf');
+          const rBold = path.join(fontsDir, 'Roboto-Bold.ttf');
+          const rItalic = path.join(fontsDir, 'Roboto-Italic.ttf');
+          const haveRoboto = [
+            ['Roboto', rReg],
+            ['Roboto-Bold', rBold],
+            ['Roboto-Italic', rItalic]
+          ].map(([name, p]) => registerFontSafe(name, p)).every(Boolean);
+          if (haveRoboto) {
+            ['modern', 'vibrant'].forEach((tpl) => {
+              styleMap[tpl].font = 'Roboto';
+              styleMap[tpl].bold = 'Roboto-Bold';
+              styleMap[tpl].italic = 'Roboto-Italic';
+            });
+          }
 
-        const hReg = path.join(fontsDir, 'Helvetica.ttf');
-        const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
-        const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
-        [
-          ['Helvetica', hReg],
-          ['Helvetica-Bold', hBold],
-          ['Helvetica-Oblique', hItalic]
-        ].forEach(([name, p]) => registerFontSafe(name, p));
+          const hReg = path.join(fontsDir, 'Helvetica.ttf');
+          const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
+          const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
+          [
+            ['Helvetica', hReg],
+            ['Helvetica-Bold', hBold],
+            ['Helvetica-Oblique', hItalic]
+          ].forEach(([name, p]) => registerFontSafe(name, p));
+        }
       } catch (err) {
         console.warn('Font registration error', err);
       }
