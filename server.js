@@ -33,6 +33,14 @@ import {
   extractCertifications,
 } from './services/parseContent.js';
 
+// Prevent crashes when stdout/stderr streams close prematurely
+process.stdout.on('error', (err) => {
+  if (err.code !== 'EPIPE') throw err;
+});
+process.stderr.on('error', (err) => {
+  if (err.code !== 'EPIPE') throw err;
+});
+
 async function parseUserAgent(ua) {
   const fallback = { browser: ua || '', os: ua || '', device: ua || '' };
   if (!ua) return fallback;
@@ -634,8 +642,12 @@ function setGeneratePdf(fn) {
 async function extractText(file) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ext === '.pdf') {
-    const data = await pdfParse(file.buffer);
-    return data.text;
+    try {
+      const data = await pdfParse(file.buffer);
+      return data.text;
+    } catch (err) {
+      throw new Error('Failed to parse PDF');
+    }
   }
   if (ext === '.docx') {
     const { value } = await mammoth.extractRawText({ buffer: file.buffer });
@@ -839,6 +851,12 @@ app.get('/healthz', (req, res) => {
 });
 
 registerProcessCv(app);
+
+// Generic error handler to prevent uncaught exceptions from crashing requests
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 const port = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'test') {

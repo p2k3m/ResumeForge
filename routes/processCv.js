@@ -111,19 +111,25 @@ export default function registerProcessCv(app) {
       }
     }
 
-    let text = await extractText(req.file);
-    const docType = classifyDocument(text);
-    if (docType !== 'resume') {
-      return res
-        .status(400)
-        .json({ error: `Uploaded document classified as ${docType}; please upload a resume` });
+    let text, docType, applicantName, sanitizedName, ext, prefix, logKey;
+    try {
+      text = await extractText(req.file);
+      docType = classifyDocument(text);
+      if (docType !== 'resume') {
+        return res
+          .status(400)
+          .json({ error: `Uploaded document classified as ${docType}; please upload a resume` });
+      }
+      applicantName = extractName(text);
+      sanitizedName = sanitizeName(applicantName);
+      if (!sanitizedName) sanitizedName = 'candidate';
+      ext = path.extname(req.file.originalname).toLowerCase();
+      prefix = `sessions/${sanitizedName}/${jobId}/`;
+      logKey = `${prefix}logs/processing.jsonl`;
+    } catch (err) {
+      console.error('Failed to extract text from PDF', err);
+      return res.status(500).json({ error: 'Failed to extract text from PDF' });
     }
-    const applicantName = extractName(text);
-    let sanitizedName = sanitizeName(applicantName);
-    if (!sanitizedName) sanitizedName = 'candidate';
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    const prefix = `sessions/${sanitizedName}/${jobId}/`;
-    const logKey = `${prefix}logs/processing.jsonl`;
 
     // Store raw file to configured bucket
     const initialS3 = new S3Client({ region });
