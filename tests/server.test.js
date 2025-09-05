@@ -89,7 +89,12 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 const serverModule = await import('../server.js');
-const { default: app, extractText, setGeneratePdf } = serverModule;
+const {
+  default: app,
+  extractText,
+  setGeneratePdf,
+  rewriteSectionsWithGemini,
+} = serverModule;
 const { generatePdf } = await import('../services/generatePdf.js');
 const generatePdfMock = jest.fn().mockResolvedValue(Buffer.from('pdf'));
 setGeneratePdf(generatePdfMock);
@@ -118,6 +123,39 @@ describe('health check', () => {
     const res = await request(app).get('/healthz');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'ok' });
+  });
+});
+
+describe('rewriteSectionsWithGemini', () => {
+  test('ensures latest role includes mandatory skills', async () => {
+    const localMock = jest.fn().mockResolvedValue({
+      response: {
+        text: () =>
+          JSON.stringify({
+            summary: [],
+            experience: [
+              { title: 'Engineer', responsibilities: ['Built tools'] },
+            ],
+            education: [],
+            certifications: [],
+            skills: [],
+            projects: [],
+            projectSnippet: '',
+            latestRoleTitle: 'Engineer',
+            latestRoleDescription: '',
+            mandatorySkills: ['React'],
+            addedSkills: [],
+          }),
+      },
+    });
+    const generativeModel = { generateContent: localMock };
+    const { text } = await rewriteSectionsWithGemini(
+      'Jane Doe',
+      {},
+      'Job description',
+      generativeModel
+    );
+    expect(text).toMatch(/Applied React/);
   });
 });
 

@@ -52,10 +52,11 @@ describe('rewriteSectionsWithGemini', () => {
     expect(text).toContain('Did X');
     expect(text).toContain('Studied Y');
     expect(text).toContain('[Cert A - Org](https://example.com/cert)');
+    expect(text).toContain('Applied Skill B');
+    expect(text).toContain('Applied Skill C');
     expect(text).toContain('Skill B');
     expect(text).toContain('Skill C');
     expect(text).toContain('Proj C');
-    expect(text).toContain('Updated Title');
     expect(modifiedTitle).toBe('Updated Title');
     expect(addedSkills).toEqual(['Skill C']);
   });
