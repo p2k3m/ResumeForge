@@ -7,7 +7,8 @@
     "start": "node server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dev": "node server.js",
-    "build": "echo 'No build step'"
+    "copy-fonts": "if [ -d fonts ]; then mkdir -p dist/fonts && cp -r fonts/* dist/fonts/; fi",
+    "build": "npm run copy-fonts && echo 'No build step'"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.432.0",
