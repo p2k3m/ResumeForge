@@ -62,9 +62,7 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
     <h2>Work Experience</h2>
     
       <ul>
-        
-          <li><span class="bullet">•</span> Built things</li>
-        
+        <li><span class="bullet">•</span> Built things</li>
       </ul>
     
   </section>
@@ -73,9 +71,7 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
     <h2>Education</h2>
     
       <ul>
-        
-          <li><span class="bullet">•</span> BSc Stuff</li>
-        
+        <li><span class="bullet">•</span> BSc Stuff</li>
       </ul>
     
   </section>

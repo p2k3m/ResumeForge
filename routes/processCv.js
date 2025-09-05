@@ -13,6 +13,7 @@ import { getSecrets } from '../config/secrets.js';
 import { logEvent } from '../logger.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 import { uploadFile as openaiUploadFile, requestEnhancedCV } from '../openaiClient.js';
+import { compareMetrics } from '../services/atsMetrics.js';
 
 import {
   uploadResume,
@@ -443,6 +444,8 @@ export default function registerProcessCv(app) {
       );
       const enhancedScore = bestImproved.score;
       const noImprovement = enhancedScore <= originalScore;
+      const bestCvText = match1.score >= match2.score ? versionData.version1 : versionData.version2;
+      const { table: atsMetrics } = compareMetrics(text, bestCvText);
       if (noImprovement) {
         await logEvent({
           s3,
@@ -686,6 +689,7 @@ export default function registerProcessCv(app) {
         applicantName,
         originalScore,
         enhancedScore,
+        atsMetrics,
         table,
         addedSkills,
         missingSkills,

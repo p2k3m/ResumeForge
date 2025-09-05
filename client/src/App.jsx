@@ -9,6 +9,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
   const [match, setMatch] = useState(null)
+  const [metrics, setMetrics] = useState([])
   const [error, setError] = useState('')
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -78,6 +79,7 @@ function App() {
         originalTitle: data.originalTitle || '',
         modifiedTitle: data.modifiedTitle || ''
       })
+      setMetrics(data.atsMetrics || data.metrics || [])
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -197,6 +199,32 @@ function App() {
           <p className="font-semibold text-purple-800">
             {formatMatchMessage(match.originalScore, match.enhancedScore)}
           </p>
+        </div>
+      )}
+
+      {metrics.length > 0 && (
+        <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
+          <h2 className="text-xl font-bold mb-2 text-purple-800">ATS Metrics</h2>
+          <table className="w-full mb-2">
+            <thead>
+              <tr>
+                <th className="text-left text-purple-800">Metric</th>
+                <th className="text-right text-purple-800">Original</th>
+                <th className="text-right text-purple-800">Improved</th>
+                <th className="text-right text-purple-800">%Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.map((m) => (
+                <tr key={m.metric}>
+                  <td className="py-1 text-purple-800">{m.metric}</td>
+                  <td className="py-1 text-right">{m.original}</td>
+                  <td className="py-1 text-right">{m.improved}</td>
+                  <td className="py-1 text-right">{m.improvement}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
