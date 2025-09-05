@@ -105,15 +105,19 @@ export async function generatePdf(
     if (css) {
       html = html.replace('</head>', `<style>${css}</style></head>`);
     }
-  }
+  }  
   let browser;
   try {
-    browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+    // Launch using Chromium's default sandboxing.
+    browser = await puppeteer.launch();
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
     return pdfBuffer;
   } catch (err) {
+    // If Chromium fails to launch due to missing sandbox support, re-run Puppeteer
+    // with `args: ['--no-sandbox', '--disable-setuid-sandbox']` or install the
+    // necessary OS sandbox dependencies. As a last resort, fall back to PDFKit.
     // Fallback for environments without Chromium dependencies
     const { default: PDFDocument } = await import('pdfkit');
     const styleMap = {
