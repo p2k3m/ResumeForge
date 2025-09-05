@@ -17,7 +17,18 @@
       {{#if items}}
         <ul>
           {{#each items}}
-            <li>{{{this}}}</li>
+            {{#if this.bullets}}
+              <li>
+                <strong>{{{this.title}}}</strong>
+                <ul>
+                  {{#each this.bullets}}
+                    <li>{{{this}}}</li>
+                  {{/each}}
+                </ul>
+              </li>
+            {{else}}
+              <li>{{{this}}}</li>
+            {{/if}}
           {{/each}}
         </ul>
       {{/if}}

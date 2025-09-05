@@ -501,7 +501,8 @@ async function rewriteSectionsWithGemini(
   try {
     const prompt =
       `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
-      `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills.` +
+      `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills. ` +
+      `For experience, respond with an array of roles, each having a title and a responsibilities array of bullet points.` +
       `\nSections: ${JSON.stringify(sectionData)}\nJob Description: ${jobDescription}`;
     const result = await generativeModel.generateContent(prompt);
     const parsed = parseAiJson(result?.response?.text?.());
@@ -512,17 +513,23 @@ async function rewriteSectionsWithGemini(
       lines.push(...mk('Summary', parsed.summary));
 
       const expItems = [];
-      if (parsed.latestRoleTitle || parsed.latestRoleDescription) {
-        const combined = [
-          parsed.latestRoleTitle,
-          parsed.latestRoleDescription,
-        ]
-          .filter(Boolean)
-          .join(': ');
-        expItems.push(`- ${combined}`.trim());
-      }
       if (Array.isArray(parsed.experience)) {
-        expItems.push(...parsed.experience.map((b) => `- ${b}`));
+        parsed.experience.forEach((role) => {
+          if (!role?.title) return;
+          expItems.push(`- ${role.title}`);
+          if (Array.isArray(role.responsibilities)) {
+            expItems.push(
+              ...role.responsibilities.map((r) => `  - ${r}`)
+            );
+          }
+        });
+      }
+      if (!expItems.length && (parsed.latestRoleTitle || parsed.latestRoleDescription)) {
+        const combined =
+          [parsed.latestRoleTitle, parsed.latestRoleDescription]
+            .filter(Boolean)
+            .join(': ');
+        if (combined) expItems.push(`- ${combined}`.trim());
       }
       if (expItems.length) {
         lines.push('# Work Experience', ...expItems);

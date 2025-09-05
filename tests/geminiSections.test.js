@@ -23,7 +23,9 @@ describe('rewriteSectionsWithGemini', () => {
         text: () =>
           JSON.stringify({
             summary: ['Polished summary'],
-            experience: ['Did X'],
+            experience: [
+              { title: 'Engineer at Acme', responsibilities: ['Did X'] },
+            ],
             education: ['Studied Y'],
             certifications: ['Cert A - Org'],
             skills: ['Skill B'],
@@ -46,6 +48,7 @@ describe('rewriteSectionsWithGemini', () => {
     );
     expect(generativeModel.generateContent).toHaveBeenCalled();
     expect(text).toContain('Polished summary');
+    expect(text).toContain('Engineer at Acme');
     expect(text).toContain('Did X');
     expect(text).toContain('Studied Y');
     expect(text).toContain('[Cert A - Org](https://example.com/cert)');
