@@ -1,5 +1,6 @@
 import path from 'path';
 import axios from 'axios';
+import crypto from 'crypto';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -48,7 +49,7 @@ export default function registerProcessCv(app) {
       next();
     });
   }, async (req, res) => {
-    const jobId = Date.now().toString();
+    const jobId = crypto.randomUUID();
     const s3 = new S3Client({ region });
     let bucket;
     let secrets;
