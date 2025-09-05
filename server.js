@@ -855,7 +855,9 @@ registerProcessCv(app);
 // Generic error handler to prevent uncaught exceptions from crashing requests
 app.use((err, req, res, next) => {
   console.error(err);
-  res.status(500).json({ error: 'Internal server error' });
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || 'Internal server error';
+  res.status(status).json({ error: message });
 });
 
 const port = process.env.PORT || 3000;
