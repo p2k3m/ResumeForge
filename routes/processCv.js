@@ -320,6 +320,12 @@ export default function registerProcessCv(app) {
             ? parsed.skills_added
             : [];
           improvementSummary = parsed.improvement_summary;
+          if (parsed.modified_title) {
+            modifiedTitle = sanitizeGeneratedText(
+              parsed.modified_title,
+              sanitizeOptions
+            );
+          }
         }
       } catch (e) {
         const responseMeta = e.response
@@ -564,7 +570,7 @@ export default function registerProcessCv(app) {
         addedSkills,
         missingSkills,
         originalTitle,
-        modifiedTitle: modifiedTitle || originalTitle,
+        modifiedTitle,
         aiOriginalScore,
         aiEnhancedScore,
         aiSkillsAdded,
