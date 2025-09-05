@@ -206,6 +206,7 @@ describe('/api/process-cv', () => {
     expect(typeof res2.body.originalScore).toBe('number');
     expect(typeof res2.body.enhancedScore).toBe('number');
     expect(res2.body.applicantName).toBeTruthy();
+    expect(res2.body.noImprovement).toBe(false);
     expect(res2.body.aiOriginalScore).toBe(40);
     expect(res2.body.aiEnhancedScore).toBe(80);
     expect(res2.body.aiSkillsAdded).toEqual(['skill1']);
@@ -271,7 +272,7 @@ describe('/api/process-cv', () => {
     expect(res.body.error).toBe('AI response invalid');
   });
 
-  test('returns 422 when score not improved', async () => {
+  test('returns success with original when score not improved', async () => {
     requestEnhancedCV.mockResolvedValueOnce(
       JSON.stringify({
         cv_version1: 'v1',
@@ -289,8 +290,15 @@ describe('/api/process-cv', () => {
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-    expect(res.status).toBe(422);
-    expect(res.body.error).toBe('score was not improved');
+    expect(res.status).toBe(200);
+    expect(res.body.noImprovement).toBe(true);
+    expect(res.body.urls.map((u) => u.type).sort()).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'original',
+      'version1',
+      'version2',
+    ]);
   });
 
   test('handles code-fenced JSON with extra text', async () => {

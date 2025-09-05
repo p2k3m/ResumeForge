@@ -442,7 +442,8 @@ export default function registerProcessCv(app) {
         match1
       );
       const enhancedScore = bestImproved.score;
-      if (enhancedScore <= originalScore) {
+      const noImprovement = enhancedScore <= originalScore;
+      if (noImprovement) {
         await logEvent({
           s3,
           bucket,
@@ -451,13 +452,12 @@ export default function registerProcessCv(app) {
           event: 'unable_to_improve',
           message: `originalScore=${originalScore}, match1Score=${match1.score}, match2Score=${match2.score}, aiEnhancedScore=${aiEnhancedScore}`
         });
-        console.error('Unable to improve score', {
+        console.warn('Unable to improve score', {
           originalScore,
           match1Score: match1.score,
           match2Score: match2.score,
           aiEnhancedScore,
         });
-        return next(createError(422, 'score was not improved'));
       }
 
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
@@ -555,6 +555,22 @@ export default function registerProcessCv(app) {
         });
         console.error('AI response invalid: no URLs generated');
         return next(createError(500, 'AI response invalid'));
+      }
+
+      if (noImprovement) {
+        try {
+          const originalKey = `${prefix}${sanitizedName}${ext}`;
+          const command = new GetObjectCommand({
+            Bucket: bucket,
+            Key: originalKey,
+          });
+          const originalUrl = await getSignedUrl(s3, command, {
+            expiresIn: 3600,
+          });
+          urls.push({ type: 'original', url: originalUrl });
+        } catch (err) {
+          console.error('original file retrieval failed', err);
+        }
       }
 
       const dynamo = new DynamoDBClient({ region });
@@ -679,6 +695,7 @@ export default function registerProcessCv(app) {
         aiEnhancedScore,
         aiSkillsAdded,
         improvementSummary,
+        noImprovement,
       });
     } catch (err) {
       console.error('processing failed', err);
