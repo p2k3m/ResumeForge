@@ -195,10 +195,15 @@ export async function generatePdf(
           console.warn('Font file missing:', p);
           return false;
         }
+        let font;
         try {
-          fontkit.openSync(p); // Validate font file
+          font = fontkit.openSync(p); // Validate font file
         } catch (err) {
           console.warn(`Invalid font file ${p}:`, err.message);
+          return false;
+        }
+        if (font.type !== 'TTF') {
+          console.warn(`Invalid font format ${p}: expected TrueType, got ${font.type}`);
           return false;
         }
         try {
