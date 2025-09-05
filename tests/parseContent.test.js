@@ -458,6 +458,20 @@ describe('parseContent certification normalization and pruning', () => {
     const cert = data.sections.find((s) => s.heading === 'Certification');
     expect(cert).toBeUndefined();
   });
+
+  test('adds a single Credly Profile link when URL provided', () => {
+    const data = parseContent('Jane Doe', {
+      resumeCertifications: [{ name: 'Credly Profile' }],
+      credlyProfileUrl: 'https://credly.com/user'
+    });
+    const cert = data.sections.find((s) => s.heading === 'Certification');
+    expect(cert).toBeTruthy();
+    const links = cert.items
+      .flat()
+      .filter((t) => t.type === 'link' && t.text === 'Credly Profile');
+    expect(links).toHaveLength(1);
+    expect(links[0].href).toBe('https://credly.com/user');
+  });
 });
 
 describe('parseContent defaultHeading option', () => {

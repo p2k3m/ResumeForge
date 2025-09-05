@@ -185,7 +185,7 @@ describe('ensureRequiredSections certifications merging', () => {
     const certSection = ensured.sections.find((s) => s.heading === 'Certification');
     expect(certSection.items).toHaveLength(1);
     expect(certSection.items[0][0].type).toBe('bullet');
-    expect(certSection.items[0][1].type).toBe('link');
+    expect(certSection.items[0][1].type).toBe('paragraph');
   });
 
   test('deduplicates existing certification entries', () => {
@@ -298,7 +298,7 @@ describe('ensureRequiredSections certifications merging', () => {
     expect(link).toMatchObject({
       type: 'link',
       text: 'Credly Profile',
-      href: 'https://credly.com/user/'
+      href: 'https://credly.com/user'
     });
   });
 

@@ -520,17 +520,37 @@ function ensureRequiredSections(
     const text = cert.provider
       ? `${cert.name} - ${cert.provider}`
       : cert.name;
-    tokens.push({ type: 'link', text, href: cert.url });
+    if (cert.url) {
+      tokens.push({ type: 'link', text, href: cert.url });
+    } else {
+      tokens.push({ type: 'paragraph', text });
+    }
     return tokens;
   });
 
   if (credlyProfileUrl) {
     const normalizedProfile = normalizeUrl(credlyProfileUrl);
-    const alreadyHasProfile = certItems.some((item) =>
-      item.some(
-        (t) => t.type === 'link' && normalizeUrl(t.href) === normalizedProfile
-      )
-    );
+    let alreadyHasProfile = false;
+    certItems.forEach((item) => {
+      item.forEach((t, idx) => {
+        const textMatch = (t.text || '').trim().toLowerCase() === 'credly profile';
+        const hrefMatch =
+          t.type === 'link' && normalizeUrl(t.href || '') === normalizedProfile;
+        if (hrefMatch || textMatch) {
+          alreadyHasProfile = true;
+          if (t.type === 'link') {
+            t.href = credlyProfileUrl;
+            t.text = 'Credly Profile';
+          } else {
+            item[idx] = {
+              type: 'link',
+              text: 'Credly Profile',
+              href: credlyProfileUrl,
+            };
+          }
+        }
+      });
+    });
     if (!alreadyHasProfile) {
       certItems.push([
         { type: 'bullet' },
