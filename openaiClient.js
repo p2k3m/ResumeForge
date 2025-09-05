@@ -42,16 +42,22 @@ export async function requestEnhancedCV({
   linkedInFileId,
   credlyFileId,
   instructions,
+  priorCvFileId,
 }) {
   if (typeof instructions !== 'string' || !instructions.trim()) {
     throw new Error('instructions must be a non-empty string');
   }
   const client = await getClient();
+  const refinedInstructions = priorCvFileId
+    ? `${instructions}\nRefine the already improved CV.`
+    : instructions;
   const content = [
-    { type: 'input_text', text: instructions },
+    { type: 'input_text', text: refinedInstructions },
     { type: 'input_file', file_id: cvFileId },
-    { type: 'input_file', file_id: jobDescFileId },
   ];
+  if (priorCvFileId)
+    content.push({ type: 'input_file', file_id: priorCvFileId });
+  content.push({ type: 'input_file', file_id: jobDescFileId });
   if (linkedInFileId) content.push({ type: 'input_file', file_id: linkedInFileId });
   if (credlyFileId) content.push({ type: 'input_file', file_id: credlyFileId });
   const schema = {

@@ -339,6 +339,55 @@ describe('/api/process-cv', () => {
     ]);
   });
 
+  test('handles iterative improvement rounds', async () => {
+    requestEnhancedCV
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          cv_version1: 'v1',
+          cv_version2: 'v2',
+          cover_letter1: 'cl1',
+          cover_letter2: 'cl2',
+          original_score: 40,
+          enhanced_score: 80,
+          skills_added: ['skill1'],
+          improvement_summary: 'summary',
+        })
+      )
+      .mockResolvedValueOnce(
+        JSON.stringify({
+          cv_version1: 'v1b',
+          cv_version2: 'v2b',
+          cover_letter1: 'cl1',
+          cover_letter2: 'cl2',
+          original_score: 80,
+          enhanced_score: 90,
+          skills_added: ['skill2'],
+          improvement_summary: 'summary2',
+        })
+      );
+
+    const first = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(first.status).toBe(200);
+    const existingKey = first.body.bestCvKey || first.body.urls.find((u) => u.type === 'version1').key;
+
+    const second = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('iteration', '1')
+      .field('existingCvKey', existingKey)
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(second.status).toBe(200);
+    expect(second.body.iteration).toBe(1);
+    expect(requestEnhancedCV).toHaveBeenCalledTimes(2);
+    expect(second.body.urls.length).toBeGreaterThan(0);
+    expect(Array.isArray(second.body.metrics)).toBe(true);
+  });
+
   test('handles code-fenced JSON with extra text', async () => {
     generateContentMock.mockReset();
     generateContentMock
