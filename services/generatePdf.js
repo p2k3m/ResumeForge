@@ -65,41 +65,61 @@ export async function generatePdf(
       css = await fs.readFile(path.resolve('templates', `${templateId}.css`), 'utf-8');
     } catch {}
     // Convert token-based data to HTML for Handlebars templates
+    const tokenHtml = (tokens, heading) =>
+      tokens
+        .map((t, i) => {
+          const text = t.text ? escapeHtml(t.text) : '';
+          if (t.type === 'link') {
+            const next = tokens[i + 1];
+            const space = next && next.text && !/^\s/.test(next.text)
+              ? ' '
+              : '';
+            return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>${space}`;
+          }
+          if (t.type === 'heading') {
+            return `<strong>${text}</strong>`;
+          }
+          if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+          if (t.style === 'bold') return `<strong>${text}</strong>`;
+          if (t.style === 'italic') return `<em>${text}</em>`;
+          if (t.type === 'newline') return '<br>';
+          if (t.type === 'tab') return '<span class="tab"></span>';
+          if (t.type === 'bullet') {
+            if (heading?.toLowerCase() === 'education') {
+              return '<span class="edu-bullet">•</span> ';
+            }
+            return '<span class="bullet">•</span> ';
+          }
+          if (t.type === 'jobsep') return '';
+          return text;
+        })
+        .join('');
+
     const htmlData = {
       ...data,
-      sections: data.sections.map((sec) => ({
-        ...sec,
-        items: sec.items.map((tokens) =>
-          tokens
-            .map((t, i) => {
-              const text = t.text ? escapeHtml(t.text) : '';
-              if (t.type === 'link') {
-                const next = tokens[i + 1];
-                const space = next && next.text && !/^\s/.test(next.text)
-                  ? ' '
-                  : '';
-                return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>${space}`;
-              }
-              if (t.type === 'heading') {
-                return `<strong>${text}</strong>`;
-              }
-              if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
-              if (t.style === 'bold') return `<strong>${text}</strong>`;
-              if (t.style === 'italic') return `<em>${text}</em>`;
-              if (t.type === 'newline') return '<br>';
-              if (t.type === 'tab') return '<span class="tab"></span>';
-              if (t.type === 'bullet') {
-                if (sec.heading?.toLowerCase() === 'education') {
-                  return '<span class="edu-bullet">•</span> ';
-                }
-                return '<span class="bullet">•</span> ';
-              }
-              if (t.type === 'jobsep') return '';
-              return text;
-            })
-            .join('')
-        )
-      }))
+      sections: data.sections.map((sec) => {
+        if (sec.heading?.toLowerCase() === 'work experience') {
+          const grouped = [];
+          let current = null;
+          sec.items.forEach((tokens) => {
+            const isResp = tokens[0]?.type === 'tab';
+            let html = tokenHtml(tokens, sec.heading);
+            if (isResp) {
+              html = html.replace(/^<span class="tab"><\/span>/, '');
+              if (current) current.bullets.push(html);
+            } else {
+              html = html.replace(/^<span class="bullet">•<\/span>\s*/, '');
+              current = { title: html, bullets: [] };
+              grouped.push(current);
+            }
+          });
+          return { ...sec, items: grouped };
+        }
+        return {
+          ...sec,
+          items: sec.items.map((tokens) => tokenHtml(tokens, sec.heading)),
+        };
+      }),
     };
     html = Handlebars.compile(templateSource)(htmlData);
     if (css) {
