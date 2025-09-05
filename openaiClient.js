@@ -95,6 +95,7 @@ export async function requestEnhancedCV({
       'enhanced_score',
       'skills_added',
       'improvement_summary',
+      'metrics',
     ],
     additionalProperties: false,
   };

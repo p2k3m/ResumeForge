@@ -341,11 +341,12 @@ export default function registerProcessCv(app) {
       let projectText = '';
       let modifiedTitle = '';
       let versionData = {};
-      let coverData = {};
-      let aiOriginalScore = 0;
-      let aiEnhancedScore = 0;
-      let aiSkillsAdded = [];
-      let improvementSummary = '';
+        let coverData = {};
+        let aiOriginalScore = 0;
+        let aiEnhancedScore = 0;
+        let aiSkillsAdded = [];
+        let aiMetrics = [];
+        let improvementSummary = '';
       const sanitizeOptions = {
         resumeExperience,
         linkedinExperience,
@@ -405,6 +406,10 @@ export default function registerProcessCv(app) {
             ? parsed.skills_added
             : [];
           improvementSummary = parsed.improvement_summary;
+          aiMetrics = Array.isArray(parsed.metrics) ? parsed.metrics : [];
+          if (aiMetrics.length) {
+            console.log('AI metrics', aiMetrics);
+          }
           if (parsed.modified_title) {
             modifiedTitle = sanitizeGeneratedText(
               parsed.modified_title,
@@ -655,14 +660,24 @@ export default function registerProcessCv(app) {
               browser: { S: browser },
               device: { S: device },
               iteration: { N: iteration.toString() },
-              aiOriginalScore: { N: aiOriginalScore.toString() },
-              aiEnhancedScore: { N: aiEnhancedScore.toString() },
-              aiSkillsAdded: { L: aiSkillsAdded.map((s) => ({ S: s })) },
-              improvementSummary: { S: improvementSummary },
-            },
-          })
-        );
-      } catch (err) {
+                aiOriginalScore: { N: aiOriginalScore.toString() },
+                aiEnhancedScore: { N: aiEnhancedScore.toString() },
+                aiSkillsAdded: { L: aiSkillsAdded.map((s) => ({ S: s })) },
+                aiMetrics: {
+                  L: aiMetrics.map((m) => ({
+                    M: {
+                      metric: { S: m.metric },
+                      original: { N: m.original.toString() },
+                      improved: { N: m.improved.toString() },
+                      improvement: { N: m.improvement.toString() },
+                    },
+                  })),
+                },
+                improvementSummary: { S: improvementSummary },
+              },
+            })
+          );
+        } catch (err) {
         console.error('DynamoDB operation failed', err);
         return next(createError(500, 'Failed to store job data'));
       }
@@ -726,6 +741,7 @@ export default function registerProcessCv(app) {
         aiOriginalScore,
         aiEnhancedScore,
         aiSkillsAdded,
+        aiMetrics,
         improvementSummary,
         noImprovement,
         bestCvKey,
