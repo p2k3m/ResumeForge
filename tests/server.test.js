@@ -240,7 +240,9 @@ describe('/api/process-cv', () => {
     );
     expect(putCall).toBeTruthy();
     expect(putCall[0].input.TableName).toBe('ResumeForge');
-    expect(putCall[0].input.Item.jobId.S).toMatch(/\d+/);
+    expect(putCall[0].input.Item.jobId.S).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    );
     expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
       'https://linkedin.com/in/example'
     );
