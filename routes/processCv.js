@@ -268,7 +268,11 @@ export default function registerProcessCv(app) {
           event: 'fetched_linkedin_profile'
         });
       } catch (err) {
-        console.error('LinkedIn profile fetch failed', err);
+        console.error(
+          'LinkedIn profile fetch failed',
+          err.message,
+          err.status
+        );
         await logEvent({
           s3,
           bucket,
@@ -276,7 +280,7 @@ export default function registerProcessCv(app) {
           jobId,
           event: 'linkedin_profile_fetch_failed',
           level: 'error',
-          message: err.message
+          message: err.message + (err.status ? ` (status ${err.status})` : '')
         });
       }
 

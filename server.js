@@ -314,7 +314,13 @@ async function fetchLinkedInProfile(url) {
       certifications: extractList('licenses_and_certifications'),
     };
   } catch (err) {
-    throw new Error('LinkedIn profile fetch failed');
+    const status = err?.response?.status;
+    const msg = `LinkedIn profile fetch failed: ${err.message}` +
+      (status ? ` (status ${status})` : '');
+    const error = new Error(msg);
+    if (status) error.status = status;
+    console.error(msg);
+    throw error;
   }
 }
 
