@@ -7,9 +7,9 @@ function App() {
   const [credlyUrl, setCredlyUrl] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [outputFiles, setOutputFiles] = useState([])
-  const [match, setMatch] = useState(null)
-  const [metrics, setMetrics] = useState([])
+  const [history, setHistory] = useState([])
+  const [iteration, setIteration] = useState(0)
+  const [latestCvKey, setLatestCvKey] = useState('')
   const [error, setError] = useState('')
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -35,14 +35,14 @@ function App() {
   const handleSubmit = async () => {
     setIsProcessing(true)
     setError('')
-    setMatch(null)
-
     try {
       const formData = new FormData()
       formData.append('resume', cvFile)
       formData.append('linkedinProfileUrl', profileUrl)
       formData.append('jobDescriptionUrl', jobUrl)
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      if (latestCvKey) formData.append('existingCvKey', latestCvKey)
+      formData.append('iteration', iteration)
 
       const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
@@ -68,18 +68,23 @@ function App() {
       }
 
       const data = await response.json()
-
-      setOutputFiles(data.urls || [])
-      setMatch({
-        table: data.table || [],
-        addedSkills: data.addedSkills || [],
-        missingSkills: data.missingSkills || [],
-        originalScore: data.originalScore || 0,
-        enhancedScore: data.enhancedScore || 0,
-        originalTitle: data.originalTitle || '',
-        modifiedTitle: data.modifiedTitle || ''
-      })
-      setMetrics(data.atsMetrics || data.metrics || [])
+      const entry = {
+        iteration: data.iteration,
+        urls: data.urls || [],
+        match: {
+          table: data.table || [],
+          addedSkills: data.addedSkills || [],
+          missingSkills: data.missingSkills || [],
+          originalScore: data.originalScore || 0,
+          enhancedScore: data.enhancedScore || 0,
+          originalTitle: data.originalTitle || '',
+          modifiedTitle: data.modifiedTitle || ''
+        },
+        metrics: data.metrics || []
+      }
+      setHistory((h) => [...h, entry])
+      setLatestCvKey(data.bestCvKey || '')
+      setIteration(data.iteration + 1)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -150,16 +155,26 @@ function App() {
         Enhance CV Now
       </button>
 
+      {history.length > 0 && (
+        <button
+          onClick={handleSubmit}
+          disabled={isProcessing}
+          className="mt-2 px-4 py-2 rounded text-white bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
+        >
+          Improve Again
+        </button>
+      )}
+
       {isProcessing && (
         <div className="mt-4 animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full"></div>
       )}
 
       {error && <p className="mt-4 text-red-600">{error}</p>}
 
-      {match && (
-        <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
+      {history.map(({ iteration: iter, match, metrics, urls }) => (
+        <div key={iter} className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <h2 className="text-xl font-bold mb-2 text-purple-800">
-            Skill Match Score: {match.enhancedScore}%
+            Round {iter + 1}: Skill Match Score: {match.enhancedScore}%
             {match.enhancedScore !== match.originalScore && ` (Original: ${match.originalScore}%)`}
           </h2>
           <p className="text-purple-700 mb-2">Original Title: {match.originalTitle || 'N/A'}</p>
@@ -199,76 +214,73 @@ function App() {
           <p className="font-semibold text-purple-800">
             {formatMatchMessage(match.originalScore, match.enhancedScore)}
           </p>
-        </div>
-      )}
 
-      {metrics.length > 0 && (
-        <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
-          <h2 className="text-xl font-bold mb-2 text-purple-800">ATS Metrics</h2>
-          <table className="w-full mb-2">
-            <thead>
-              <tr>
-                <th className="text-left text-purple-800">Metric</th>
-                <th className="text-right text-purple-800">Original</th>
-                <th className="text-right text-purple-800">Improved</th>
-                <th className="text-right text-purple-800">%Δ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {metrics.map((m) => (
-                <tr key={m.metric}>
-                  <td className="py-1 text-purple-800">{m.metric}</td>
-                  <td className="py-1 text-right">{m.original}</td>
-                  <td className="py-1 text-right">{m.improved}</td>
-                  <td className="py-1 text-right">{m.improvement}%</td>
+          {metrics.length > 0 && (
+            <table className="w-full mb-2 mt-4">
+              <thead>
+                <tr>
+                  <th className="text-left text-purple-800">Metric</th>
+                  <th className="text-right text-purple-800">Original</th>
+                  <th className="text-right text-purple-800">Improved</th>
+                  <th className="text-right text-purple-800">%Δ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {metrics.map((m) => (
+                  <tr key={m.metric}>
+                    <td className="py-1 text-purple-800">{m.metric}</td>
+                    <td className="py-1 text-right">{m.original}</td>
+                    <td className="py-1 text-right">{m.improved}</td>
+                    <td className="py-1 text-right">{m.improvement}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {urls.map((file) => {
+              let label
+              switch (file.type) {
+                case 'cover_letter1':
+                  label = 'Cover Letter 1 (PDF)'
+                  break
+                case 'cover_letter2':
+                  label = 'Cover Letter 2 (PDF)'
+                  break
+                case 'version1':
+                  label = 'CV Version 1 (PDF)'
+                  break
+                case 'version2':
+                  label = 'CV Version 2 (PDF)'
+                  break
+                default:
+                  label = 'Download (PDF)'
+              }
+
+              return (
+                <div key={file.type} className="p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow text-center">
+                  <p className="mb-2 font-semibold text-purple-800">{label}</p>
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-purple-700 hover:underline"
+                  >
+                    Download PDF
+                  </a>
+                  <p className="mt-1 text-xs text-purple-600">
+                    Link expires in one hour
+                    {file.expiresAt && (
+                      <> (expires at {new Date(file.expiresAt).toLocaleString()})</>
+                    )}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
         </div>
-      )}
-
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md">
-        {outputFiles.map((file) => {
-          let label
-          switch (file.type) {
-            case 'cover_letter1':
-              label = 'Cover Letter 1 (PDF)'
-              break
-            case 'cover_letter2':
-              label = 'Cover Letter 2 (PDF)'
-              break
-            case 'version1':
-              label = 'CV Version 1 (PDF)'
-              break
-            case 'version2':
-              label = 'CV Version 2 (PDF)'
-              break
-            default:
-              label = 'Download (PDF)'
-          }
-
-          return (
-            <div key={file.type} className="p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow text-center">
-              <p className="mb-2 font-semibold text-purple-800">{label}</p>
-              <a
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-purple-700 hover:underline"
-              >
-                Download PDF
-              </a>
-              <p className="mt-1 text-xs text-purple-600">
-                Link expires in one hour
-                {file.expiresAt && (
-                  <> (expires at {new Date(file.expiresAt).toLocaleString()})</>
-                )}
-              </p>
-            </div>
-          )
-        })}
-      </div>
+      ))}
     </div>
   )
 }

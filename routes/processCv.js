@@ -86,7 +86,8 @@ export default function registerProcessCv(app) {
       return next(createError(500, 'failed to load configuration'));
     }
 
-    let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
+    let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl, existingCvKey, iteration } = req.body;
+    iteration = parseInt(iteration) || 0;
     const ipAddress =
       (req.headers['x-forwarded-for'] || '')
         .split(',')
@@ -142,10 +143,10 @@ export default function registerProcessCv(app) {
       }
     }
 
-    let text, docType, applicantName, sanitizedName, ext, prefix, logKey;
+    let text, docType, applicantName, sanitizedName, ext, prefix, logKey, existingCvBuffer, originalText;
     try {
-      text = await extractText(req.file);
-      docType = classifyDocument(text);
+      originalText = await extractText(req.file);
+      docType = classifyDocument(originalText);
       if (docType !== 'resume') {
         return next(
           createError(
@@ -154,12 +155,24 @@ export default function registerProcessCv(app) {
           )
         );
       }
-      applicantName = extractName(text);
+      applicantName = extractName(originalText);
       sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) sanitizedName = 'candidate';
       ext = path.extname(req.file.originalname).toLowerCase();
       prefix = `sessions/${sanitizedName}/${jobId}/`;
       logKey = `${prefix}logs/processing.jsonl`;
+      text = originalText;
+      if (existingCvKey) {
+        const existingObj = await s3.send(
+          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+        );
+        const arr = await existingObj.Body.transformToByteArray();
+        existingCvBuffer = Buffer.from(arr);
+        text = await extractText({
+          originalname: path.basename(existingCvKey),
+          buffer: existingCvBuffer,
+        });
+      }
     } catch (err) {
       console.error('Failed to extract text from PDF', err);
       return next(createError(500, 'Failed to extract text from PDF'));
@@ -346,8 +359,12 @@ export default function registerProcessCv(app) {
         project: projectText,
       };
       try {
-        const cvBuffer = await convertToPdf(text);
+        const cvBuffer = await convertToPdf(originalText);
         const cvFile = await openaiUploadFile(cvBuffer, 'cv.pdf');
+        let priorCvFile;
+        if (existingCvBuffer) {
+          priorCvFile = await openaiUploadFile(existingCvBuffer, 'existing_cv.pdf');
+        }
         const jdBuffer = await convertToPdf(jobDescription);
         const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
         let liFile;
@@ -364,6 +381,7 @@ export default function registerProcessCv(app) {
           'You are an expert resume writer and career coach. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, improvement_summary.';
         const responseText = await requestEnhancedCV({
           cvFileId: cvFile.id,
+          priorCvFileId: priorCvFile?.id,
           jobDescFileId: jdFile.id,
           linkedInFileId: liFile?.id,
           credlyFileId: credlyFile?.id,
@@ -444,7 +462,12 @@ export default function registerProcessCv(app) {
       );
       const enhancedScore = bestImproved.score;
       const noImprovement = enhancedScore <= originalScore;
-      const bestCvText = match1.score >= match2.score ? versionData.version1 : versionData.version2;
+      const bestVersionType =
+        match1.score >= match2.score ? 'version1' : 'version2';
+      const bestCvText =
+        bestVersionType === 'version1'
+          ? versionData.version1
+          : versionData.version2;
       const { table: atsMetrics } = compareMetrics(text, bestCvText);
       if (noImprovement) {
         await logEvent({
@@ -539,7 +562,7 @@ export default function registerProcessCv(app) {
           });
           const command = new GetObjectCommand({ Bucket: bucket, Key: key });
           const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
-          urls.push({ type: name, url });
+          urls.push({ type: name, url, key });
         } catch (err) {
           console.error(`${name} generation or upload failed`, err);
           return next(createError(500, `${name} generation failed`));
@@ -560,6 +583,9 @@ export default function registerProcessCv(app) {
         return next(createError(500, 'AI response invalid'));
       }
 
+      const bestCvKey =
+        urls.find((u) => u.type === bestVersionType)?.key || '';
+
       if (noImprovement) {
         try {
           const originalKey = `${prefix}${sanitizedName}${ext}`;
@@ -570,7 +596,7 @@ export default function registerProcessCv(app) {
           const originalUrl = await getSignedUrl(s3, command, {
             expiresIn: 3600,
           });
-          urls.push({ type: 'original', url: originalUrl });
+          urls.push({ type: 'original', url: originalUrl, key: originalKey });
         } catch (err) {
           console.error('original file retrieval failed', err);
         }
@@ -628,6 +654,7 @@ export default function registerProcessCv(app) {
               os: { S: os },
               browser: { S: browser },
               device: { S: device },
+              iteration: { N: iteration.toString() },
               aiOriginalScore: { N: aiOriginalScore.toString() },
               aiEnhancedScore: { N: aiEnhancedScore.toString() },
               aiSkillsAdded: { L: aiSkillsAdded.map((s) => ({ S: s })) },
@@ -689,7 +716,8 @@ export default function registerProcessCv(app) {
         applicantName,
         originalScore,
         enhancedScore,
-        atsMetrics,
+        iteration,
+        metrics: atsMetrics,
         table,
         addedSkills,
         missingSkills,
@@ -700,6 +728,7 @@ export default function registerProcessCv(app) {
         aiSkillsAdded,
         improvementSummary,
         noImprovement,
+        bestCvKey,
       });
     } catch (err) {
       console.error('processing failed', err);
