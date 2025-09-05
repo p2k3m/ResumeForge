@@ -12,7 +12,7 @@ function tokensToHtml(tokens) {
   return tokens
     .map((t) => {
       const text = t.text || '';
-      if (t.type === 'link') return `<a href="${t.href}">${text}</a>`;
+      if (t.type === 'link') return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
       if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
       if (t.style === 'bold') return `<strong>${text}</strong>`;
       if (t.style === 'italic') return `<em>${text}</em>`;

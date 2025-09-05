@@ -78,7 +78,7 @@ export async function generatePdf(
                 const space = next && next.text && !/^\s/.test(next.text)
                   ? ' '
                   : '';
-                return `<a href="${t.href}">${text.trim()}</a>${space}`;
+                return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>${space}`;
               }
               if (t.type === 'heading') {
                 return `<strong>${text}</strong>`;

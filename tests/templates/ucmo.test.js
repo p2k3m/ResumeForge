@@ -12,7 +12,7 @@ function tokensToHtml(tokens) {
       if (t.type === 'link') {
         const next = tokens[i + 1];
         const space = next && next.text && !/^\s/.test(next.text) ? ' ' : '';
-        return `<a href="${t.href}">${text.trim()}</a>${space}`;
+        return `<a href="${t.href}" target="_blank" rel="noopener noreferrer">${text.trim()}</a>${space}`;
       }
       if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
       if (t.style === 'bold') return `<strong>${text}</strong>`;
