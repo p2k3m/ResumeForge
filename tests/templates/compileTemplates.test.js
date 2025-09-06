@@ -10,7 +10,8 @@ const templates = [
   'modern',
   'professional',
   'ucmo',
-  'vibrant'
+  'vibrant',
+  'sleek'
 ];
 
 describe('handlebars template compilation', () => {
