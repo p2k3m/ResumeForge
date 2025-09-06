@@ -11,6 +11,7 @@ import {
   uploadFile as openaiUploadFile,
   requestEnhancedCV,
   requestCoverLetter,
+  requestAtsAnalysis,
 } from '../openaiClient.js';
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
@@ -196,7 +197,13 @@ export default function registerProcessCv(app, generativeModel) {
           jobSkills,
           resumeSkills
         );
-        const atsMetrics = calculateMetrics(resumeText);
+        let atsMetrics;
+        try {
+          atsMetrics = await requestAtsAnalysis(resumeText);
+        } catch (err) {
+          console.warn('ATS analysis failed, using heuristic metrics', err);
+          atsMetrics = calculateMetrics(resumeText);
+        }
         const atsScore = Math.round(
           Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
             Math.max(Object.keys(atsMetrics).length, 1)
@@ -1390,7 +1397,13 @@ export default function registerProcessCv(app, generativeModel) {
         { expiresIn: 3600 }
       );
 
-      const atsMetrics = calculateMetrics(cvText);
+      let atsMetrics;
+      try {
+        atsMetrics = await requestAtsAnalysis(cvText);
+      } catch (err) {
+        console.warn('ATS analysis failed, using heuristic metrics', err);
+        atsMetrics = calculateMetrics(cvText);
+      }
       const atsScore = Math.round(
         Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
           Math.max(Object.keys(atsMetrics).length, 1)
