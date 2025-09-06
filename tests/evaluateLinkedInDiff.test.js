@@ -58,7 +58,10 @@ describe('/api/evaluate LinkedIn diff', () => {
     ]);
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
-      expect.objectContaining({ docType: 'resume' })
+      expect.objectContaining({
+        docType: 'resume',
+        linkedinProfileUrl: 'https://linkedin.com/in/example',
+      })
     );
   });
 });
