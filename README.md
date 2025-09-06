@@ -108,7 +108,7 @@ Custom TrueType fonts can be embedded by placing valid `.ttf` files in a `fonts/
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
 
 ## API Response
-The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics:
+The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics and an estimated chance of selection:
 
 ```json
 {
@@ -124,12 +124,12 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
     { "skill": "aws", "matched": true },
     { "skill": "python", "matched": false }
   ],
-  "addedSkills": ["aws"],
-  "missingSkills": ["python"]
+  "newSkills": ["python"],
+  "chanceOfSelection": 65
 }
 ```
 
-`originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
+`originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched. `newSkills` lists job skills not found in the résumé, and `chanceOfSelection` averages the ATS score and skill match percentage to estimate selection likelihood.
 
 S3 keys follow the pattern `sessions/<name>/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
 
