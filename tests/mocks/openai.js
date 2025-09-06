@@ -16,6 +16,8 @@ export const requestEnhancedCV = jest.fn(async () =>
   })
 );
 
+export const requestCoverLetter = jest.fn(async () => 'Cover letter');
+
 // Track calls to responses.create so tests can inspect model selection.
 export const createResponse = jest.fn(async (options) => ({
   output_text: await requestEnhancedCV(options),

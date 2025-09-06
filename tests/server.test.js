@@ -1,7 +1,11 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
-import { uploadFile, requestEnhancedCV } from './mocks/openai.js';
+import {
+  uploadFile,
+  requestEnhancedCV,
+  requestCoverLetter,
+} from './mocks/openai.js';
 
 process.env.MAX_ITERATIONS = '3';
 
@@ -41,6 +45,7 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   uploadFile,
   requestEnhancedCV,
   requestSectionImprovement: jest.fn(async ({ sectionText }) => sectionText),
+  requestCoverLetter,
 }));
 
 generateContentMock
@@ -121,6 +126,8 @@ beforeEach(() => {
       improvement_summary: 'summary',
     })
   );
+  requestCoverLetter.mockReset();
+  requestCoverLetter.mockResolvedValue('Cover letter');
 });
 
 describe('health check', () => {
@@ -752,5 +759,31 @@ describe('client download labels', () => {
       expect(source).toContain(`case '${type}':`);
       expect(source).toContain(`label = '${label}'`);
     });
+  });
+});
+
+describe('/api/compile', () => {
+  test('returns added skills and designation', async () => {
+    mockS3Send.mockReset();
+    mockS3Send.mockImplementation((cmd) => {
+      if (cmd.input?.Key === 'cv.txt') {
+        return Promise.resolve({
+          Body: { transformToString: async () => 'Experience\nSkills' },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    const res = await request(app)
+      .post('/api/compile')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('existingCvTextKey', 'cv.txt')
+      .field('addedSkills', JSON.stringify(['aws']))
+      .field('designation', 'Team Lead');
+
+    expect(res.status).toBe(200);
+    expect(res.body.addedSkills).toEqual(['aws']);
+    expect(res.body.designation).toBe('Team Lead');
   });
 });
