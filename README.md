@@ -99,6 +99,10 @@ Available template values:
 Any missing or invalid ID falls back to `modern`.
 
 
+## Fonts
+Custom TrueType fonts can be embedded by placing valid `.ttf` files in a `fonts/` directory at the project root. If the directory or required font files are missing or invalid, the PDF generator automatically falls back to PDFKit's built-in fonts.
+
+
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
