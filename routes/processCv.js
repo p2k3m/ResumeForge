@@ -463,7 +463,10 @@ export default function registerProcessCv(app) {
       const chunks = [];
       for await (const chunk of obj.Body) chunks.push(chunk);
       const existingCvBuffer = Buffer.concat(chunks);
-      const originalText = await extractText(existingCvBuffer);
+      const originalText = await extractText({
+        originalname: path.basename(existingCvKey),
+        buffer: existingCvBuffer,
+      });
       const applicantName = extractName(originalText);
       let sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) sanitizedName = 'candidate';
