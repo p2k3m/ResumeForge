@@ -137,3 +137,26 @@ export async function requestEnhancedCV({
   }
   throw lastError;
 }
+
+export async function requestSectionImprovement({ sectionName, sectionText, jobDescription }) {
+  if (!sectionText) {
+    throw new Error('sectionText is required');
+  }
+  const client = await getClient();
+  const prompt = `You are an expert resume writer. Improve the ${sectionName} section of a resume so that it aligns with the job description. Return only the rewritten ${sectionName} text.\nJob Description: ${jobDescription}\n${sectionName}: ${sectionText}`;
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await client.responses.create({
+        model,
+        input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+      });
+      return response.output_text;
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') continue;
+      throw err;
+    }
+  }
+  throw lastError;
+}
