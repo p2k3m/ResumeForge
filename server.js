@@ -36,6 +36,7 @@ import {
   extractExperience,
   extractEducation,
   extractCertifications,
+  extractLanguages,
 } from './services/parseContent.js';
 
 let generativeModel;
@@ -340,6 +341,17 @@ async function fetchLinkedInProfile(url) {
             provider: providerMatch ? strip(providerMatch[1]) : '',
             url: urlMatch ? strip(urlMatch[1]) : '',
           });
+        } else if (id === 'languages') {
+          const nameMatch =
+            itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
+            itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
+          const profMatch =
+            itemHtml.match(/<span[^>]*>([^<]*proficienc[^<]*)<\/span>/i) ||
+            itemHtml.match(/"proficiency"\s*:\s*"(.*?)"/i);
+          items.push({
+            language: nameMatch ? strip(nameMatch[1]) : strip(text),
+            proficiency: profMatch ? strip(profMatch[1]) : '',
+          });
         } else {
           items.push(text);
         }
@@ -353,18 +365,20 @@ async function fetchLinkedInProfile(url) {
       education: extractList('education'),
       skills: extractList('skills'),
       certifications: extractList('licenses_and_certifications'),
+      languages: extractList('languages'),
     };
   } catch (err) {
     const status = err?.response?.status;
-    if (status === 999) {
-      return {
-        headline: '',
-        experience: [],
-        education: [],
-        skills: [],
-        certifications: []
-      };
-    }
+      if (status === 999) {
+        return {
+          headline: '',
+          experience: [],
+          education: [],
+          skills: [],
+          certifications: [],
+          languages: []
+        };
+      }
     const msg = `LinkedIn profile fetch failed: ${err.message}` +
       (status ? ` (status ${status})` : '');
     const error = new Error(msg);
@@ -519,6 +533,10 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     .filter(Boolean)
     .join(', ');
   const projects = sectionMap.projects || '';
+  const languages = [
+    ...extractLanguages(resumeText),
+    ...extractLanguages(linkedinData.languages || [])
+  ];
 
   return {
     summary,
@@ -527,7 +545,8 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     certifications,
     certificationUrls,
     skills,
-    projects
+    projects,
+    languages
   };
 }
 
@@ -552,7 +571,7 @@ async function rewriteSectionsWithGemini(
     const prompt =
       `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
       `Emphasize that the most recent role should explicitly reference keywords and mandatory skills from the job description. ` +
-      `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills. ` +
+      `Return only JSON with keys summary, experience, education, certifications, skills, languages, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills. ` +
       `For experience, respond with an array of roles, each having a title and a responsibilities array of bullet points.` +
       `\nSections: ${JSON.stringify(sectionData)}\nJob Description: ${jobDescription}`;
     const result = await generativeModel.generateContent(prompt);
@@ -608,6 +627,14 @@ async function rewriteSectionsWithGemini(
         new Set([...(parsed.skills || []), ...(parsed.mandatorySkills || [])])
       );
       lines.push(...mk('Skills', skillsList));
+      lines.push(
+        ...mk(
+          'Languages',
+          (parsed.languages || []).map((l) =>
+            l.proficiency ? `${l.language} - ${l.proficiency}` : l.language
+          )
+        )
+      );
       lines.push(...mk('Projects', parsed.projects));
       const raw = lines.join('\n');
       const cleaned = sanitizeGeneratedText(
@@ -945,6 +972,7 @@ export {
   extractExperience,
   extractEducation,
   extractCertifications,
+  extractLanguages,
   splitSkills,
   fetchLinkedInProfile,
   fetchCredlyProfile,

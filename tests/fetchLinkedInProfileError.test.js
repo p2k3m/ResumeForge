@@ -34,7 +34,8 @@ describe('fetchLinkedInProfile error handling', () => {
       experience: [],
       education: [],
       skills: [],
-      certifications: []
+      certifications: [],
+      languages: []
     });
   });
 });

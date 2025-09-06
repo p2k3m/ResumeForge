@@ -26,6 +26,7 @@ function App() {
   const [expOptions, setExpOptions] = useState([])
   const [eduOptions, setEduOptions] = useState([])
   const [certOptions, setCertOptions] = useState([])
+  const [langOptions, setLangOptions] = useState([])
   const [cvKey, setCvKey] = useState('')
   const [cvTextKey, setCvTextKey] = useState('')
   const [finalScore, setFinalScore] = useState(null)
@@ -99,6 +100,9 @@ function App() {
           checked: false
         }))
       )
+      setLangOptions(
+        (data.missingLanguages || []).map((t) => ({ text: t, checked: false }))
+      )
       if (!data.designationMatch) {
         setDesignationOverride(data.jobTitle || '')
       }
@@ -135,6 +139,7 @@ function App() {
       const selectedCertifications = certOptions
         .filter((o) => o.checked)
         .map((o) => o.data)
+      const selectedLanguages = langOptions.filter((o) => o.checked).map((o) => o.text)
 
       // Step 1: improve CV to obtain keys
       const improveForm = new FormData()
@@ -146,6 +151,7 @@ function App() {
       improveForm.append('selectedExperience', JSON.stringify(selectedExperience))
       improveForm.append('selectedEducation', JSON.stringify(selectedEducation))
       improveForm.append('selectedCertifications', JSON.stringify(selectedCertifications))
+      improveForm.append('selectedLanguages', JSON.stringify(selectedLanguages))
       const improveResp = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
         body: improveForm
@@ -172,6 +178,7 @@ function App() {
       compileForm.append('selectedExperience', JSON.stringify(selectedExperience))
       compileForm.append('selectedEducation', JSON.stringify(selectedEducation))
       compileForm.append('selectedCertifications', JSON.stringify(selectedCertifications))
+      compileForm.append('selectedLanguages', JSON.stringify(selectedLanguages))
       if (designationOverride)
         compileForm.append('designation', designationOverride)
       const compileResp = await fetch(`${API_BASE_URL}/api/compile`, {
@@ -188,7 +195,7 @@ function App() {
       setCvUrl(data.cvUrl || '')
       setCoverLetterUrl(data.coverLetterUrl || '')
       setNewAdditions(
-        [...(data.addedSkills || []), data.designation].filter(Boolean)
+        [...(data.addedSkills || []), ...(data.addedLanguages || []), data.designation].filter(Boolean)
       )
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -362,6 +369,22 @@ function App() {
                     type="checkbox"
                     checked={opt.checked}
                     onChange={() => toggleOption(setCertOptions)(idx)}
+                    className="mr-2"
+                  />
+                  {opt.text}
+                </label>
+              ))}
+            </div>
+          )}
+          {langOptions.length > 0 && (
+            <div className="text-purple-800 mb-2">
+              <p className="mb-2">LinkedIn languages not in resume:</p>
+              {langOptions.map((opt, idx) => (
+                <label key={idx} className="block">
+                  <input
+                    type="checkbox"
+                    checked={opt.checked}
+                    onChange={() => toggleOption(setLangOptions)(idx)}
                     className="mr-2"
                   />
                   {opt.text}

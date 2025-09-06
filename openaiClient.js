@@ -82,6 +82,18 @@ export async function requestEnhancedCV({
       original_score: { type: 'number' },
       enhanced_score: { type: 'number' },
       skills_added: { type: 'array', items: { type: 'string' } },
+      languages: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            language: { type: 'string' },
+            proficiency: { type: 'string' }
+          },
+          required: ['language'],
+          additionalProperties: false
+        }
+      },
       improvement_summary: { type: 'string' },
       metrics: {
         type: 'array',
@@ -106,6 +118,7 @@ export async function requestEnhancedCV({
       'original_score',
       'enhanced_score',
       'skills_added',
+      'languages',
       'improvement_summary',
       'metrics',
     ],

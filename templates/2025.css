@@ -94,6 +94,35 @@ body {
     width: 0;
   }
 
+  .languages {
+    grid-column: 1 / -1;
+  }
+
+  .languages-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+
+  .language-name {
+    font-weight: 600;
+  }
+
+  .language-bar {
+    background: #e0e0e0;
+    border-radius: 4px;
+    height: 8px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+
+  .language-fill {
+    background: var(--accent);
+    height: 100%;
+    border-radius: 4px;
+    width: 0;
+  }
+
 @media (min-width: 700px) {
   main {
     grid-template-columns: repeat(2, 1fr);
