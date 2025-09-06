@@ -50,6 +50,7 @@ function App() {
   const handleSubmit = async () => {
     setIsProcessing(true)
     setError('')
+    setDesignationOverride('')
     try {
       const formData = new FormData()
       formData.append('resume', cvFile)
@@ -82,6 +83,9 @@ function App() {
           checked: false
         }))
       )
+      if (!data.designationMatch) {
+        setDesignationOverride(data.jobTitle || '')
+      }
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -285,10 +289,10 @@ function App() {
           <p className="text-purple-800 mb-2">ATS Score: {result.atsScore}%</p>
           <p className="text-purple-800 mb-2">
             Designation: {result.originalTitle || 'N/A'} vs {result.jobTitle || 'N/A'}
+            {!result.designationMatch ? ' (Mismatch)' : ''}
           </p>
           {!result.designationMatch && (
-            <div className="mb-2 text-red-600">
-              <p className="mb-2">Designation mismatch</p>
+            <div className="mb-2">
               <input
                 type="text"
                 placeholder="Revised Designation"
