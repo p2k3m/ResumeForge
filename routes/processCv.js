@@ -143,11 +143,12 @@ export default function registerProcessCv(app, generativeModel) {
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
 
-        if (linkedinProfileUrl) {
-          linkedinProfileUrl = validateUrl(linkedinProfileUrl);
-          if (!linkedinProfileUrl)
-            return next(createError(400, 'invalid linkedinProfileUrl'));
-        }
+        if (!linkedinProfileUrl)
+          return next(createError(400, 'linkedinProfileUrl required'));
+        linkedinProfileUrl = validateUrl(linkedinProfileUrl);
+        if (!linkedinProfileUrl)
+          return next(createError(400, 'invalid linkedinProfileUrl'));
+
         if (credlyProfileUrl) {
           credlyProfileUrl = validateUrl(credlyProfileUrl);
           if (!credlyProfileUrl)

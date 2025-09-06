@@ -72,10 +72,13 @@ function App() {
     setError('')
     setDesignationOverride('')
     try {
+      if (!linkedinUrl.trim()) {
+        throw new Error('LinkedIn profile URL is required.')
+      }
       const formData = new FormData()
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
-      if (linkedinUrl) formData.append('linkedinProfileUrl', linkedinUrl)
+      formData.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim())
         formData.append('credlyProfileUrl', credlyUrl.trim())
       if (nameOverride) formData.append('applicantName', nameOverride)
@@ -125,7 +128,7 @@ function App() {
     }
   }
 
-  const disabled = !jobUrl || !cvFile || isProcessing
+  const disabled = !jobUrl || !cvFile || !linkedinUrl || isProcessing
 
   const handleSkillChange = (idx, value) => {
     setSkills((prev) => prev.map((s, i) => (i === idx ? value : s)))
