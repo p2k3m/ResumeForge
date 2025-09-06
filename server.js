@@ -110,7 +110,7 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
-const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
+const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025', 'sleek'];
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
 const TEMPLATE_IDS = CV_TEMPLATES; // Backwards compatibility
 const ALL_TEMPLATES = [...CV_TEMPLATES, ...CL_TEMPLATES];
@@ -121,14 +121,16 @@ const CV_TEMPLATE_GROUPS = {
   ucmo: 'classic',
   professional: 'professional',
   vibrant: 'creative',
-  2025: 'futuristic'
+  2025: 'futuristic',
+  sleek: 'modern'
 };
 
 // Predefined contrasting template pairs used when no explicit templates are provided
 const CONTRASTING_PAIRS = [
   ['modern', 'vibrant'],
   ['ucmo', '2025'],
-  ['professional', 'vibrant']
+  ['professional', 'vibrant'],
+  ['sleek', 'professional']
 ];
 
 const TECHNICAL_TERMS = [

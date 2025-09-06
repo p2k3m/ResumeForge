@@ -16,6 +16,7 @@ const ALL_TEMPLATES = [
   'professional',
   'vibrant',
   '2025',
+  'sleek',
   'cover_modern',
   'cover_classic'
 ];
@@ -200,6 +201,18 @@ export async function generatePdf(
         textColor: '#333',
         lineGap: 6,
         paragraphGap: 8
+      },
+      sleek: {
+        font: 'Helvetica',
+        bold: 'Helvetica-Bold',
+        italic: 'Helvetica-Oblique',
+        headingColor: '#4a90e2',
+        bullet: '•',
+        eduBullet: '•',
+        bulletColor: '#4a90e2',
+        textColor: '#333',
+        lineGap: 8,
+        paragraphGap: 12
       }
     };
     return new Promise((resolve, reject) => {

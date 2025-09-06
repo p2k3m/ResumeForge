@@ -88,8 +88,10 @@ export default function registerProcessCv(app) {
       console.error('User agent parsing failed', err);
       return next(createError(500, 'Failed to parse user agent'));
     }
-    const defaultCvTemplate =
+    let defaultCvTemplate =
       req.body.template || req.query.template || CV_TEMPLATES[0];
+    if (!CV_TEMPLATES.includes(defaultCvTemplate))
+      defaultCvTemplate = CV_TEMPLATES[0];
     const defaultClTemplate =
       req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
     const selection = selectTemplates({

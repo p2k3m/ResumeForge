@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resume</title>
+</head>
+<body>
+  <header class="header">
+    <h1>{{name}}</h1>
+  </header>
+  {{#each sections}}
+  <section class="section">
+    {{#if heading}}<h2>{{heading}}</h2>{{/if}}
+    {{#if items}}
+      <ul>
+        {{#each items}}
+          {{#if this.bullets}}
+            <li>
+              <strong>{{{this.title}}}</strong>
+              <ul>
+                {{#each this.bullets}}
+                  <li>{{{this}}}</li>
+                {{/each}}
+              </ul>
+            </li>
+          {{else}}
+            <li>{{{this}}}</li>
+          {{/if}}
+        {{/each}}
+      </ul>
+    {{/if}}
+  </section>
+  {{/each}}
+</body>
+</html>
