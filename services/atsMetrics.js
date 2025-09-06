@@ -54,12 +54,52 @@ export function scoreCrispness(text) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+export function scoreKeywordDensity(text) {
+  const words = text.toLowerCase().match(/\b[a-z]+\b/g) || [];
+  if (words.length === 0) return 0;
+  const freq = words.reduce((map, w) => {
+    map[w] = (map[w] || 0) + 1;
+    return map;
+  }, {});
+  const repeated = Object.values(freq).filter((c) => c > 1).length;
+  const density = repeated / words.length;
+  return Math.min(100, Math.round(density * 500));
+}
+
+export function scoreSectionHeadingClarity(text) {
+  const lines = text.split(/\n+/).map((l) => l.toLowerCase());
+  const headings = [
+    'experience',
+    'education',
+    'skills',
+    'projects',
+    'summary',
+    'contact'
+  ];
+  const found = headings.filter((h) => lines.some((l) => l.includes(h)));
+  return Math.round((found.length / headings.length) * 100);
+}
+
+export function scoreContactInfoCompleteness(text) {
+  const email = /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/.test(text);
+  const phone = /\b(?:\+?\d{1,2}[\s-]?)?(?:\(\d{3}\)|\d{3})[\s-]?\d{3}[\s-]?\d{4}\b/.test(
+    text
+  );
+  const linkedin = /linkedin\.com\/\S+/i.test(text);
+  const components = [email, phone, linkedin];
+  const score = components.filter(Boolean).length / components.length;
+  return Math.round(score * 100);
+}
+
 export function calculateMetrics(text) {
   return {
     layoutSearchability: scoreLayoutSearchability(text),
     atsReadability: scoreAtsReadability(text),
     impact: scoreImpact(text),
-    crispness: scoreCrispness(text)
+    crispness: scoreCrispness(text),
+    keywordDensity: scoreKeywordDensity(text),
+    sectionHeadingClarity: scoreSectionHeadingClarity(text),
+    contactInfoCompleteness: scoreContactInfoCompleteness(text)
   };
 }
 
