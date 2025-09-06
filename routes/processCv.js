@@ -10,8 +10,9 @@ import {
   uploadFile as openaiUploadFile,
   requestEnhancedCV,
 } from '../openaiClient.js';
-import { compareMetrics } from '../services/atsMetrics.js';
+import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
+import { logEvaluation } from '../services/dynamo.js';
 
 import {
   uploadResume,
@@ -78,6 +79,77 @@ export async function improveSections(sections, jobDescription) {
 }
 
 export default function registerProcessCv(app) {
+  app.post(
+    '/api/evaluate',
+    (req, res, next) => {
+      uploadResume(req, res, (err) => {
+        if (err) return next(createError(400, err.message));
+        next();
+      });
+    },
+    async (req, res, next) => {
+      const jobId = crypto.randomUUID();
+      const ipAddress =
+        (req.headers['x-forwarded-for'] || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)[0] || req.ip;
+      const userAgent = req.headers['user-agent'] || '';
+      let browser = '', os = '', device = '';
+      try {
+        ({ browser, os, device } = await parseUserAgent(userAgent));
+      } catch {}
+      try {
+        if (!req.file) return next(createError(400, 'resume file required'));
+        let { jobDescriptionUrl } = req.body;
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'jobDescriptionUrl required'));
+        jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'invalid jobDescriptionUrl'));
+
+        const { data: jobHtml } = await axios.get(jobDescriptionUrl, {
+          timeout: REQUEST_TIMEOUT_MS,
+        });
+        const { title: jobTitle, skills: jobSkills } =
+          analyzeJobDescription(jobHtml);
+        const resumeText = await extractText(req.file);
+        const resumeSkills = extractResumeSkills(resumeText);
+        const match = calculateMatchScore(jobSkills, resumeSkills);
+        const atsMetrics = calculateMetrics(resumeText);
+        const atsScore = Math.round(
+          Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
+            Math.max(Object.keys(atsMetrics).length, 1)
+        );
+        const experience = extractExperience(resumeText);
+        const candidateTitle = experience[0]?.title || '';
+        const designationMatch =
+          candidateTitle && jobTitle
+            ? candidateTitle.toLowerCase() === jobTitle.toLowerCase()
+            : false;
+
+        await logEvaluation({
+          jobId,
+          ipAddress,
+          userAgent,
+          browser,
+          os,
+          device,
+        });
+
+        res.json({
+          atsScore,
+          jobTitle,
+          candidateTitle,
+          designationMatch,
+          missingSkills: match.newSkills,
+        });
+      } catch (err) {
+        console.error('evaluation failed', err);
+        next(createError(500, 'evaluation failed'));
+      }
+    }
+  );
   app.post(
     '/api/process-cv',
     (req, res, next) => {

@@ -1,60 +1,38 @@
 /** @jest-environment jsdom */
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import App from './App.jsx';
+import React from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import App from './App.jsx'
+
+const mockResponse = {
+  atsScore: 70,
+  jobTitle: 'Senior Developer',
+  candidateTitle: 'Developer',
+  designationMatch: false,
+  missingSkills: ['aws']
+}
 
 global.fetch = jest.fn(() =>
   Promise.resolve({
     ok: true,
     headers: { get: () => 'application/json' },
-    json: () =>
-      Promise.resolve({
-        urls: [],
-        table: [],
-        addedSkills: [],
-        missingSkills: [],
-        originalScore: 40,
-        enhancedScore: 60,
-        metrics: [],
-        iteration: 0,
-        existingCvKey: 'key1',
-      }),
+    json: () => Promise.resolve(mockResponse)
   })
-);
+)
 
-test('triggers multiple improvement cycles', async () => {
-  render(<App />);
-  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' });
-  fireEvent.change(screen.getByPlaceholderText('LinkedIn Profile URL'), {
-    target: { value: 'https://linkedin.com/in/example' },
-  });
+test('evaluates CV and displays results', async () => {
+  render(<App />)
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(screen.getByLabelText('Choose File'), {
+    target: { files: [file] }
+  })
   fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
-    target: { value: 'https://indeed.com/job' },
-  });
-  fireEvent.change(screen.getByLabelText('Choose File'), { target: { files: [file] } });
-  fireEvent.click(screen.getByText('Enhance CV'));
-  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-
-  fetch.mockResolvedValueOnce({
-    ok: true,
-    headers: { get: () => 'application/json' },
-    json: () =>
-      Promise.resolve({
-        urls: [],
-        table: [],
-        addedSkills: [],
-        missingSkills: [],
-        originalScore: 60,
-        enhancedScore: 70,
-        metrics: [],
-        iteration: 1,
-        bestCvKey: 'key2',
-      }),
-  });
-  fireEvent.click(screen.getByText('Refine CV'));
-  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-  const body = JSON.parse(fetch.mock.calls[1][1].body);
-  expect(body.existingCvKey).toBe('key1');
-  expect(body.iteration).toBe(0);
-  expect(screen.getAllByText(/Skill Match Score/).length).toBe(2);
-});
+    target: { value: 'https://indeed.com/job' }
+  })
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+  expect(await screen.findByText(/ATS Score: 70%/)).toBeInTheDocument()
+  expect(
+    await screen.findByText(/Designation: Developer vs Senior Developer/)
+  ).toBeInTheDocument()
+  expect(await screen.findByText(/Missing skills: aws/)).toBeInTheDocument()
+})
