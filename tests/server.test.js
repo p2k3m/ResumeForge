@@ -8,6 +8,8 @@ import {
 } from './mocks/openai.js';
 
 process.env.MAX_ITERATIONS = '3';
+process.env.RATE_LIMIT_WINDOW_MS = '1000';
+process.env.RATE_LIMIT_MAX = '2';
 
 const mockS3Send = jest.fn().mockResolvedValue({
   Body: { transformToByteArray: async () => [] },
@@ -104,12 +106,14 @@ const {
   extractText,
   setGeneratePdf,
   rewriteSectionsWithGemini,
+  rateLimiter,
 } = serverModule;
 const { generatePdf } = await import('../services/generatePdf.js');
 const generatePdfMock = jest.fn().mockResolvedValue(Buffer.from('pdf'));
 setGeneratePdf(generatePdfMock);
 
 beforeEach(() => {
+  rateLimiter.reset();
   setupDefaultDynamoMock();
   uploadFile.mockReset();
   uploadFile.mockResolvedValue({ id: 'file-id' });
@@ -725,6 +729,15 @@ describe('/api/improve-metric', () => {
       .send({ iteration: 3 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('max improvements reached');
+  });
+});
+
+describe('rate limiting', () => {
+  test('throttles excessive requests', async () => {
+    await request(app).get('/healthz');
+    await request(app).get('/healthz');
+    const res = await request(app).get('/healthz');
+    expect(res.status).toBe(429);
   });
 });
 

@@ -61,6 +61,30 @@ async function parseUserAgent(ua) {
   }
 }
 
+function createRateLimiter({ windowMs, max } = {}) {
+  const hits = new Map();
+  return Object.assign(
+    (req, res, next) => {
+      const now = Date.now();
+      const ip = req.ip;
+      let entry = hits.get(ip);
+      if (!entry || now - entry.start > windowMs) {
+        entry = { start: now, count: 0 };
+        hits.set(ip, entry);
+      }
+      entry.count++;
+      if (entry.count > max) {
+        res.status(429).json({ error: 'Too many requests' });
+      } else {
+        next();
+      }
+    },
+    {
+      reset: () => hits.clear()
+    }
+  );
+}
+
 const allowedDomains = ['indeed.com', 'linkedin.com'];
 
 function validateUrl(input, whitelist = []) {
@@ -94,6 +118,11 @@ function validateUrl(input, whitelist = []) {
 }
 
 const app = express();
+const rateLimiter = createRateLimiter({
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX) || 100
+});
+app.use(rateLimiter);
 app.use(cors());
 app.use(express.json());
 
@@ -937,5 +966,6 @@ export {
   extractName,
   sanitizeName,
   region,
-  REQUEST_TIMEOUT_MS
+  REQUEST_TIMEOUT_MS,
+  rateLimiter
 };
