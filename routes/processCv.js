@@ -121,7 +121,10 @@ export default function registerProcessCv(app) {
           analyzeJobDescription(jobHtml);
         const resumeText = await extractText(req.file);
         const resumeSkills = extractResumeSkills(resumeText);
-        const match = calculateMatchScore(jobSkills, resumeSkills);
+        const { newSkills: missingSkills } = calculateMatchScore(
+          jobSkills,
+          resumeSkills
+        );
         const atsMetrics = calculateMetrics(resumeText);
         const atsScore = Math.round(
           Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
@@ -163,7 +166,7 @@ export default function registerProcessCv(app) {
           jobTitle,
           originalTitle,
           designationMatch,
-          missingSkills: match.newSkills,
+          missingSkills: missingSkills || [],
         });
       } catch (err) {
         console.error('evaluation failed', err);
@@ -201,7 +204,19 @@ export default function registerProcessCv(app) {
       existingCvTextKey,
       iteration,
       designation,
+      addedSkills,
     } = req.body;
+    let userSkills = [];
+    try {
+      if (Array.isArray(addedSkills)) {
+        userSkills = addedSkills;
+      } else if (typeof addedSkills === 'string') {
+        userSkills = JSON.parse(addedSkills);
+        if (!Array.isArray(userSkills)) userSkills = [];
+      }
+    } catch {
+      userSkills = [];
+    }
     iteration = parseInt(iteration) || 0;
     const maxIterations = parseInt(
       process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
@@ -492,7 +507,7 @@ export default function registerProcessCv(app) {
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
-      const improvedCv = [
+      let improvedCv = [
         sanitizedName,
         '# Summary',
         improvedSections.summary,
@@ -503,6 +518,9 @@ export default function registerProcessCv(app) {
         '# Certifications',
         improvedSections.certifications,
       ].join('\n\n');
+      if (userSkills.length) {
+        improvedCv += `\n\n# Skills\n${userSkills.join(', ')}`;
+      }
       const resumeSkills = extractResumeSkills(text);
       const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
       const enhancedMatch = calculateMatchScore(
