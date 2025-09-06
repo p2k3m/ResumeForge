@@ -35,16 +35,26 @@ jest
     ]
   });
 
+jest
+  .spyOn(serverModule, 'fetchCredlyProfile')
+  .mockResolvedValue([
+    { name: 'CertA', provider: 'OrgA' },
+    { name: 'CertB', provider: 'OrgB' }
+  ]);
+
 describe('/api/evaluate LinkedIn diff', () => {
   test('returns missing LinkedIn items', async () => {
     const res = await request(app)
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('credlyProfileUrl', 'https://credly.com/u/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.missingExperience).toEqual(['Manager at AnotherCo']);
     expect(res.body.missingEducation).toEqual(['Masters Uni']);
-    expect(res.body.missingCertifications).toEqual(['CertB - OrgB']);
+    expect(res.body.missingCertifications).toEqual([
+      { name: 'CertB', provider: 'OrgB' }
+    ]);
   });
 });

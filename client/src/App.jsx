@@ -6,6 +6,7 @@ function App() {
   const [result, setResult] = useState(null)
   const [skills, setSkills] = useState([])
   const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [credlyUrl, setCredlyUrl] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [designationOverride, setDesignationOverride] = useState('')
@@ -31,6 +32,8 @@ function App() {
       const formData = new FormData()
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
+      if (linkedinUrl) formData.append('linkedinProfileUrl', linkedinUrl)
+      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       const response = await fetch(`${API_BASE_URL}/api/evaluate`, {
         method: 'POST',
         body: formData,
@@ -44,7 +47,13 @@ function App() {
       setSkills(data.missingSkills || [])
       setExpOptions((data.missingExperience || []).map((t) => ({ text: t, checked: false })))
       setEduOptions((data.missingEducation || []).map((t) => ({ text: t, checked: false })))
-      setCertOptions((data.missingCertifications || []).map((t) => ({ text: t, checked: false })))
+      setCertOptions(
+        (data.missingCertifications || []).map((c) => ({
+          text: c.provider ? `${c.name} - ${c.provider}` : c.name,
+          data: c,
+          checked: false
+        }))
+      )
       if (!data.designationMatch) {
         alert('Designation mismatch detected. Please enter a revised designation.')
         setShowDesignationInput(true)
@@ -78,12 +87,13 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
+      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       formData.append('addedSkills', JSON.stringify(skills))
       const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
       const selectedEducation = eduOptions.filter((o) => o.checked).map((o) => o.text)
       const selectedCertifications = certOptions
         .filter((o) => o.checked)
-        .map((o) => o.text)
+        .map((o) => o.data)
       formData.append('selectedExperience', JSON.stringify(selectedExperience))
       formData.append('selectedEducation', JSON.stringify(selectedEducation))
       formData.append('selectedCertifications', JSON.stringify(selectedCertifications))
@@ -111,6 +121,11 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
+      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      const selectedCertifications = certOptions
+        .filter((o) => o.checked)
+        .map((o) => o.data)
+      formData.append('selectedCertifications', JSON.stringify(selectedCertifications))
       const response = await fetch(
         `${API_BASE_URL}/api/generate-cover-letter`,
         {
@@ -158,6 +173,14 @@ function App() {
         placeholder="LinkedIn Profile URL"
         value={linkedinUrl}
         onChange={(e) => setLinkedinUrl(e.target.value)}
+        className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+      />
+
+      <input
+        type="url"
+        placeholder="Credly Profile URL"
+        value={credlyUrl}
+        onChange={(e) => setCredlyUrl(e.target.value)}
         className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
       />
 
@@ -236,7 +259,7 @@ function App() {
           )}
           {certOptions.length > 0 && (
             <div className="text-purple-800 mb-2">
-              <p className="mb-2">LinkedIn certifications not in resume:</p>
+              <p className="mb-2">Credly certifications not in resume:</p>
               {certOptions.map((opt, idx) => (
                 <label key={idx} className="block">
                   <input

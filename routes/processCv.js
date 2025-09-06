@@ -102,7 +102,7 @@ export default function registerProcessCv(app) {
       } catch {}
       try {
         if (!req.file) return next(createError(400, 'resume file required'));
-        let { jobDescriptionUrl, linkedinProfileUrl } = req.body;
+        let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
         jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
@@ -113,6 +113,11 @@ export default function registerProcessCv(app) {
           linkedinProfileUrl = validateUrl(linkedinProfileUrl, allowedDomains);
           if (!linkedinProfileUrl)
             return next(createError(400, 'invalid linkedinProfileUrl'));
+        }
+        if (credlyProfileUrl) {
+          credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+          if (!credlyProfileUrl)
+            return next(createError(400, 'invalid credlyProfileUrl'));
         }
 
         const { data: jobHtml } = await axios.get(jobDescriptionUrl, {
@@ -148,9 +153,6 @@ export default function registerProcessCv(app) {
             const linkedinEducation = extractEducation(
               linkedinData.education || []
             );
-            const linkedinCertifications = extractCertifications(
-              linkedinData.certifications || []
-            );
             if (linkedinExperience[0]?.title) {
               originalTitle = linkedinExperience[0].title;
             }
@@ -168,16 +170,25 @@ export default function registerProcessCv(app) {
             missingEducation = linkedinEducation.filter(
               (e) => e && !resumeEduSet.has(e.toLowerCase())
             );
+          } catch {
+            // ignore LinkedIn fetch errors
+          }
+        }
+
+        if (credlyProfileUrl) {
+          try {
+            const credlyData = await fetchCredlyProfile(credlyProfileUrl);
             const fmtCert = (c = {}) =>
               (c.provider ? `${c.name} - ${c.provider}` : c.name || '').trim();
             const resumeCertSet = new Set(
               resumeCertifications.map((c) => fmtCert(c))
             );
-            missingCertifications = linkedinCertifications
-              .map((c) => fmtCert(c))
-              .filter((c) => c && !resumeCertSet.has(c));
+            missingCertifications = credlyData.filter((c) => {
+              const key = fmtCert(c);
+              return key && !resumeCertSet.has(key);
+            });
           } catch {
-            // ignore LinkedIn fetch errors
+            // ignore Credly fetch errors
           }
         }
 
@@ -522,10 +533,9 @@ export default function registerProcessCv(app) {
       }
       linkedinData.experience = selectedExperienceArr;
       linkedinData.education = selectedEducationArr;
-      linkedinData.certifications = selectedCertificationsArr;
 
-      let credlyCertifications = [];
-      if (credlyProfileUrl) {
+      let credlyCertifications = selectedCertificationsArr;
+      if (!credlyCertifications.length && credlyProfileUrl) {
         try {
           credlyCertifications = await withRetry(
             () => fetchCredlyProfile(credlyProfileUrl),
@@ -557,9 +567,6 @@ export default function registerProcessCv(app) {
       const resumeEducation = extractEducation(text);
       const linkedinEducation = extractEducation(linkedinData.education || []);
       const resumeCertifications = extractCertifications(text);
-      const linkedinCertifications = extractCertifications(
-        linkedinData.certifications || []
-      );
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
@@ -887,6 +894,7 @@ export default function registerProcessCv(app) {
         linkedinProfileUrl,
         credlyProfileUrl,
         existingCvTextKey,
+        selectedCertifications,
       } = req.body;
 
       if (!jobDescriptionUrl)
@@ -905,6 +913,16 @@ export default function registerProcessCv(app) {
         if (!credlyProfileUrl)
           return next(createError(400, 'invalid credlyProfileUrl'));
       }
+
+      let selectedCertificationsArr = [];
+      try {
+        if (Array.isArray(selectedCertifications))
+          selectedCertificationsArr = selectedCertifications;
+        else if (typeof selectedCertifications === 'string') {
+          const arr = JSON.parse(selectedCertifications);
+          if (Array.isArray(arr)) selectedCertificationsArr = arr;
+        }
+      } catch {}
 
       let originalText = '';
       let cvBuffer;
@@ -941,8 +959,8 @@ export default function registerProcessCv(app) {
         linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
       } catch {}
 
-      let credlyCertifications = [];
-      if (credlyProfileUrl) {
+      let credlyCertifications = selectedCertificationsArr;
+      if (!credlyCertifications.length && credlyProfileUrl) {
         try {
           credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
         } catch {}
