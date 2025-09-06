@@ -56,6 +56,12 @@ export async function logEvaluation({
     createdAt: { N: String(Date.now()) }
   };
 
+  const safeLinkedin =
+    typeof linkedinProfileUrl === 'string' && linkedinProfileUrl.trim()
+      ? linkedinProfileUrl
+      : 'unknown';
+  item.linkedinProfileUrl = { S: safeLinkedin };
+
   const addString = (key, value) => {
     if (typeof value === 'string' && value.trim()) {
       item[key] = { S: value };
@@ -68,7 +74,6 @@ export async function logEvaluation({
   addString('os', os);
   addString('device', device);
   addString('jobDescriptionUrl', jobDescriptionUrl);
-  addString('linkedinProfileUrl', linkedinProfileUrl);
   addString('credlyProfileUrl', credlyProfileUrl);
   addString('docType', docType);
 
@@ -109,6 +114,12 @@ export async function logSession({
     improvement: { N: String(improvement || 0) }
   };
 
+  const safeLinkedin =
+    typeof linkedinProfileUrl === 'string' && linkedinProfileUrl.trim()
+      ? linkedinProfileUrl
+      : 'unknown';
+  item.linkedinProfileUrl = { S: safeLinkedin };
+
   const addString = (key, value) => {
     if (typeof value === 'string' && value.trim()) {
       item[key] = { S: value };
@@ -121,7 +132,6 @@ export async function logSession({
   addString('os', os);
   addString('device', device);
   addString('jobDescriptionUrl', jobDescriptionUrl);
-  addString('linkedinProfileUrl', linkedinProfileUrl);
   addString('credlyProfileUrl', credlyProfileUrl);
   addString('cvKey', cvKey);
   addString('coverLetterKey', coverLetterKey);

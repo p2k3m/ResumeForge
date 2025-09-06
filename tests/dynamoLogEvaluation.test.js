@@ -50,7 +50,9 @@ describe('logEvaluation optional fields', () => {
     const putCall = sendMock.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
     );
-    expect(putCall[0].input.Item.linkedinProfileUrl).toBeUndefined();
+    expect(putCall[0].input.Item.linkedinProfileUrl).toEqual({
+      S: 'unknown',
+    });
   });
 });
 
