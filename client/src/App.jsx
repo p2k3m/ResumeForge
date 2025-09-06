@@ -18,6 +18,8 @@ function App() {
   const [finalScore, setFinalScore] = useState(null)
   const [improvement, setImprovement] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [cvUrl, setCvUrl] = useState('')
+  const [coverLetterUrl, setCoverLetterUrl] = useState('')
   const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -107,9 +109,11 @@ function App() {
     )
   }
 
-  const handleGenerateDocuments = async () => {
+  const handleCompile = async () => {
     setIsProcessing(true)
     setError('')
+    setCvUrl('')
+    setCoverLetterUrl('')
     try {
       // Gather user selections once
       const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
@@ -167,6 +171,8 @@ function App() {
       const data = await compileResp.json()
       setFinalScore(data.atsScore)
       setImprovement(data.improvement)
+      setCvUrl(data.cvUrl || '')
+      setCoverLetterUrl(data.coverLetterUrl || '')
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -329,7 +335,7 @@ function App() {
           )}
           <div className="flex gap-2 mt-2">
             <button
-              onClick={handleGenerateDocuments}
+              onClick={handleCompile}
               className="px-4 py-2 bg-purple-600 text-white rounded"
             >
               Generate CV & Cover Letter
@@ -339,6 +345,28 @@ function App() {
             <p className="text-purple-800 mt-2">
               Final ATS Score: {finalScore}% (Improvement: {improvement}% )
             </p>
+          )}
+          {cvUrl && (
+            <div className="flex gap-2 mt-2">
+              <a
+                href={cvUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 bg-green-600 text-white rounded"
+              >
+                Download CV
+              </a>
+              {coverLetterUrl && (
+                <a
+                  href={coverLetterUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-green-600 text-white rounded"
+                >
+                  Download Cover Letter
+                </a>
+              )}
+            </div>
           )}
         </div>
       )}
