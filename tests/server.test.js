@@ -132,6 +132,16 @@ beforeEach(() => {
   );
   requestCoverLetter.mockReset();
   requestCoverLetter.mockResolvedValue('Cover letter');
+  global.fetch = jest.fn().mockResolvedValue({
+    json: jest.fn().mockResolvedValue({
+      city: 'Test City',
+      country_name: 'Test Country',
+    }),
+  });
+});
+
+afterEach(() => {
+  delete global.fetch;
 });
 
 describe('health check', () => {
@@ -311,6 +321,7 @@ describe('/api/process-cv', () => {
     );
     expect(putCall[0].input.Item.candidateName.S).toBe(res2.body.applicantName);
     expect(putCall[0].input.Item.ipAddress.S).toBe('203.0.113.42');
+    expect(putCall[0].input.Item.location.S).toBe('Test City, Test Country');
     expect(putCall[0].input.Item.userAgent.S).toContain('iPhone');
     expect(putCall[0].input.Item.os.S).toBe('iOS');
     expect(putCall[0].input.Item.device.S).toBe('iPhone');

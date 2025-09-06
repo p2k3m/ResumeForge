@@ -59,6 +59,19 @@ Minimal permissions required by the server:
 }
 ```
 
+## DynamoDB Table
+Evaluation and session metadata are stored in a DynamoDB table (default name `ResumeForge`).
+Each item includes:
+
+- `jobId` – primary key for the log entry.
+- `createdAt` – timestamp in milliseconds.
+- `ipAddress` – IP address of the requester.
+- `location` – city and country derived from the IP address.
+- `userAgent` – raw user agent string.
+- `browser`, `os`, `device` – parsed client details.
+- Optional URLs like `jobDescriptionUrl`, `linkedinProfileUrl`, and `credlyProfileUrl`.
+- Fields such as `docType`, `atsScore`, `improvement`, `cvKey`, and `coverLetterKey` when relevant.
+
 ## Local Development
 1. Install dependencies in both the server and client directories:
    ```bash

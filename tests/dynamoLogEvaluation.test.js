@@ -5,10 +5,17 @@ import { logEvaluation } from '../services/dynamo.js';
 describe('logEvaluation optional fields', () => {
   beforeEach(() => {
     process.env.DYNAMO_TABLE = 'test';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: jest.fn().mockResolvedValue({
+        city: 'City',
+        country_name: 'Country',
+      }),
+    });
   });
 
   afterEach(() => {
     delete process.env.DYNAMO_TABLE;
+    delete global.fetch;
     jest.restoreAllMocks();
   });
 
@@ -32,6 +39,7 @@ describe('logEvaluation optional fields', () => {
     expect(putCall[0].input.Item.linkedinProfileUrl).toEqual({
       S: 'https://linkedin.com/in/example',
     });
+    expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
   });
 
   test('omits linkedinProfileUrl when not provided', async () => {
@@ -53,6 +61,7 @@ describe('logEvaluation optional fields', () => {
     expect(putCall[0].input.Item.linkedinProfileUrl).toEqual({
       S: 'unknown',
     });
+    expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
   });
 });
 

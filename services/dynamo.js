@@ -1,6 +1,26 @@
-import { DynamoDBClient, CreateTableCommand, DescribeTableCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBClient,
+  CreateTableCommand,
+  DescribeTableCommand,
+  PutItemCommand
+} from '@aws-sdk/client-dynamodb';
 import { getSecrets } from '../config/secrets.js';
 import { region } from '../server.js';
+
+async function resolveLocation(ipAddress) {
+  if (!ipAddress) return 'unknown';
+  try {
+    const res = await fetch(`https://ipapi.co/${ipAddress}/json/`);
+    const data = await res.json();
+    const city = data?.city;
+    const country = data?.country_name || data?.country;
+    if (city && country) return `${city}, ${country}`;
+    if (country) return country;
+  } catch {
+    /* ignore errors */
+  }
+  return 'unknown';
+}
 
 async function ensureTable(client, tableName) {
   try {
@@ -68,7 +88,9 @@ export async function logEvaluation({
     }
   };
 
+  const location = await resolveLocation(ipAddress);
   addString('ipAddress', ipAddress);
+  addString('location', location);
   addString('userAgent', userAgent);
   addString('browser', browser);
   addString('os', os);
@@ -126,7 +148,9 @@ export async function logSession({
     }
   };
 
+  const location = await resolveLocation(ipAddress);
   addString('ipAddress', ipAddress);
+  addString('location', location);
   addString('userAgent', userAgent);
   addString('browser', browser);
   addString('os', os);
@@ -139,4 +163,5 @@ export async function logSession({
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
 }
 
-export default { logEvaluation, logSession };
+export { resolveLocation };
+export default { logEvaluation, logSession, resolveLocation };
