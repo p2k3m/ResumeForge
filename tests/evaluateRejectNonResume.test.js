@@ -31,7 +31,10 @@ describe('/api/evaluate non-resume', () => {
     );
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
-      expect.objectContaining({ docType: 'cover letter' })
+      expect.objectContaining({
+        docType: 'cover letter',
+        linkedinProfileUrl: undefined,
+      })
     );
   });
 });
