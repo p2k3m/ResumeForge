@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 function App() {
   const [jobUrl, setJobUrl] = useState('')
@@ -18,6 +18,7 @@ function App() {
   const [finalScore, setFinalScore] = useState(null)
   const [improvement, setImprovement] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
   const handleFileChange = (e) => {
@@ -224,16 +225,20 @@ function App() {
         data-testid="dropzone"
         className={`mb-4 p-4 border-2 border-dashed rounded ${
           isDragging ? 'border-blue-500 bg-blue-100' : 'border-purple-300'
-        }`}
+        } cursor-pointer text-center text-purple-700`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onClick={() => fileInputRef.current && fileInputRef.current.click()}
       >
+        <p>Drag & drop your CV here or click to browse</p>
         <input
+          ref={fileInputRef}
           type="file"
           accept=".pdf,.docx"
           onChange={handleFileChange}
           aria-label="Choose File"
+          className="sr-only"
         />
       </div>
 

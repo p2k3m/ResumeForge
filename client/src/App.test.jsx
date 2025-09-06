@@ -22,9 +22,12 @@ global.fetch = jest.fn(() =>
 test('evaluates CV and displays results', async () => {
   render(<App />)
   const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
-  fireEvent.change(screen.getByLabelText('Choose File'), {
-    target: { files: [file] }
-  })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] }
+    }
+  )
   fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
     target: { value: 'https://indeed.com/job' }
   })
@@ -49,7 +52,13 @@ test('allows file to be dropped in drop zone', async () => {
   render(<App />)
   const dropZone = screen.getByTestId('dropzone')
   const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
-  fireEvent.drop(dropZone, { dataTransfer: { files: [file] } })
+  const dropEvent = new Event('drop', { bubbles: true })
+  Object.assign(dropEvent, {
+    dataTransfer: { files: [file] },
+    preventDefault: jest.fn()
+  })
+  dropZone.dispatchEvent(dropEvent)
+  expect(dropEvent.preventDefault).toHaveBeenCalled()
   fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
     target: { value: 'https://indeed.com/job' }
   })
@@ -60,8 +69,15 @@ test('allows file to be dropped in drop zone', async () => {
 test('highlights drop zone on drag over', () => {
   render(<App />)
   const dropZone = screen.getByTestId('dropzone')
-  fireEvent.dragOver(dropZone)
+  const dragOverEvent = new Event('dragover', { bubbles: true })
+  dragOverEvent.preventDefault = jest.fn()
+  dropZone.dispatchEvent(dragOverEvent)
+  expect(dragOverEvent.preventDefault).toHaveBeenCalled()
   expect(dropZone.className).toMatch('border-blue-500')
-  fireEvent.dragLeave(dropZone)
+
+  const dragLeaveEvent = new Event('dragleave', { bubbles: true })
+  dragLeaveEvent.preventDefault = jest.fn()
+  dropZone.dispatchEvent(dragLeaveEvent)
+  expect(dragLeaveEvent.preventDefault).toHaveBeenCalled()
   expect(dropZone.className).not.toMatch('border-blue-500')
 })
