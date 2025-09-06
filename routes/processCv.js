@@ -50,6 +50,23 @@ async function withRetry(fn, retries = 3, delay = 500) {
   throw lastErr;
 }
 
+export async function improveSections(sections, jobDescription) {
+  const improvedSections = {};
+  for (const key of ['summary', 'experience', 'education', 'certifications']) {
+    const text = sections[key]?.trim();
+    if (!text) {
+      improvedSections[key] = '';
+      continue;
+    }
+    improvedSections[key] = await requestSectionImprovement({
+      sectionName: key,
+      sectionText: text,
+      jobDescription,
+    });
+  }
+  return improvedSections;
+}
+
 export default function registerProcessCv(app) {
   app.post(
     '/api/process-cv',
@@ -330,14 +347,7 @@ export default function registerProcessCv(app) {
         resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
-      const improvedSections = {};
-      for (const key of ['summary', 'experience', 'education', 'certifications']) {
-        improvedSections[key] = await requestSectionImprovement({
-          sectionName: key,
-          sectionText: sections[key] || '',
-          jobDescription,
-        });
-      }
+      const improvedSections = await improveSections(sections, jobDescription);
       const improvedCv = [
         sanitizedName,
         '# Summary',

@@ -36,6 +36,7 @@ import { parseContent } from '../services/parseContent.js';
 jest.unstable_mockModule('../openaiClient.js', () => ({
   uploadFile,
   requestEnhancedCV,
+  requestSectionImprovement: jest.fn(async ({ sectionText }) => sectionText),
 }));
 
 generateContentMock
