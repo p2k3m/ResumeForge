@@ -38,7 +38,8 @@ import {
   region,
   REQUEST_TIMEOUT_MS,
   sanitizeGeneratedText,
-  parseAiJson
+  parseAiJson,
+  generatePdf
 } from '../server.js';
 
 const createError = (status, message) => {
@@ -933,6 +934,7 @@ export default function registerProcessCv(app) {
         credlyProfileUrl,
         existingCvTextKey,
         selectedCertifications,
+        coverTemplate,
       } = req.body;
 
       if (!jobDescriptionUrl)
@@ -961,6 +963,10 @@ export default function registerProcessCv(app) {
           if (Array.isArray(arr)) selectedCertificationsArr = arr;
         }
       } catch {}
+
+      let coverTemplateId = coverTemplate;
+      if (!CL_TEMPLATES.includes(coverTemplateId))
+        coverTemplateId = CL_TEMPLATES[0];
 
       let originalText = '';
       let cvBuffer;
@@ -1036,7 +1042,10 @@ export default function registerProcessCv(app) {
         defaultHeading: '',
       });
 
-      const clPdf = await convertToPdf(sanitizedCoverLetter);
+      const clPdf = await generatePdf(sanitizedCoverLetter, coverTemplateId, {
+        skipRequiredSections: true,
+        defaultHeading: '',
+      });
       const date = new Date().toISOString().split('T')[0];
       const key = path.join(
         sanitizedName,
@@ -1250,7 +1259,10 @@ export default function registerProcessCv(app) {
         skipRequiredSections: true,
         defaultHeading: '',
       });
-      const coverBuffer = await convertToPdf(sanitizedCover);
+      const coverBuffer = await generatePdf(sanitizedCover, coverTemplate1, {
+        skipRequiredSections: true,
+        defaultHeading: '',
+      });
       const date = new Date().toISOString().split('T')[0];
       const coverKey = path.join(
         sanitizedName,
