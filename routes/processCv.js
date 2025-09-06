@@ -5,6 +5,7 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSecrets } from '../config/secrets.js';
 import { logEvent } from '../logger.js';
 import { requestSectionImprovement } from '../openaiClient.js';
+import { uploadFile as openaiUploadFile } from '../openaiClient.js';
 import { compareMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 
