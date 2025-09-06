@@ -3,6 +3,8 @@ import request from 'supertest';
 import fs from 'fs';
 import { uploadFile, requestEnhancedCV } from './mocks/openai.js';
 
+process.env.MAX_ITERATIONS = '3';
+
 const mockS3Send = jest.fn().mockResolvedValue({
   Body: { transformToByteArray: async () => [] },
 });
@@ -394,7 +396,7 @@ describe('/api/process-cv', () => {
     expect(Array.isArray(second.body.metrics)).toBe(true);
   });
 
-  test('rejects third improvement attempt', async () => {
+  test('rejects fourth improvement attempt', async () => {
     const first = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
@@ -411,15 +413,22 @@ describe('/api/process-cv', () => {
       .field('existingCvKey', key)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(second.status).toBe(200);
-
     const third = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('iteration', '2')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-    expect(third.status).toBe(400);
-    expect(third.body.error).toBe('max improvements reached');
+    expect(third.status).toBe(200);
+
+    const fourth = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('iteration', '3')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(fourth.status).toBe(400);
+    expect(fourth.body.error).toBe('max improvements reached');
   });
 
   test('handles code-fenced JSON with extra text', async () => {
@@ -697,10 +706,10 @@ describe('/api/process-cv', () => {
 });
 
 describe('/api/improve-metric', () => {
-  test('rejects third improvement attempt', async () => {
+  test('rejects improvement beyond configured limit', async () => {
     const res = await request(app)
       .post('/api/improve-metric')
-      .send({ iteration: 2 });
+      .send({ iteration: 3 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('max improvements reached');
   });
