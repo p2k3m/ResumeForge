@@ -54,7 +54,8 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
       if (linkedinUrl) formData.append('linkedinProfileUrl', linkedinUrl)
-      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      if (credlyUrl.trim())
+        formData.append('credlyProfileUrl', credlyUrl.trim())
       const response = await fetch(`${API_BASE_URL}/api/evaluate`, {
         method: 'POST',
         body: formData,
@@ -109,7 +110,8 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
-      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      if (credlyUrl.trim())
+        formData.append('credlyProfileUrl', credlyUrl.trim())
       formData.append('addedSkills', JSON.stringify(skills))
       const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
       const selectedEducation = eduOptions.filter((o) => o.checked).map((o) => o.text)
@@ -145,7 +147,8 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
-      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      if (credlyUrl.trim())
+        formData.append('credlyProfileUrl', credlyUrl.trim())
       const selectedCertifications = certOptions
         .filter((o) => o.checked)
         .map((o) => o.data)
@@ -176,7 +179,8 @@ function App() {
       const formData = new FormData()
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
-      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      if (credlyUrl.trim())
+        formData.append('credlyProfileUrl', credlyUrl.trim())
       formData.append('existingCvKey', cvKey)
       formData.append('existingCvTextKey', cvTextKey)
       formData.append('originalScore', result?.atsScore || 0)
@@ -251,7 +255,7 @@ function App() {
 
       <input
         type="url"
-        placeholder="Credly Profile URL"
+        placeholder="Credly Profile URL (optional)"
         value={credlyUrl}
         onChange={(e) => setCredlyUrl(e.target.value)}
         className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
