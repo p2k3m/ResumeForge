@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import skillResources from './skillResources'
+import { getScoreStatus } from './scoreStatus'
 
 const metricTips = {
   layoutSearchability: 'Use bullet points for better scanning.',
@@ -294,18 +295,21 @@ function App() {
             <div className="text-purple-800 mb-2">
               <p className="font-semibold mb-1">ATS Breakdown</p>
               <ul>
-                {Object.entries(result.atsMetrics).map(([metric, score]) => (
-                  <li key={metric} className="mb-1">
-                    <span>
-                      {formatMetricName(metric)}: {score}%
-                    </span>
-                    {score < 70 && metricTips[metric] && (
-                      <span className="block text-sm text-purple-600">
-                        {metricTips[metric]}
+                {Object.entries(result.atsMetrics).map(([metric, score]) => {
+                  const status = getScoreStatus(score)
+                  return (
+                    <li key={metric} className="mb-1">
+                      <span>
+                        {formatMetricName(metric)}: {score}% ({status})
                       </span>
-                    )}
-                  </li>
-                ))}
+                      {score < 70 && metricTips[metric] && (
+                        <span className="block text-sm text-purple-600">
+                          {metricTips[metric]}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}
