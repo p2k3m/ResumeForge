@@ -131,18 +131,51 @@ export default function registerProcessCv(app) {
           Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
             Math.max(Object.keys(atsMetrics).length, 1)
         );
-        const experience = extractExperience(resumeText);
-        let originalTitle = experience[0]?.title || '';
+        const resumeExperience = extractExperience(resumeText);
+        const resumeEducation = extractEducation(resumeText);
+        const resumeCertifications = extractCertifications(resumeText);
+        let originalTitle = resumeExperience[0]?.title || '';
 
+        let missingExperience = [];
+        let missingEducation = [];
+        let missingCertifications = [];
         if (linkedinProfileUrl) {
           try {
             const linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
             const linkedinExperience = extractExperience(
               linkedinData.experience || []
             );
+            const linkedinEducation = extractEducation(
+              linkedinData.education || []
+            );
+            const linkedinCertifications = extractCertifications(
+              linkedinData.certifications || []
+            );
             if (linkedinExperience[0]?.title) {
               originalTitle = linkedinExperience[0].title;
             }
+            const fmtExp = (e = {}) =>
+              `${e.title || ''} at ${e.company || ''}`.trim();
+            const resumeExpSet = new Set(
+              resumeExperience.map((e) => fmtExp(e))
+            );
+            missingExperience = linkedinExperience
+              .map((e) => fmtExp(e))
+              .filter((e) => e && !resumeExpSet.has(e));
+            const resumeEduSet = new Set(
+              resumeEducation.map((e) => e.toLowerCase())
+            );
+            missingEducation = linkedinEducation.filter(
+              (e) => e && !resumeEduSet.has(e.toLowerCase())
+            );
+            const fmtCert = (c = {}) =>
+              (c.provider ? `${c.name} - ${c.provider}` : c.name || '').trim();
+            const resumeCertSet = new Set(
+              resumeCertifications.map((c) => fmtCert(c))
+            );
+            missingCertifications = linkedinCertifications
+              .map((c) => fmtCert(c))
+              .filter((c) => c && !resumeCertSet.has(c));
           } catch {
             // ignore LinkedIn fetch errors
           }
@@ -168,6 +201,9 @@ export default function registerProcessCv(app) {
           originalTitle,
           designationMatch,
           missingSkills: missingSkills || [],
+          missingExperience,
+          missingEducation,
+          missingCertifications,
         });
       } catch (err) {
         console.error('evaluation failed', err);
@@ -206,6 +242,9 @@ export default function registerProcessCv(app) {
       iteration,
       designation,
       addedSkills,
+      selectedExperience,
+      selectedEducation,
+      selectedCertifications,
     } = req.body;
     let userSkills = [];
     try {
@@ -218,6 +257,19 @@ export default function registerProcessCv(app) {
     } catch {
       userSkills = [];
     }
+    const parseArrayField = (field) => {
+      try {
+        if (Array.isArray(field)) return field;
+        if (typeof field === 'string') {
+          const arr = JSON.parse(field);
+          return Array.isArray(arr) ? arr : [];
+        }
+      } catch {}
+      return [];
+    };
+    const selectedExperienceArr = parseArrayField(selectedExperience);
+    const selectedEducationArr = parseArrayField(selectedEducation);
+    const selectedCertificationsArr = parseArrayField(selectedCertifications);
     iteration = parseInt(iteration) || 0;
     const maxIterations = parseInt(
       process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
@@ -468,6 +520,9 @@ export default function registerProcessCv(app) {
           message: err.message + (err.status ? ` (status ${err.status})` : '')
         });
       }
+      linkedinData.experience = selectedExperienceArr;
+      linkedinData.education = selectedEducationArr;
+      linkedinData.certifications = selectedCertificationsArr;
 
       let credlyCertifications = [];
       if (credlyProfileUrl) {

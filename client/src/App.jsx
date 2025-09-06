@@ -10,6 +10,9 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [designationOverride, setDesignationOverride] = useState('')
   const [showDesignationInput, setShowDesignationInput] = useState(false)
+  const [expOptions, setExpOptions] = useState([])
+  const [eduOptions, setEduOptions] = useState([])
+  const [certOptions, setCertOptions] = useState([])
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
   const handleFileChange = (e) => {
@@ -39,6 +42,9 @@ function App() {
       const data = await response.json()
       setResult(data)
       setSkills(data.missingSkills || [])
+      setExpOptions((data.missingExperience || []).map((t) => ({ text: t, checked: false })))
+      setEduOptions((data.missingEducation || []).map((t) => ({ text: t, checked: false })))
+      setCertOptions((data.missingCertifications || []).map((t) => ({ text: t, checked: false })))
       if (!data.designationMatch) {
         alert('Designation mismatch detected. Please enter a revised designation.')
         setShowDesignationInput(true)
@@ -58,6 +64,12 @@ function App() {
 
   const addSkill = () => setSkills((prev) => [...prev, ''])
 
+  const toggleOption = (setter) => (idx) => {
+    setter((prev) =>
+      prev.map((o, i) => (i === idx ? { ...o, checked: !o.checked } : o))
+    )
+  }
+
   const handleImproveCv = async () => {
     setIsProcessing(true)
     setError('')
@@ -67,8 +79,15 @@ function App() {
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
       formData.append('addedSkills', JSON.stringify(skills))
-      formData.append('metric', 'atsReadability')
-      const response = await fetch(`${API_BASE_URL}/api/improve-metric`, {
+      const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
+      const selectedEducation = eduOptions.filter((o) => o.checked).map((o) => o.text)
+      const selectedCertifications = certOptions
+        .filter((o) => o.checked)
+        .map((o) => o.text)
+      formData.append('selectedExperience', JSON.stringify(selectedExperience))
+      formData.append('selectedEducation', JSON.stringify(selectedEducation))
+      formData.append('selectedCertifications', JSON.stringify(selectedCertifications))
+      const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
         body: formData
       })
@@ -181,6 +200,54 @@ function App() {
               >
                 Add Skill
               </button>
+            </div>
+          )}
+          {expOptions.length > 0 && (
+            <div className="text-purple-800 mb-2">
+              <p className="mb-2">LinkedIn experience not in resume:</p>
+              {expOptions.map((opt, idx) => (
+                <label key={idx} className="block">
+                  <input
+                    type="checkbox"
+                    checked={opt.checked}
+                    onChange={() => toggleOption(setExpOptions)(idx)}
+                    className="mr-2"
+                  />
+                  {opt.text}
+                </label>
+              ))}
+            </div>
+          )}
+          {eduOptions.length > 0 && (
+            <div className="text-purple-800 mb-2">
+              <p className="mb-2">LinkedIn education not in resume:</p>
+              {eduOptions.map((opt, idx) => (
+                <label key={idx} className="block">
+                  <input
+                    type="checkbox"
+                    checked={opt.checked}
+                    onChange={() => toggleOption(setEduOptions)(idx)}
+                    className="mr-2"
+                  />
+                  {opt.text}
+                </label>
+              ))}
+            </div>
+          )}
+          {certOptions.length > 0 && (
+            <div className="text-purple-800 mb-2">
+              <p className="mb-2">LinkedIn certifications not in resume:</p>
+              {certOptions.map((opt, idx) => (
+                <label key={idx} className="block">
+                  <input
+                    type="checkbox"
+                    checked={opt.checked}
+                    onChange={() => toggleOption(setCertOptions)(idx)}
+                    className="mr-2"
+                  />
+                  {opt.text}
+                </label>
+              ))}
             </div>
           )}
           <div className="flex gap-2 mt-2">
