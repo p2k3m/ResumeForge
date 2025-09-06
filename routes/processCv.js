@@ -32,6 +32,7 @@ import {
   extractExperience,
   extractEducation,
   extractCertifications,
+  extractLanguages,
   collectSectionText,
   extractResumeSkills,
   calculateMatchScore,
@@ -159,11 +160,13 @@ export default function registerProcessCv(app, generativeModel) {
         const resumeExperience = extractExperience(resumeText);
         const resumeEducation = extractEducation(resumeText);
         const resumeCertifications = extractCertifications(resumeText);
+        const resumeLanguages = extractLanguages(resumeText);
         let originalTitle = resumeExperience[0]?.title || '';
 
         let missingExperience = [];
         let missingEducation = [];
         let missingCertifications = [];
+        let missingLanguages = [];
         if (linkedinProfileUrl) {
           try {
             const linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
@@ -172,6 +175,9 @@ export default function registerProcessCv(app, generativeModel) {
             );
             const linkedinEducation = extractEducation(
               linkedinData.education || []
+            );
+            const linkedinLanguages = extractLanguages(
+              linkedinData.languages || []
             );
             if (linkedinExperience[0]?.title) {
               originalTitle = linkedinExperience[0].title;
@@ -190,6 +196,19 @@ export default function registerProcessCv(app, generativeModel) {
             missingEducation = linkedinEducation.filter(
               (e) => e && !resumeEduSet.has(e.toLowerCase())
             );
+            const resumeLangSet = new Set(
+              resumeLanguages.map((l) => l.language.toLowerCase())
+            );
+            missingLanguages = linkedinLanguages
+              .map((l) =>
+                l.proficiency
+                  ? `${l.language} - ${l.proficiency}`
+                  : l.language
+              )
+              .filter((l) => {
+                const name = l.split('-')[0].trim().toLowerCase();
+                return name && !resumeLangSet.has(name);
+              });
           } catch {
             // ignore LinkedIn fetch errors
           }
@@ -240,6 +259,7 @@ export default function registerProcessCv(app, generativeModel) {
           missingExperience,
           missingEducation,
           missingCertifications,
+          missingLanguages,
         });
       } catch (err) {
         console.error('evaluation failed', err);
@@ -281,6 +301,7 @@ export default function registerProcessCv(app, generativeModel) {
       selectedExperience,
       selectedEducation,
       selectedCertifications,
+      selectedLanguages,
     } = req.body;
     let userSkills = [];
     try {
@@ -306,6 +327,7 @@ export default function registerProcessCv(app, generativeModel) {
     const selectedExperienceArr = parseArrayField(selectedExperience);
     const selectedEducationArr = parseArrayField(selectedEducation);
     const selectedCertificationsArr = parseArrayField(selectedCertifications);
+    const selectedLanguagesArr = parseArrayField(selectedLanguages);
     iteration = parseInt(iteration) || 0;
     const maxIterations = parseInt(
       process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
@@ -561,6 +583,7 @@ export default function registerProcessCv(app, generativeModel) {
       }
       linkedinData.experience = selectedExperienceArr;
       linkedinData.education = selectedEducationArr;
+      linkedinData.languages = selectedLanguagesArr;
 
       let credlyCertifications = selectedCertificationsArr;
       if (!credlyCertifications.length && credlyProfileUrl) {
@@ -595,6 +618,8 @@ export default function registerProcessCv(app, generativeModel) {
       const resumeEducation = extractEducation(text);
       const linkedinEducation = extractEducation(linkedinData.education || []);
       const resumeCertifications = extractCertifications(text);
+      const resumeLanguages = extractLanguages(text);
+      const linkedinLanguages = extractLanguages(linkedinData.languages || []);
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
@@ -611,6 +636,16 @@ export default function registerProcessCv(app, generativeModel) {
       ].join('\n\n');
       if (userSkills.length) {
         improvedCv += `\n\n# Skills\n${userSkills.join(', ')}`;
+      }
+      if (sections.languages?.length) {
+        const langLines = sections.languages
+          .map((l) =>
+            l.proficiency ? `${l.language} - ${l.proficiency}` : l.language
+          )
+          .join('\n');
+        if (langLines) {
+          improvedCv += `\n\n# Languages\n${langLines}`;
+        }
       }
       const resumeSkills = extractResumeSkills(text);
       const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
@@ -822,7 +857,7 @@ export default function registerProcessCv(app, generativeModel) {
       }
 
       const instructions =
-        `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, improvement_summary, metrics.`;
+        `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics.`;
 
       const responseText = await requestEnhancedCV({
         cvFileId: cvFile.id,
@@ -1107,6 +1142,7 @@ export default function registerProcessCv(app, generativeModel) {
         selectedEducation,
         addedSkills,
         designation,
+        selectedLanguages,
       } = req.body;
 
       if (!jobDescriptionUrl)
@@ -1145,6 +1181,7 @@ export default function registerProcessCv(app, generativeModel) {
       const selectedExperienceArr = parseArray(selectedExperience);
       const selectedEducationArr = parseArray(selectedEducation);
       let selectedCertificationsArr = parseArray(selectedCertifications);
+      const selectedLanguagesArr = parseArray(selectedLanguages);
 
       let cvBuffer;
       let cvText;
@@ -1219,6 +1256,7 @@ export default function registerProcessCv(app, generativeModel) {
       let linkedinData = {};
       try {
         linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+        linkedinData.languages = selectedLanguagesArr;
       } catch {}
 
       let credlyCertifications = selectedCertificationsArr;
@@ -1338,6 +1376,7 @@ export default function registerProcessCv(app, generativeModel) {
         atsScore,
         improvement,
         addedSkills: addedSkillsArr,
+        addedLanguages: selectedLanguagesArr,
         designation: designation || '',
       });
     }

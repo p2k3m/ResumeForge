@@ -11,6 +11,7 @@ export const requestEnhancedCV = jest.fn(async () =>
     original_score: 40,
     enhanced_score: 80,
     skills_added: ['skill1'],
+    languages: [],
     improvement_summary: 'summary',
     metrics: [],
   })

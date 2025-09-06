@@ -22,6 +22,16 @@ const ALL_TEMPLATES = [
   'cover_2025'
 ];
 
+function proficiencyToLevel(str = '') {
+  const s = String(str).toLowerCase();
+  if (/native|bilingual/.test(s)) return 100;
+  if (/full/.test(s)) return 80;
+  if (/professional/.test(s)) return 60;
+  if (/limited/.test(s)) return 40;
+  if (/elementary|basic/.test(s)) return 20;
+  return 50;
+}
+
 function escapeHtml(str = '') {
   return str
     .replace(/&/g, '&amp;')
@@ -163,6 +173,34 @@ export async function generatePdf(
         });
         htmlData.sections = htmlData.sections.filter(
           (s) => s.heading?.toLowerCase() !== 'skills'
+        );
+      }
+      const langIdx = data.sections.findIndex(
+        (s) => s.heading?.toLowerCase() === 'languages'
+      );
+      if (langIdx !== -1) {
+        const sec = data.sections[langIdx];
+        htmlData.languages = sec.items.map((tokens) => {
+          const text = tokens.map((t) => t.text || '').join('').trim();
+          const match = text.match(/^(.*?)[\s\-:|]+(\d{1,3})%?$/);
+          let name = text;
+          let level = 100;
+          if (match) {
+            name = match[1].trim();
+            level = parseInt(match[2], 10);
+            if (level <= 5) level = (level / 5) * 100;
+            if (level > 100) level = 100;
+          } else {
+            const paren = text.match(/^(.*?)\s*\((.*?)\)$/);
+            if (paren) {
+              name = paren[1].trim();
+              level = proficiencyToLevel(paren[2]);
+            }
+          }
+          return { name, level };
+        });
+        htmlData.sections = htmlData.sections.filter(
+          (s) => s.heading?.toLowerCase() !== 'languages'
         );
       }
     }

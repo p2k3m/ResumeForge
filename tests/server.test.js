@@ -127,6 +127,7 @@ beforeEach(() => {
       original_score: 40,
       enhanced_score: 80,
       skills_added: ['skill1'],
+      languages: [],
       improvement_summary: 'summary',
     })
   );
@@ -355,6 +356,7 @@ describe('/api/process-cv', () => {
         original_score: 40,
         enhanced_score: 40,
         skills_added: [],
+        languages: [],
         improvement_summary: 'none',
       })
     );
@@ -385,6 +387,7 @@ describe('/api/process-cv', () => {
           original_score: 40,
           enhanced_score: 80,
           skills_added: ['skill1'],
+          languages: [],
           improvement_summary: 'summary',
         })
       )
@@ -397,6 +400,7 @@ describe('/api/process-cv', () => {
           original_score: 80,
           enhanced_score: 90,
           skills_added: ['skill2'],
+          languages: [],
           improvement_summary: 'summary2',
         })
       );

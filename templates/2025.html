@@ -36,6 +36,21 @@
         </div>
       </section>
       {{/if}}
+      {{#if languages}}
+      <section class="section languages">
+        <h2>Languages</h2>
+        <div class="languages-grid">
+          {{#each languages}}
+          <div class="language">
+            <span class="language-name">{{this.name}}</span>
+            <div class="language-bar">
+              <div class="language-fill" style="width: {{this.level}}%;"></div>
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
       {{#each sections}}
       <section class="section">
         {{#if heading}}<h2>{{heading}}</h2>{{/if}}

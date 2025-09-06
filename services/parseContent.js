@@ -881,7 +881,7 @@ function parseContent(text, options = {}) {
         continue;
       }
       const plainHeadingMatch = trimmed.match(
-        /^((?:work|professional)\s*experience|education|skills|projects|certifications?|summary)$/i
+        /^((?:work|professional)\s*experience|education|skills|projects|certifications?|summary|languages)$/i
       );
       if (plainHeadingMatch) {
         if (current.length) currentSection.items.push(current);
@@ -1130,6 +1130,58 @@ function extractCertifications(source) {
   return entries;
 }
 
+function extractLanguages(source) {
+  if (!source) return [];
+
+  const parseEntry = (text = '') => {
+    let language = '';
+    let proficiency = '';
+    const paren = text.match(/^(.*?)\s*\((.*?)\)$/);
+    if (paren) {
+      language = paren[1].trim();
+      proficiency = paren[2].trim();
+    } else {
+      const parts = text.split(/[-\u2013:|]/);
+      language = parts.shift()?.trim() || '';
+      proficiency = parts.join('-').trim();
+    }
+    return { language, proficiency };
+  };
+
+  if (Array.isArray(source)) {
+    return source
+      .map((item) => {
+        if (typeof item === 'string') return parseEntry(item);
+        const language = item.language || item.name || '';
+        const proficiency = item.proficiency || item.level || '';
+        if (language || proficiency) return { language, proficiency };
+        return parseEntry(String(item));
+      })
+      .filter((l) => l.language);
+  }
+
+  const lines = String(source).split(/\r?\n/);
+  const entries = [];
+  let inSection = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^languages?/i.test(trimmed)) {
+      inSection = true;
+      continue;
+    }
+    if (inSection && /^\s*$/.test(trimmed)) {
+      inSection = false;
+      continue;
+    }
+    if (inSection) {
+      const match = trimmed.match(/^[-*]\s+(.*)/);
+      if (match) entries.push(parseEntry(match[1].trim()));
+      else if (trimmed) entries.push(parseEntry(trimmed));
+    }
+  }
+  return entries;
+}
+
 export {
   parseLine,
   parseContent,
@@ -1140,5 +1192,6 @@ export {
   extractExperience,
   extractEducation,
   extractCertifications,
+  extractLanguages,
   normalizeHeading,
 };
