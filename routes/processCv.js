@@ -101,12 +101,18 @@ export default function registerProcessCv(app) {
       } catch {}
       try {
         if (!req.file) return next(createError(400, 'resume file required'));
-        let { jobDescriptionUrl } = req.body;
+        let { jobDescriptionUrl, linkedinProfileUrl } = req.body;
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
         jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
+
+        if (linkedinProfileUrl) {
+          linkedinProfileUrl = validateUrl(linkedinProfileUrl, allowedDomains);
+          if (!linkedinProfileUrl)
+            return next(createError(400, 'invalid linkedinProfileUrl'));
+        }
 
         const { data: jobHtml } = await axios.get(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
@@ -122,10 +128,25 @@ export default function registerProcessCv(app) {
             Math.max(Object.keys(atsMetrics).length, 1)
         );
         const experience = extractExperience(resumeText);
-        const candidateTitle = experience[0]?.title || '';
+        let originalTitle = experience[0]?.title || '';
+
+        if (linkedinProfileUrl) {
+          try {
+            const linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+            const linkedinExperience = extractExperience(
+              linkedinData.experience || []
+            );
+            if (linkedinExperience[0]?.title) {
+              originalTitle = linkedinExperience[0].title;
+            }
+          } catch {
+            // ignore LinkedIn fetch errors
+          }
+        }
+
         const designationMatch =
-          candidateTitle && jobTitle
-            ? candidateTitle.toLowerCase() === jobTitle.toLowerCase()
+          originalTitle && jobTitle
+            ? originalTitle.toLowerCase() === jobTitle.toLowerCase()
             : false;
 
         await logEvaluation({
@@ -140,7 +161,7 @@ export default function registerProcessCv(app) {
         res.json({
           atsScore,
           jobTitle,
-          candidateTitle,
+          originalTitle,
           designationMatch,
           missingSkills: match.newSkills,
         });
@@ -179,6 +200,7 @@ export default function registerProcessCv(app) {
       existingCvKey,
       existingCvTextKey,
       iteration,
+      designation,
     } = req.body;
     iteration = parseInt(iteration) || 0;
     const maxIterations = parseInt(
@@ -390,8 +412,11 @@ export default function registerProcessCv(app) {
         });
         return next(createError(500, 'Job description fetch failed'));
       }
-      const { title: jobTitle, skills: jobSkills, text: jobDescription } =
+      let { title: jobTitle, skills: jobSkills, text: jobDescription } =
         analyzeJobDescription(jobDescriptionHtml);
+      if (designation) {
+        jobTitle = designation;
+      }
       // Original skills and score can be computed here if needed in future
 
       let linkedinData = {};
