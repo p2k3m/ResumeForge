@@ -68,6 +68,7 @@ function App() {
           const text = await response.text()
           message = text || message
         }
+        setError(message)
         throw new Error(message)
       }
 
@@ -120,7 +121,7 @@ function App() {
         }),
       })
 
-      if (!response.ok) {
+        if (!response.ok) {
         let message = 'Request failed'
         try {
           const data = await response.json()
@@ -129,6 +130,7 @@ function App() {
           const text = await response.text()
           message = text || message
         }
+        setError(message)
         throw new Error(message)
       }
 
@@ -141,17 +143,31 @@ function App() {
       const data = await response.json()
       setHistory((h) => {
         if (h.length === 0) return h
-        const updated = [...h]
         const last = h[h.length - 1]
-        updated[updated.length - 1] = {
-          ...last,
-          urls: data.urls || last.urls,
-          metrics: data.metrics || last.metrics,
+        const entry = {
+          iteration: data.iteration,
+          urls: data.urls || [],
+          metrics: data.metrics || [],
+          match: {
+            table: data.table || last.match.table,
+            addedSkills: data.addedSkills || last.match.addedSkills,
+            missingSkills:
+              data.missingSkills || data.newSkills || last.match.missingSkills,
+            originalScore:
+              data.originalScore ?? last.match.originalScore,
+            enhancedScore:
+              data.enhancedScore ?? last.match.enhancedScore,
+            originalTitle:
+              data.originalTitle ?? last.match.originalTitle,
+            modifiedTitle:
+              data.modifiedTitle ?? last.match.modifiedTitle,
+          },
         }
-        return updated
+        return [...h, entry]
       })
       if (data.existingCvKey || data.bestCvKey)
         setLatestCvKey(data.existingCvKey || data.bestCvKey)
+      setIteration(data.iteration + 1)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
