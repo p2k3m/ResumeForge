@@ -94,9 +94,20 @@ export default function registerProcessCv(app) {
       return next(createError(500, 'failed to load configuration'));
     }
 
-    let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl, existingCvKey, iteration } = req.body;
+    let {
+      jobDescriptionUrl,
+      linkedinProfileUrl,
+      credlyProfileUrl,
+      existingCvKey,
+      iteration,
+    } = req.body;
     iteration = parseInt(iteration) || 0;
-    if (iteration >= 2) return next(createError(400, 'max improvements reached'));
+    const maxIterations = parseInt(
+      process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
+      10
+    );
+    if (maxIterations && iteration >= maxIterations)
+      return next(createError(400, 'max improvements reached'));
     const ipAddress =
       (req.headers['x-forwarded-for'] || '')
         .split(',')
@@ -436,7 +447,12 @@ export default function registerProcessCv(app) {
       iteration,
     } = req.body;
     iteration = parseInt(iteration) || 0;
-    if (iteration >= 2) return next(createError(400, 'max improvements reached'));
+    const maxIterations = parseInt(
+      process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
+      10
+    );
+    if (maxIterations && iteration >= maxIterations)
+      return next(createError(400, 'max improvements reached'));
     if (!metric) return next(createError(400, 'metric required'));
     if (!jobDescriptionUrl)
       return next(createError(400, 'jobDescriptionUrl required'));
