@@ -232,6 +232,7 @@ export default function registerProcessCv(app) {
 
         res.json({
           atsScore,
+          atsMetrics,
           jobTitle,
           originalTitle,
           designationMatch,
