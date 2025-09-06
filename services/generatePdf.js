@@ -122,6 +122,49 @@ export async function generatePdf(
         };
       }),
     };
+
+    if (templateId === '2025') {
+      if (data.contactTokens) {
+        htmlData.contact = tokenHtml(data.contactTokens);
+        const linkedIn = data.contactTokens.find(
+          (t) => t.type === 'link' && /linkedin\.com/i.test(t.href || '')
+        );
+        if (linkedIn?.href) {
+          try {
+            const { default: QRCode } = await import('qrcode').catch(() => ({ default: null }));
+            if (QRCode) {
+              htmlData.linkedinQr = await QRCode.toDataURL(linkedIn.href, {
+                margin: 0,
+              });
+            }
+          } catch {
+            /* ignore QR generation errors */
+          }
+        }
+      }
+      const skillsIdx = data.sections.findIndex(
+        (s) => s.heading?.toLowerCase() === 'skills'
+      );
+      if (skillsIdx !== -1) {
+        const sec = data.sections[skillsIdx];
+        htmlData.skillsMatrix = sec.items.map((tokens) => {
+          const text = tokens.map((t) => t.text || '').join('').trim();
+          const match = text.match(/^(.*?)[\s\-:|]+(\d{1,3})%?$/);
+          let name = text;
+          let level = 100;
+          if (match) {
+            name = match[1].trim();
+            level = parseInt(match[2], 10);
+            if (level <= 5) level = (level / 5) * 100;
+            if (level > 100) level = 100;
+          }
+          return { name, level };
+        });
+        htmlData.sections = htmlData.sections.filter(
+          (s) => s.heading?.toLowerCase() !== 'skills'
+        );
+      }
+    }
     html = Handlebars.compile(templateSource)(htmlData);
     if (css) {
       html = html.replace('</head>', `<style>${css}</style></head>`);

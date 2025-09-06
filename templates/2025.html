@@ -7,33 +7,58 @@
   <!-- 2025 template ensures whitespace and tab rendering -->
 </head>
 <body>
-  <header class="header">
-    <h1>{{name}}</h1>
-  </header>
-  <main class="content">
-    {{#each sections}}
-    <section class="section">
-      {{#if heading}}<h2>{{heading}}</h2>{{/if}}
-      {{#if items}}
-        <ul>
-          {{#each items}}
-            {{#if this.bullets}}
-              <li>
-                <strong>{{{this.title}}}</strong>
-                <ul>
-                  {{#each this.bullets}}
-                    <li>{{{this}}}</li>
-                  {{/each}}
-                </ul>
-              </li>
-            {{else}}
-              <li>{{{this}}}</li>
-            {{/if}}
-          {{/each}}
-        </ul>
+    <header class="header">
+      <div class="header-info">
+        <h1>{{name}}</h1>
+        {{#if contact}}
+        <div class="contact">{{{contact}}}</div>
+        {{/if}}
+      </div>
+      {{#if linkedinQr}}
+      <div class="qr">
+        <img src="{{linkedinQr}}" alt="LinkedIn QR code" />
+      </div>
       {{/if}}
-    </section>
-    {{/each}}
-  </main>
-</body>
-</html>
+    </header>
+    <main class="content">
+      {{#if skillsMatrix}}
+      <section class="section skills-matrix">
+        <h2>Skills</h2>
+        <div class="skills-grid">
+          {{#each skillsMatrix}}
+          <div class="skill">
+            <span class="skill-name">{{this.name}}</span>
+            <div class="skill-bar">
+              <div class="skill-fill" style="width: {{this.level}}%;"></div>
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </section>
+      {{/if}}
+      {{#each sections}}
+      <section class="section">
+        {{#if heading}}<h2>{{heading}}</h2>{{/if}}
+        {{#if items}}
+          <ul>
+            {{#each items}}
+              {{#if this.bullets}}
+                <li>
+                  <strong>{{{this.title}}}</strong>
+                  <ul>
+                    {{#each this.bullets}}
+                      <li>{{{this}}}</li>
+                    {{/each}}
+                  </ul>
+                </li>
+              {{else}}
+                <li>{{{this}}}</li>
+              {{/if}}
+            {{/each}}
+          </ul>
+        {{/if}}
+      </section>
+      {{/each}}
+    </main>
+  </body>
+  </html>
