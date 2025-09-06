@@ -150,20 +150,28 @@ function App() {
       <button
         onClick={handleSubmit}
         disabled={disabled}
+        title="Generate an initial enhanced CV"
         className={`px-4 py-2 rounded text-white ${disabled ? 'bg-purple-300' : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'}`}
       >
-        Enhance CV Now
+        Enhance CV
       </button>
 
       {history.length > 0 && (
         <button
           onClick={handleSubmit}
           disabled={isProcessing}
+          title="Refine the latest enhanced CV"
           className="mt-2 px-4 py-2 rounded text-white bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700"
         >
-          Improve Again
+          Refine CV
         </button>
       )}
+
+      <p className="mt-2 text-sm text-purple-700">
+        {history.length === 0
+          ? 'Enhance CV generates your first improved document.'
+          : 'Refine CV iteratively polishes the latest version; use Enhance CV to start over.'}
+      </p>
 
       {isProcessing && (
         <div className="mt-4 animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full"></div>
