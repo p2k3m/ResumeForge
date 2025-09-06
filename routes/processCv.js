@@ -171,7 +171,16 @@ export default function registerProcessCv(app) {
       }
     }
 
-    let text, docType, applicantName, sanitizedName, ext, prefix, logKey, existingCvBuffer, originalText;
+    let text,
+      docType,
+      applicantName,
+      sanitizedName,
+      ext,
+      prefix,
+      logKey,
+      existingCvBuffer,
+      originalText,
+      originalTitle;
     try {
       originalText = await extractText(req.file);
       docType = classifyDocument(originalText);
@@ -183,7 +192,12 @@ export default function registerProcessCv(app) {
           )
         );
       }
+      const lines = originalText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
       applicantName = extractName(originalText);
+      originalTitle = lines[1] || '';
       sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) sanitizedName = 'candidate';
       ext = path.extname(req.file.originalname).toLowerCase();
@@ -379,13 +393,31 @@ export default function registerProcessCv(app) {
         improvedSections.certifications,
       ].join('\n\n');
       const resumeSkills = extractResumeSkills(text);
-      const match = calculateMatchScore(jobSkills, resumeSkills);
-      const { table: atsMetrics, improved: atsImproved } = compareMetrics(text, improvedCv);
+      const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
+      const enhancedMatch = calculateMatchScore(
+        jobSkills,
+        extractResumeSkills(improvedCv)
+      );
+      const addedSkills = enhancedMatch.table
+        .filter((r) =>
+          r.matched &&
+          originalMatch.table.some((o) => o.skill === r.skill && !o.matched)
+        )
+        .map((r) => r.skill);
+      const missingSkills = enhancedMatch.newSkills;
+      const originalScore = originalMatch.score;
+      const enhancedScore = enhancedMatch.score;
+      const { table: atsMetrics, improved: atsImproved } = compareMetrics(
+        text,
+        improvedCv
+      );
       const atsScore = Math.round(
         Object.values(atsImproved).reduce((sum, v) => sum + v, 0) /
           Math.max(Object.keys(atsImproved).length, 1)
       );
-      const chanceOfSelection = Math.round((match.score + atsScore) / 2);
+      const chanceOfSelection = Math.round(
+        (enhancedScore + atsScore) / 2
+      );
       const improvedPdf = await convertToPdf(improvedCv);
       const key = `${prefix}generated/cv/${Date.now()}-improved.pdf`;
       await s3.send(
@@ -402,8 +434,13 @@ export default function registerProcessCv(app) {
         sections: improvedSections,
         cv: improvedCv,
         metrics: atsMetrics,
-        table: match.table,
-        newSkills: match.newSkills,
+        table: enhancedMatch.table,
+        addedSkills,
+        missingSkills,
+        originalScore,
+        enhancedScore,
+        originalTitle,
+        modifiedTitle: jobTitle,
         chanceOfSelection,
         existingCvKey: key,
         iteration,
