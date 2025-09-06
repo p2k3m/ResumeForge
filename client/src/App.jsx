@@ -18,15 +18,33 @@ function App() {
   const [cvTextKey, setCvTextKey] = useState('')
   const [finalScore, setFinalScore] = useState(null)
   const [improvement, setImprovement] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0]
+    const file = e.target ? e.target.files[0] : e
     if (file && !file.name.toLowerCase().match(/\.(pdf|docx)$/)) {
       setError('Only PDF or DOCX files are supported.')
       return
     }
     setCvFile(file)
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFileChange(file)
   }
 
   const handleSubmit = async () => {
@@ -198,13 +216,22 @@ function App() {
         Upload your CV and provide the job description URL to evaluate how well it matches.
       </p>
 
-      <input
-        type="file"
-        accept=".pdf,.docx"
-        onChange={handleFileChange}
-        className="mb-4"
-        aria-label="Choose File"
-      />
+      <div
+        data-testid="dropzone"
+        className={`mb-4 p-4 border-2 border-dashed rounded ${
+          isDragging ? 'border-blue-500 bg-blue-100' : 'border-purple-300'
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <input
+          type="file"
+          accept=".pdf,.docx"
+          onChange={handleFileChange}
+          aria-label="Choose File"
+        />
+      </div>
 
       <input
         type="url"

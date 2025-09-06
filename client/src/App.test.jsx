@@ -44,3 +44,26 @@ test('evaluates CV and displays results', async () => {
   const skillInputs = await screen.findAllByPlaceholderText('Skill')
   expect(skillInputs.length).toBe(2)
 })
+
+test('allows file to be dropped in drop zone', async () => {
+  window.alert = jest.fn()
+  fetch.mockClear()
+  render(<App />)
+  const dropZone = screen.getByTestId('dropzone')
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.drop(dropZone, { dataTransfer: { files: [file] } })
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://indeed.com/job' }
+  })
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+})
+
+test('highlights drop zone on drag over', () => {
+  render(<App />)
+  const dropZone = screen.getByTestId('dropzone')
+  fireEvent.dragOver(dropZone)
+  expect(dropZone.className).toMatch('border-blue-500')
+  fireEvent.dragLeave(dropZone)
+  expect(dropZone.className).not.toMatch('border-blue-500')
+})
