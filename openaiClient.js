@@ -54,6 +54,8 @@ export async function requestEnhancedCV({
   instructions,
   priorCvFileId,
 }) {
+  if (!cvFileId) throw new Error('cvFileId is required');
+  if (!jobDescFileId) throw new Error('jobDescFileId is required');
   if (typeof instructions !== 'string' || !instructions.trim()) {
     throw new Error('instructions must be a non-empty string');
   }
