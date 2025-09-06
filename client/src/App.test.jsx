@@ -39,5 +39,8 @@ test('evaluates CV and displays results', async () => {
   expect(
     await screen.findByPlaceholderText('Revised Designation')
   ).toBeInTheDocument()
-  expect(await screen.findByText(/Missing skills: aws/)).toBeInTheDocument()
+  expect(await screen.findByDisplayValue('aws')).toBeInTheDocument()
+  fireEvent.click(await screen.findByText('Add Skill'))
+  const skillInputs = await screen.findAllByPlaceholderText('Skill')
+  expect(skillInputs.length).toBe(2)
 })
