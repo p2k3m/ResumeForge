@@ -376,6 +376,7 @@ export default function registerProcessCv(app) {
       sanitizedName,
       ext,
       prefix,
+      enhancedPrefix,
       logKey,
       existingCvBuffer,
       originalText,
@@ -400,7 +401,9 @@ export default function registerProcessCv(app) {
       sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) sanitizedName = 'candidate';
       ext = path.extname(req.file.originalname).toLowerCase();
-      prefix = `sessions/${sanitizedName}/${jobId}/`;
+      const date = new Date().toISOString().split('T')[0];
+      prefix = `${sanitizedName}/cv/${date}/`;
+      enhancedPrefix = `${sanitizedName}/enhanced/${date}/`;
       logKey = `${prefix}logs/processing.jsonl`;
       text = null;
       if (existingCvTextKey) {
@@ -637,8 +640,8 @@ export default function registerProcessCv(app) {
       );
       const improvedPdf = await convertToPdf(improvedCv);
       const ts = Date.now();
-      const key = `${prefix}generated/cv/${ts}-improved.pdf`;
-      const textKey = `${prefix}generated/cv/${ts}-improved.txt`;
+      const key = `${enhancedPrefix}cv/${ts}-improved.pdf`;
+      const textKey = `${enhancedPrefix}cv/${ts}-improved.txt`;
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -847,6 +850,7 @@ export default function registerProcessCv(app) {
         Math.max(Object.keys(metrics2.improved).length, 1);
 
       const ts = Date.now();
+      const date = new Date().toISOString().split('T')[0];
 
       let bestCv = cvVersion1;
       let metricTable = metrics1.table;
@@ -855,7 +859,12 @@ export default function registerProcessCv(app) {
         metricTable = metrics2.table;
       }
       const pdf = await convertToPdf(bestCv);
-      const key = path.join(sanitizedName, `${ts}-improved.pdf`);
+      const key = path.join(
+        sanitizedName,
+        'enhanced',
+        date,
+        `${ts}-improved.pdf`
+      );
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -864,7 +873,12 @@ export default function registerProcessCv(app) {
           ContentType: 'application/pdf',
         })
       );
-      const textKey = path.join(sanitizedName, `${ts}-improved.txt`);
+      const textKey = path.join(
+        sanitizedName,
+        'enhanced',
+        date,
+        `${ts}-improved.txt`
+      );
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1024,8 +1038,11 @@ export default function registerProcessCv(app) {
       });
 
       const clPdf = await convertToPdf(sanitizedCoverLetter);
+      const date = new Date().toISOString().split('T')[0];
       const key = path.join(
         sanitizedName,
+        'enhanced',
+        date,
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
@@ -1150,10 +1167,13 @@ export default function registerProcessCv(app) {
       const applicantName = extractName(cvText);
       let sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) sanitizedName = 'candidate';
+      const date = new Date().toISOString().split('T')[0];
 
       if (!existingCvKey) {
         existingCvKey = path.join(
           sanitizedName,
+          'cv',
+          date,
           `${Date.now()}-final_cv.pdf`
         );
         await s3.send(
@@ -1169,6 +1189,8 @@ export default function registerProcessCv(app) {
       if (!existingCvTextKey) {
         existingCvTextKey = path.join(
           sanitizedName,
+          'cv',
+          date,
           `${Date.now()}-final_cv.txt`
         );
         await s3.send(
@@ -1230,8 +1252,11 @@ export default function registerProcessCv(app) {
         defaultHeading: '',
       });
       const coverBuffer = await convertToPdf(sanitizedCover);
+      const date = new Date().toISOString().split('T')[0];
       const coverKey = path.join(
         sanitizedName,
+        'enhanced',
+        date,
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
