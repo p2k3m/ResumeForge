@@ -9,6 +9,7 @@ import {
   requestSectionImprovement,
   uploadFile as openaiUploadFile,
   requestEnhancedCV,
+  requestCoverLetter,
 } from '../openaiClient.js';
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
@@ -654,8 +655,10 @@ export default function registerProcessCv(app) {
       return next(createError(400, 'jobDescriptionUrl required'));
     if (!linkedinProfileUrl)
       return next(createError(400, 'linkedinProfileUrl required'));
-    if (!existingCvKey)
-      return next(createError(400, 'existingCvKey required'));
+    if (!existingCvKey && !existingCvTextKey)
+      return next(
+        createError(400, 'existingCvKey or existingCvTextKey required')
+      );
 
     jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
     if (!jobDescriptionUrl)
@@ -670,25 +673,21 @@ export default function registerProcessCv(app) {
     }
 
     let existingCvBuffer;
+    let originalText;
     try {
-      const obj = await s3.send(
-        new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
-      );
-      const chunks = [];
-      for await (const chunk of obj.Body) chunks.push(chunk);
-      existingCvBuffer = Buffer.concat(chunks);
-      let originalText;
       if (existingCvTextKey) {
-        try {
-          const textObj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
-          );
-          originalText = await textObj.Body.transformToString();
-        } catch (err) {
-          console.error('failed to fetch saved CV text', err);
-        }
-      }
-      if (!originalText) {
+        const textObj = await s3.send(
+          new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+        );
+        originalText = await textObj.Body.transformToString();
+        existingCvBuffer = await convertToPdf(originalText);
+      } else if (existingCvKey) {
+        const obj = await s3.send(
+          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+        );
+        const chunks = [];
+        for await (const chunk of obj.Body) chunks.push(chunk);
+        existingCvBuffer = Buffer.concat(chunks);
         originalText = await extractText({
           originalname: path.basename(existingCvKey),
           buffer: existingCvBuffer,
@@ -746,19 +745,9 @@ export default function registerProcessCv(app) {
       const parsed = parseAiJson(responseText);
       let cvVersion1 = '';
       let cvVersion2 = '';
-      let coverLetter1 = '';
-      let coverLetter2 = '';
       if (parsed) {
         cvVersion1 = sanitizeGeneratedText(parsed.cv_version1, { jobTitle });
         cvVersion2 = sanitizeGeneratedText(parsed.cv_version2, { jobTitle });
-        coverLetter1 = sanitizeGeneratedText(parsed.cover_letter1, {
-          skipRequiredSections: true,
-          defaultHeading: '',
-        });
-        coverLetter2 = sanitizeGeneratedText(parsed.cover_letter2, {
-          skipRequiredSections: true,
-          defaultHeading: '',
-        });
       }
 
       const metrics1 = compareMetrics(originalText, cvVersion1);
@@ -772,101 +761,194 @@ export default function registerProcessCv(app) {
 
       const ts = Date.now();
 
-      const pdf1 = await convertToPdf(cvVersion1);
-      const key1 = path.join(sanitizedName, `${ts}-version1.pdf`);
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key1,
-          Body: pdf1,
-          ContentType: 'application/pdf',
-        })
-      );
-      const url1 = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key1 }),
-        { expiresIn: 3600 }
-      );
-
-      const pdf2 = await convertToPdf(cvVersion2);
-      const key2 = path.join(sanitizedName, `${ts}-version2.pdf`);
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key2,
-          Body: pdf2,
-          ContentType: 'application/pdf',
-        })
-      );
-      const url2 = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key2 }),
-        { expiresIn: 3600 }
-      );
-
-      const clPdf1 = await convertToPdf(coverLetter1);
-      const clKey1 = path.join(sanitizedName, `${ts}-cover_letter1.pdf`);
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: clKey1,
-          Body: clPdf1,
-          ContentType: 'application/pdf',
-        })
-      );
-      const clUrl1 = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: clKey1 }),
-        { expiresIn: 3600 }
-      );
-
-      const clPdf2 = await convertToPdf(coverLetter2);
-      const clKey2 = path.join(sanitizedName, `${ts}-cover_letter2.pdf`);
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: clKey2,
-          Body: clPdf2,
-          ContentType: 'application/pdf',
-        })
-      );
-      const clUrl2 = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: clKey2 }),
-        { expiresIn: 3600 }
-      );
-
+      let bestCv = cvVersion1;
       let metricTable = metrics1.table;
-      let bestKey = key1;
       if (avg2 > avg1) {
+        bestCv = cvVersion2;
         metricTable = metrics2.table;
-        bestKey = key2;
       }
+      const pdf = await convertToPdf(bestCv);
+      const key = path.join(sanitizedName, `${ts}-improved.pdf`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: pdf,
+          ContentType: 'application/pdf',
+        })
+      );
+      const textKey = path.join(sanitizedName, `${ts}-improved.txt`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: textKey,
+          Body: bestCv,
+          ContentType: 'text/plain',
+        })
+      );
+      const url = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: 3600 }
+      );
 
       iteration += 1;
       res.json({
         iteration,
-        urls: [
-          { type: 'version1', url: url1, expiresAt: Date.now() + 3600 * 1000 },
-          { type: 'version2', url: url2, expiresAt: Date.now() + 3600 * 1000 },
-          {
-            type: 'cover_letter1',
-            url: clUrl1,
-            expiresAt: Date.now() + 3600 * 1000,
-          },
-          {
-            type: 'cover_letter2',
-            url: clUrl2,
-            expiresAt: Date.now() + 3600 * 1000,
-          },
-        ],
+        url,
         metrics: metricTable,
-        bestCvKey: bestKey,
+        cvKey: key,
+        textKey,
       });
     } catch (err) {
       console.error('metric improvement failed', err);
       next(createError(500, 'failed to improve metric'));
     }
   });
+
+  app.post(
+    '/api/generate-cover-letter',
+    (req, res, next) => {
+      uploadResume(req, res, (err) => {
+        if (err) return next(createError(400, err.message));
+        next();
+      });
+    },
+    async (req, res, next) => {
+      const s3 = new S3Client({ region });
+      let bucket;
+      let secrets;
+      try {
+        secrets = await getSecrets();
+        bucket =
+          process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+      } catch (err) {
+        console.error('failed to load configuration', err);
+        return next(createError(500, 'failed to load configuration'));
+      }
+
+      let {
+        jobDescriptionUrl,
+        linkedinProfileUrl,
+        credlyProfileUrl,
+        existingCvTextKey,
+      } = req.body;
+
+      if (!jobDescriptionUrl)
+        return next(createError(400, 'jobDescriptionUrl required'));
+      if (!linkedinProfileUrl)
+        return next(createError(400, 'linkedinProfileUrl required'));
+
+      jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+      if (!jobDescriptionUrl)
+        return next(createError(400, 'invalid jobDescriptionUrl'));
+      linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+      if (!linkedinProfileUrl)
+        return next(createError(400, 'invalid linkedinProfileUrl'));
+      if (credlyProfileUrl) {
+        credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+        if (!credlyProfileUrl)
+          return next(createError(400, 'invalid credlyProfileUrl'));
+      }
+
+      let originalText = '';
+      let cvBuffer;
+      try {
+        if (existingCvTextKey) {
+          const textObj = await s3.send(
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+          );
+          originalText = await textObj.Body.transformToString();
+        } else if (req.file) {
+          originalText = await extractText(req.file);
+        } else {
+          return next(
+            createError(400, 'resume or existingCvTextKey required')
+          );
+        }
+        cvBuffer = await convertToPdf(originalText);
+      } catch (err) {
+        console.error('failed to process cv', err);
+        return next(createError(500, 'failed to process cv'));
+      }
+
+      const applicantName = extractName(originalText);
+      let sanitizedName = sanitizeName(applicantName);
+      if (!sanitizedName) sanitizedName = 'candidate';
+
+      let jobDescription = '';
+      try {
+        ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
+      } catch {}
+
+      let linkedinData = {};
+      try {
+        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+      } catch {}
+
+      let credlyCertifications = [];
+      if (credlyProfileUrl) {
+        try {
+          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+        } catch {}
+      }
+
+      const cvFile = await openaiUploadFile(cvBuffer, 'cv.pdf');
+      const jdBuffer = await convertToPdf(jobDescription);
+      const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
+      let liFile;
+      if (Object.keys(linkedinData).length) {
+        const liBuffer = await convertToPdf(linkedinData);
+        liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
+      }
+      let credlyFile;
+      if (credlyCertifications.length) {
+        const credlyBuffer = await convertToPdf(credlyCertifications);
+        credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
+      }
+
+      let coverLetterText;
+      try {
+        coverLetterText = await requestCoverLetter({
+          cvFileId: cvFile.id,
+          jobDescFileId: jdFile.id,
+          linkedInFileId: liFile?.id,
+          credlyFileId: credlyFile?.id,
+        });
+      } catch (err) {
+        console.error('cover letter generation failed', err);
+        return next(createError(500, 'cover letter generation failed'));
+      }
+
+      const sanitizedCoverLetter = sanitizeGeneratedText(coverLetterText, {
+        skipRequiredSections: true,
+        defaultHeading: '',
+      });
+
+      const clPdf = await convertToPdf(sanitizedCoverLetter);
+      const key = path.join(
+        sanitizedName,
+        `${Date.now()}-cover_letter.pdf`
+      );
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: clPdf,
+          ContentType: 'application/pdf',
+        })
+      );
+      const url = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: 3600 }
+      );
+
+      res.json({
+        url,
+        expiresAt: Date.now() + 3600 * 1000,
+      });
+    }
+  );
 }
 
