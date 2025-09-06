@@ -157,3 +157,51 @@ test('highlights drop zone on drag over', () => {
   expect(dragLeaveEvent.preventDefault).toHaveBeenCalled()
   expect(dropZone.className).not.toMatch('border-blue-500')
 })
+
+test('shows curated resource link for known skill', async () => {
+  fetch
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(mockResponse),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve({ existingCvKey: 'key.pdf', cvTextKey: 'key.txt' }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () =>
+        Promise.resolve({
+          cvUrl: 'cv.pdf',
+          coverLetterUrl: '',
+          atsScore: 80,
+          improvement: 10,
+          addedSkills: ['aws'],
+          designation: 'Senior Developer',
+        }),
+    })
+
+  render(<App />)
+
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] },
+    }
+  )
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://indeed.com/job' },
+  })
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+
+  fireEvent.click(await screen.findByText('Generate CV & Cover Letter'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
+
+  const link = await screen.findByText('AWS Training')
+  expect(link).toHaveAttribute('href', 'https://aws.amazon.com/training/')
+})

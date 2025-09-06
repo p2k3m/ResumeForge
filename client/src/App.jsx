@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react'
+import skillResources from './skillResources'
 
 const metricTips = {
   layoutSearchability: 'Use bullet points for better scanning.',
@@ -444,19 +445,40 @@ function App() {
             <div className="text-purple-800 mt-4">
               <h3 className="font-semibold mb-2">New Additions for Interview Prep</h3>
               <ul className="list-disc list-inside">
-                {newAdditions.map((item, idx) => (
-                  <li key={idx}>
-                    {item}{' '}
-                    <a
-                      href={`https://www.google.com/search?q=${encodeURIComponent(item + ' interview questions')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 underline"
-                    >
-                      Learning Resources
-                    </a>
-                  </li>
-                ))}
+                {newAdditions.map((item, idx) => {
+                  const resources = skillResources[item.toLowerCase().trim()]
+                  return (
+                    <li key={idx}>
+                      {item}{' '}
+                      {resources ? (
+                        resources.map((r, i) => (
+                          <span key={i}>
+                            <a
+                              href={r.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 underline"
+                            >
+                              {r.label}
+                            </a>
+                            {i < resources.length - 1 ? ', ' : ''}
+                          </span>
+                        ))
+                      ) : (
+                        <a
+                          href={`https://www.google.com/search?q=${encodeURIComponent(
+                            item + ' interview questions'
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline"
+                        >
+                          Learning Resources
+                        </a>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           )}
