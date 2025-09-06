@@ -6,7 +6,7 @@ import App from './App.jsx'
 const mockResponse = {
   atsScore: 70,
   jobTitle: 'Senior Developer',
-  candidateTitle: 'Developer',
+  originalTitle: 'Developer',
   designationMatch: false,
   missingSkills: ['aws']
 }
@@ -20,6 +20,7 @@ global.fetch = jest.fn(() =>
 )
 
 test('evaluates CV and displays results', async () => {
+  window.alert = jest.fn()
   render(<App />)
   const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
   fireEvent.change(screen.getByLabelText('Choose File'), {
@@ -30,9 +31,13 @@ test('evaluates CV and displays results', async () => {
   })
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+  expect(window.alert).toHaveBeenCalled()
   expect(await screen.findByText(/ATS Score: 70%/)).toBeInTheDocument()
   expect(
     await screen.findByText(/Designation: Developer vs Senior Developer/)
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByPlaceholderText('Revised Designation')
   ).toBeInTheDocument()
   expect(await screen.findByText(/Missing skills: aws/)).toBeInTheDocument()
 })
