@@ -17,24 +17,31 @@ jest.unstable_mockModule('../services/dynamo.js', () => ({
   logEvaluation: jest.fn().mockResolvedValue()
 }));
 
+jest.unstable_mockModule('../openaiClient.js', () => ({
+  uploadFile: jest.fn(),
+  requestSectionImprovement: jest.fn(),
+  requestEnhancedCV: jest.fn(),
+  requestCoverLetter: jest.fn(),
+  classifyDocument: jest.fn(),
+}));
+
 const app = (await import('../server.js')).default;
+const { classifyDocument } = await import('../openaiClient.js');
 
 describe('/api/evaluate non-resume', () => {
-  test('rejects cover letters', async () => {
+  test.each(['cover letter', 'essay'])('rejects %s', async (docType) => {
+    classifyDocument.mockResolvedValueOnce(docType);
     const res = await request(app)
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .attach('resume', Buffer.from('dummy'), 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
-      'You seem to have uploaded cover letter and not a CV – please upload the correct CV'
+      `You have uploaded a ${docType} and not a CV – please upload the correct CV`
     );
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        docType: 'cover letter',
-        linkedinProfileUrl: undefined,
-      })
+      expect.objectContaining({ docType, linkedinProfileUrl: undefined })
     );
   });
 });

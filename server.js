@@ -13,7 +13,11 @@ import {
   PutItemCommand
 } from '@aws-sdk/client-dynamodb';
 import { logEvent } from './logger.js';
-import { uploadFile as openaiUploadFile, requestEnhancedCV } from './openaiClient.js';
+import {
+  uploadFile as openaiUploadFile,
+  requestEnhancedCV,
+  classifyDocument as aiClassifyDocument,
+} from './openaiClient.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { getSecrets } from './config/secrets.js';
@@ -693,23 +697,12 @@ async function extractText(file) {
   return file.buffer.toString();
 }
 
-function classifyDocument(text) {
-  const lower = text.toLowerCase();
-  const resumeIndicators = [
-    'education',
-    'experience',
-    'skills',
-    'work history',
-    'professional summary',
-  ];
-  const coverLetterIndicators = ['dear', 'sincerely', 'cover letter'];
-
-  const resumeScore = resumeIndicators.filter((i) => lower.includes(i)).length;
-  const coverLetterScore = coverLetterIndicators.filter((i) => lower.includes(i)).length;
-
-  if (resumeScore >= 2) return 'resume';
-  if (coverLetterScore >= 1 && resumeScore === 0) return 'cover letter';
-  return 'unknown';
+async function classifyDocument(text) {
+  try {
+    return await aiClassifyDocument(text);
+  } catch {
+    return 'unknown';
+  }
 }
 
 function extractName(text) {
