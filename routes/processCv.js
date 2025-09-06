@@ -126,7 +126,7 @@ export default function registerProcessCv(app) {
         const { title: jobTitle, skills: jobSkills } =
           analyzeJobDescription(jobHtml);
         const resumeText = await extractText(req.file);
-        const docType = classifyDocument(resumeText);
+        const docType = await classifyDocument(resumeText);
         if (docType !== 'resume') {
           await logEvaluation({
             jobId,
@@ -143,7 +143,7 @@ export default function registerProcessCv(app) {
           return res
             .status(400)
             .send(
-              `You seem to have uploaded ${docType} and not a CV – please upload the correct CV`
+              `You have uploaded a ${docType} and not a CV – please upload the correct CV`
             );
         }
         const resumeSkills = extractResumeSkills(resumeText);
@@ -383,12 +383,12 @@ export default function registerProcessCv(app) {
       originalTitle;
     try {
       originalText = await extractText(req.file);
-      docType = classifyDocument(originalText);
+      docType = await classifyDocument(originalText);
       if (docType !== 'resume') {
         return next(
           createError(
             400,
-            `Uploaded document classified as ${docType}; please upload a resume`
+            `You have uploaded a ${docType} and not a CV – please upload the correct CV`
           )
         );
       }

@@ -200,3 +200,29 @@ export async function requestCoverLetter({
   }
   throw lastError;
 }
+
+export async function classifyDocument(text) {
+  const client = await getClient();
+  const prompt =
+    'Classify the following document. Respond with a short phrase such as "resume", "cover letter", "essay", etc.';
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await client.responses.create({
+        model,
+        input: [
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: `${prompt}\n\n${text.slice(0, 4000)}` }],
+          },
+        ],
+      });
+      return response.output_text.trim().toLowerCase();
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') continue;
+      throw err;
+    }
+  }
+  throw lastError;
+}
