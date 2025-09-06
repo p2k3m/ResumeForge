@@ -211,6 +211,10 @@ export async function generatePdf(
 
       function registerFontSafe(name, p) {
         if (!fontsDirExists) return false;
+        if (path.extname(p).toLowerCase() !== '.ttf') {
+          console.warn('Skipping non-TTF font:', p);
+          return false;
+        }
         if (!fsSync.existsSync(p)) {
           console.warn('Font file missing:', p);
           return false;
@@ -242,8 +246,18 @@ export async function generatePdf(
       doc.on('warning', (w) => {
         const currentName = doc._font?.name;
         const fp = currentName && fontPaths[currentName];
-        if (fp) console.warn('PDFKit warning:', w, 'Font file:', fp);
-        else console.warn('PDFKit warning:', w, 'Font:', currentName || 'unknown');
+        if (fp) {
+          console.warn('PDFKit warning:', w, 'Font file:', fp, '- falling back to built-in fonts');
+          delete fontPaths[currentName];
+          Object.values(styleMap).forEach((s) => {
+            if (s.font === currentName) s.font = 'Helvetica';
+            if (s.bold === currentName) s.bold = 'Helvetica-Bold';
+            if (s.italic === currentName) s.italic = 'Helvetica-Oblique';
+          });
+          doc.font('Helvetica');
+        } else {
+          console.warn('PDFKit warning:', w, 'Font:', currentName || 'unknown');
+        }
       });
 
       // Optional font embedding for Roboto/Helvetica families if available
