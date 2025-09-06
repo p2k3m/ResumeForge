@@ -21,6 +21,7 @@ import {
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import { getSecrets } from './config/secrets.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import JSON5 from 'json5';
 import registerProcessCv from './routes/processCv.js';
 import { generatePdf as _generatePdf } from './services/generatePdf.js';
@@ -36,6 +37,18 @@ import {
   extractEducation,
   extractCertifications,
 } from './services/parseContent.js';
+
+let generativeModel;
+try {
+  const { GEMINI_API_KEY } = await getSecrets();
+  const apiKey = GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  if (apiKey) {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    generativeModel = genAI.getGenerativeModel({ model: 'gemini-pro' });
+  }
+} catch (err) {
+  console.error('Failed to initialize Gemini', err);
+}
 
 // Prevent crashes when stdout/stderr streams close prematurely
 process.stdout.on('error', (err) => {
@@ -696,7 +709,8 @@ function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
   return parts.join('\n');
 }
 
-let generatePdf = _generatePdf;
+let generatePdf = (text, templateId, options, gm = generativeModel) =>
+  _generatePdf(text, templateId, options, gm);
 
 function setGeneratePdf(fn) {
   generatePdf = fn;
@@ -902,7 +916,7 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-registerProcessCv(app);
+registerProcessCv(app, generativeModel);
 
 // Generic error handler to prevent uncaught exceptions from crashing requests
 app.use((err, req, res, next) => {

@@ -79,7 +79,7 @@ export async function improveSections(sections, jobDescription) {
   return improvedSections;
 }
 
-export default function registerProcessCv(app) {
+export default function registerProcessCv(app, generativeModel) {
   app.post(
     '/api/evaluate',
     (req, res, next) => {
@@ -1045,7 +1045,7 @@ export default function registerProcessCv(app) {
       const clPdf = await generatePdf(sanitizedCoverLetter, coverTemplateId, {
         skipRequiredSections: true,
         defaultHeading: '',
-      });
+      }, generativeModel);
       const date = new Date().toISOString().split('T')[0];
       const key = path.join(
         sanitizedName,
@@ -1262,12 +1262,12 @@ export default function registerProcessCv(app) {
       const coverBuffer = await generatePdf(sanitizedCover, coverTemplate1, {
         skipRequiredSections: true,
         defaultHeading: '',
-      });
-      const date = new Date().toISOString().split('T')[0];
+      }, generativeModel);
+      const coverDate = new Date().toISOString().split('T')[0];
       const coverKey = path.join(
         sanitizedName,
         'enhanced',
-        date,
+        coverDate,
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
