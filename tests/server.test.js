@@ -274,6 +274,8 @@ describe('/api/process-cv', () => {
     pdfKeys.forEach((k) => {
       expect(k).toContain(`sessions/${sanitized}/`);
     });
+    expect(res2.body.existingCvKey).toBeTruthy();
+    expect(pdfKeys).toContain(res2.body.existingCvKey);
 
     const putCall = mockDynamoSend.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
@@ -373,7 +375,8 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(first.status).toBe(200);
-    const existingKey = first.body.bestCvKey || first.body.urls.find((u) => u.type === 'version1').key;
+    const existingKey = first.body.existingCvKey;
+    expect(existingKey).toBeTruthy();
 
     const second = await request(app)
       .post('/api/process-cv')

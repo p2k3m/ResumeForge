@@ -17,7 +17,7 @@ global.fetch = jest.fn(() =>
         enhancedScore: 60,
         metrics: [],
         iteration: 0,
-        bestCvKey: 'key1',
+        existingCvKey: 'key1',
       }),
   })
 );
@@ -53,5 +53,8 @@ test('triggers multiple improvement cycles', async () => {
   });
   fireEvent.click(screen.getByText('Refine CV'));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  const body = JSON.parse(fetch.mock.calls[1][1].body);
+  expect(body.existingCvKey).toBe('key1');
+  expect(body.iteration).toBe(0);
   expect(screen.getAllByText(/Skill Match Score/).length).toBe(2);
 });

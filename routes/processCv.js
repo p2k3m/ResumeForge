@@ -6,6 +6,7 @@ import { getSecrets } from '../config/secrets.js';
 import { logEvent } from '../logger.js';
 import { requestSectionImprovement } from '../openaiClient.js';
 import { compareMetrics } from '../services/atsMetrics.js';
+import { convertToPdf } from '../lib/convertToPdf.js';
 
 import {
   uploadResume,
@@ -366,6 +367,16 @@ export default function registerProcessCv(app) {
           Math.max(Object.keys(atsImproved).length, 1)
       );
       const chanceOfSelection = Math.round((match.score + atsScore) / 2);
+      const improvedPdf = await convertToPdf(improvedCv);
+      const key = `${prefix}generated/cv/${Date.now()}-improved.pdf`;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: improvedPdf,
+          ContentType: 'application/pdf',
+        })
+      );
       return res.json({
         applicantName,
         sections: improvedSections,
@@ -374,6 +385,9 @@ export default function registerProcessCv(app) {
         table: match.table,
         newSkills: match.newSkills,
         chanceOfSelection,
+        existingCvKey: key,
+        iteration: 0,
+        bestCvKey: key,
       });
 
     } catch (err) {
