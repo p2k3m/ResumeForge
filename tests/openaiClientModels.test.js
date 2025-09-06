@@ -15,7 +15,7 @@ import { createResponse, uploadFile as openaiUpload } from './mocks/openai.js';
 test('uses supported model without model_not_found warnings', async () => {
   const warnSpy = jest.spyOn(console, 'warn');
 
-  await requestEnhancedCV({
+  const result = await requestEnhancedCV({
     cvFileId: 'cv',
     jobDescFileId: 'jd',
     instructions: 'Test instructions',
@@ -31,6 +31,11 @@ test('uses supported model without model_not_found warnings', async () => {
     strict: true,
   });
   expect(options.text.format.schema).toHaveProperty('additionalProperties', false);
+  expect(options.text.format.schema.properties).toHaveProperty('metrics');
+  expect(options.text.format.schema.required).toEqual(
+    expect.arrayContaining(['metrics'])
+  );
+  expect(JSON.parse(result)).toHaveProperty('metrics');
   expect(warnSpy).not.toHaveBeenCalledWith(expect.stringMatching(/Model not found/));
 });
 
