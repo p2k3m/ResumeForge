@@ -137,7 +137,7 @@ const upload = multer({
 const uploadResume = upload.single('resume');
 
 const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025', 'sleek'];
-const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
+const CL_TEMPLATES = ['cover_modern', 'cover_classic', 'cover_2025'];
 const TEMPLATE_IDS = CV_TEMPLATES; // Backwards compatibility
 const ALL_TEMPLATES = [...CV_TEMPLATES, ...CL_TEMPLATES];
 

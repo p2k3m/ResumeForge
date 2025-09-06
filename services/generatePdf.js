@@ -18,7 +18,8 @@ const ALL_TEMPLATES = [
   '2025',
   'sleek',
   'cover_modern',
-  'cover_classic'
+  'cover_classic',
+  'cover_2025'
 ];
 
 function escapeHtml(str = '') {
