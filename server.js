@@ -85,12 +85,10 @@ function createRateLimiter({ windowMs, max } = {}) {
   );
 }
 
-const allowedDomains = ['indeed.com', 'linkedin.com'];
-
-function validateUrl(input, whitelist = []) {
+function validateUrl(input) {
   try {
     const url = new URL(String(input));
-    if (url.protocol !== 'https:') return null;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
     const host = url.hostname.toLowerCase();
     if (
       net.isIP(host) ||
@@ -104,11 +102,6 @@ function validateUrl(input, whitelist = []) {
       /^fd00:/i.test(host) ||
       /^fe80:/i.test(host) ||
       host === '::1'
-    )
-      return null;
-    if (
-      whitelist.length &&
-      !whitelist.some((d) => host === d || host.endsWith(`.${d}`))
     )
       return null;
     return url.toString();
@@ -273,7 +266,7 @@ const region = process.env.AWS_REGION || 'ap-south-1';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
 
 async function fetchLinkedInProfile(url) {
-  const valid = validateUrl(url, ['linkedin.com']);
+  const valid = validateUrl(url);
   if (!valid) throw new Error('Invalid LinkedIn URL');
   try {
     const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
@@ -369,7 +362,7 @@ async function fetchLinkedInProfile(url) {
 }
 
 async function fetchCredlyProfile(url) {
-  const valid = validateUrl(url, ['credly.com']);
+  const valid = validateUrl(url);
   if (!valid) throw new Error('Invalid Credly URL');
   try {
     const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
@@ -962,7 +955,6 @@ export {
   uploadResume,
   parseUserAgent,
   validateUrl,
-  allowedDomains,
   extractName,
   sanitizeName,
   region,

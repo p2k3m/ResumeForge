@@ -19,7 +19,6 @@ import {
   uploadResume,
   parseUserAgent,
   validateUrl,
-  allowedDomains,
   extractText,
   classifyDocument,
   extractName,
@@ -105,17 +104,17 @@ export default function registerProcessCv(app) {
         let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+        jobDescriptionUrl = validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
 
         if (linkedinProfileUrl) {
-          linkedinProfileUrl = validateUrl(linkedinProfileUrl, allowedDomains);
+          linkedinProfileUrl = validateUrl(linkedinProfileUrl);
           if (!linkedinProfileUrl)
             return next(createError(400, 'invalid linkedinProfileUrl'));
         }
         if (credlyProfileUrl) {
-          credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+          credlyProfileUrl = validateUrl(credlyProfileUrl);
           if (!credlyProfileUrl)
             return next(createError(400, 'invalid credlyProfileUrl'));
         }
@@ -355,16 +354,16 @@ export default function registerProcessCv(app) {
     if (!linkedinProfileUrl) {
       return next(createError(400, 'linkedinProfileUrl required'));
     }
-    jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+    jobDescriptionUrl = validateUrl(jobDescriptionUrl);
     if (!jobDescriptionUrl) {
       return next(createError(400, 'invalid jobDescriptionUrl'));
     }
-    linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+    linkedinProfileUrl = validateUrl(linkedinProfileUrl);
     if (!linkedinProfileUrl) {
       return next(createError(400, 'invalid linkedinProfileUrl'));
     }
     if (credlyProfileUrl) {
-      credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+      credlyProfileUrl = validateUrl(credlyProfileUrl);
       if (!credlyProfileUrl) {
         return next(createError(400, 'invalid credlyProfileUrl'));
       }
@@ -750,14 +749,14 @@ export default function registerProcessCv(app) {
         createError(400, 'existingCvKey or existingCvTextKey required')
       );
 
-    jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+    jobDescriptionUrl = validateUrl(jobDescriptionUrl);
     if (!jobDescriptionUrl)
       return next(createError(400, 'invalid jobDescriptionUrl'));
-    linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+    linkedinProfileUrl = validateUrl(linkedinProfileUrl);
     if (!linkedinProfileUrl)
       return next(createError(400, 'invalid linkedinProfileUrl'));
     if (credlyProfileUrl) {
-      credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+      credlyProfileUrl = validateUrl(credlyProfileUrl);
       if (!credlyProfileUrl)
         return next(createError(400, 'invalid credlyProfileUrl'));
     }
@@ -941,14 +940,14 @@ export default function registerProcessCv(app) {
       if (!linkedinProfileUrl)
         return next(createError(400, 'linkedinProfileUrl required'));
 
-      jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+      jobDescriptionUrl = validateUrl(jobDescriptionUrl);
       if (!jobDescriptionUrl)
         return next(createError(400, 'invalid jobDescriptionUrl'));
-      linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+      linkedinProfileUrl = validateUrl(linkedinProfileUrl);
       if (!linkedinProfileUrl)
         return next(createError(400, 'invalid linkedinProfileUrl'));
       if (credlyProfileUrl) {
-        credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+        credlyProfileUrl = validateUrl(credlyProfileUrl);
         if (!credlyProfileUrl)
           return next(createError(400, 'invalid credlyProfileUrl'));
       }
@@ -1110,14 +1109,14 @@ export default function registerProcessCv(app) {
           createError(400, 'existingCvKey or existingCvTextKey required')
         );
 
-      jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+      jobDescriptionUrl = validateUrl(jobDescriptionUrl);
       if (!jobDescriptionUrl)
         return next(createError(400, 'invalid jobDescriptionUrl'));
-      linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+      linkedinProfileUrl = validateUrl(linkedinProfileUrl);
       if (!linkedinProfileUrl)
         return next(createError(400, 'invalid linkedinProfileUrl'));
       if (credlyProfileUrl) {
-        credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+        credlyProfileUrl = validateUrl(credlyProfileUrl);
         if (!credlyProfileUrl)
           return next(createError(400, 'invalid credlyProfileUrl'));
       }
