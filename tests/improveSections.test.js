@@ -11,6 +11,10 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
 
 const { improveSections } = await import('../routes/processCv.js');
 
+beforeEach(() => {
+  requestSectionImprovement.mockClear();
+});
+
 test('missing sections return empty strings and skip OpenAI call', async () => {
   const sections = {
     summary: '   ',
@@ -29,4 +33,16 @@ test('missing sections return empty strings and skip OpenAI call', async () => {
     sectionText: 'Worked hard',
     jobDescription: 'JD',
   });
+});
+
+test('all sections empty skip OpenAI entirely', async () => {
+  const sections = { summary: '', experience: '', education: '', certifications: '' };
+  const result = await improveSections(sections, 'JD');
+  expect(result).toEqual({
+    summary: '',
+    experience: '',
+    education: '',
+    certifications: '',
+  });
+  expect(requestSectionImprovement).not.toHaveBeenCalled();
 });
