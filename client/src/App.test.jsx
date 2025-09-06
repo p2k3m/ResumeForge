@@ -47,7 +47,10 @@ test('evaluates CV and displays results', async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
   expect(await screen.findByText(/ATS Score: 70%/)).toBeInTheDocument()
   expect(
-    await screen.findByText(/Layout Searchability: 50%/)
+    await screen.findByText(/Layout Searchability: 50% \(Needs Improvement\)/)
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByText(/Crispness: 90% \(Good\)/)
   ).toBeInTheDocument()
   expect(
     await screen.findByText('Include email, phone, and LinkedIn.')
