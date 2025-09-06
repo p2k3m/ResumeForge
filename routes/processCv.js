@@ -126,6 +126,26 @@ export default function registerProcessCv(app) {
         const { title: jobTitle, skills: jobSkills } =
           analyzeJobDescription(jobHtml);
         const resumeText = await extractText(req.file);
+        const docType = classifyDocument(resumeText);
+        if (docType !== 'resume') {
+          await logEvaluation({
+            jobId,
+            ipAddress,
+            userAgent,
+            browser,
+            os,
+            device,
+            jobDescriptionUrl,
+            linkedinProfileUrl,
+            credlyProfileUrl,
+            docType,
+          });
+          return res
+            .status(400)
+            .send(
+              `You seem to have uploaded ${docType} and not a CV – please upload the correct CV`
+            );
+        }
         const resumeSkills = extractResumeSkills(resumeText);
         const { newSkills: missingSkills } = calculateMatchScore(
           jobSkills,
@@ -204,6 +224,10 @@ export default function registerProcessCv(app) {
           browser,
           os,
           device,
+          jobDescriptionUrl,
+          linkedinProfileUrl,
+          credlyProfileUrl,
+          docType: 'resume',
         });
 
         res.json({

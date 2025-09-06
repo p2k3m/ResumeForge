@@ -56,5 +56,9 @@ describe('/api/evaluate LinkedIn diff', () => {
     expect(res.body.missingCertifications).toEqual([
       { name: 'CertB', provider: 'OrgB' }
     ]);
+    const { logEvaluation } = await import('../services/dynamo.js');
+    expect(logEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({ docType: 'resume' })
+    );
   });
 });
