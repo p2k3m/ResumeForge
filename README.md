@@ -111,6 +111,24 @@ Available template values:
 
 Any missing or invalid ID falls back to `modern`.
 
+### Skill Icons
+The `2025` template supports optional icons for skills. Define each skill using pipe-separated fields:
+
+```
+JavaScript | fa-brands fa-js | 90
+Python | https://example.com/python.svg | 80
+```
+
+The middle field accepts a Font Awesome class name or an image URL. The last field is the proficiency percentage. If no icon is provided, common skills fall back to default Font Awesome classes:
+
+- JavaScript → `fa-brands fa-js`
+- Python → `fa-brands fa-python`
+- HTML → `fa-brands fa-html5`
+- CSS → `fa-brands fa-css3-alt`
+- Node.js → `fa-brands fa-node-js`
+- React → `fa-brands fa-react`
+- Docker → `fa-brands fa-docker`
+- AWS → `fa-brands fa-aws`
 
 ## Fonts
 Custom TrueType fonts can be embedded by placing valid `.ttf` files in a `fonts/` directory at the project root. If the directory or required font files are missing or invalid, the PDF generator automatically falls back to PDFKit's built-in fonts.

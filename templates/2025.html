@@ -27,7 +27,10 @@
         <div class="skills-grid">
           {{#each skillsMatrix}}
           <div class="skill">
-            <span class="skill-name">{{this.name}}</span>
+            <div class="skill-title">
+              {{this.iconHtml}}
+              <span class="skill-name">{{this.name}}</span>
+            </div>
             <div class="skill-bar">
               <div class="skill-fill" style="width: {{this.level}}%;"></div>
             </div>

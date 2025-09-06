@@ -22,6 +22,17 @@ const ALL_TEMPLATES = [
   'cover_2025'
 ];
 
+const DEFAULT_SKILL_ICONS = {
+  javascript: 'fa-brands fa-js',
+  python: 'fa-brands fa-python',
+  html: 'fa-brands fa-html5',
+  css: 'fa-brands fa-css3-alt',
+  node: 'fa-brands fa-node-js',
+  react: 'fa-brands fa-react',
+  docker: 'fa-brands fa-docker',
+  aws: 'fa-brands fa-aws'
+};
+
 function proficiencyToLevel(str = '') {
   const s = String(str).toLowerCase();
   if (/native|bilingual/.test(s)) return 100;
@@ -160,16 +171,41 @@ export async function generatePdf(
         const sec = data.sections[skillsIdx];
         htmlData.skillsMatrix = sec.items.map((tokens) => {
           const text = tokens.map((t) => t.text || '').join('').trim();
-          const match = text.match(/^(.*?)[\s\-:|]+(\d{1,3})%?$/);
-          let name = text;
+          const parts = text.split('|').map((p) => p.trim()).filter(Boolean);
+          let name = parts[0] || text;
+          let icon = null;
           let level = 100;
-          if (match) {
-            name = match[1].trim();
-            level = parseInt(match[2], 10);
+          let levelStr = null;
+          if (parts.length === 3) {
+            icon = parts[1];
+            levelStr = parts[2];
+          } else if (parts.length === 2) {
+            if (/^\d{1,3}%?$/.test(parts[1])) levelStr = parts[1];
+            else icon = parts[1];
+          } else {
+            const match = text.match(/^(.*?)[\s\-:]+(\d{1,3})%?$/);
+            if (match) {
+              name = match[1].trim();
+              levelStr = match[2];
+            }
+          }
+          if (levelStr) {
+            level = parseInt(levelStr, 10);
             if (level <= 5) level = (level / 5) * 100;
             if (level > 100) level = 100;
           }
-          return { name, level };
+          if (!icon) {
+            icon = DEFAULT_SKILL_ICONS[name.toLowerCase()] || null;
+          }
+          let iconHtml = '';
+          if (icon) {
+            if (/^(https?:|data:|\/)/i.test(icon)) {
+              iconHtml = `<img src="${icon}" alt="" class="skill-icon">`;
+            } else {
+              iconHtml = `<i class="skill-icon ${icon}"></i>`;
+            }
+          }
+          return { name, level, iconHtml };
         });
         htmlData.sections = htmlData.sections.filter(
           (s) => s.heading?.toLowerCase() !== 'skills'
