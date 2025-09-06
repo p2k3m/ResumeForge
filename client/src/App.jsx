@@ -35,6 +35,8 @@ function App() {
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
   const [newAdditions, setNewAdditions] = useState([])
+  const [manualName, setManualName] = useState('')
+  const [showNameModal, setShowNameModal] = useState(false)
   const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -64,7 +66,7 @@ function App() {
     if (file) handleFileChange(file)
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (nameOverride) => {
     setIsProcessing(true)
     setError('')
     setDesignationOverride('')
@@ -75,13 +77,22 @@ function App() {
       if (linkedinUrl) formData.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim())
         formData.append('credlyProfileUrl', credlyUrl.trim())
+      if (nameOverride) formData.append('applicantName', nameOverride)
       const response = await fetch(`${API_BASE_URL}/api/evaluate`, {
         method: 'POST',
         body: formData,
       })
       if (response.status === 400) {
-        const text = await response.text()
-        setError(text || 'Request failed')
+        let data
+        try {
+          data = await response.json()
+        } catch {}
+        if (data?.nameRequired) {
+          setShowNameModal(true)
+          return
+        }
+        const text = data?.error || 'Request failed'
+        setError(text)
         return
       }
       if (!response.ok) {
@@ -147,6 +158,7 @@ function App() {
       improveForm.append('jobDescriptionUrl', jobUrl)
       improveForm.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) improveForm.append('credlyProfileUrl', credlyUrl.trim())
+      if (manualName) improveForm.append('applicantName', manualName)
       improveForm.append('addedSkills', JSON.stringify(skills))
       improveForm.append('selectedExperience', JSON.stringify(selectedExperience))
       improveForm.append('selectedEducation', JSON.stringify(selectedEducation))
@@ -171,6 +183,7 @@ function App() {
       compileForm.append('jobDescriptionUrl', jobUrl)
       compileForm.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) compileForm.append('credlyProfileUrl', credlyUrl.trim())
+      if (manualName) compileForm.append('applicantName', manualName)
       compileForm.append('existingCvKey', existingKey)
       compileForm.append('existingCvTextKey', existingTextKey)
       compileForm.append('originalScore', result?.atsScore || 0)
@@ -448,10 +461,33 @@ function App() {
             </div>
           )}
         </div>
+        )}
+
+      {showNameModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-4 rounded shadow w-80">
+            <p className="mb-2 text-purple-800">Please enter your name</p>
+            <input
+              type="text"
+              value={manualName}
+              onChange={(e) => setManualName(e.target.value)}
+              className="w-full p-2 border border-purple-300 rounded mb-2"
+            />
+            <button
+              onClick={() => {
+                setShowNameModal(false)
+                handleSubmit(manualName)
+              }}
+              className="px-4 py-2 bg-purple-600 text-white rounded"
+            >
+              Submit
+            </button>
+          </div>
+        </div>
       )}
 
-    </div>
-  )
-}
+      </div>
+    )
+  }
 
 export default App

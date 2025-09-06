@@ -182,6 +182,14 @@ export default function registerProcessCv(app, generativeModel) {
               `You have uploaded a ${docType} and not a CV – please upload the correct CV`
             );
         }
+        const applicantName =
+          req.body.applicantName || extractName(resumeText);
+        const sanitized = sanitizeName(applicantName);
+        if (!sanitized) {
+          return res
+            .status(400)
+            .json({ error: 'name required', nameRequired: true });
+        }
         const resumeSkills = extractResumeSkills(resumeText);
         const { newSkills: missingSkills } = calculateMatchScore(
           jobSkills,
@@ -453,10 +461,13 @@ export default function registerProcessCv(app, generativeModel) {
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter(Boolean);
-      applicantName = extractName(originalText);
+      applicantName = req.body.applicantName || extractName(originalText);
       originalTitle = lines[1] || '';
       sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) sanitizedName = 'candidate';
+      if (!sanitizedName)
+        return res
+          .status(400)
+          .json({ error: 'name required', nameRequired: true });
       ext = path.extname(req.file.originalname).toLowerCase();
       const date = new Date().toISOString().split('T')[0];
       prefix = `${sanitizedName}/cv/${date}/`;
@@ -856,9 +867,13 @@ export default function registerProcessCv(app, generativeModel) {
           buffer: existingCvBuffer,
         });
       }
-      const applicantName = extractName(originalText);
+      const applicantName =
+        req.body.applicantName || extractName(originalText);
       let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) sanitizedName = 'candidate';
+      if (!sanitizedName)
+        return res
+          .status(400)
+          .json({ error: 'name required', nameRequired: true });
 
       let jobDescription = '';
       let jobTitle = '';
@@ -1062,9 +1077,13 @@ export default function registerProcessCv(app, generativeModel) {
         return next(createError(500, 'failed to process cv'));
       }
 
-      const applicantName = extractName(originalText);
+      const applicantName =
+        req.body.applicantName || extractName(originalText);
       let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) sanitizedName = 'candidate';
+      if (!sanitizedName)
+        return res
+          .status(400)
+          .json({ error: 'name required', nameRequired: true });
 
       let jobDescription = '';
       try {
@@ -1247,9 +1266,13 @@ export default function registerProcessCv(app, generativeModel) {
         return next(createError(500, 'failed to load cv'));
       }
 
-      const applicantName = extractName(cvText);
+      const applicantName =
+        req.body.applicantName || extractName(cvText);
       let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) sanitizedName = 'candidate';
+      if (!sanitizedName)
+        return res
+          .status(400)
+          .json({ error: 'name required', nameRequired: true });
       const date = new Date().toISOString().split('T')[0];
 
       if (!existingCvKey) {
