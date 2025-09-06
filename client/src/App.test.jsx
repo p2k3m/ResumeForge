@@ -20,7 +20,6 @@ global.fetch = jest.fn(() =>
 )
 
 test('evaluates CV and displays results', async () => {
-  window.alert = jest.fn()
   render(<App />)
   const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
   fireEvent.change(screen.getByLabelText('Choose File'), {
@@ -31,11 +30,11 @@ test('evaluates CV and displays results', async () => {
   })
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
-  expect(window.alert).toHaveBeenCalled()
   expect(await screen.findByText(/ATS Score: 70%/)).toBeInTheDocument()
   expect(
     await screen.findByText(/Designation: Developer vs Senior Developer/)
   ).toBeInTheDocument()
+  expect(await screen.findByText(/Designation mismatch/)).toBeInTheDocument()
   expect(
     await screen.findByPlaceholderText('Revised Designation')
   ).toBeInTheDocument()
@@ -46,7 +45,6 @@ test('evaluates CV and displays results', async () => {
 })
 
 test('allows file to be dropped in drop zone', async () => {
-  window.alert = jest.fn()
   fetch.mockClear()
   render(<App />)
   const dropZone = screen.getByTestId('dropzone')

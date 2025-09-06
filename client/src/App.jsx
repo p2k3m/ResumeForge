@@ -10,7 +10,6 @@ function App() {
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [designationOverride, setDesignationOverride] = useState('')
-  const [showDesignationInput, setShowDesignationInput] = useState(false)
   const [expOptions, setExpOptions] = useState([])
   const [eduOptions, setEduOptions] = useState([])
   const [certOptions, setCertOptions] = useState([])
@@ -81,10 +80,6 @@ function App() {
           checked: false
         }))
       )
-      if (!data.designationMatch) {
-        alert('Designation mismatch detected. Please enter a revised designation.')
-        setShowDesignationInput(true)
-      }
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -280,8 +275,20 @@ function App() {
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <p className="text-purple-800 mb-2">ATS Score: {result.atsScore}%</p>
           <p className="text-purple-800 mb-2">
-            Designation: {result.originalTitle || 'N/A'} vs {result.jobTitle || 'N/A'} ({result.designationMatch ? 'Match' : 'Mismatch'})
+            Designation: {result.originalTitle || 'N/A'} vs {result.jobTitle || 'N/A'}
           </p>
+          {!result.designationMatch && (
+            <div className="mb-2 text-red-600">
+              <p className="mb-2">Designation mismatch</p>
+              <input
+                type="text"
+                placeholder="Revised Designation"
+                value={designationOverride}
+                onChange={(e) => setDesignationOverride(e.target.value)}
+                className="w-full p-2 border border-purple-300 rounded"
+              />
+            </div>
+          )}
           {skills.length > 0 && (
             <div className="text-purple-800 mb-2">
               <p className="mb-2">Missing skills:</p>
@@ -379,17 +386,6 @@ function App() {
         </div>
       )}
 
-      {showDesignationInput && (
-        <div className="mt-4 w-full max-w-md">
-          <input
-            type="text"
-            placeholder="Revised Designation"
-            value={designationOverride}
-            onChange={(e) => setDesignationOverride(e.target.value)}
-            className="w-full p-2 border border-purple-300 rounded mb-4"
-          />
-        </div>
-      )}
     </div>
   )
 }
