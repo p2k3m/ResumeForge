@@ -32,6 +32,17 @@ test('uses supported model without model_not_found warnings', async () => {
   });
   expect(options.text.format.schema).toHaveProperty('additionalProperties', false);
   expect(options.text.format.schema.properties).toHaveProperty('metrics');
+  expect(
+    options.text.format.schema.properties.metrics.items.properties.metric.enum
+  ).toEqual([
+    'layoutSearchability',
+    'atsReadability',
+    'impact',
+    'crispness',
+    'keywordDensity',
+    'sectionHeadingClarity',
+    'contactInfoCompleteness',
+  ]);
   expect(options.text.format.schema.required).toEqual(
     expect.arrayContaining(['metrics'])
   );

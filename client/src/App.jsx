@@ -12,6 +12,16 @@ function App() {
   const [latestCvKey, setLatestCvKey] = useState('')
   const [error, setError] = useState('')
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+  const metricLabels = {
+    layoutSearchability: 'Layout Searchability',
+    atsReadability: 'ATS Readability',
+    impact: 'Impact',
+    crispness: 'Crispness',
+    keywordDensity: 'Keyword Density',
+    sectionHeadingClarity: 'Section Heading Clarity',
+    contactInfoCompleteness: 'Contact Info Completeness'
+  }
+  const metricOrder = Object.keys(metricLabels)
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -291,22 +301,26 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {metrics.map((m) => (
-                  <tr key={m.metric}>
-                    <td className="py-1 text-purple-800">{m.metric}</td>
-                    <td className="py-1 text-right">{m.original}</td>
-                    <td className="py-1 text-right">{m.improved}</td>
-                    <td className="py-1 text-right">{m.improvement}%</td>
-                    <td className="py-1 text-right">
-                      <button
-                        onClick={() => handleImproveMetric(m.metric)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        Improve
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {[...metrics]
+                  .sort((a, b) => metricOrder.indexOf(a.metric) - metricOrder.indexOf(b.metric))
+                  .map((m) => (
+                    <tr key={m.metric}>
+                      <td className="py-1 text-purple-800">
+                        {metricLabels[m.metric] || m.metric}
+                      </td>
+                      <td className="py-1 text-right">{m.original}</td>
+                      <td className="py-1 text-right">{m.improved}</td>
+                      <td className="py-1 text-right">{m.improvement}%</td>
+                      <td className="py-1 text-right">
+                        <button
+                          onClick={() => handleImproveMetric(m.metric)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          Improve
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           )}

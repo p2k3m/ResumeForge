@@ -8,6 +8,16 @@ import { getSecrets } from './config/secrets.js';
 // warnings during résumé generation.
 const preferredModels = ['gpt-4.1', 'gpt-4o-mini'];
 
+const metricNames = [
+  'layoutSearchability',
+  'atsReadability',
+  'impact',
+  'crispness',
+  'keywordDensity',
+  'sectionHeadingClarity',
+  'contactInfoCompleteness',
+];
+
 let clientPromise;
 async function getClient() {
   if (!clientPromise) {
@@ -76,7 +86,7 @@ export async function requestEnhancedCV({
         items: {
           type: 'object',
           properties: {
-            metric: { type: 'string' },
+            metric: { type: 'string', enum: metricNames },
             original: { type: 'number' },
             improved: { type: 'number' },
             improvement: { type: 'number' }

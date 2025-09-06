@@ -8,7 +8,10 @@ describe('ATS metric calculations', () => {
       'layoutSearchability',
       'atsReadability',
       'impact',
-      'crispness'
+      'crispness',
+      'keywordDensity',
+      'sectionHeadingClarity',
+      'contactInfoCompleteness',
     ]);
     for (const score of Object.values(metrics)) {
       expect(score).toBeGreaterThanOrEqual(0);
