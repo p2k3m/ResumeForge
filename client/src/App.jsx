@@ -93,7 +93,7 @@ function App() {
         metrics: data.metrics || []
       }
       setHistory((h) => [...h, entry])
-      setLatestCvKey(data.bestCvKey || '')
+      setLatestCvKey(data.existingCvKey || data.bestCvKey || '')
       setIteration(data.iteration + 1)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
@@ -150,7 +150,8 @@ function App() {
         }
         return updated
       })
-      if (data.bestCvKey) setLatestCvKey(data.bestCvKey)
+      if (data.existingCvKey || data.bestCvKey)
+        setLatestCvKey(data.existingCvKey || data.bestCvKey)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
