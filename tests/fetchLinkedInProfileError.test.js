@@ -22,4 +22,19 @@ describe('fetchLinkedInProfile error handling', () => {
       status: 404
     });
   });
+
+  test('returns empty profile on LinkedIn status 999', async () => {
+    const error = new Error('Blocked');
+    error.response = { status: 999 };
+    mockGet.mockRejectedValueOnce(error);
+    await expect(
+      fetchLinkedInProfile('https://linkedin.com/in/example')
+    ).resolves.toEqual({
+      headline: '',
+      experience: [],
+      education: [],
+      skills: [],
+      certifications: []
+    });
+  });
 });

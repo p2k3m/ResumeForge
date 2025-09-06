@@ -315,6 +315,15 @@ async function fetchLinkedInProfile(url) {
     };
   } catch (err) {
     const status = err?.response?.status;
+    if (status === 999) {
+      return {
+        headline: '',
+        experience: [],
+        education: [],
+        skills: [],
+        certifications: []
+      };
+    }
     const msg = `LinkedIn profile fetch failed: ${err.message}` +
       (status ? ` (status ${status})` : '');
     const error = new Error(msg);

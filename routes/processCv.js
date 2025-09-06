@@ -274,6 +274,10 @@ export default function registerProcessCv(app) {
           () => fetchLinkedInProfile(linkedinProfileUrl),
           2
         );
+        const hasContent = Object.values(linkedinData).some((v) =>
+          Array.isArray(v) ? v.length > 0 : v
+        );
+        if (!hasContent) linkedinData = {};
         await logEvent({
           s3,
           bucket,
