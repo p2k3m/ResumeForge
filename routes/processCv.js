@@ -95,6 +95,7 @@ export default function registerProcessCv(app) {
 
     let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl, existingCvKey, iteration } = req.body;
     iteration = parseInt(iteration) || 0;
+    if (iteration >= 2) return next(createError(400, 'max improvements reached'));
     const ipAddress =
       (req.headers['x-forwarded-for'] || '')
         .split(',')
@@ -377,6 +378,7 @@ export default function registerProcessCv(app) {
           ContentType: 'application/pdf',
         })
       );
+      iteration += 1;
       return res.json({
         applicantName,
         sections: improvedSections,
@@ -386,7 +388,7 @@ export default function registerProcessCv(app) {
         newSkills: match.newSkills,
         chanceOfSelection,
         existingCvKey: key,
-        iteration: 0,
+        iteration,
         bestCvKey: key,
       });
 
@@ -433,6 +435,7 @@ export default function registerProcessCv(app) {
       iteration,
     } = req.body;
     iteration = parseInt(iteration) || 0;
+    if (iteration >= 2) return next(createError(400, 'max improvements reached'));
     if (!metric) return next(createError(400, 'metric required'));
     if (!jobDescriptionUrl)
       return next(createError(400, 'jobDescriptionUrl required'));
@@ -532,7 +535,7 @@ export default function registerProcessCv(app) {
         new GetObjectCommand({ Bucket: bucket, Key: key }),
         { expiresIn: 3600 }
       );
-
+      iteration += 1;
       res.json({
         iteration,
         urls: [

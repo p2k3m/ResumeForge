@@ -3,7 +3,9 @@ import request from 'supertest';
 import fs from 'fs';
 import { uploadFile, requestEnhancedCV } from './mocks/openai.js';
 
-const mockS3Send = jest.fn().mockResolvedValue({});
+const mockS3Send = jest.fn().mockResolvedValue({
+  Body: { transformToByteArray: async () => [] },
+});
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: mockS3Send })),
   PutObjectCommand: jest.fn((input) => ({ input })),
@@ -386,10 +388,38 @@ describe('/api/process-cv', () => {
       .field('existingCvKey', existingKey)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(second.status).toBe(200);
-    expect(second.body.iteration).toBe(1);
+    expect(second.body.iteration).toBe(2);
     expect(requestEnhancedCV).toHaveBeenCalledTimes(2);
     expect(second.body.urls.length).toBeGreaterThan(0);
     expect(Array.isArray(second.body.metrics)).toBe(true);
+  });
+
+  test('rejects third improvement attempt', async () => {
+    const first = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(first.status).toBe(200);
+    const key = first.body.bestCvKey;
+
+    const second = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('iteration', '1')
+      .field('existingCvKey', key)
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(second.status).toBe(200);
+
+    const third = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('iteration', '2')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(third.status).toBe(400);
+    expect(third.body.error).toBe('max improvements reached');
   });
 
   test('handles code-fenced JSON with extra text', async () => {
@@ -663,6 +693,16 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/cover letter/);
+  });
+});
+
+describe('/api/improve-metric', () => {
+  test('rejects third improvement attempt', async () => {
+    const res = await request(app)
+      .post('/api/improve-metric')
+      .send({ iteration: 2 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('max improvements reached');
   });
 });
 
