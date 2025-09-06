@@ -84,7 +84,7 @@ function App() {
         match: {
           table: data.table || [],
           addedSkills: data.addedSkills || [],
-          missingSkills: data.missingSkills || [],
+          missingSkills: data.missingSkills || data.newSkills || [],
           originalScore: data.originalScore || 0,
           enhancedScore: data.enhancedScore || 0,
           originalTitle: data.originalTitle || '',
