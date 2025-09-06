@@ -2,6 +2,7 @@ import path from 'path';
 import axios from 'axios';
 import crypto from 'crypto';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getSecrets } from '../config/secrets.js';
 import { logEvent } from '../logger.js';
 import { requestSectionImprovement } from '../openaiClient.js';
@@ -31,7 +32,9 @@ import {
   extractResumeSkills,
   calculateMatchScore,
   region,
-  REQUEST_TIMEOUT_MS
+  REQUEST_TIMEOUT_MS,
+  sanitizeGeneratedText,
+  parseAiJson
 } from '../server.js';
 
 const createError = (status, message) => {
@@ -534,39 +537,124 @@ export default function registerProcessCv(app) {
       });
 
       const parsed = parseAiJson(responseText);
-      let improvedText = '';
+      let cvVersion1 = '';
+      let cvVersion2 = '';
+      let coverLetter1 = '';
+      let coverLetter2 = '';
       if (parsed) {
-        improvedText = sanitizeGeneratedText(parsed.cv_version1, { jobTitle });
+        cvVersion1 = sanitizeGeneratedText(parsed.cv_version1, { jobTitle });
+        cvVersion2 = sanitizeGeneratedText(parsed.cv_version2, { jobTitle });
+        coverLetter1 = sanitizeGeneratedText(parsed.cover_letter1, {
+          skipRequiredSections: true,
+          defaultHeading: '',
+        });
+        coverLetter2 = sanitizeGeneratedText(parsed.cover_letter2, {
+          skipRequiredSections: true,
+          defaultHeading: '',
+        });
       }
-      const { table: metricTable } = compareMetrics(originalText, improvedText);
 
-      const improvedPdf = await convertToPdf(improvedText);
-      const key = path.join(sanitizedName, `${Date.now()}-improved.pdf`);
+      const metrics1 = compareMetrics(originalText, cvVersion1);
+      const metrics2 = compareMetrics(originalText, cvVersion2);
+      const avg1 =
+        Object.values(metrics1.improved).reduce((a, b) => a + b, 0) /
+        Math.max(Object.keys(metrics1.improved).length, 1);
+      const avg2 =
+        Object.values(metrics2.improved).reduce((a, b) => a + b, 0) /
+        Math.max(Object.keys(metrics2.improved).length, 1);
+
+      const ts = Date.now();
+
+      const pdf1 = await convertToPdf(cvVersion1);
+      const key1 = path.join(sanitizedName, `${ts}-version1.pdf`);
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
-          Key: key,
-          Body: improvedPdf,
+          Key: key1,
+          Body: pdf1,
           ContentType: 'application/pdf',
         })
       );
-      const url = await getSignedUrl(
+      const url1 = await getSignedUrl(
         s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        new GetObjectCommand({ Bucket: bucket, Key: key1 }),
         { expiresIn: 3600 }
       );
+
+      const pdf2 = await convertToPdf(cvVersion2);
+      const key2 = path.join(sanitizedName, `${ts}-version2.pdf`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key2,
+          Body: pdf2,
+          ContentType: 'application/pdf',
+        })
+      );
+      const url2 = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key2 }),
+        { expiresIn: 3600 }
+      );
+
+      const clPdf1 = await convertToPdf(coverLetter1);
+      const clKey1 = path.join(sanitizedName, `${ts}-cover_letter1.pdf`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: clKey1,
+          Body: clPdf1,
+          ContentType: 'application/pdf',
+        })
+      );
+      const clUrl1 = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: clKey1 }),
+        { expiresIn: 3600 }
+      );
+
+      const clPdf2 = await convertToPdf(coverLetter2);
+      const clKey2 = path.join(sanitizedName, `${ts}-cover_letter2.pdf`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: clKey2,
+          Body: clPdf2,
+          ContentType: 'application/pdf',
+        })
+      );
+      const clUrl2 = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: clKey2 }),
+        { expiresIn: 3600 }
+      );
+
+      let metricTable = metrics1.table;
+      let bestKey = key1;
+      if (avg2 > avg1) {
+        metricTable = metrics2.table;
+        bestKey = key2;
+      }
+
       iteration += 1;
       res.json({
         iteration,
         urls: [
+          { type: 'version1', url: url1, expiresAt: Date.now() + 3600 * 1000 },
+          { type: 'version2', url: url2, expiresAt: Date.now() + 3600 * 1000 },
           {
-            type: 'version1',
-            url,
+            type: 'cover_letter1',
+            url: clUrl1,
+            expiresAt: Date.now() + 3600 * 1000,
+          },
+          {
+            type: 'cover_letter2',
+            url: clUrl2,
             expiresAt: Date.now() + 3600 * 1000,
           },
         ],
         metrics: metricTable,
-        bestCvKey: key,
+        bestCvKey: bestKey,
       });
     } catch (err) {
       console.error('metric improvement failed', err);
