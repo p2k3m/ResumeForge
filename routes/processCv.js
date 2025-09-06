@@ -428,6 +428,11 @@ export default function registerProcessCv(app) {
           ContentType: 'application/pdf',
         })
       );
+      const cvUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: 3600 }
+      );
       iteration += 1;
       return res.json({
         applicantName,
@@ -445,6 +450,13 @@ export default function registerProcessCv(app) {
         existingCvKey: key,
         iteration,
         bestCvKey: key,
+        urls: [
+          {
+            type: 'cv',
+            url: cvUrl,
+            expiresAt: Date.now() + 3600 * 1000,
+          },
+        ],
       });
 
     } catch (err) {

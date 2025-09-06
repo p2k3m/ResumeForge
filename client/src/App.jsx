@@ -336,6 +336,9 @@ function App() {
                 case 'cover_letter2':
                   label = 'Cover Letter 2 (PDF)'
                   break
+                case 'cv':
+                  label = 'Improved CV (PDF)'
+                  break
                 case 'version1':
                   label = 'CV Version 1 (PDF)'
                   break
