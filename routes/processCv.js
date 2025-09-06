@@ -1,5 +1,6 @@
 import path from 'path';
 import axios from 'axios';
+import puppeteer from 'puppeteer';
 import crypto from 'crypto';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -42,6 +43,38 @@ import {
   parseAiJson,
   generatePdf
 } from '../server.js';
+
+const DEFAULT_USER_AGENT =
+  process.env.JOB_FETCH_USER_AGENT ||
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const DEFAULT_FETCH_TIMEOUT_MS =
+  parseInt(process.env.JOB_FETCH_TIMEOUT_MS || REQUEST_TIMEOUT_MS, 10);
+
+export async function fetchJobDescription(
+  url,
+  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = DEFAULT_USER_AGENT } = {}
+) {
+  try {
+    const { data } = await axios.get(url, {
+      timeout,
+      headers: { 'User-Agent': userAgent },
+    });
+    if (data && data.trim()) return data;
+  } catch (err) {
+    // ignore and fallback to puppeteer
+  }
+
+  const browser = await puppeteer.launch({ headless: 'new' });
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent(userAgent);
+    await page.goto(url, { timeout, waitUntil: 'networkidle2' });
+    const content = await page.content();
+    return content;
+  } finally {
+    await browser.close();
+  }
+}
 
 const createError = (status, message) => {
   const err = new Error(message);
@@ -121,11 +154,13 @@ export default function registerProcessCv(app, generativeModel) {
             return next(createError(400, 'invalid credlyProfileUrl'));
         }
 
-        const { data: jobHtml } = await axios.get(jobDescriptionUrl, {
+        const jobHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
+          userAgent,
         });
-        const { title: jobTitle, skills: jobSkills } =
-          analyzeJobDescription(jobHtml);
+        const { title: jobTitle, skills: jobSkills } = analyzeJobDescription(
+          jobHtml
+        );
         const resumeText = await extractText(req.file);
         const docType = await classifyDocument(resumeText);
         if (docType !== 'resume') {
@@ -516,17 +551,20 @@ export default function registerProcessCv(app, generativeModel) {
 
       let jobDescriptionHtml;
       try {
-        const { data } = await withRetry(
-          () => axios.get(jobDescriptionUrl, { timeout: REQUEST_TIMEOUT_MS }),
+        jobDescriptionHtml = await withRetry(
+          () =>
+            fetchJobDescription(jobDescriptionUrl, {
+              timeout: REQUEST_TIMEOUT_MS,
+              userAgent,
+            }),
           2
         );
-        jobDescriptionHtml = data;
         await logEvent({
           s3,
           bucket,
           key: logKey,
           jobId,
-          event: 'fetched_job_description'
+          event: 'fetched_job_description',
         });
       } catch (err) {
         console.error('Job description fetch failed', err);
@@ -537,7 +575,7 @@ export default function registerProcessCv(app, generativeModel) {
           jobId,
           event: 'job_description_fetch_failed',
           level: 'error',
-          message: err.message
+          message: err.message,
         });
         return next(createError(500, 'Job description fetch failed'));
       }
