@@ -105,6 +105,7 @@ export default function registerProcessCv(app) {
       linkedinProfileUrl,
       credlyProfileUrl,
       existingCvKey,
+      existingCvTextKey,
       iteration,
     } = req.body;
     iteration = parseInt(iteration) || 0;
@@ -203,8 +204,20 @@ export default function registerProcessCv(app) {
       ext = path.extname(req.file.originalname).toLowerCase();
       prefix = `sessions/${sanitizedName}/${jobId}/`;
       logKey = `${prefix}logs/processing.jsonl`;
-      text = originalText;
-      if (existingCvKey) {
+      text = null;
+      if (existingCvTextKey) {
+        try {
+          const textObj = await s3.send(
+            new GetObjectCommand({
+              Bucket: bucket,
+              Key: existingCvTextKey,
+            })
+          );
+          text = await textObj.Body.transformToString();
+        } catch (err) {
+          console.error('failed to fetch existing CV text', err);
+        }
+      } else if (existingCvKey) {
         const existingObj = await s3.send(
           new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
         );
@@ -215,6 +228,7 @@ export default function registerProcessCv(app) {
           buffer: existingCvBuffer,
         });
       }
+      if (!text) text = originalText;
     } catch (err) {
       console.error('Failed to extract text from PDF', err);
       return next(createError(500, 'Failed to extract text from PDF'));
@@ -419,13 +433,23 @@ export default function registerProcessCv(app) {
         (enhancedScore + atsScore) / 2
       );
       const improvedPdf = await convertToPdf(improvedCv);
-      const key = `${prefix}generated/cv/${Date.now()}-improved.pdf`;
+      const ts = Date.now();
+      const key = `${prefix}generated/cv/${ts}-improved.pdf`;
+      const textKey = `${prefix}generated/cv/${ts}-improved.txt`;
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
           Key: key,
           Body: improvedPdf,
           ContentType: 'application/pdf',
+        })
+      );
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: textKey,
+          Body: improvedCv,
+          ContentType: 'text/plain',
         })
       );
       const cvUrl = await getSignedUrl(
@@ -450,6 +474,7 @@ export default function registerProcessCv(app) {
         existingCvKey: key,
         iteration,
         bestCvKey: key,
+        cvTextKey: textKey,
         urls: [
           {
             type: 'cv',
@@ -499,6 +524,7 @@ export default function registerProcessCv(app) {
       linkedinProfileUrl,
       credlyProfileUrl,
       existingCvKey,
+      existingCvTextKey,
       iteration,
     } = req.body;
     iteration = parseInt(iteration) || 0;
@@ -528,17 +554,31 @@ export default function registerProcessCv(app) {
         return next(createError(400, 'invalid credlyProfileUrl'));
     }
 
+    let existingCvBuffer;
     try {
       const obj = await s3.send(
         new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
       );
       const chunks = [];
       for await (const chunk of obj.Body) chunks.push(chunk);
-      const existingCvBuffer = Buffer.concat(chunks);
-      const originalText = await extractText({
-        originalname: path.basename(existingCvKey),
-        buffer: existingCvBuffer,
-      });
+      existingCvBuffer = Buffer.concat(chunks);
+      let originalText;
+      if (existingCvTextKey) {
+        try {
+          const textObj = await s3.send(
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+          );
+          originalText = await textObj.Body.transformToString();
+        } catch (err) {
+          console.error('failed to fetch saved CV text', err);
+        }
+      }
+      if (!originalText) {
+        originalText = await extractText({
+          originalname: path.basename(existingCvKey),
+          buffer: existingCvBuffer,
+        });
+      }
       const applicantName = extractName(originalText);
       let sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) sanitizedName = 'candidate';

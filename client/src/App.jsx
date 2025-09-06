@@ -10,6 +10,7 @@ function App() {
   const [history, setHistory] = useState([])
   const [iteration, setIteration] = useState(0)
   const [latestCvKey, setLatestCvKey] = useState('')
+  const [latestCvTextKey, setLatestCvTextKey] = useState('')
   const [error, setError] = useState('')
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
   const metricLabels = {
@@ -52,6 +53,7 @@ function App() {
       formData.append('jobDescriptionUrl', jobUrl)
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       if (latestCvKey) formData.append('existingCvKey', latestCvKey)
+      if (latestCvTextKey) formData.append('existingCvTextKey', latestCvTextKey)
       formData.append('iteration', iteration)
 
       const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
@@ -95,6 +97,7 @@ function App() {
       }
       setHistory((h) => [...h, entry])
       setLatestCvKey(data.existingCvKey || data.bestCvKey || '')
+      if (data.cvTextKey) setLatestCvTextKey(data.cvTextKey)
       setIteration(data.iteration + 1)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
@@ -117,6 +120,7 @@ function App() {
           linkedinProfileUrl: profileUrl,
           credlyProfileUrl: credlyUrl,
           existingCvKey: latestCvKey,
+          existingCvTextKey: latestCvTextKey,
           iteration: iteration - 1,
         }),
       })
@@ -167,6 +171,7 @@ function App() {
       })
       if (data.existingCvKey || data.bestCvKey)
         setLatestCvKey(data.existingCvKey || data.bestCvKey)
+      if (data.cvTextKey) setLatestCvTextKey(data.cvTextKey)
       setIteration(data.iteration + 1)
     } catch (err) {
       setError(err.message || 'Something went wrong. Please try again.')
