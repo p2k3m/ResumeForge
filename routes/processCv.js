@@ -343,9 +343,6 @@ export default function registerProcessCv(app) {
         linkedinData.certifications || []
       );
 
-      const originalTitle =
-        resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
-
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
       const improvedCv = [
