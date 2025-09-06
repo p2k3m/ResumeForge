@@ -162,3 +162,41 @@ export async function requestSectionImprovement({ sectionName, sectionText, jobD
   }
   throw lastError;
 }
+
+export async function requestCoverLetter({
+  cvFileId,
+  jobDescFileId,
+  linkedInFileId,
+  credlyFileId,
+}) {
+  if (!cvFileId) throw new Error('cvFileId is required');
+  if (!jobDescFileId) throw new Error('jobDescFileId is required');
+  const client = await getClient();
+  const content = [
+    {
+      type: 'input_text',
+      text: 'You are an expert career coach. Write a concise and professional cover letter tailored to the provided job description and resume.',
+    },
+    { type: 'input_file', file_id: cvFileId },
+    { type: 'input_file', file_id: jobDescFileId },
+  ];
+  if (linkedInFileId)
+    content.push({ type: 'input_file', file_id: linkedInFileId });
+  if (credlyFileId)
+    content.push({ type: 'input_file', file_id: credlyFileId });
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await client.responses.create({
+        model,
+        input: [{ role: 'user', content }],
+      });
+      return response.output_text;
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') continue;
+      throw err;
+    }
+  }
+  throw lastError;
+}

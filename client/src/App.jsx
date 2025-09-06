@@ -58,7 +58,7 @@ function App() {
 
   const addSkill = () => setSkills((prev) => [...prev, ''])
 
-  const handleImprove = async () => {
+  const handleImproveCv = async () => {
     setIsProcessing(true)
     setError('')
     try {
@@ -67,10 +67,38 @@ function App() {
       formData.append('jobDescriptionUrl', jobUrl)
       formData.append('linkedinProfileUrl', linkedinUrl)
       formData.append('addedSkills', JSON.stringify(skills))
-      const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
+      formData.append('metric', 'atsReadability')
+      const response = await fetch(`${API_BASE_URL}/api/improve-metric`, {
         method: 'POST',
         body: formData
       })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || 'Request failed')
+      }
+      await response.json()
+    } catch (err) {
+      setError(err.message || 'Something went wrong.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleGenerateCoverLetter = async () => {
+    setIsProcessing(true)
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('resume', cvFile)
+      formData.append('jobDescriptionUrl', jobUrl)
+      formData.append('linkedinProfileUrl', linkedinUrl)
+      const response = await fetch(
+        `${API_BASE_URL}/api/generate-cover-letter`,
+        {
+          method: 'POST',
+          body: formData
+        }
+      )
       if (!response.ok) {
         const text = await response.text()
         throw new Error(text || 'Request failed')
@@ -155,12 +183,20 @@ function App() {
               </button>
             </div>
           )}
-          <button
-            onClick={handleImprove}
-            className="mt-2 px-4 py-2 bg-blue-500 text-white rounded"
-          >
-            Improve my CV
-          </button>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={handleImproveCv}
+              className="px-4 py-2 bg-blue-500 text-white rounded"
+            >
+              Improve CV
+            </button>
+            <button
+              onClick={handleGenerateCoverLetter}
+              className="px-4 py-2 bg-green-500 text-white rounded"
+            >
+              Generate Cover Letter
+            </button>
+          </div>
         </div>
       )}
 
