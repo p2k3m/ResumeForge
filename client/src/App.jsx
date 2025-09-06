@@ -33,6 +33,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
+  const [newAdditions, setNewAdditions] = useState([])
   const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -186,6 +187,9 @@ function App() {
       setImprovement(data.improvement)
       setCvUrl(data.cvUrl || '')
       setCoverLetterUrl(data.coverLetterUrl || '')
+      setNewAdditions(
+        [...(data.addedSkills || []), data.designation].filter(Boolean)
+      )
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -398,6 +402,26 @@ function App() {
                   Download Cover Letter
                 </a>
               )}
+            </div>
+          )}
+          {newAdditions.length > 0 && (
+            <div className="text-purple-800 mt-4">
+              <h3 className="font-semibold mb-2">New Additions for Interview Prep</h3>
+              <ul className="list-disc list-inside">
+                {newAdditions.map((item, idx) => (
+                  <li key={idx}>
+                    {item}{' '}
+                    <a
+                      href={`https://www.google.com/search?q=${encodeURIComponent(item + ' interview questions')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      Learning Resources
+                    </a>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

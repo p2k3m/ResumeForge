@@ -20,15 +20,18 @@ const mockResponse = {
   }
 }
 
-global.fetch = jest.fn(() =>
-  Promise.resolve({
+global.fetch = jest.fn()
+
+beforeEach(() => {
+  fetch.mockReset()
+})
+
+test('evaluates CV and displays results', async () => {
+  fetch.mockResolvedValueOnce({
     ok: true,
     headers: { get: () => 'application/json' },
     json: () => Promise.resolve(mockResponse)
   })
-)
-
-test('evaluates CV and displays results', async () => {
   render(<App />)
   const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
   fireEvent.change(
@@ -63,7 +66,11 @@ test('evaluates CV and displays results', async () => {
 })
 
 test('allows file to be dropped in drop zone', async () => {
-  fetch.mockClear()
+  fetch.mockResolvedValueOnce({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: () => Promise.resolve(mockResponse)
+  })
   render(<App />)
   const dropZone = screen.getByTestId('dropzone')
   const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
@@ -79,6 +86,60 @@ test('allows file to be dropped in drop zone', async () => {
   })
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+})
+
+test('displays new additions section after compile', async () => {
+  fetch
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(mockResponse),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () =>
+        Promise.resolve({ existingCvKey: 'key.pdf', cvTextKey: 'key.txt' }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () =>
+        Promise.resolve({
+          cvUrl: 'cv.pdf',
+          coverLetterUrl: '',
+          atsScore: 80,
+          improvement: 10,
+          addedSkills: ['aws'],
+          designation: 'Senior Developer',
+        }),
+    })
+
+  render(<App />)
+
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] },
+    }
+  )
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://indeed.com/job' },
+  })
+  fireEvent.change(screen.getByPlaceholderText('LinkedIn Profile URL'), {
+    target: { value: 'https://linkedin.com/in/example' },
+  })
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+
+  fireEvent.click(await screen.findByText('Generate CV & Cover Letter'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
+  expect(
+    await screen.findByText('New Additions for Interview Prep')
+  ).toBeInTheDocument()
+  expect(await screen.findByText('aws')).toBeInTheDocument()
+  expect(await screen.findByText('Senior Developer')).toBeInTheDocument()
 })
 
 test('highlights drop zone on drag over', () => {

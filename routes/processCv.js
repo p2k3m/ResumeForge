@@ -1326,6 +1326,8 @@ export default function registerProcessCv(app) {
         coverLetterUrl: coverUrl,
         atsScore,
         improvement,
+        addedSkills: addedSkillsArr,
+        designation: designation || '',
       });
     }
   );
