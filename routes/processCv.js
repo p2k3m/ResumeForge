@@ -26,6 +26,8 @@ import {
   extractEducation,
   extractCertifications,
   collectSectionText,
+  extractResumeSkills,
+  calculateMatchScore,
   region,
   REQUEST_TIMEOUT_MS
 } from '../server.js';
@@ -356,12 +358,22 @@ export default function registerProcessCv(app) {
         '# Certifications',
         improvedSections.certifications,
       ].join('\n\n');
-      const { table: atsMetrics } = compareMetrics(text, improvedCv);
+      const resumeSkills = extractResumeSkills(text);
+      const match = calculateMatchScore(jobSkills, resumeSkills);
+      const { table: atsMetrics, improved: atsImproved } = compareMetrics(text, improvedCv);
+      const atsScore = Math.round(
+        Object.values(atsImproved).reduce((sum, v) => sum + v, 0) /
+          Math.max(Object.keys(atsImproved).length, 1)
+      );
+      const chanceOfSelection = Math.round((match.score + atsScore) / 2);
       return res.json({
         applicantName,
         sections: improvedSections,
         cv: improvedCv,
         metrics: atsMetrics,
+        table: match.table,
+        newSkills: match.newSkills,
+        chanceOfSelection,
       });
 
     } catch (err) {
