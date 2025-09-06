@@ -92,6 +92,62 @@ function App() {
     }
   }
 
+  const handleImproveMetric = async (metric) => {
+    if (!metric) return
+    setIsProcessing(true)
+    setError('')
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/improve-metric`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metric,
+          jobDescriptionUrl: jobUrl,
+          linkedinProfileUrl: profileUrl,
+          credlyProfileUrl: credlyUrl,
+          existingCvKey: latestCvKey,
+          iteration: iteration - 1,
+        }),
+      })
+
+      if (!response.ok) {
+        let message = 'Request failed'
+        try {
+          const data = await response.json()
+          message = data.error || data.message || message
+        } catch {
+          const text = await response.text()
+          message = text || message
+        }
+        throw new Error(message)
+      }
+
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('application/json')) {
+        const text = await response.text()
+        throw new Error(text || 'Invalid JSON response')
+      }
+
+      const data = await response.json()
+      setHistory((h) => {
+        if (h.length === 0) return h
+        const updated = [...h]
+        const last = h[h.length - 1]
+        updated[updated.length - 1] = {
+          ...last,
+          urls: data.urls || last.urls,
+          metrics: data.metrics || last.metrics,
+        }
+        return updated
+      })
+      if (data.bestCvKey) setLatestCvKey(data.bestCvKey)
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const disabled = !profileUrl || !jobUrl || !cvFile || isProcessing
 
   return (
@@ -231,6 +287,7 @@ function App() {
                   <th className="text-right text-purple-800">Original</th>
                   <th className="text-right text-purple-800">Improved</th>
                   <th className="text-right text-purple-800">%Δ</th>
+                  <th className="text-right text-purple-800">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,6 +297,14 @@ function App() {
                     <td className="py-1 text-right">{m.original}</td>
                     <td className="py-1 text-right">{m.improved}</td>
                     <td className="py-1 text-right">{m.improvement}%</td>
+                    <td className="py-1 text-right">
+                      <button
+                        onClick={() => handleImproveMetric(m.metric)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        Improve
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

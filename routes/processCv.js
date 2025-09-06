@@ -770,5 +770,145 @@ export default function registerProcessCv(app) {
       return next(createError(500, 'processing failed'));
     }
   });
+
+  app.post('/api/improve-metric', async (req, res, next) => {
+    const jobId = crypto.randomUUID();
+    const s3 = new S3Client({ region });
+    let bucket;
+    let secrets;
+    try {
+      secrets = await getSecrets();
+      bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+    } catch (err) {
+      console.error('failed to load configuration', err);
+      return next(createError(500, 'failed to load configuration'));
+    }
+
+    let {
+      metric,
+      jobDescriptionUrl,
+      linkedinProfileUrl,
+      credlyProfileUrl,
+      existingCvKey,
+      iteration,
+    } = req.body;
+    iteration = parseInt(iteration) || 0;
+    if (!metric) return next(createError(400, 'metric required'));
+    if (!jobDescriptionUrl)
+      return next(createError(400, 'jobDescriptionUrl required'));
+    if (!linkedinProfileUrl)
+      return next(createError(400, 'linkedinProfileUrl required'));
+    if (!existingCvKey)
+      return next(createError(400, 'existingCvKey required'));
+
+    jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+    if (!jobDescriptionUrl)
+      return next(createError(400, 'invalid jobDescriptionUrl'));
+    linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+    if (!linkedinProfileUrl)
+      return next(createError(400, 'invalid linkedinProfileUrl'));
+    if (credlyProfileUrl) {
+      credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+      if (!credlyProfileUrl)
+        return next(createError(400, 'invalid credlyProfileUrl'));
+    }
+
+    try {
+      const obj = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+      );
+      const chunks = [];
+      for await (const chunk of obj.Body) chunks.push(chunk);
+      const existingCvBuffer = Buffer.concat(chunks);
+      const originalText = await extractText(existingCvBuffer);
+      const applicantName = extractName(originalText);
+      let sanitizedName = sanitizeName(applicantName);
+      if (!sanitizedName) sanitizedName = 'candidate';
+
+      let jobDescription = '';
+      let jobTitle = '';
+      try {
+        ({ jobDescription, jobTitle } = await analyzeJobDescription(
+          jobDescriptionUrl
+        ));
+      } catch {}
+
+      let linkedinData = {};
+      try {
+        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+      } catch {}
+
+      let credlyCertifications = [];
+      if (credlyProfileUrl) {
+        try {
+          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+        } catch {}
+      }
+
+      const cvFile = await openaiUploadFile(existingCvBuffer, 'cv.pdf');
+      const jdBuffer = await convertToPdf(jobDescription);
+      const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
+      let liFile;
+      if (Object.keys(linkedinData).length) {
+        const liBuffer = await convertToPdf(linkedinData);
+        liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
+      }
+      let credlyFile;
+      if (credlyCertifications.length) {
+        const credlyBuffer = await convertToPdf(credlyCertifications);
+        credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
+      }
+
+      const instructions =
+        `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, improvement_summary, metrics.`;
+
+      const responseText = await requestEnhancedCV({
+        cvFileId: cvFile.id,
+        jobDescFileId: jdFile.id,
+        linkedInFileId: liFile?.id,
+        credlyFileId: credlyFile?.id,
+        instructions,
+      });
+
+      const parsed = parseAiJson(responseText);
+      let improvedText = '';
+      if (parsed) {
+        improvedText = sanitizeGeneratedText(parsed.cv_version1, { jobTitle });
+      }
+      const { table: metricTable } = compareMetrics(originalText, improvedText);
+
+      const improvedPdf = await convertToPdf(improvedText);
+      const key = path.join(sanitizedName, `${Date.now()}-improved.pdf`);
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: improvedPdf,
+          ContentType: 'application/pdf',
+        })
+      );
+      const url = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: 3600 }
+      );
+
+      res.json({
+        iteration,
+        urls: [
+          {
+            type: 'version1',
+            url,
+            expiresAt: Date.now() + 3600 * 1000,
+          },
+        ],
+        metrics: metricTable,
+        bestCvKey: key,
+      });
+    } catch (err) {
+      console.error('metric improvement failed', err);
+      next(createError(500, 'failed to improve metric'));
+    }
+  });
 }
 
