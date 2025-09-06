@@ -75,8 +75,19 @@ body {
     gap: 1rem;
   }
 
+  .skill-title {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
   .skill-name {
     font-weight: 600;
+  }
+
+  .skill-icon {
+    width: 1em;
+    height: 1em;
   }
 
   .skill-bar {
