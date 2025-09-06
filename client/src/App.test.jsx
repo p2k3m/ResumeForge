@@ -32,7 +32,7 @@ test('triggers multiple improvement cycles', async () => {
     target: { value: 'https://indeed.com/job' },
   });
   fireEvent.change(screen.getByLabelText('Choose File'), { target: { files: [file] } });
-  fireEvent.click(screen.getByText('Enhance CV Now'));
+  fireEvent.click(screen.getByText('Enhance CV'));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
 
   fetch.mockResolvedValueOnce({
@@ -51,7 +51,7 @@ test('triggers multiple improvement cycles', async () => {
         bestCvKey: 'key2',
       }),
   });
-  fireEvent.click(screen.getByText('Improve Again'));
+  fireEvent.click(screen.getByText('Refine CV'));
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   expect(screen.getAllByText(/Skill Match Score/).length).toBe(2);
 });
