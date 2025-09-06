@@ -60,6 +60,11 @@ function App() {
         method: 'POST',
         body: formData,
       })
+      if (response.status === 400) {
+        const text = await response.text()
+        setError(text || 'Request failed')
+        return
+      }
       if (!response.ok) {
         const text = await response.text()
         throw new Error(text || 'Request failed')

@@ -27,7 +27,18 @@ async function ensureTable(client, tableName) {
   }
 }
 
-export async function logEvaluation({ jobId, ipAddress, userAgent, browser = '', os = '', device = '' }) {
+export async function logEvaluation({
+  jobId,
+  ipAddress,
+  userAgent,
+  browser = '',
+  os = '',
+  device = '',
+  jobDescriptionUrl = '',
+  linkedinProfileUrl = '',
+  credlyProfileUrl = '',
+  docType = '',
+}) {
   const client = new DynamoDBClient({ region });
   let tableName = process.env.DYNAMO_TABLE;
   if (!tableName) {
@@ -46,6 +57,10 @@ export async function logEvaluation({ jobId, ipAddress, userAgent, browser = '',
     browser: { S: browser || '' },
     os: { S: os || '' },
     device: { S: device || '' },
+    jobDescriptionUrl: { S: jobDescriptionUrl || '' },
+    linkedinProfileUrl: { S: linkedinProfileUrl || '' },
+    credlyProfileUrl: { S: credlyProfileUrl || '' },
+    docType: { S: docType || '' },
     createdAt: { N: String(Date.now()) }
   };
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
