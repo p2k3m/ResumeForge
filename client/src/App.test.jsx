@@ -8,7 +8,16 @@ const mockResponse = {
   jobTitle: 'Senior Developer',
   originalTitle: 'Developer',
   designationMatch: false,
-  missingSkills: ['aws']
+  missingSkills: ['aws'],
+  atsMetrics: {
+    layoutSearchability: 50,
+    atsReadability: 60,
+    impact: 80,
+    crispness: 90,
+    keywordDensity: 40,
+    sectionHeadingClarity: 100,
+    contactInfoCompleteness: 30
+  }
 }
 
 global.fetch = jest.fn(() =>
@@ -34,6 +43,12 @@ test('evaluates CV and displays results', async () => {
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
   expect(await screen.findByText(/ATS Score: 70%/)).toBeInTheDocument()
+  expect(
+    await screen.findByText(/Layout Searchability: 50%/)
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByText('Include email, phone, and LinkedIn.')
+  ).toBeInTheDocument()
   expect(
     await screen.findByText(/Designation: Developer vs Senior Developer/)
   ).toBeInTheDocument()

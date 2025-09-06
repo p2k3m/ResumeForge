@@ -1,5 +1,18 @@
 import { useState, useRef } from 'react'
 
+const metricTips = {
+  layoutSearchability: 'Use bullet points for better scanning.',
+  atsReadability: 'Simplify language and shorten sentences.',
+  impact: 'Emphasize strong action verbs and results.',
+  crispness: 'Keep sentences concise.',
+  keywordDensity: 'Repeat relevant keywords naturally.',
+  sectionHeadingClarity: 'Use clear section headings like Experience.',
+  contactInfoCompleteness: 'Include email, phone, and LinkedIn.'
+}
+
+const formatMetricName = (name) =>
+  name.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())
+
 function App() {
   const [jobUrl, setJobUrl] = useState('')
   const [cvFile, setCvFile] = useState(null)
@@ -249,6 +262,25 @@ function App() {
       {result && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <p className="text-purple-800 mb-2">ATS Score: {result.atsScore}%</p>
+          {result.atsMetrics && (
+            <div className="text-purple-800 mb-2">
+              <p className="font-semibold mb-1">ATS Breakdown</p>
+              <ul>
+                {Object.entries(result.atsMetrics).map(([metric, score]) => (
+                  <li key={metric} className="mb-1">
+                    <span>
+                      {formatMetricName(metric)}: {score}%
+                    </span>
+                    {score < 70 && metricTips[metric] && (
+                      <span className="block text-sm text-purple-600">
+                        {metricTips[metric]}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="text-purple-800 mb-2">
             Designation: {result.originalTitle || 'N/A'} vs {result.jobTitle || 'N/A'}
             {!result.designationMatch ? ' (Mismatch)' : ''}
