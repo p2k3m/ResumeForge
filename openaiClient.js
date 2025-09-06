@@ -214,6 +214,54 @@ export async function requestCoverLetter({
   throw lastError;
 }
 
+export async function requestAtsAnalysis(text) {
+  if (!text) throw new Error('text is required');
+  const client = await getClient();
+  const schema = {
+    type: 'object',
+    properties: metricNames.reduce((acc, metric) => {
+      acc[metric] = { type: 'number' };
+      return acc;
+    }, {}),
+    required: metricNames,
+    additionalProperties: false,
+  };
+  const prompt = `You are an ATS evaluation expert. Analyze the resume text and score each metric from 0-100: ${metricNames.join(
+    ', '
+  )}. Return a JSON object with these metrics.`;
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await client.responses.create({
+        model,
+        input: [
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: `${prompt}\n\n${text}` }],
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'AtsAnalysis',
+            schema,
+            strict: true,
+          },
+        },
+      });
+      const parsed = JSON.parse(response.output_text);
+      if (!metricNames.every((m) => typeof parsed[m] === 'number')) {
+        throw new Error('invalid metrics');
+      }
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') continue;
+    }
+  }
+  throw lastError;
+}
+
 export async function classifyDocument(text) {
   const client = await getClient();
   const prompt =
