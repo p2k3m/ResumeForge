@@ -13,7 +13,7 @@ import {
 } from '../openaiClient.js';
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
-import { logEvaluation } from '../services/dynamo.js';
+import { logEvaluation, logSession } from '../services/dynamo.js';
 
 import {
   uploadResume,
@@ -1020,6 +1020,262 @@ export default function registerProcessCv(app) {
       res.json({
         url,
         expiresAt: Date.now() + 3600 * 1000,
+      });
+    }
+  );
+
+  app.post(
+    '/api/compile',
+    (req, res, next) => {
+      uploadResume(req, res, (err) => {
+        if (err) return next(createError(400, err.message));
+        next();
+      });
+    },
+    async (req, res, next) => {
+      const jobId = crypto.randomUUID();
+      const s3 = new S3Client({ region });
+      let bucket;
+      let secrets;
+      try {
+        secrets = await getSecrets();
+        bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+      } catch (err) {
+        console.error('failed to load configuration', err);
+        return next(createError(500, 'failed to load configuration'));
+      }
+
+      let {
+        jobDescriptionUrl,
+        linkedinProfileUrl,
+        credlyProfileUrl,
+        existingCvKey,
+        existingCvTextKey,
+        originalScore,
+        selectedCertifications,
+        selectedExperience,
+        selectedEducation,
+        addedSkills,
+        designation,
+      } = req.body;
+
+      if (!jobDescriptionUrl)
+        return next(createError(400, 'jobDescriptionUrl required'));
+      if (!linkedinProfileUrl)
+        return next(createError(400, 'linkedinProfileUrl required'));
+      if (!existingCvKey && !existingCvTextKey)
+        return next(
+          createError(400, 'existingCvKey or existingCvTextKey required')
+        );
+
+      jobDescriptionUrl = validateUrl(jobDescriptionUrl, allowedDomains);
+      if (!jobDescriptionUrl)
+        return next(createError(400, 'invalid jobDescriptionUrl'));
+      linkedinProfileUrl = validateUrl(linkedinProfileUrl, ['linkedin.com']);
+      if (!linkedinProfileUrl)
+        return next(createError(400, 'invalid linkedinProfileUrl'));
+      if (credlyProfileUrl) {
+        credlyProfileUrl = validateUrl(credlyProfileUrl, ['credly.com']);
+        if (!credlyProfileUrl)
+          return next(createError(400, 'invalid credlyProfileUrl'));
+      }
+
+      const parseArray = (field) => {
+        try {
+          if (Array.isArray(field)) return field;
+          if (typeof field === 'string') {
+            const arr = JSON.parse(field);
+            return Array.isArray(arr) ? arr : [];
+          }
+        } catch {}
+        return [];
+      };
+
+      const addedSkillsArr = parseArray(addedSkills);
+      const selectedExperienceArr = parseArray(selectedExperience);
+      const selectedEducationArr = parseArray(selectedEducation);
+      let selectedCertificationsArr = parseArray(selectedCertifications);
+
+      let cvBuffer;
+      let cvText;
+      try {
+        if (existingCvTextKey) {
+          const textObj = await s3.send(
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+          );
+          cvText = await textObj.Body.transformToString();
+          cvBuffer = await convertToPdf(cvText);
+        } else if (existingCvKey) {
+          const obj = await s3.send(
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+          );
+          const chunks = [];
+          for await (const chunk of obj.Body) chunks.push(chunk);
+          cvBuffer = Buffer.concat(chunks);
+          cvText = await extractText({
+            originalname: path.basename(existingCvKey),
+            buffer: cvBuffer,
+          });
+        }
+      } catch (err) {
+        console.error('failed to load cv', err);
+        return next(createError(500, 'failed to load cv'));
+      }
+
+      const applicantName = extractName(cvText);
+      let sanitizedName = sanitizeName(applicantName);
+      if (!sanitizedName) sanitizedName = 'candidate';
+
+      if (!existingCvKey) {
+        existingCvKey = path.join(
+          sanitizedName,
+          `${Date.now()}-final_cv.pdf`
+        );
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: existingCvKey,
+            Body: cvBuffer,
+            ContentType: 'application/pdf',
+          })
+        );
+      }
+
+      if (!existingCvTextKey) {
+        existingCvTextKey = path.join(
+          sanitizedName,
+          `${Date.now()}-final_cv.txt`
+        );
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: existingCvTextKey,
+            Body: cvText,
+            ContentType: 'text/plain',
+          })
+        );
+      }
+
+      let jobDescription = '';
+      try {
+        ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
+      } catch {}
+
+      let linkedinData = {};
+      try {
+        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+      } catch {}
+
+      let credlyCertifications = selectedCertificationsArr;
+      if (!credlyCertifications.length && credlyProfileUrl) {
+        try {
+          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+        } catch {}
+      }
+
+      const cvFile = await openaiUploadFile(cvBuffer, 'cv.pdf');
+      const jdBuffer = await convertToPdf(jobDescription);
+      const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
+      let liFile;
+      if (Object.keys(linkedinData).length) {
+        const liBuffer = await convertToPdf(linkedinData);
+        liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
+      }
+      let credlyFile;
+      if (credlyCertifications.length) {
+        const credlyBuffer = await convertToPdf(credlyCertifications);
+        credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
+      }
+
+      let coverLetterText;
+      try {
+        coverLetterText = await requestCoverLetter({
+          cvFileId: cvFile.id,
+          jobDescFileId: jdFile.id,
+          linkedInFileId: liFile?.id,
+          credlyFileId: credlyFile?.id,
+        });
+      } catch (err) {
+        console.error('cover letter generation failed', err);
+        return next(createError(500, 'cover letter generation failed'));
+      }
+
+      const sanitizedCover = sanitizeGeneratedText(coverLetterText, {
+        skipRequiredSections: true,
+        defaultHeading: '',
+      });
+      const coverBuffer = await convertToPdf(sanitizedCover);
+      const coverKey = path.join(
+        sanitizedName,
+        `${Date.now()}-cover_letter.pdf`
+      );
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: coverKey,
+          Body: coverBuffer,
+          ContentType: 'application/pdf',
+        })
+      );
+
+      const cvUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
+        { expiresIn: 3600 }
+      );
+      const coverUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: coverKey }),
+        { expiresIn: 3600 }
+      );
+
+      const atsMetrics = calculateMetrics(cvText);
+      const atsScore = Math.round(
+        Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
+          Math.max(Object.keys(atsMetrics).length, 1)
+      );
+      const improvement = originalScore
+        ? Math.round(((atsScore - Number(originalScore)) / Number(originalScore)) * 100)
+        : 0;
+
+      const ipAddress =
+        (req.headers['x-forwarded-for'] || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)[0] || req.ip;
+      const userAgent = req.headers['user-agent'] || '';
+      let browser = '',
+        os = '',
+        device = '';
+      try {
+        ({ browser, os, device } = await parseUserAgent(userAgent));
+      } catch {}
+
+      try {
+        await logSession({
+          jobId,
+          ipAddress,
+          userAgent,
+          browser,
+          os,
+          device,
+          jobDescriptionUrl,
+          linkedinProfileUrl,
+          credlyProfileUrl,
+          cvKey: existingCvKey,
+          coverLetterKey: coverKey,
+          atsScore,
+          improvement,
+        });
+      } catch (err) {
+        console.error('failed to log session', err);
+      }
+
+      res.json({
+        cvUrl,
+        coverLetterUrl: coverUrl,
+        atsScore,
+        improvement,
       });
     }
   );

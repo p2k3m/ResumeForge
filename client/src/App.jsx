@@ -14,6 +14,10 @@ function App() {
   const [expOptions, setExpOptions] = useState([])
   const [eduOptions, setEduOptions] = useState([])
   const [certOptions, setCertOptions] = useState([])
+  const [cvKey, setCvKey] = useState('')
+  const [cvTextKey, setCvTextKey] = useState('')
+  const [finalScore, setFinalScore] = useState(null)
+  const [improvement, setImprovement] = useState(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
   const handleFileChange = (e) => {
@@ -105,7 +109,9 @@ function App() {
         const text = await response.text()
         throw new Error(text || 'Request failed')
       }
-      await response.json()
+      const data = await response.json()
+      setCvKey(data.existingCvKey || '')
+      setCvTextKey(data.cvTextKey || '')
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -138,6 +144,46 @@ function App() {
         throw new Error(text || 'Request failed')
       }
       await response.json()
+    } catch (err) {
+      setError(err.message || 'Something went wrong.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleCompile = async () => {
+    setIsProcessing(true)
+    setError('')
+    try {
+      const formData = new FormData()
+      formData.append('jobDescriptionUrl', jobUrl)
+      formData.append('linkedinProfileUrl', linkedinUrl)
+      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
+      formData.append('existingCvKey', cvKey)
+      formData.append('existingCvTextKey', cvTextKey)
+      formData.append('originalScore', result?.atsScore || 0)
+      formData.append('addedSkills', JSON.stringify(skills))
+      const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
+      const selectedEducation = eduOptions.filter((o) => o.checked).map((o) => o.text)
+      const selectedCertifications = certOptions
+        .filter((o) => o.checked)
+        .map((o) => o.data)
+      formData.append('selectedExperience', JSON.stringify(selectedExperience))
+      formData.append('selectedEducation', JSON.stringify(selectedEducation))
+      formData.append('selectedCertifications', JSON.stringify(selectedCertifications))
+      if (designationOverride)
+        formData.append('designation', designationOverride)
+      const response = await fetch(`${API_BASE_URL}/api/compile`, {
+        method: 'POST',
+        body: formData
+      })
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || 'Request failed')
+      }
+      const data = await response.json()
+      setFinalScore(data.atsScore)
+      setImprovement(data.improvement)
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -286,7 +332,18 @@ function App() {
             >
               Generate Cover Letter
             </button>
+            <button
+              onClick={handleCompile}
+              className="px-4 py-2 bg-purple-600 text-white rounded"
+            >
+              Generate Final CV & Cover Letter
+            </button>
           </div>
+          {finalScore !== null && (
+            <p className="text-purple-800 mt-2">
+              Final ATS Score: {finalScore}% (Improvement: {improvement}% )
+            </p>
+          )}
         </div>
       )}
 
