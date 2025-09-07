@@ -17,6 +17,22 @@ jest.unstable_mockModule('../services/dynamo.js', () => ({
   logEvaluation: jest.fn().mockResolvedValue()
 }));
 
+const mockS3Send = jest.fn().mockResolvedValue({});
+jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(() => ({ send: mockS3Send })),
+  PutObjectCommand: jest.fn((input) => ({ input })),
+  GetObjectCommand: jest.fn((input) => ({ input })),
+}));
+
+jest.unstable_mockModule('../config/secrets.js', () => ({
+  getSecrets: jest.fn().mockResolvedValue({}),
+}));
+
+jest.unstable_mockModule('../openaiClient.js', () => ({
+  classifyDocument: jest.fn().mockResolvedValue('resume'),
+  requestAtsAnalysis: jest.fn().mockRejectedValue(new Error('no ai')),
+}));
+
 const serverModule = await import('../server.js');
 const app = serverModule.default;
 
@@ -25,6 +41,7 @@ describe('/api/evaluate metrics', () => {
     const res = await request(app)
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.atsMetrics).toBeDefined();

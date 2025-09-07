@@ -197,7 +197,7 @@ export default function registerProcessCv(app, generativeModel) {
       } catch {}
       try {
         if (!req.file) return next(createError(400, 'resume file required'));
-        const cvKey =
+        let cvKey =
           req.file.key || req.file.filename || req.file.originalname || '';
         let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
         if (!jobDescriptionUrl)
@@ -254,6 +254,32 @@ export default function registerProcessCv(app, generativeModel) {
           return res
             .status(400)
             .json({ error: 'name required', nameRequired: true });
+        }
+        let bucket;
+        try {
+          const secrets = await getSecrets();
+          bucket =
+            process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+        } catch (err) {
+          console.error('failed to load configuration', err);
+          return next(createError(500, 'failed to load configuration'));
+        }
+        const s3 = new S3Client({ region });
+        const ext = path.extname(req.file.originalname).toLowerCase();
+        const date = new Date().toISOString().split('T')[0];
+        const prefix = `${sanitized}/cv/${date}/`;
+        cvKey = `${prefix}${sanitized}${ext}`;
+        try {
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: cvKey,
+              Body: req.file.buffer,
+              ContentType: req.file.mimetype,
+            })
+          );
+        } catch (err) {
+          console.error(`initial upload to bucket ${bucket} failed`, err);
         }
         const resumeSkills = extractResumeSkills(resumeText);
         const { newSkills: missingSkills } = calculateMatchScore(
