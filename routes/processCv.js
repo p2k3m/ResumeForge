@@ -46,6 +46,7 @@ import {
   parseAiJson,
   generatePdf,
   PUPPETEER_HEADLESS,
+  PUPPETEER_ARGS,
   BLOCKED_PATTERNS
 } from '../server.js';
 
@@ -73,7 +74,7 @@ export async function fetchJobDescription(
   }
   const browser = await puppeteer.launch({
     headless: PUPPETEER_HEADLESS,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: PUPPETEER_ARGS
   });
   try {
     const page = await browser.newPage();

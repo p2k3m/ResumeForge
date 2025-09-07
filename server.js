@@ -29,6 +29,7 @@ import JSON5 from 'json5';
 import { generativeModel } from './geminiClient.js';
 import registerProcessCv from './routes/processCv.js';
 import { generatePdf as _generatePdf } from './services/generatePdf.js';
+import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from './config/puppeteer.js';
 import {
   parseContent,
   parseLine,
@@ -320,8 +321,6 @@ const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
 const JOB_FETCH_USER_AGENT =
   process.env.JOB_FETCH_USER_AGENT ||
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const PUPPETEER_HEADLESS =
-  process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
 const BLOCKED_PATTERNS = [
   /captcha/i,
   /access denied/i,
@@ -487,7 +486,7 @@ async function fetchHtml(url, { timeout = REQUEST_TIMEOUT_MS, userAgent = JOB_FE
   }
   const browser = await puppeteer.launch({
     headless: PUPPETEER_HEADLESS,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: PUPPETEER_ARGS
   });
   try {
     const page = await browser.newPage();
@@ -1135,5 +1134,6 @@ export {
   REQUEST_TIMEOUT_MS,
   rateLimiter,
   PUPPETEER_HEADLESS,
+  PUPPETEER_ARGS,
   BLOCKED_PATTERNS
 };
