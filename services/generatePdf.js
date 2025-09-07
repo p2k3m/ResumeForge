@@ -121,7 +121,8 @@ export async function generatePdf(
     const htmlData = {
       ...data,
       sections: data.sections.map((sec) => {
-        if (sec.heading?.toLowerCase() === 'work experience') {
+        const heading = sec.heading?.toLowerCase();
+        if (heading === 'work experience' || heading === 'projects') {
           const grouped = [];
           let current = null;
           sec.items.forEach((tokens) => {

@@ -62,9 +62,9 @@
           <ul>
             {{#each items}}
               {{#if this.bullets}}
-                <li>
-                  <strong>{{{this.title}}}</strong>
-                  <ul>
+                <li class="item-with-bullets">
+                  <strong class="item-title">{{{this.title}}}</strong>
+                  <ul class="subpoints">
                     {{#each this.bullets}}
                       <li>{{{this}}}</li>
                     {{/each}}

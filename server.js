@@ -547,7 +547,12 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
   ]
     .filter(Boolean)
     .join(', ');
-  const projects = sectionMap.projects || '';
+  const projects = [
+    sectionMap.projects || '',
+    (linkedinData.projects || []).join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n');
   const languages = [
     ...extractLanguages(resumeText),
     ...extractLanguages(linkedinData.languages || [])
