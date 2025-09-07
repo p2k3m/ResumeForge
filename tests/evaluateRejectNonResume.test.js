@@ -50,7 +50,7 @@ describe('/api/evaluate non-resume', () => {
       .attach('resume', Buffer.from('dummy'), 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
-      `You have uploaded a ${docType} and not a CV – please upload the correct CV`
+      `You have uploaded a ${docType}. Please upload a CV only.`
     );
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
