@@ -7,7 +7,7 @@ import {
   DeleteItemCommand
 } from '@aws-sdk/client-dynamodb';
 import { getSecrets } from '../config/secrets.js';
-import { region } from '../server.js';
+const region = process.env.AWS_REGION || 'ap-south-1';
 
 async function resolveLocation(ipAddress) {
   if (!ipAddress) return 'unknown';
