@@ -13,7 +13,9 @@ The server relies on the following environment variables:
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
-  "REQUEST_TIMEOUT_MS": "5000"
+  "REQUEST_TIMEOUT_MS": "5000",
+  "TRUST_PROXY": "1",
+  "ENFORCE_HTTPS": "true"
 }
 ```
 
@@ -25,6 +27,9 @@ JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the 
 `resume-forge-data`, which is suitable for local development.
 
 `REQUEST_TIMEOUT_MS` sets the timeout in milliseconds for outbound HTTP requests when fetching external profiles and job descriptions. It defaults to `5000`.
+
+When deploying behind a reverse proxy or load balancer, set `TRUST_PROXY` to the number of trusted hops (typically `1`) so Express honors `X-Forwarded-*` headers. Combine this with `ENFORCE_HTTPS=true` to redirect all HTTP requests to `https://`.
+
 
 `GEMINI_API_KEY` supplies the Google Gemini API key. Set it directly in your environment for development or include it in the
 secret.
