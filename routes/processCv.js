@@ -44,7 +44,9 @@ import {
   REQUEST_TIMEOUT_MS,
   sanitizeGeneratedText,
   parseAiJson,
-  generatePdf
+  generatePdf,
+  PUPPETEER_HEADLESS,
+  BLOCKED_PATTERNS
 } from '../server.js';
 
 const DEFAULT_USER_AGENT =
@@ -52,15 +54,6 @@ const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_FETCH_TIMEOUT_MS =
   parseInt(process.env.JOB_FETCH_TIMEOUT_MS || REQUEST_TIMEOUT_MS, 10);
-
-const PUPPETEER_HEADLESS =
-  process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
-const BLOCKED_PATTERNS = [
-  /captcha/i,
-  /access denied/i,
-  /enable javascript/i,
-  /bot detection/i
-];
 
 export async function fetchJobDescription(
   url,

@@ -1133,5 +1133,7 @@ export {
   sanitizeName,
   region,
   REQUEST_TIMEOUT_MS,
-  rateLimiter
+  rateLimiter,
+  PUPPETEER_HEADLESS,
+  BLOCKED_PATTERNS
 };
