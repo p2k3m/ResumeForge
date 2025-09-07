@@ -296,8 +296,15 @@ function App() {
         onDrop={handleDrop}
         onClick={() => fileInputRef.current && fileInputRef.current.click()}
       >
-        <p>Drag & drop your CV here or click to browse</p>
+        <p>Drag & drop your CV here or</p>
+        <label
+          htmlFor="cv-upload"
+          className="block mt-2 underline cursor-pointer break-words"
+        >
+          Browse... {cvFile ? cvFile.name : 'No file selected.'}
+        </label>
         <input
+          id="cv-upload"
           ref={fileInputRef}
           type="file"
           accept=".pdf,.docx"
