@@ -17,11 +17,23 @@ jest.unstable_mockModule('../services/dynamo.js', () => ({
   logEvaluation: jest.fn().mockResolvedValue()
 }));
 
+const mockS3Send = jest.fn().mockResolvedValue({});
+jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(() => ({ send: mockS3Send })),
+  PutObjectCommand: jest.fn((input) => ({ input })),
+  GetObjectCommand: jest.fn((input) => ({ input })),
+}));
+
+jest.unstable_mockModule('../config/secrets.js', () => ({
+  getSecrets: jest.fn().mockResolvedValue({}),
+}));
+
 jest.unstable_mockModule('../openaiClient.js', () => ({
   uploadFile: jest.fn(),
   requestSectionImprovement: jest.fn(),
   requestEnhancedCV: jest.fn(),
   requestCoverLetter: jest.fn(),
+  requestAtsAnalysis: jest.fn(),
   classifyDocument: jest.fn(),
 }));
 
