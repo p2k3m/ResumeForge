@@ -57,10 +57,12 @@ const PUPPETEER_HEADLESS =
 
 export async function fetchJobDescription(
   url,
-  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = DEFAULT_USER_AGENT } = {}
+  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = DEFAULT_USER_AGENT } = {},
 ) {
+  const valid = validateUrl(url);
+  if (!valid) throw new Error('Invalid URL');
   try {
-    const { data } = await axios.get(url, {
+    const { data } = await axios.get(valid, {
       timeout,
       headers: { 'User-Agent': userAgent },
     });
@@ -75,7 +77,7 @@ export async function fetchJobDescription(
   try {
     const page = await browser.newPage();
     await page.setUserAgent(userAgent);
-    await page.goto(url, { timeout, waitUntil: 'networkidle2' });
+    await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
     const content = await page.content();
     return content;
   } finally {

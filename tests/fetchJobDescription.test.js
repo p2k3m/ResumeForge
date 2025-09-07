@@ -54,4 +54,16 @@ describe('fetchJobDescription', () => {
       waitUntil: 'networkidle2',
     });
   });
+
+  test('rejects invalid URL', async () => {
+    await expect(fetchJobDescription('http:/bad')).rejects.toThrow('Invalid URL');
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+    expect(mockLaunch).not.toHaveBeenCalled();
+  });
+
+  test('rejects private IP URL', async () => {
+    await expect(fetchJobDescription('http://127.0.0.1')).rejects.toThrow('Invalid URL');
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+    expect(mockLaunch).not.toHaveBeenCalled();
+  });
 });
