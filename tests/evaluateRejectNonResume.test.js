@@ -61,4 +61,25 @@ describe('/api/evaluate non-resume', () => {
       })
     );
   });
+
+  test('rejects unknown document type', async () => {
+    classifyDocument.mockResolvedValueOnce('unknown');
+    const res = await request(app)
+      .post('/api/evaluate')
+      .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'file.pdf');
+    expect(res.status).toBe(400);
+    expect(res.text).toBe(
+      "The document type couldn't be recognized; please upload a CV."
+    );
+    const { logEvaluation } = await import('../services/dynamo.js');
+    expect(logEvaluation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        docType: 'unknown',
+        linkedinProfileUrl: 'https://linkedin.com/in/example',
+        cvKey: expect.any(String),
+      })
+    );
+  });
 });
