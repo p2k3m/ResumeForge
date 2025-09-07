@@ -1,14 +1,17 @@
 import { jest } from '@jest/globals';
 
 const mockGet = jest.fn();
+const mockLaunch = jest.fn();
 
 jest.unstable_mockModule('axios', () => ({ default: { get: mockGet } }));
+jest.unstable_mockModule('puppeteer', () => ({ default: { launch: mockLaunch } }));
 
 const { fetchLinkedInProfile } = await import('../server.js');
 
 describe('fetchLinkedInProfile error handling', () => {
   beforeEach(() => {
     mockGet.mockReset();
+    mockLaunch.mockReset();
   });
 
   test('includes status and message in thrown error', async () => {
@@ -27,6 +30,9 @@ describe('fetchLinkedInProfile error handling', () => {
     const error = new Error('Blocked');
     error.response = { status: 999 };
     mockGet.mockRejectedValueOnce(error);
+    const mockPage = { goto: jest.fn(), content: jest.fn().mockResolvedValue('Access Denied') };
+    const mockBrowser = { newPage: jest.fn().mockResolvedValue(mockPage), close: jest.fn() };
+    mockLaunch.mockResolvedValueOnce(mockBrowser);
     await expect(
       fetchLinkedInProfile('https://linkedin.com/in/example')
     ).resolves.toEqual({

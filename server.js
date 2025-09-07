@@ -5,6 +5,7 @@ import path from 'path';
 import net from 'net';
 import dns from 'dns';
 import axios from 'axios';
+import puppeteer from 'puppeteer';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -215,139 +216,186 @@ const region = process.env.AWS_REGION || 'ap-south-1';
 async function fetchLinkedInProfile(url) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid LinkedIn URL');
+  let html = '';
+  let status;
   try {
-    const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
-    const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
-    const headlineMatch =
-      html.match(/<title>([^<]*)<\/title>/i) || html.match(/"headline":"(.*?)"/i);
-    const headline = headlineMatch ? strip(headlineMatch[1]) : '';
-
-    const extractList = (id) => {
-      const sectionRegex = new RegExp(
-        `<section[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)<\\/section>`,
-        'i'
-      );
-      const sectionMatch = html.match(sectionRegex);
-      if (!sectionMatch) return [];
-      const itemRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-      const items = [];
-      let m;
-      while ((m = itemRegex.exec(sectionMatch[1])) !== null) {
-        const itemHtml = m[1];
-        const text = strip(itemHtml);
-        if (!text) continue;
-        if (id === 'experience') {
-          const titleMatch =
-            itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
-            itemHtml.match(/"title"\s*:\s*"(.*?)"/i);
-          const companyMatch =
-            itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
-            itemHtml.match(/"companyName"\s*:\s*"(.*?)"/i);
-          const dateMatch =
-            itemHtml.match(/<span[^>]*>([^<]*\d{4}[^<]*)<\/span>/i) ||
-            itemHtml.match(/"dateRange"\s*:\s*"(.*?)"/i);
-          let startDate = '';
-          let endDate = '';
-          if (dateMatch) {
-            const parts = strip(dateMatch[1]).split(/[-–to]+/);
-            startDate = parts[0]?.trim() || '';
-            endDate = parts[1]?.trim() || '';
-          }
-          items.push({
-            company: companyMatch ? strip(companyMatch[1]) : '',
-            title: titleMatch ? strip(titleMatch[1]) : '',
-            startDate,
-            endDate
-          });
-        } else if (id === 'licenses_and_certifications') {
-          const nameMatch =
-            itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
-            itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
-          const providerMatch =
-            itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
-            itemHtml.match(/"issuer"\s*:\s*"(.*?)"/i);
-          const urlMatch =
-            itemHtml.match(/href=["']([^"']+)["']/i) ||
-            itemHtml.match(/"url"\s*:\s*"(.*?)"/i);
-          items.push({
-            name: nameMatch ? strip(nameMatch[1]) : '',
-            provider: providerMatch ? strip(providerMatch[1]) : '',
-            url: urlMatch ? strip(urlMatch[1]) : '',
-          });
-        } else if (id === 'languages') {
-          const nameMatch =
-            itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
-            itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
-          const profMatch =
-            itemHtml.match(/<span[^>]*>([^<]*proficienc[^<]*)<\/span>/i) ||
-            itemHtml.match(/"proficiency"\s*:\s*"(.*?)"/i);
-          items.push({
-            language: nameMatch ? strip(nameMatch[1]) : strip(text),
-            proficiency: profMatch ? strip(profMatch[1]) : '',
-          });
-        } else {
-          items.push(text);
-        }
-      }
-      return items;
-    };
-
-    return {
-      headline,
-      experience: extractList('experience'),
-      education: extractList('education'),
-      skills: extractList('skills'),
-      certifications: extractList('licenses_and_certifications'),
-      languages: extractList('languages'),
-    };
+    const { data } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
+    html = data;
   } catch (err) {
-    const status = err?.response?.status;
-      if (status === 999) {
-        return {
-          headline: '',
-          experience: [],
-          education: [],
-          skills: [],
-          certifications: [],
-          languages: []
-        };
-      }
-    const msg = `LinkedIn profile fetch failed: ${err.message}` +
-      (status ? ` (status ${status})` : '');
-    const error = new Error(msg);
-    if (status) error.status = status;
-    console.error(msg);
-    throw error;
+    status = err?.response?.status;
+    if (status && status !== 999) {
+      const msg =
+        `LinkedIn profile fetch failed: ${err.message}` +
+        (status ? ` (status ${status})` : '');
+      const error = new Error(msg);
+      if (status) error.status = status;
+      console.error(msg);
+      throw error;
+    }
   }
+  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+    const browser = await puppeteer.launch({
+      headless: PUPPETEER_HEADLESS,
+      args: PUPPETEER_ARGS,
+    });
+    try {
+      const page = await browser.newPage();
+      await page.goto(valid, {
+        timeout: REQUEST_TIMEOUT_MS,
+        waitUntil: 'networkidle2',
+      });
+      html = await page.content();
+    } finally {
+      await browser.close();
+    }
+  }
+  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+    if (status === 999) {
+      return {
+        headline: '',
+        experience: [],
+        education: [],
+        skills: [],
+        certifications: [],
+        languages: [],
+      };
+    }
+    const msg = 'LinkedIn profile fetch failed: Blocked content';
+    console.error(msg);
+    throw new Error('Blocked content');
+  }
+  const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
+  const headlineMatch =
+    html.match(/<title>([^<]*)<\/title>/i) ||
+    html.match(/"headline":"(.*?)"/i);
+  const headline = headlineMatch ? strip(headlineMatch[1]) : '';
+  const extractList = (id) => {
+    const sectionRegex = new RegExp(
+      `<section[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)<\/section>`,
+      'i'
+    );
+    const sectionMatch = html.match(sectionRegex);
+    if (!sectionMatch) return [];
+    const itemRegex = /<li[^>]*>([\\s\\S]*?)<\/li>/gi;
+    const items = [];
+    let m;
+    while ((m = itemRegex.exec(sectionMatch[1])) !== null) {
+      const itemHtml = m[1];
+      const text = strip(itemHtml);
+      if (!text) continue;
+      if (id === 'experience') {
+        const titleMatch =
+          itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
+          itemHtml.match(/"title"\s*:\s*"(.*?)"/i);
+        const companyMatch =
+          itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
+          itemHtml.match(/"companyName"\s*:\s*"(.*?)"/i);
+        const dateMatch =
+          itemHtml.match(/<span[^>]*>([^<]*\d{4}[^<]*)<\/span>/i) ||
+          itemHtml.match(/"dateRange"\s*:\s*"(.*?)"/i);
+        let startDate = '';
+        let endDate = '';
+        if (dateMatch) {
+          const parts = strip(dateMatch[1]).split(/[-–to]+/);
+          startDate = parts[0]?.trim() || '';
+          endDate = parts[1]?.trim() || '';
+        }
+        items.push({
+          company: companyMatch ? strip(companyMatch[1]) : '',
+          title: titleMatch ? strip(titleMatch[1]) : '',
+          startDate,
+          endDate,
+        });
+      } else if (id === 'licenses_and_certifications') {
+        const nameMatch =
+          itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
+          itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
+        const providerMatch =
+          itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
+          itemHtml.match(/"issuer"\s*:\s*"(.*?)"/i);
+        const urlMatch =
+          itemHtml.match(/href=["']([^"']+)["']/i) ||
+          itemHtml.match(/"url"\s*:\s*"(.*?)"/i);
+        items.push({
+          name: nameMatch ? strip(nameMatch[1]) : '',
+          provider: providerMatch ? strip(providerMatch[1]) : '',
+          url: urlMatch ? strip(urlMatch[1]) : '',
+        });
+      } else if (id === 'languages') {
+        const nameMatch =
+          itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
+          itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
+        const profMatch =
+          itemHtml.match(/<span[^>]*>([^<]*proficienc[^<]*)<\/span>/i) ||
+          itemHtml.match(/"proficiency"\s*:\s*"(.*?)"/i);
+        items.push({
+          language: nameMatch ? strip(nameMatch[1]) : strip(text),
+          proficiency: profMatch ? strip(profMatch[1]) : '',
+        });
+      } else {
+        items.push(text);
+      }
+    }
+    return items;
+  };
+  return {
+    headline,
+    experience: extractList('experience'),
+    education: extractList('education'),
+    skills: extractList('skills'),
+    certifications: extractList('licenses_and_certifications'),
+    languages: extractList('languages'),
+  };
 }
 
 async function fetchCredlyProfile(url) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid Credly URL');
+  let html = '';
   try {
-    const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
-    const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
-    const badgeRegex = /<div[^>]*class=["'][^"']*badge[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
-    const badges = [];
-    let m;
-    while ((m = badgeRegex.exec(html)) !== null) {
-      const block = m[1];
-      const statusMatch = block.match(/<span[^>]*class=["'][^"']*(?:status|state)[^"']*["'][^>]*>(.*?)<\/span>/i);
-      if (statusMatch && !/active/i.test(strip(statusMatch[1]))) continue;
-      const nameMatch = block.match(/class=["'][^"']*badge-name[^"']*["'][^>]*>(.*?)<\/span>/i);
-      const providerMatch = block.match(/class=["'][^"']*(?:issuer-name|org|organization)[^"']*["'][^>]*>(.*?)<\/span>/i);
-      const urlMatch = block.match(/<a[^>]*href=["']([^"']+)["']/i);
-      badges.push({
-        name: nameMatch ? strip(nameMatch[1]) : '',
-        provider: providerMatch ? strip(providerMatch[1]) : '',
-        url: urlMatch ? strip(urlMatch[1]) : '',
-        source: 'credly'
-      });
-    }
-    return badges;
+    const { data } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
+    html = data;
   } catch {
-    return [];
+    // ignore axios error and fall back to puppeteer
   }
+  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+    const browser = await puppeteer.launch({
+      headless: PUPPETEER_HEADLESS,
+      args: PUPPETEER_ARGS,
+    });
+    try {
+      const page = await browser.newPage();
+      await page.goto(valid, {
+        timeout: REQUEST_TIMEOUT_MS,
+        waitUntil: 'networkidle2',
+      });
+      html = await page.content();
+    } finally {
+      await browser.close();
+    }
+  }
+  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+    throw new Error('Blocked content');
+  }
+  const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
+  const badgeRegex = /<div[^>]*class=["'][^"']*badge[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi;
+  const badges = [];
+  let m;
+  while ((m = badgeRegex.exec(html)) !== null) {
+    const block = m[1];
+    const statusMatch = block.match(/<span[^>]*class=["'][^"']*(?:status|state)[^"']*["'][^>]*>(.*?)<\/span>/i);
+    if (statusMatch && !/active/i.test(strip(statusMatch[1]))) continue;
+    const nameMatch = block.match(/class=["'][^"']*badge-name[^"']*["'][^>]*>(.*?)<\/span>/i);
+    const providerMatch = block.match(/class=["'][^"']*(?:issuer-name|org|organization)[^"']*["'][^>]*>(.*?)<\/span>/i);
+    const urlMatch = block.match(/<a[^>]*href=["']([^"']+)["']/i);
+    badges.push({
+      name: nameMatch ? strip(nameMatch[1]) : '',
+      provider: providerMatch ? strip(providerMatch[1]) : '',
+      url: urlMatch ? strip(urlMatch[1]) : '',
+      source: 'credly'
+    });
+  }
+  return badges;
 }
 
 async function analyzeJobDescription(input) {
