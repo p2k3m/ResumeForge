@@ -231,6 +231,26 @@ function App() {
     }
   }
 
+  const handleGapFix = async (gap) => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/api/fix-gap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gap, jobDescriptionUrl: jobUrl })
+      })
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(text || 'Request failed')
+      }
+      const data = await resp.json()
+      setGapSuggestion(data.suggestion || 'No suggestions')
+    } catch (err) {
+      setGapSuggestion(err.message || 'Failed to fetch suggestions')
+    } finally {
+      setShowGapModal(true)
+    }
+  }
+
   const handleCompile = async () => {
     setIsProcessing(true)
     setError('')
@@ -570,6 +590,7 @@ function App() {
                     <a
                       href="#"
                       className="ml-2 text-purple-600 underline"
+                      onClick={() => handleGapFix(gap)}
                     >
                       Click to fix
                     </a>
