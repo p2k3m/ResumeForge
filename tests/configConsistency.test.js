@@ -9,8 +9,9 @@ const mockLaunch = jest.fn();
 jest.unstable_mockModule('axios', () => ({ default: { get: mockAxiosGet } }));
 jest.unstable_mockModule('puppeteer', () => ({ default: { launch: mockLaunch } }));
 
+const { PUPPETEER_HEADLESS } = await import('../config/puppeteer.js');
 const serverModule = await import('../server.js');
-const { PUPPETEER_HEADLESS, BLOCKED_PATTERNS } = serverModule;
+const { BLOCKED_PATTERNS } = serverModule;
 const { fetchJobDescription } = await import('../routes/processCv.js');
 
 describe('shared configuration values', () => {

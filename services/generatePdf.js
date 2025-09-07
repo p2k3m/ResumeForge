@@ -9,6 +9,7 @@ import {
   normalizeHeading
 } from './parseContent.js';
 import { getSkillIcon } from '../skillIcons.js';
+import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from '../config/puppeteer.js';
 
 const ALL_TEMPLATES = [
   'modern',
@@ -21,9 +22,6 @@ const ALL_TEMPLATES = [
   'cover_classic',
   'cover_2025'
 ];
-
-const PUPPETEER_HEADLESS =
-  process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
 
 function proficiencyToLevel(str = '') {
   const s = String(str).toLowerCase();
@@ -267,7 +265,7 @@ export async function generatePdf(
     // Launch using Chromium's default sandboxing.
     browser = await puppeteer.launch({
       headless: PUPPETEER_HEADLESS,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      args: PUPPETEER_ARGS
     });
     const page = await browser.newPage();
     // Ensure consistent layout width for templates that use multiple columns
