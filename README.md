@@ -135,9 +135,6 @@ The middle field accepts a Font Awesome class name or an image URL. The last fie
 - Docker → `fa-brands fa-docker`
 - AWS → `fa-brands fa-aws`
 
-## Fonts
-Custom TrueType fonts can be embedded by placing valid `.ttf` files in a `fonts/` directory at the project root. If the directory or required font files are missing or invalid, the PDF generator automatically falls back to PDFKit's built-in fonts.
-
 
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".

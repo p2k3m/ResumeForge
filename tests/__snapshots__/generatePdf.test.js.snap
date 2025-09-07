@@ -2,158 +2,52 @@
 
 exports[`generatePdf and parsing 2025 template renders expected HTML snapshot 1`] = `
 "<!DOCTYPE html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset=\"UTF-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
   <title>Resume</title>
   <!-- 2025 template ensures whitespace and tab rendering -->
-<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-
-:root {
-  --accent: #1f3c5d;
-  --bullet: #4a5568;
-}
-
-body {
-  font-family: 'Inter', sans-serif;
-  margin: 2.5rem;
-  color: #333;
-  line-height: 1.6;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-header {
-  text-align: center;
-  margin-bottom: 2rem;
-  display: flex;
-  justify-content: center;
-}
-
-  h1 {
-    font-size: 2.8rem;
-    font-weight: 700;
-    margin: 0;
-    color: var(--accent);
-  }
-
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-top: 2.5rem;
-    margin-bottom: 0.75rem;
-    color: var(--accent);
-    border-bottom: 2px solid var(--accent);
-    padding-bottom: 0.25rem;
-  }
-
-main {
-  display: grid;
-  gap: 2rem;
-}
-
-section {
-  padding: 1.25rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: #fafafa;
-}
-
-@media (min-width: 700px) {
-  main {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-li {
-  /* preserve formatting for multi-line bullets */
-  margin-bottom: 0.5rem;
-  margin-left: 1.2em;
-  white-space: pre-wrap;
-  line-height: 1.5;
-  font-weight: 400;
-}
-
-.bullet {
-  display: inline-block;
-  width: 1em;
-  margin-left: -1em;
-  margin-right: 0.5em;
-  color: var(--bullet);
-  font-weight: 700;
-}
-
-.edu-bullet {
-  display: inline-block;
-  width: 1em;
-  margin-left: -1em;
-  margin-right: 0.5em;
-  color: var(--bullet);
-  font-weight: 700;
-}
-
-.tab {
-  display: inline-block;
-  width: 1.5em;
-}
-
-.tab + p {
-  margin-top: 0;
-}
-
-strong {
-  font-weight: 700;
-}
-
-</style></head>
+<style>/* inlined CSS */</style></head>
 <body>
-  <header class="header">
+  <header class=\"header\">
     <h1>Jane Doe</h1>
   </header>
-  <main class="content">
-    
-    <section class="section">
+  <main class=\"content\">
+
+    <section class=\"section\">
       <h2>Skills</h2>
-      
+
         <ul>
-          <li><span class="bullet">•</span>Testing</li>
+          <li><span class=\"bullet\">•</span>Testing</li>
         </ul>
-      
+
     </section>
-    
-    <section class="section">
+
+    <section class=\"section\">
       <h2>Work Experience</h2>
-      
+
         <ul>
           <li>Information not provided</li>
         </ul>
-      
+
     </section>
-    
-    <section class="section">
+
+    <section class=\"section\">
       <h2>Education</h2>
-      
+
         <ul>
           <li>Information not provided</li>
         </ul>
-      
+
     </section>
-    
+
   </main>
 </body>
 </html>
-"
-`;
+"`;
 
-exports[`generatePdf and parsing bullet list HTML spacing snapshot 1`] = `"<span class="bullet">•</span> First bullet"`;
+exports[`generatePdf and parsing bullet list HTML spacing snapshot 1`] = `"<span class=\"bullet\">•</span> First bullet"`;
 
 exports[`generatePdf and parsing bullet list PDF spacing snapshot: browser 1`] = `
 "1 0 0 -1 0 792 cm
