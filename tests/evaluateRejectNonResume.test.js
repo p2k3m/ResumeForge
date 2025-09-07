@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 
+const pdfBuffer = Buffer.from('%PDF-1.4');
+
 jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: '' }) }
 }));
@@ -47,7 +49,7 @@ describe('/api/evaluate non-resume', () => {
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'file.pdf');
+      .attach('resume', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
       `You have uploaded a ${docType}. Please upload a CV only.`
@@ -68,7 +70,7 @@ describe('/api/evaluate non-resume', () => {
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'file.pdf');
+      .attach('resume', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
       "The document type couldn't be recognized; please upload a CV."

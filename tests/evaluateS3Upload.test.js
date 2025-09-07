@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 
+const pdfBuffer = Buffer.from('%PDF-1.4');
+
 const mockS3Send = jest.fn().mockResolvedValue({});
 const PutObjectCommand = jest.fn((input) => ({ input }));
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
@@ -53,7 +55,7 @@ describe('/api/evaluate S3 upload', () => {
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('applicantName', 'John Doe')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', pdfBuffer, 'resume.pdf');
     expect(res.status).toBe(200);
     expect(PutObjectCommand).toHaveBeenCalled();
     const key = PutObjectCommand.mock.calls[0][0].Key;
