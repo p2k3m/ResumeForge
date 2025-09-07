@@ -12,6 +12,7 @@ The server relies on the following environment variables:
   "SECRET_ID": "your-secret-id",
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
+  "OPENAI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
   "REQUEST_TIMEOUT_MS": "5000",
   "TRUST_PROXY": "1",
@@ -31,14 +32,14 @@ JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the 
 When deploying behind a reverse proxy or load balancer, set `TRUST_PROXY` to the number of trusted hops (typically `1`) so Express honors `X-Forwarded-*` headers. Combine this with `ENFORCE_HTTPS=true` to redirect all HTTP requests to `https://`.
 
 
-`GEMINI_API_KEY` supplies the Google Gemini API key. Set it directly in your environment for development or include it in the
-secret.
+`GEMINI_API_KEY` and `OPENAI_API_KEY` supply the Google Gemini and OpenAI API keys. Set them directly in your environment for development or include them in the secret.
 
 The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 
 ```json
 {
   "GEMINI_API_KEY": "<api-key>",
+  "OPENAI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data"
 }
 ```
