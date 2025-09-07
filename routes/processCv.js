@@ -766,7 +766,15 @@ export default function registerProcessCv(app, generativeModel) {
         improvedCv += `\n\n# Projects\n${projectLines.join('\n')}`;
       }
       if (userSkills.length) {
-        improvedCv += `\n\n# Skills\n${userSkills.join(', ')}`;
+        const skillLines = userSkills
+          .map((s) => {
+            if (typeof s === 'string') return s;
+            const { name, icon, level } = s || {};
+            return [name, icon, level].filter(Boolean).join(' | ');
+          })
+          .filter(Boolean)
+          .join('\n');
+        improvedCv += `\n\n# Skills\n${skillLines}`;
       }
       if (sections.languages?.length) {
         const langLines = sections.languages
