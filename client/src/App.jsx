@@ -349,6 +349,24 @@ function App() {
               </button>
             </div>
           )}
+          {result.jdMismatches?.length > 0 && (
+            <div className="text-purple-800 mb-2">
+              <p className="mb-2">JD responsibility gaps:</p>
+              <ul>
+                {result.jdMismatches.map((gap, idx) => (
+                  <li key={idx} className="mb-1">
+                    {gap}
+                    <a
+                      href="#"
+                      className="ml-2 text-purple-600 underline"
+                    >
+                      Click to fix
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {expOptions.length > 0 && (
             <div className="text-purple-800 mb-2">
               <p className="mb-2">LinkedIn experience not in resume:</p>

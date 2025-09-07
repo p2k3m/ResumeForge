@@ -97,6 +97,51 @@ async function withRetry(fn, retries = 3, delay = 500) {
   throw lastErr;
 }
 
+function extractResponsibilitiesFromJd(html = '', jobSkills = []) {
+  const items = html.match(/<li[^>]*>(.*?)<\/li>/gis) || [];
+  const skillSet = new Set(jobSkills.map((s) => s.toLowerCase()));
+  const verbs = [
+    'manage',
+    'lead',
+    'develop',
+    'design',
+    'implement',
+    'coordinate',
+    'support',
+    'maintain',
+    'analyze',
+    'plan',
+    'oversee',
+    'create',
+    'build'
+  ];
+  return items
+    .map((li) =>
+      li
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    )
+    .filter((text) => {
+      const lower = text.toLowerCase();
+      if (!verbs.some((v) => lower.includes(v))) return false;
+      const words = lower.split(/[^a-z0-9+]+/);
+      return !words.some((w) => skillSet.has(w));
+    });
+}
+
+function computeJdMismatches(resumeText = '', jobHtml = '', jobSkills = []) {
+  const responsibilities = extractResponsibilitiesFromJd(jobHtml, jobSkills);
+  const resumeLower = resumeText.toLowerCase();
+  return responsibilities.filter((resp) => {
+    const words = resp
+      .toLowerCase()
+      .split(/[^a-z0-9+]+/)
+      .filter((w) => w.length > 3);
+    return !words.every((w) => resumeLower.includes(w));
+  });
+}
+
 export async function improveSections(sections, jobDescription) {
   const improvedSections = {};
   for (const key of ['summary', 'experience', 'education', 'certifications']) {
@@ -196,6 +241,11 @@ export default function registerProcessCv(app, generativeModel) {
         const { newSkills: missingSkills } = calculateMatchScore(
           jobSkills,
           resumeSkills
+        );
+        const jdMismatches = computeJdMismatches(
+          resumeText,
+          jobHtml,
+          jobSkills
         );
         let atsMetrics;
         try {
@@ -307,6 +357,7 @@ export default function registerProcessCv(app, generativeModel) {
           originalTitle,
           designationMatch,
           missingSkills: missingSkills || [],
+          jdMismatches,
           missingExperience,
           missingEducation,
           missingCertifications,
