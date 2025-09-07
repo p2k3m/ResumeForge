@@ -14,6 +14,7 @@ The server relies on the following environment variables:
   "GEMINI_API_KEY": "<api-key>",
   "OPENAI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
+  "DYNAMO_TABLE": "ResumeForgeLogs",
   "REQUEST_TIMEOUT_MS": "5000",
   "TRUST_PROXY": "1",
   "ENFORCE_HTTPS": "true"
@@ -26,6 +27,9 @@ JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the 
 
 `S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
 `resume-forge-data`, which is suitable for local development.
+
+`DYNAMO_TABLE` specifies the DynamoDB table used for logging. If absent from the environment or secret, it defaults to
+`ResumeForgeLogs`.
 
 `REQUEST_TIMEOUT_MS` sets the timeout in milliseconds for outbound HTTP requests when fetching external profiles and job descriptions. It defaults to `5000`.
 
@@ -66,7 +70,7 @@ Minimal permissions required by the server:
 ```
 
 ## DynamoDB Table
-Evaluation and session metadata are stored in a DynamoDB table (default name `ResumeForge`).
+Evaluation and session metadata are stored in a DynamoDB table (default name `ResumeForgeLogs`).
 Each item includes:
 
 - `jobId` – primary key for the log entry.

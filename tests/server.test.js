@@ -398,7 +398,7 @@ describe('/api/process-cv', () => {
       ([cmd]) => cmd.__type === 'PutItemCommand'
     );
     expect(putCall).toBeTruthy();
-    expect(putCall[0].input.TableName).toBe('ResumeForge');
+    expect(putCall[0].input.TableName).toBe('ResumeForgeLogs');
     expect(putCall[0].input.Item.jobId.S).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     );
