@@ -315,7 +315,7 @@ export default function registerProcessCv(app, generativeModel) {
         const s3 = new S3Client({ region });
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
-        const prefix = `${sanitized}/cv/${date}/`;
+        const prefix = `${sanitized}/${date}/cv/`;
         cvKey = `${prefix}${sanitized}${ext}`;
         try {
           await s3.send(
@@ -1315,6 +1315,7 @@ export default function registerProcessCv(app, generativeModel) {
         sanitizedName,
         'enhanced',
         date,
+        'cv',
         `${ts}-improved.pdf`
       );
       await s3.send(
@@ -1329,6 +1330,7 @@ export default function registerProcessCv(app, generativeModel) {
         sanitizedName,
         'enhanced',
         date,
+        'cv',
         `${ts}-improved.txt`
       );
       await s3.send(
@@ -1519,6 +1521,7 @@ export default function registerProcessCv(app, generativeModel) {
         sanitizedName,
         'enhanced',
         date,
+        'cover_letter',
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
@@ -1655,8 +1658,8 @@ export default function registerProcessCv(app, generativeModel) {
         existingCvKey = path.join(
           sanitizedName,
           'enhanced',
-          'cv',
           date,
+          'cv',
           `${Date.now()}-final_cv.pdf`
         );
         await s3.send(
@@ -1673,8 +1676,8 @@ export default function registerProcessCv(app, generativeModel) {
         existingCvTextKey = path.join(
           sanitizedName,
           'enhanced',
-          'cv',
           date,
+          'cv',
           `${Date.now()}-final_cv.txt`
         );
         await s3.send(

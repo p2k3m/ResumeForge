@@ -59,6 +59,6 @@ describe('/api/evaluate S3 upload', () => {
     expect(res.status).toBe(200);
     expect(PutObjectCommand).toHaveBeenCalled();
     const key = PutObjectCommand.mock.calls[0][0].Key;
-    expect(key).toMatch(/^john_doe\/cv\/\d{4}-\d{2}-\d{2}\/john_doe\.pdf$/);
+    expect(key).toMatch(/^john_doe\/\d{4}-\d{2}-\d{2}\/cv\/john_doe\.pdf$/);
   });
 });
