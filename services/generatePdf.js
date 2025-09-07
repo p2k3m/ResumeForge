@@ -3,7 +3,6 @@ import fsSync from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
 import Handlebars from '../lib/handlebars.js';
-import fontkit from 'fontkit';
 import {
   parseContent,
   mergeDuplicateSections,
@@ -343,92 +342,13 @@ export async function generatePdf(
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];
-      const fontPaths = {};
-      const fontsDir = path.resolve('fonts');
-      const fontsDirExists = fsSync.existsSync(fontsDir);
-
-      function registerFontSafe(name, p) {
-        if (!fontsDirExists) return false;
-        if (path.extname(p).toLowerCase() !== '.ttf') {
-          console.warn('Skipping non-TTF font:', p);
-          return false;
-        }
-        if (!fsSync.existsSync(p)) {
-          console.warn('Font file missing:', p);
-          return false;
-        }
-        let font;
-        try {
-          font = fontkit.openSync(p); // Validate font file
-        } catch (err) {
-          console.warn(`Invalid font file ${p}:`, err.message);
-          return false;
-        }
-        if (font.type !== 'TTF') {
-          console.warn(`Invalid font format ${p}: expected TrueType, got ${font.type}`);
-          return false;
-        }
-        try {
-          doc.registerFont(name, p);
-          fontPaths[name] = p;
-          return true;
-        } catch (err) {
-          console.warn(`Failed to register font ${name} (${p}):`, err.message);
-          return false;
-        }
-      }
 
       doc.on('data', (d) => buffers.push(d));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', reject);
       doc.on('warning', (w) => {
-        const currentName = doc._font?.name;
-        const fp = currentName && fontPaths[currentName];
-        if (fp) {
-          console.warn('PDFKit warning:', w, 'Font file:', fp, '- falling back to built-in fonts');
-          delete fontPaths[currentName];
-          Object.values(styleMap).forEach((s) => {
-            if (s.font === currentName) s.font = 'Helvetica';
-            if (s.bold === currentName) s.bold = 'Helvetica-Bold';
-            if (s.italic === currentName) s.italic = 'Helvetica-Oblique';
-          });
-          doc.font('Helvetica');
-        } else {
-          console.warn('PDFKit warning:', w, 'Font:', currentName || 'unknown');
-        }
+        console.warn('PDFKit warning:', w);
       });
-
-      // Optional font embedding for Roboto/Helvetica families if available
-      try {
-        if (fontsDirExists) {
-          const rReg = path.join(fontsDir, 'Roboto-Regular.ttf');
-          const rBold = path.join(fontsDir, 'Roboto-Bold.ttf');
-          const rItalic = path.join(fontsDir, 'Roboto-Italic.ttf');
-          const haveRoboto = [
-            ['Roboto', rReg],
-            ['Roboto-Bold', rBold],
-            ['Roboto-Italic', rItalic]
-          ].map(([name, p]) => registerFontSafe(name, p)).every(Boolean);
-          if (haveRoboto) {
-            ['modern', 'vibrant'].forEach((tpl) => {
-              styleMap[tpl].font = 'Roboto';
-              styleMap[tpl].bold = 'Roboto-Bold';
-              styleMap[tpl].italic = 'Roboto-Italic';
-            });
-          }
-
-          const hReg = path.join(fontsDir, 'Helvetica.ttf');
-          const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
-          const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
-          [
-            ['Helvetica', hReg],
-            ['Helvetica-Bold', hBold],
-            ['Helvetica-Oblique', hItalic]
-          ].forEach(([name, p]) => registerFontSafe(name, p));
-        }
-      } catch (err) {
-        console.warn('Font registration error', err);
-      }
       const style = styleMap[templateId] || styleMap.modern;
 
       doc.font(style.bold)

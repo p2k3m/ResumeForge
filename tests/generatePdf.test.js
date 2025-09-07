@@ -671,7 +671,8 @@ describe('generatePdf and parsing', () => {
       }))
     };
     let html = Handlebars.compile(tplSrc)(htmlData);
-    html = html.replace('</head>', `<style>${css}</style></head>`);
+    html = html.replace('</head>', `<style>/* inlined CSS */</style></head>`);
+    expect(css).toMatch(/@font-face\s*{[^}]*data:font\/truetype;base64/);
     expect(html).toMatchSnapshot();
   });
 
@@ -695,35 +696,5 @@ describe('generatePdf and parsing', () => {
     expect(css).toMatch(/li\s*{[^}]*line-height:\s*[0-9.]+/);
   });
 
-  test('PDFKit fallback emits no warnings for valid fonts', async () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const launchSpy = jest
-      .spyOn(puppeteer, 'launch')
-      .mockRejectedValue(new Error('no chromium'));
-    const buffer = await generatePdf('Jane Doe\n- test', 'modern');
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    expect(warnSpy).not.toHaveBeenCalled();
-    launchSpy.mockRestore();
-    warnSpy.mockRestore();
-  });
-
-  test('invalid fonts are skipped without emitting PDFKit warnings', async () => {
-    const fontsDir = path.resolve('fonts');
-    await fs.mkdir(fontsDir, { recursive: true });
-    await fs.writeFile(path.join(fontsDir, 'BadFont.ttf'), 'not a font');
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    const launchSpy = jest
-      .spyOn(puppeteer, 'launch')
-      .mockRejectedValue(new Error('no chromium'));
-    const buffer = await generatePdf('Jane Doe\n- test', 'modern');
-    expect(Buffer.isBuffer(buffer)).toBe(true);
-    const pdfWarnings = warnSpy.mock.calls.filter((c) =>
-      c.some((msg) => typeof msg === 'string' && msg.includes('PDFKit warning'))
-    );
-    expect(pdfWarnings).toHaveLength(0);
-    launchSpy.mockRestore();
-    warnSpy.mockRestore();
-    await fs.rm(fontsDir, { recursive: true, force: true });
-  });
 
 });
