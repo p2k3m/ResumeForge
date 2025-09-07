@@ -1758,6 +1758,7 @@ export default function registerProcessCv(app, generativeModel) {
         sanitizedName,
         'enhanced',
         coverDate,
+        'cover_letter',
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
