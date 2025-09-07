@@ -6,7 +6,7 @@ const mockLaunch = jest.fn();
 jest.unstable_mockModule('axios', () => ({ default: { get: mockAxiosGet } }));
 jest.unstable_mockModule('puppeteer', () => ({ default: { launch: mockLaunch } }));
 
-const { fetchJobDescription } = await import('../routes/processCv.js');
+const { fetchJobDescription } = await import('../services/jobFetch.js');
 
 describe('fetchJobDescription', () => {
   const mockPage = {

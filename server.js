@@ -5,7 +5,6 @@ import path from 'path';
 import net from 'net';
 import dns from 'dns';
 import axios from 'axios';
-import puppeteer from 'puppeteer';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -31,6 +30,8 @@ import { generatePdf as _generatePdf } from './services/generatePdf.js';
 import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from './config/puppeteer.js';
 import { JOB_FETCH_USER_AGENT } from './config/http.js';
 import { uploadResume, parseUserAgent, validateUrl } from './lib/serverUtils.js';
+import { fetchJobDescription } from './services/jobFetch.js';
+import { BLOCKED_PATTERNS, REQUEST_TIMEOUT_MS } from './config/jobFetch.js';
 import {
   parseContent,
   parseLine,
@@ -210,13 +211,6 @@ function selectTemplates({
 }
 
 const region = process.env.AWS_REGION || 'ap-south-1';
-const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
-const BLOCKED_PATTERNS = [
-  /captcha/i,
-  /access denied/i,
-  /enable javascript/i,
-  /bot detection/i
-];
 
 async function fetchLinkedInProfile(url) {
   const valid = await validateUrl(url);
@@ -356,46 +350,10 @@ async function fetchCredlyProfile(url) {
   }
 }
 
-async function fetchHtml(url, { timeout = REQUEST_TIMEOUT_MS, userAgent = JOB_FETCH_USER_AGENT } = {}) {
-  const valid = await validateUrl(url);
-  if (!valid) throw new Error('Invalid URL');
-  try {
-    const { data } = await axios.get(valid, {
-      timeout,
-      headers: { 'User-Agent': userAgent }
-    });
-    if (data && data.trim()) {
-      if (BLOCKED_PATTERNS.some((re) => re.test(data))) {
-        throw new Error('Blocked content');
-      }
-      return data;
-    }
-  } catch (err) {
-    if (err.message === 'Blocked content') throw err;
-    // ignore and fall through to puppeteer
-  }
-  const browser = await puppeteer.launch({
-    headless: PUPPETEER_HEADLESS,
-    args: PUPPETEER_ARGS
-  });
-  try {
-    const page = await browser.newPage();
-    await page.setUserAgent(userAgent);
-    await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
-    const html = await page.content();
-    if (BLOCKED_PATTERNS.some((re) => re.test(html))) {
-      throw new Error('Blocked content');
-    }
-    return html;
-  } finally {
-    await browser.close();
-  }
-}
-
 async function analyzeJobDescription(input) {
   let html = input;
   if (/^https?:\/\//i.test(String(input))) {
-    html = await fetchHtml(input);
+    html = await fetchJobDescription(input);
   }
   const strip = (s) =>
     s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
