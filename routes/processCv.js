@@ -65,10 +65,15 @@ export async function fetchJobDescription(
       timeout,
       headers: { 'User-Agent': userAgent },
     });
-    if (data && data.trim() && !BLOCKED_PATTERNS.some((re) => re.test(data)))
+    if (data && data.trim()) {
+      if (BLOCKED_PATTERNS.some((re) => re.test(data))) {
+        throw new Error('Blocked content');
+      }
       return data;
+    }
   } catch (err) {
-    // ignore and fallback to puppeteer
+    if (err.message === 'Blocked content') throw err;
+    // ignore other errors and fallback to puppeteer
   }
   const browser = await puppeteer.launch({
     headless: PUPPETEER_HEADLESS,
@@ -79,6 +84,9 @@ export async function fetchJobDescription(
     await page.setUserAgent(userAgent);
     await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
     const content = await page.content();
+    if (BLOCKED_PATTERNS.some((re) => re.test(content))) {
+      throw new Error('Blocked content');
+    }
     return content;
   } finally {
     await browser.close();
