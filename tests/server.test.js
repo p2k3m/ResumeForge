@@ -89,6 +89,8 @@ jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: 'Job description' }) }
 }));
 
+const axios = (await import('axios')).default;
+
 jest.unstable_mockModule('pdf-parse/lib/pdf-parse.js', () => ({
   default: jest.fn().mockResolvedValue({ text: 'Education\nExperience\nSkills' })
 }));
@@ -844,6 +846,36 @@ describe('/api/improve-metric', () => {
       .send({ iteration: 3 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('max improvements reached');
+  });
+
+  test('returns designation when job title differs', async () => {
+    mockS3Send.mockReset();
+    mockS3Send.mockImplementation((cmd) => {
+      if (cmd.input?.Key === 'cv.txt') {
+        return Promise.resolve({
+          Body: { transformToString: async () => 'Experience\nDeveloper\nSkills' },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    axios.get.mockResolvedValueOnce({ data: '<h1>Team Lead</h1>' });
+
+    const res = await request(app)
+      .post('/api/improve-metric')
+      .send({
+        metric: 'impact',
+        jobDescriptionUrl: 'https://indeed.com/job',
+        linkedinProfileUrl: 'https://linkedin.com/in/example',
+        existingCvTextKey: 'cv.txt',
+      });
+
+    expect(res.status).toBe(200);
+    const { instructions } = requestEnhancedCV.mock.calls[0][0];
+    expect(instructions).toContain(
+      "Modify the last job title to match 'Team Lead'"
+    );
+    expect(res.body.designation).toBe('Team Lead');
   });
 });
 

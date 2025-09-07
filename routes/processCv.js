@@ -1274,7 +1274,7 @@ export default function registerProcessCv(app, generativeModel) {
       }
 
       const instructions =
-        `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics.`;
+        `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Modify the last job title to match '${jobTitle}' if different. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics.`;
 
       const responseText = await requestEnhancedCV({
         cvFileId: cvFile.id,
@@ -1352,6 +1352,7 @@ export default function registerProcessCv(app, generativeModel) {
         metrics: metricTable,
         cvKey: key,
         textKey,
+        designation: jobTitle || '',
       });
     } catch (err) {
       console.error('metric improvement failed', err);
