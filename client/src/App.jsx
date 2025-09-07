@@ -676,7 +676,7 @@ function App() {
               onClick={handleCompile}
               className="px-4 py-2 bg-purple-600 text-white rounded"
             >
-              Generate CV & Cover Letter
+              Improve CV and Generate Cover Letter
             </button>
           </div>
           {finalScore !== null && (
