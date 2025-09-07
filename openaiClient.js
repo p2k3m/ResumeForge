@@ -41,6 +41,26 @@ function extractJson(text) {
   return JSON.parse(match[0]);
 }
 
+// Normalize Gemini's JSON keys to match the OpenAI schema
+function normalizeEnhancedCvJson(data = {}) {
+  const mapping = {
+    cvVersion1: 'cv_version1',
+    cvVersion2: 'cv_version2',
+    coverLetter1: 'cover_letter1',
+    coverLetter2: 'cover_letter2',
+    originalScore: 'original_score',
+    enhancedScore: 'enhanced_score',
+    skillsAdded: 'skills_added',
+    improvementSummary: 'improvement_summary',
+  };
+  for (const [from, to] of Object.entries(mapping)) {
+    if (data[from] !== undefined && data[to] === undefined) {
+      data[to] = data[from];
+    }
+  }
+  return data;
+}
+
 let clientPromise;
 async function getClient() {
   if (!clientPromise) {
@@ -172,14 +192,36 @@ export async function requestEnhancedCV({
         console.warn(`Model not found: ${model}`);
         continue;
       }
-      throw err;
+      // For other errors, break to Gemini fallback
+      break;
     }
   }
   if (generativeModel?.generateContent) {
     try {
-      const prompt = `${refinedInstructions}\nReturn JSON with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics (metric, original, improved, improvement).`;
-      const result = await withTimeout(generativeModel.generateContent(prompt));
-      return result?.response?.text?.();
+      const result = await withTimeout(
+        generativeModel.generateContent({
+          contents: [
+            {
+              role: 'user',
+              parts: content.map((part) =>
+                part.type === 'input_text'
+                  ? { text: part.text }
+                  : {
+                      fileData: { fileUri: part.file_id, mimeType: 'application/pdf' },
+                    }
+              ),
+            },
+          ],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: schema,
+          },
+        })
+      );
+      const parsed = normalizeEnhancedCvJson(
+        extractJson(result?.response?.text?.())
+      );
+      return JSON.stringify(parsed);
     } catch (err) {
       lastError = err;
     }
