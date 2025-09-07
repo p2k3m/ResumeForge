@@ -2,8 +2,9 @@ import { jest } from '@jest/globals';
 
 const setContent = jest.fn();
 const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+const setViewport = jest.fn();
 const close = jest.fn();
-const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+const newPage = jest.fn().mockResolvedValue({ setContent, pdf, setViewport });
 const launch = jest.fn().mockResolvedValue({ newPage, close });
 
 jest.unstable_mockModule('puppeteer', () => ({ default: { launch } }));

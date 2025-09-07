@@ -270,6 +270,8 @@ export async function generatePdf(
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
+    // Ensure consistent layout width for templates that use multiple columns
+    await page.setViewport({ width: 1000, height: 1414 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
     return pdfBuffer;

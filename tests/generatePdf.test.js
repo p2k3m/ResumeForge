@@ -133,8 +133,9 @@ describe('generatePdf and parsing', () => {
   test('default skill icons render in HTML for PDF generation', async () => {
     const setContent = jest.fn();
     const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const setViewport = jest.fn();
     const close = jest.fn();
-    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf, setViewport });
     const launchSpy = jest
       .spyOn(puppeteer, 'launch')
       .mockResolvedValue({ newPage, close });
@@ -151,8 +152,9 @@ describe('generatePdf and parsing', () => {
   test('education GPA renders separately in 2025 template', async () => {
     const setContent = jest.fn();
     const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const setViewport = jest.fn();
     const close = jest.fn();
-    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf, setViewport });
     const launchSpy = jest
       .spyOn(puppeteer, 'launch')
       .mockResolvedValue({ newPage, close });
@@ -169,8 +171,9 @@ describe('generatePdf and parsing', () => {
   test('includes LinkedIn QR image when LinkedIn contact provided', async () => {
     const setContent = jest.fn();
     const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const setViewport = jest.fn();
     const close = jest.fn();
-    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf, setViewport });
     const launchSpy = jest
       .spyOn(puppeteer, 'launch')
       .mockResolvedValue({ newPage, close });
@@ -183,6 +186,36 @@ describe('generatePdf and parsing', () => {
     expect(html).toMatch(/<img[^>]+alt="LinkedIn QR code"/);
 
     launchSpy.mockRestore();
+  });
+
+  test('2025 template renders two-column layout', async () => {
+    const setContent = jest.fn();
+    const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const setViewport = jest.fn();
+    const close = jest.fn();
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf, setViewport });
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockResolvedValue({ newPage, close });
+
+    await generatePdf('Jane Doe\n# Experience\n- Testing columns', '2025');
+    expect(setViewport).toHaveBeenCalledWith({ width: 1000, height: 1414 });
+    const html = setContent.mock.calls[0][0];
+    launchSpy.mockRestore();
+
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1000, height: 1414 });
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const columns = await page.evaluate(() =>
+      getComputedStyle(document.querySelector('.content')).gridTemplateColumns
+    );
+    await browser.close();
+
+    expect(columns.split(' ').length).toBe(2);
   });
 
   test('script tags render as text', () => {
