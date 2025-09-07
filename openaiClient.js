@@ -347,11 +347,28 @@ export async function classifyDocument(text) {
           ],
         })
       );
-      return response.output_text.trim().toLowerCase();
+      const classification = response.output_text?.trim().toLowerCase();
+      if (classification) return classification;
+      lastError = new Error('No classification result');
     } catch (err) {
       lastError = err;
       if (err?.code === 'model_not_found') continue;
-      throw err;
+      // For other errors, break to Gemini fallback
+      break;
+    }
+  }
+  if (generativeModel?.generateContent) {
+    try {
+      const result = await withTimeout(
+        generativeModel.generateContent(
+          `${prompt}\n\n${text.slice(0, 4000)}`
+        )
+      );
+      const classification = result?.response?.text?.().trim().toLowerCase();
+      if (classification) return classification;
+      lastError = new Error('No classification result');
+    } catch (err) {
+      lastError = err;
     }
   }
   throw lastError;

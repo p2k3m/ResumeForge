@@ -256,7 +256,25 @@ export default function registerProcessCv(app, generativeModel) {
         );
         const resumeText = await extractText(req.file);
         const docType = await classifyDocument(resumeText);
-        if (docType !== 'resume') {
+        if (docType && docType !== 'resume' && docType !== 'unknown') {
+          await logEvaluation({
+            jobId,
+            ipAddress,
+            userAgent,
+            browser,
+            os,
+            device,
+            jobDescriptionUrl,
+            linkedinProfileUrl,
+            credlyProfileUrl,
+            cvKey,
+            docType,
+          });
+          return res.status(400).json({
+            error: `You have uploaded a ${docType}. Please upload a CV only.`,
+          });
+        }
+        if (docType === 'unknown') {
           await logEvaluation({
             jobId,
             ipAddress,
@@ -272,9 +290,7 @@ export default function registerProcessCv(app, generativeModel) {
           });
           return res
             .status(400)
-            .json({
-              error: `You have uploaded a ${docType}. Please upload a CV only.`,
-            });
+            .json({ error: 'Document type could not be determined.' });
         }
         const applicantName =
           req.body.applicantName || (await extractName(resumeText));
@@ -581,13 +597,16 @@ export default function registerProcessCv(app, generativeModel) {
     try {
       originalText = await extractText(req.file);
       docType = await classifyDocument(originalText);
-      if (docType !== 'resume') {
+      if (docType && docType !== 'resume' && docType !== 'unknown') {
         return next(
           createError(
             400,
             `You have uploaded a ${docType}. Please upload a CV only.`
           )
         );
+      }
+      if (docType === 'unknown') {
+        return next(createError(400, 'Document type could not be determined.'));
       }
       const lines = originalText
         .split(/\r?\n/)
