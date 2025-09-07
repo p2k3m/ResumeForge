@@ -384,7 +384,7 @@ describe('/api/process-cv', () => {
       .map((c) => c[0]?.input?.Key)
       .filter((k) => k && k.endsWith('.pdf'));
     expect(pdfKeys).toHaveLength(5);
-    const cvPrefix = `${sanitized}/${date}/cv/`;
+    const cvPrefix = `${sanitized}/cv/${date}/`;
     const enhancedCvPrefix = `${sanitized}/enhanced/${date}/cv/`;
     const coverLetterPrefix = `${sanitized}/enhanced/${date}/cover_letter/`;
     const enhancedPrefix = `${sanitized}/enhanced/${date}/`;
