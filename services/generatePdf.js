@@ -141,6 +141,30 @@ export async function generatePdf(
           });
           return { ...sec, items: grouped };
         }
+        if (heading === 'education' && templateId === '2025') {
+          return {
+            ...sec,
+            items: sec.items.map((tokens) => {
+              const plain = tokens
+                .map((t) => t.text || '')
+                .join('')
+                .trim();
+              const gpaMatch = plain.match(/\bGPA[:\s]*([0-9.]+(?:\/[0-9.]+)?)\b/i);
+              let gpa = null;
+              let html = tokenHtml(tokens, sec.heading);
+              if (gpaMatch) {
+                gpa = gpaMatch[1];
+                const pattern = gpaMatch[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(pattern, 'i');
+                html = html
+                  .replace(regex, '')
+                  .replace(/[,;\-]+\s*$/, '')
+                  .trim();
+              }
+              return { entry: html, gpa };
+            }),
+          };
+        }
         return {
           ...sec,
           items: sec.items.map((tokens) => tokenHtml(tokens, sec.heading)),

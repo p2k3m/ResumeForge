@@ -148,6 +148,24 @@ describe('generatePdf and parsing', () => {
     launchSpy.mockRestore();
   });
 
+  test('education GPA renders separately in 2025 template', async () => {
+    const setContent = jest.fn();
+    const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const close = jest.fn();
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockResolvedValue({ newPage, close });
+
+    const text = 'Jane Doe\n# Education\n- MIT, GPA 3.8';
+    await generatePdf(text, '2025');
+    const html = setContent.mock.calls[0][0];
+    expect(html).toContain('class="edu-gpa">GPA: 3.8');
+    expect(html).toContain('edu-entry');
+
+    launchSpy.mockRestore();
+  });
+
   test('script tags render as text', () => {
     const tokens = parseContent('Jane Doe\n- uses <script>alert(1)</script> safely')
       .sections[0].items[0];

@@ -336,11 +336,11 @@ export default function registerProcessCv(app, generativeModel) {
               .map((e) => fmtExp(e))
               .filter((e) => e && !resumeExpSet.has(e));
             const resumeEduSet = new Set(
-              resumeEducation.map((e) => e.toLowerCase())
+              resumeEducation.map((e) => e.entry.toLowerCase())
             );
-            missingEducation = linkedinEducation.filter(
-              (e) => e && !resumeEduSet.has(e.toLowerCase())
-            );
+            missingEducation = linkedinEducation
+              .map((e) => e.entry)
+              .filter((e) => e && !resumeEduSet.has(e.toLowerCase()));
             const resumeLangSet = new Set(
               resumeLanguages.map((l) => l.language.toLowerCase())
             );
