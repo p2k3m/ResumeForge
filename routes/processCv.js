@@ -55,6 +55,12 @@ const DEFAULT_FETCH_TIMEOUT_MS =
 
 const PUPPETEER_HEADLESS =
   process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
+const BLOCKED_PATTERNS = [
+  /captcha/i,
+  /access denied/i,
+  /enable javascript/i,
+  /bot detection/i
+];
 
 export async function fetchJobDescription(
   url,
@@ -67,7 +73,8 @@ export async function fetchJobDescription(
       timeout,
       headers: { 'User-Agent': userAgent },
     });
-    if (data && data.trim()) return data;
+    if (data && data.trim() && !BLOCKED_PATTERNS.some((re) => re.test(data)))
+      return data;
   } catch (err) {
     // ignore and fallback to puppeteer
   }
@@ -251,7 +258,7 @@ export default function registerProcessCv(app, generativeModel) {
           timeout: REQUEST_TIMEOUT_MS,
           userAgent,
         });
-        const { title: jobTitle, skills: jobSkills } = analyzeJobDescription(
+        const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
         );
         const resumeText = await extractText(req.file);
@@ -751,7 +758,7 @@ export default function registerProcessCv(app, generativeModel) {
         return next(createError(500, 'Job description fetch failed'));
       }
       let { title: jobTitle, skills: jobSkills, text: jobDescription } =
-        analyzeJobDescription(jobDescriptionHtml);
+        await analyzeJobDescription(jobDescriptionHtml);
       if (designation) {
         jobTitle = designation;
       }
@@ -1103,7 +1110,9 @@ export default function registerProcessCv(app, generativeModel) {
               userAgent,
             });
           } catch {}
-          const { text: jobDescription } = analyzeJobDescription(jobDescriptionHtml);
+          const { text: jobDescription } = await analyzeJobDescription(
+            jobDescriptionHtml
+          );
           const suggestion = await requestSectionImprovement({
             sectionName: 'gap',
             sectionText: gap,
@@ -1127,7 +1136,7 @@ export default function registerProcessCv(app, generativeModel) {
           });
         } catch {}
         const { skills: jobSkills, text: jobDescription } =
-          analyzeJobDescription(jobDescriptionHtml);
+          await analyzeJobDescription(jobDescriptionHtml);
         const resumeText = await extractText(req.file);
         const gaps = computeJdMismatches(
           resumeText,
@@ -1698,7 +1707,7 @@ export default function registerProcessCv(app, generativeModel) {
           timeout: REQUEST_TIMEOUT_MS,
           userAgent: req.headers['user-agent'] || DEFAULT_USER_AGENT,
         });
-        ({ skills: jobSkills, text: jobDescription } = analyzeJobDescription(
+        ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
           jobDescriptionHtml,
         ));
       } catch {}

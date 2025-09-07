@@ -6,6 +6,7 @@ import path from 'path';
 import net from 'net';
 import dns from 'dns';
 import axios from 'axios';
+import puppeteer from 'puppeteer';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -316,6 +317,17 @@ function selectTemplates({
 
 const region = process.env.AWS_REGION || 'ap-south-1';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
+const JOB_FETCH_USER_AGENT =
+  process.env.JOB_FETCH_USER_AGENT ||
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const PUPPETEER_HEADLESS =
+  process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
+const BLOCKED_PATTERNS = [
+  /captcha/i,
+  /access denied/i,
+  /enable javascript/i,
+  /bot detection/i
+];
 
 async function fetchLinkedInProfile(url) {
   const valid = await validateUrl(url);
@@ -455,10 +467,46 @@ async function fetchCredlyProfile(url) {
   }
 }
 
-function analyzeJobDescription(html) {
+async function fetchHtml(url, { timeout = REQUEST_TIMEOUT_MS, userAgent = JOB_FETCH_USER_AGENT } = {}) {
+  const valid = await validateUrl(url);
+  if (!valid) throw new Error('Invalid URL');
+  try {
+    const { data } = await axios.get(valid, {
+      timeout,
+      headers: { 'User-Agent': userAgent }
+    });
+    if (
+      data &&
+      data.trim() &&
+      !BLOCKED_PATTERNS.some((re) => re.test(data))
+    ) {
+      return data;
+    }
+  } catch {
+    // ignore and fall through to puppeteer
+  }
+  const browser = await puppeteer.launch({
+    headless: PUPPETEER_HEADLESS,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent(userAgent);
+    await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
+    return await page.content();
+  } finally {
+    await browser.close();
+  }
+}
+
+async function analyzeJobDescription(input) {
+  let html = input;
+  if (/^https?:\/\//i.test(String(input))) {
+    html = await fetchHtml(input);
+  }
   const strip = (s) =>
     s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  const text = strip(html);
+  const text = strip(html || '');
 
   let title = '';
   const titleMatch =

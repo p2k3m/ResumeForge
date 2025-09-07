@@ -55,6 +55,16 @@ describe('fetchJobDescription', () => {
     });
   });
 
+  test('falls back to puppeteer on blocked axios content', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: 'Access Denied' });
+    const html = await fetchJobDescription('http://example.com', {
+      timeout: 1000,
+      userAgent: 'agent',
+    });
+    expect(mockLaunch).toHaveBeenCalled();
+    expect(html).toBe('<html>dynamic</html>');
+  });
+
   test('rejects invalid URL', async () => {
     await expect(fetchJobDescription('http:/bad')).rejects.toThrow('Invalid URL');
     expect(mockAxiosGet).not.toHaveBeenCalled();
