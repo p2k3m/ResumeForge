@@ -109,6 +109,7 @@ const {
   rewriteSectionsWithGemini,
   rateLimiter,
 } = serverModule;
+const { requestSectionImprovement } = await import('../openaiClient.js');
 const { generatePdf } = await import('../services/generatePdf.js');
 const generatePdfMock = jest.fn().mockResolvedValue(Buffer.from('pdf'));
 setGeneratePdf(generatePdfMock);
@@ -791,6 +792,23 @@ describe('/api/improve-metric', () => {
       .send({ iteration: 3 });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('max improvements reached');
+  });
+});
+
+describe('/api/fix-metric', () => {
+  test('returns suggestion for metric', async () => {
+    const res = await request(app)
+      .post('/api/fix-metric')
+      .field('metric', 'impact')
+      .field('jobDescriptionUrl', 'https://example.com/job')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(200);
+    expect(res.body.suggestion).toBe('Education\nExperience\nSkills');
+    expect(requestSectionImprovement).toHaveBeenCalledWith({
+      sectionName: 'impact',
+      sectionText: 'Education\nExperience\nSkills',
+      jobDescription: 'Job description',
+    });
   });
 });
 

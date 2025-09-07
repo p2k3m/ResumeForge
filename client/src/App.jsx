@@ -39,6 +39,7 @@ function App() {
   const [newAdditions, setNewAdditions] = useState([])
   const [manualName, setManualName] = useState('')
   const [showNameModal, setShowNameModal] = useState(false)
+  const [metricSuggestions, setMetricSuggestions] = useState({})
   const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -146,6 +147,30 @@ function App() {
     setter((prev) =>
       prev.map((o, i) => (i === idx ? { ...o, checked: !o.checked } : o))
     )
+  }
+
+  const handleFix = async (metric) => {
+    try {
+      const form = new FormData()
+      form.append('resume', cvFile)
+      form.append('jobDescriptionUrl', jobUrl)
+      form.append('metric', metric)
+      const resp = await fetch(`${API_BASE_URL}/api/fix-metric`, {
+        method: 'POST',
+        body: form
+      })
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(text || 'Request failed')
+      }
+      const data = await resp.json()
+      setMetricSuggestions((prev) => ({ ...prev, [metric]: data.suggestion }))
+    } catch (err) {
+      setMetricSuggestions((prev) => ({
+        ...prev,
+        [metric]: err.message || 'Failed to fetch suggestion'
+      }))
+    }
   }
 
   const handleCompile = async () => {
@@ -313,10 +338,25 @@ function App() {
                       <span>
                         {formatMetricName(metric)}: {score}% ({status})
                       </span>
-                      {score < 70 && metricTips[metric] && (
-                        <span className="block text-sm text-purple-600">
-                          {metricTips[metric]}
-                        </span>
+                      {score < 70 && (
+                        <>
+                          <button
+                            onClick={() => handleFix(metric)}
+                            className="ml-2 text-blue-600 underline"
+                          >
+                            Fix
+                          </button>
+                          {metricTips[metric] && (
+                            <span className="block text-sm text-purple-600">
+                              {metricTips[metric]}
+                            </span>
+                          )}
+                          {metricSuggestions[metric] && (
+                            <div className="mt-1 text-sm text-purple-700">
+                              {metricSuggestions[metric]}
+                            </div>
+                          )}
+                        </>
                       )}
                     </li>
                   )

@@ -889,6 +889,46 @@ export default function registerProcessCv(app, generativeModel) {
     }
   });
 
+  app.post(
+    '/api/fix-metric',
+    (req, res, next) => {
+      uploadResume(req, res, (err) => {
+        if (err) return next(createError(400, err.message));
+        next();
+      });
+    },
+    async (req, res, next) => {
+      try {
+        let { metric, jobDescriptionUrl } = req.body;
+        if (!req.file) return next(createError(400, 'resume file required'));
+        if (!metric) return next(createError(400, 'metric required'));
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'jobDescriptionUrl required'));
+        jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'invalid jobDescriptionUrl'));
+        const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
+        let jobDescription = '';
+        try {
+          jobDescription = await fetchJobDescription(jobDescriptionUrl, {
+            timeout: REQUEST_TIMEOUT_MS,
+            userAgent,
+          });
+        } catch {}
+        const resumeText = await extractText(req.file);
+        const suggestion = await requestSectionImprovement({
+          sectionName: metric,
+          sectionText: resumeText,
+          jobDescription,
+        });
+        res.json({ suggestion });
+      } catch (err) {
+        console.error('fix metric failed', err);
+        next(createError(500, 'failed to fix metric'));
+      }
+    }
+  );
+
   app.post('/api/improve-metric', async (req, res, next) => {
     const jobId = crypto.randomUUID();
     const s3 = new S3Client({ region });
