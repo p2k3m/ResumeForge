@@ -2,8 +2,11 @@ import {
   DynamoDBClient,
   CreateTableCommand,
   DescribeTableCommand,
-  PutItemCommand
+  PutItemCommand,
+  ScanCommand,
+  DeleteItemCommand
 } from '@aws-sdk/client-dynamodb';
+import { createHash } from 'crypto';
 import { getSecrets } from '../config/secrets.js';
 import { region } from '../server.js';
 
@@ -47,6 +50,10 @@ async function ensureTable(client, tableName) {
   }
 }
 
+function hash(value = '') {
+  return createHash('sha256').update(String(value)).digest('hex');
+}
+
 export async function logEvaluation({
   jobId,
   ipAddress = '',
@@ -77,28 +84,29 @@ export async function logEvaluation({
     createdAt: { N: String(Date.now()) }
   };
 
-  const safeLinkedin =
-    typeof linkedinProfileUrl === 'string' && linkedinProfileUrl.trim()
-      ? linkedinProfileUrl
-      : 'unknown';
-  item.linkedinProfileUrl = { S: safeLinkedin };
-
   const addString = (key, value) => {
     if (typeof value === 'string' && value.trim()) {
       item[key] = { S: value };
     }
   };
 
+  const addHash = (key, value) => {
+    if (typeof value === 'string' && value.trim()) {
+      item[key] = { S: hash(value) };
+    }
+  };
+
   const location = await resolveLocation(ipAddress);
-  addString('ipAddress', ipAddress);
+  addHash('ipHash', ipAddress);
   addString('location', location);
   addString('userAgent', userAgent);
   addString('browser', browser);
   addString('os', os);
   addString('device', device);
-  addString('jobDescriptionUrl', jobDescriptionUrl);
-  addString('credlyProfileUrl', credlyProfileUrl);
-  addString('cvKey', cvKey);
+  addHash('jobDescriptionHash', jobDescriptionUrl);
+  addHash('linkedinProfileHash', linkedinProfileUrl);
+  addHash('credlyProfileHash', credlyProfileUrl);
+  addHash('cvKeyHash', cvKey);
   addString('docType', docType);
 
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
@@ -138,32 +146,80 @@ export async function logSession({
     improvement: { N: String(improvement || 0) }
   };
 
-  const safeLinkedin =
-    typeof linkedinProfileUrl === 'string' && linkedinProfileUrl.trim()
-      ? linkedinProfileUrl
-      : 'unknown';
-  item.linkedinProfileUrl = { S: safeLinkedin };
-
   const addString = (key, value) => {
     if (typeof value === 'string' && value.trim()) {
       item[key] = { S: value };
     }
   };
 
+  const addHash = (key, value) => {
+    if (typeof value === 'string' && value.trim()) {
+      item[key] = { S: hash(value) };
+    }
+  };
+
   const location = await resolveLocation(ipAddress);
-  addString('ipAddress', ipAddress);
+  addHash('ipHash', ipAddress);
   addString('location', location);
   addString('userAgent', userAgent);
   addString('browser', browser);
   addString('os', os);
   addString('device', device);
-  addString('jobDescriptionUrl', jobDescriptionUrl);
-  addString('credlyProfileUrl', credlyProfileUrl);
-  addString('cvKey', cvKey);
-  addString('coverLetterKey', coverLetterKey);
+  addHash('jobDescriptionHash', jobDescriptionUrl);
+  addHash('linkedinProfileHash', linkedinProfileUrl);
+  addHash('credlyProfileHash', credlyProfileUrl);
+  addHash('cvKeyHash', cvKey);
+  addHash('coverLetterKeyHash', coverLetterKey);
 
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
 }
 
+export async function cleanupOldRecords({ retentionDays = 30 } = {}) {
+  const client = new DynamoDBClient({ region });
+  let tableName = process.env.DYNAMO_TABLE;
+  if (!tableName) {
+    try {
+      const secrets = await getSecrets();
+      tableName = secrets.DYNAMO_TABLE || 'ResumeForge';
+    } catch {
+      tableName = 'ResumeForge';
+    }
+  }
+  try {
+    await ensureTable(client, tableName);
+  } catch {
+    return;
+  }
+
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  let ExclusiveStartKey;
+  do {
+    const { Items = [], LastEvaluatedKey } = await client.send(
+      new ScanCommand({
+        TableName: tableName,
+        ProjectionExpression: 'jobId, createdAt',
+        ExclusiveStartKey
+      })
+    );
+    for (const item of Items) {
+      const ts = Number(item.createdAt?.N);
+      if (ts && ts < cutoff) {
+        await client.send(
+          new DeleteItemCommand({
+            TableName: tableName,
+            Key: { jobId: { S: item.jobId.S } }
+          })
+        );
+      }
+    }
+    ExclusiveStartKey = LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  const interval = Number(process.env.DYNAMO_CLEANUP_INTERVAL_MS) || 24 * 60 * 60 * 1000;
+  setInterval(() => cleanupOldRecords().catch(() => {}), interval).unref();
+}
+
 export { resolveLocation };
-export default { logEvaluation, logSession, resolveLocation };
+export default { logEvaluation, logSession, resolveLocation, cleanupOldRecords };
