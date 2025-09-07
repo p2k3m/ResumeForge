@@ -72,9 +72,9 @@ export async function logEvaluation({
   if (!tableName) {
     try {
       const secrets = await getSecrets();
-      tableName = secrets.DYNAMO_TABLE || 'ResumeForge';
+      tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
     } catch {
-      tableName = 'ResumeForge';
+      tableName = 'ResumeForgeLogs';
     }
   }
   await ensureTable(client, tableName);
@@ -132,9 +132,9 @@ export async function logSession({
   if (!tableName) {
     try {
       const secrets = await getSecrets();
-      tableName = secrets.DYNAMO_TABLE || 'ResumeForge';
+      tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
     } catch {
-      tableName = 'ResumeForge';
+      tableName = 'ResumeForgeLogs';
     }
   }
   await ensureTable(client, tableName);
@@ -180,9 +180,9 @@ export async function cleanupOldRecords({ retentionDays = 30 } = {}) {
   if (!tableName) {
     try {
       const secrets = await getSecrets();
-      tableName = secrets.DYNAMO_TABLE || 'ResumeForge';
+      tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
     } catch {
-      tableName = 'ResumeForge';
+      tableName = 'ResumeForgeLogs';
     }
   }
   try {
