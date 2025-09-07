@@ -106,7 +106,9 @@ function App() {
       }
       const data = await response.json()
       setResult(data)
-      setSkills(data.missingSkills || [])
+      setSkills(
+        (data.missingSkills || []).map((s) => ({ name: s, icon: '', level: '' }))
+      )
       setExpOptions((data.missingExperience || []).map((t) => ({ text: t, checked: false })))
       setEduOptions((data.missingEducation || []).map((t) => ({ text: t, checked: false })))
       setCertOptions(
@@ -131,11 +133,14 @@ function App() {
 
   const disabled = !jobUrl || !cvFile || !linkedinUrl || isProcessing
 
-  const handleSkillChange = (idx, value) => {
-    setSkills((prev) => prev.map((s, i) => (i === idx ? value : s)))
+  const handleSkillChange = (idx, field, value) => {
+    setSkills((prev) =>
+      prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s))
+    )
   }
 
-  const addSkill = () => setSkills((prev) => [...prev, ''])
+  const addSkill = () =>
+    setSkills((prev) => [...prev, { name: '', icon: '', level: '' }])
 
   const toggleOption = (setter) => (idx) => {
     setter((prev) =>
@@ -213,7 +218,13 @@ function App() {
       setCvUrl(data.cvUrl || '')
       setCoverLetterUrl(data.coverLetterUrl || '')
       setNewAdditions(
-        [...(data.addedSkills || []), ...(data.addedLanguages || []), data.designation].filter(Boolean)
+        [
+          ...(data.addedSkills || []).map((s) =>
+            typeof s === 'string' ? s : s.name
+          ),
+          ...(data.addedLanguages || []),
+          data.designation,
+        ].filter(Boolean)
       )
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -332,13 +343,27 @@ function App() {
             <div className="text-purple-800 mb-2">
               <p className="mb-2">Missing skills:</p>
               {skills.map((skill, idx) => (
-                <input
-                  key={idx}
-                  value={skill}
-                  placeholder="Skill"
-                  onChange={(e) => handleSkillChange(idx, e.target.value)}
-                  className="w-full p-2 border border-purple-300 rounded mb-2"
-                />
+                <div key={idx} className="flex flex-col md:flex-row gap-2 mb-2">
+                  <input
+                    value={skill.name}
+                    placeholder="Skill"
+                    onChange={(e) => handleSkillChange(idx, 'name', e.target.value)}
+                    className="flex-1 p-2 border border-purple-300 rounded"
+                  />
+                  <input
+                    value={skill.icon || ''}
+                    placeholder="Icon (optional)"
+                    onChange={(e) => handleSkillChange(idx, 'icon', e.target.value)}
+                    className="flex-1 p-2 border border-purple-300 rounded"
+                  />
+                  <input
+                    value={skill.level || ''}
+                    type="number"
+                    placeholder="Level"
+                    onChange={(e) => handleSkillChange(idx, 'level', e.target.value)}
+                    className="w-24 p-2 border border-purple-300 rounded"
+                  />
+                </div>
               ))}
               <button
                 type="button"
