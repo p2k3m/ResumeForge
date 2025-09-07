@@ -762,6 +762,16 @@ export default function registerProcessCv(app, generativeModel) {
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
+      if (jobTitle) {
+        const lines = (improvedSections.experience || '').split('\n');
+        const idx = lines.findIndex((l) => l.trim());
+        if (idx !== -1) {
+          const line = lines[idx];
+          const atIdx = line.toLowerCase().indexOf(' at ');
+          lines[idx] = atIdx !== -1 ? `${jobTitle}${line.slice(atIdx)}` : jobTitle;
+          improvedSections.experience = lines.join('\n');
+        }
+      }
       const resumeSkills = extractResumeSkills(text);
       const projectSummary = await generateProjectSummary(
         jobDescription,

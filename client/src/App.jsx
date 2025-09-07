@@ -214,6 +214,8 @@ function App() {
       improveForm.append('selectedEducation', JSON.stringify(selectedEducation))
       improveForm.append('selectedCertifications', JSON.stringify(selectedCertifications))
       improveForm.append('selectedLanguages', JSON.stringify(selectedLanguages))
+      if (designationOverride)
+        improveForm.append('designation', designationOverride)
       const improveResp = await fetch(`${API_BASE_URL}/api/process-cv`, {
         method: 'POST',
         body: improveForm
