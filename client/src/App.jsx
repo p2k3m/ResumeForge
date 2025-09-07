@@ -525,13 +525,13 @@ function App() {
                           <p className="font-medium">{category}</p>
                           <p>
                             {avgScore}% ({status})
+                            <button
+                              onClick={() => handleFix(metricKey)}
+                              className="ml-2 text-blue-600 underline"
+                            >
+                              Fix
+                            </button>
                           </p>
-                          <button
-                            onClick={() => handleFix(metricKey)}
-                            className="mt-1 text-blue-600 underline"
-                          >
-                            Fix
-                          </button>
                           {metricTips[metricKey] && (
                             <span
                               className={`block text-sm ${
