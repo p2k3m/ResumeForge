@@ -63,6 +63,15 @@ async function parseUserAgent(ua) {
   }
 }
 
+/**
+ * Very small in-memory rate limiter for development/testing.
+ * Tracks hits per IP for a fixed window and automatically removes
+ * entries once their window expires to prevent unbounded growth.
+ *
+ * NOTE: This implementation is intentionally simple. If rate limiting
+ * requirements grow, consider replacing it with a library such as
+ * `express-rate-limit`.
+ */
 function createRateLimiter({ windowMs, max } = {}) {
   const hits = new Map();
   return Object.assign(
@@ -71,7 +80,12 @@ function createRateLimiter({ windowMs, max } = {}) {
       const ip = req.ip;
       let entry = hits.get(ip);
       if (!entry || now - entry.start > windowMs) {
-        entry = { start: now, count: 0 };
+        if (entry?.timeout) clearTimeout(entry.timeout);
+        entry = {
+          start: now,
+          count: 0,
+          timeout: setTimeout(() => hits.delete(ip), windowMs)
+        };
         hits.set(ip, entry);
       }
       entry.count++;
@@ -82,7 +96,10 @@ function createRateLimiter({ windowMs, max } = {}) {
       }
     },
     {
-      reset: () => hits.clear()
+      reset: () => {
+        hits.forEach(({ timeout }) => clearTimeout(timeout));
+        hits.clear();
+      }
     }
   );
 }
