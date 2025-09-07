@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { createHash } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { logEvaluation } from '../services/dynamo.js';
 
@@ -19,7 +20,9 @@ describe('logEvaluation optional fields', () => {
     jest.restoreAllMocks();
   });
 
-  test('includes linkedinProfileUrl when provided', async () => {
+  const hash = (v) => createHash('sha256').update(v).digest('hex');
+
+  test('includes hashed urls when provided', async () => {
     const sendMock = jest
       .spyOn(DynamoDBClient.prototype, 'send')
       .mockResolvedValue({});
@@ -37,14 +40,15 @@ describe('logEvaluation optional fields', () => {
     const putCall = sendMock.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
     );
-    expect(putCall[0].input.Item.linkedinProfileUrl).toEqual({
-      S: 'https://linkedin.com/in/example',
+    expect(putCall[0].input.Item.linkedinProfileHash).toEqual({
+      S: hash('https://linkedin.com/in/example'),
     });
+    expect(putCall[0].input.Item.cvKeyHash).toEqual({ S: hash('s3/key') });
+    expect(putCall[0].input.Item.ipHash).toEqual({ S: hash('ip') });
     expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
-    expect(putCall[0].input.Item.cvKey).toEqual({ S: 's3/key' });
   });
 
-  test('omits linkedinProfileUrl when not provided', async () => {
+  test('omits linkedinProfileHash when not provided', async () => {
     const sendMock = jest
       .spyOn(DynamoDBClient.prototype, 'send')
       .mockResolvedValue({});
@@ -61,9 +65,8 @@ describe('logEvaluation optional fields', () => {
     const putCall = sendMock.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
     );
-    expect(putCall[0].input.Item.linkedinProfileUrl).toEqual({
-      S: 'unknown',
-    });
+    expect(putCall[0].input.Item.linkedinProfileHash).toBeUndefined();
+    expect(putCall[0].input.Item.ipHash).toEqual({ S: hash('ip') });
     expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
   });
 });

@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { createHash } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { logSession } from '../services/dynamo.js';
 
@@ -19,7 +20,7 @@ describe('logSession location field', () => {
     jest.restoreAllMocks();
   });
 
-  test('includes location derived from IP', async () => {
+  test('includes hashed IP and location derived from IP', async () => {
     const sendMock = jest
       .spyOn(DynamoDBClient.prototype, 'send')
       .mockResolvedValue({});
@@ -29,6 +30,8 @@ describe('logSession location field', () => {
     const putCall = sendMock.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
     );
+    const hash = createHash('sha256').update('1.2.3.4').digest('hex');
+    expect(putCall[0].input.Item.ipHash).toEqual({ S: hash });
     expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
   });
 });
