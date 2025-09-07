@@ -189,6 +189,8 @@ export default function registerProcessCv(app, generativeModel) {
       } catch {}
       try {
         if (!req.file) return next(createError(400, 'resume file required'));
+        const cvKey =
+          req.file.key || req.file.filename || req.file.originalname || '';
         let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
@@ -228,6 +230,7 @@ export default function registerProcessCv(app, generativeModel) {
             jobDescriptionUrl,
             linkedinProfileUrl,
             credlyProfileUrl,
+            cvKey,
             docType,
           });
           return res
@@ -354,6 +357,7 @@ export default function registerProcessCv(app, generativeModel) {
           jobDescriptionUrl,
           linkedinProfileUrl,
           credlyProfileUrl,
+          cvKey,
           docType: 'resume',
         });
 

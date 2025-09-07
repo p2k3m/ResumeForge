@@ -57,6 +57,7 @@ export async function logEvaluation({
   jobDescriptionUrl = '',
   linkedinProfileUrl = '',
   credlyProfileUrl = '',
+  cvKey = '',
   docType = '',
 }) {
   const client = new DynamoDBClient({ region });
@@ -97,6 +98,7 @@ export async function logEvaluation({
   addString('device', device);
   addString('jobDescriptionUrl', jobDescriptionUrl);
   addString('credlyProfileUrl', credlyProfileUrl);
+  addString('cvKey', cvKey);
   addString('docType', docType);
 
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));

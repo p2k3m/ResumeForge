@@ -61,6 +61,7 @@ describe('/api/evaluate LinkedIn diff', () => {
       expect.objectContaining({
         docType: 'resume',
         linkedinProfileUrl: 'https://linkedin.com/in/example',
+        cvKey: expect.any(String),
       })
     );
   });

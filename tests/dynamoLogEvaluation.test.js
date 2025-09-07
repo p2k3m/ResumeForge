@@ -30,6 +30,7 @@ describe('logEvaluation optional fields', () => {
       userAgent: 'ua',
       jobDescriptionUrl: 'https://example.com/job',
       linkedinProfileUrl: 'https://linkedin.com/in/example',
+      cvKey: 's3/key',
       docType: 'resume',
     });
 
@@ -40,6 +41,7 @@ describe('logEvaluation optional fields', () => {
       S: 'https://linkedin.com/in/example',
     });
     expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
+    expect(putCall[0].input.Item.cvKey).toEqual({ S: 's3/key' });
   });
 
   test('omits linkedinProfileUrl when not provided', async () => {
@@ -52,6 +54,7 @@ describe('logEvaluation optional fields', () => {
       ipAddress: 'ip',
       userAgent: 'ua',
       jobDescriptionUrl: 'https://example.com/job',
+      cvKey: 'another/key',
       docType: 'resume',
     });
 

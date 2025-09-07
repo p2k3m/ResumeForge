@@ -34,6 +34,7 @@ describe('/api/evaluate non-resume', () => {
     const res = await request(app)
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
@@ -41,7 +42,11 @@ describe('/api/evaluate non-resume', () => {
     );
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
-      expect.objectContaining({ docType, linkedinProfileUrl: undefined })
+      expect.objectContaining({
+        docType,
+        linkedinProfileUrl: 'https://linkedin.com/in/example',
+        cvKey: expect.any(String),
+      })
     );
   });
 });
