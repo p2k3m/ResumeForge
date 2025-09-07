@@ -56,6 +56,8 @@ function App() {
   const [manualName, setManualName] = useState('')
   const [showNameModal, setShowNameModal] = useState(false)
   const [metricSuggestions, setMetricSuggestions] = useState({})
+  const [gapSuggestion, setGapSuggestion] = useState('')
+  const [showGapModal, setShowGapModal] = useState(false)
   const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -202,6 +204,28 @@ function App() {
         ...prev,
         [metric]: err.message || 'Failed to fetch suggestion'
       }))
+    }
+  }
+
+  const handleGap = async () => {
+    try {
+      const form = new FormData()
+      form.append('resume', cvFile)
+      form.append('jobDescriptionUrl', jobUrl)
+      const resp = await fetch(`${API_BASE_URL}/api/fix-gap`, {
+        method: 'POST',
+        body: form
+      })
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(text || 'Request failed')
+      }
+      const data = await resp.json()
+      setGapSuggestion(data.suggestion || 'No suggestions')
+    } catch (err) {
+      setGapSuggestion(err.message || 'Failed to fetch suggestions')
+    } finally {
+      setShowGapModal(true)
     }
   }
 
@@ -468,6 +492,12 @@ function App() {
             Designation: {result.originalTitle || 'N/A'} vs {result.jobTitle || 'N/A'}
             {!result.designationMatch ? ' (Mismatch)' : ''}
           </p>
+          <button
+            onClick={handleGap}
+            className="px-4 py-2 bg-purple-600 text-white rounded mb-2"
+          >
+            Get Targeted Suggestions
+          </button>
           {!result.designationMatch && (
             <div className="mb-2">
               <input
@@ -707,6 +737,20 @@ function App() {
               className="px-4 py-2 bg-purple-600 text-white rounded"
             >
               Submit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showGapModal && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-4 rounded shadow w-96 max-h-[80vh] overflow-y-auto">
+            <p className="mb-2 text-purple-800 whitespace-pre-line">{gapSuggestion}</p>
+            <button
+              onClick={() => setShowGapModal(false)}
+              className="mt-2 px-4 py-2 bg-purple-600 text-white rounded"
+            >
+              Close
             </button>
           </div>
         </div>

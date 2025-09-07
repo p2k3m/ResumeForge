@@ -1047,6 +1047,63 @@ export default function registerProcessCv(app, generativeModel) {
     }
   );
 
+  app.post(
+    '/api/fix-gap',
+    (req, res, next) => {
+      uploadResume(req, res, (err) => {
+        if (err) return next(createError(400, err.message));
+        next();
+      });
+    },
+    async (req, res, next) => {
+      try {
+        let { jobDescriptionUrl } = req.body;
+        if (!req.file) return next(createError(400, 'resume file required'));
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'jobDescriptionUrl required'));
+        jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'invalid jobDescriptionUrl'));
+        const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
+        let jobDescriptionHtml = '';
+        try {
+          jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
+            timeout: REQUEST_TIMEOUT_MS,
+            userAgent,
+          });
+        } catch {}
+        const { skills: jobSkills, text: jobDescription } =
+          analyzeJobDescription(jobDescriptionHtml);
+        const resumeText = await extractText(req.file);
+        const gaps = computeJdMismatches(
+          resumeText,
+          jobDescriptionHtml,
+          jobSkills
+        );
+        let suggestion = '';
+        if (gaps.length) {
+          suggestion = await requestSectionImprovement({
+            sectionName: 'gap analysis',
+            sectionText: gaps.join('\n'),
+            jobDescription,
+          });
+        }
+        res.json({ suggestion, gaps });
+      } catch (err) {
+        console.error('fix gap failed', err);
+        if (err.code === 'AI_TIMEOUT') {
+          return next(
+            createError(
+              504,
+              'The AI service took too long to respond. Please try again later.'
+            )
+          );
+        }
+        next(createError(500, 'failed to fix gap'));
+      }
+    }
+  );
+
   app.post('/api/improve-metric', async (req, res, next) => {
     const jobId = crypto.randomUUID();
     const s3 = new S3Client({ region });
