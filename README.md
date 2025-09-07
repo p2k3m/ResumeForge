@@ -196,7 +196,7 @@ When headless Chromium is unavailable, ResumeForge automatically renders the ré
 
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
-- **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
+- **Job description scraping limitations:** The job description is fetched via an axios HTTP request, falling back to a Puppeteer-rendered page if the content is blocked or requires client-side rendering. Pages requiring login or heavy anti-bot defenses may still return empty or restricted content.
 
 ## API Response
 The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics and an estimated chance of selection:
