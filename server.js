@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import net from 'net';
 import axios from 'axios';
@@ -63,47 +64,6 @@ async function parseUserAgent(ua) {
   }
 }
 
-/**
- * Very small in-memory rate limiter for development/testing.
- * Tracks hits per IP for a fixed window and automatically removes
- * entries once their window expires to prevent unbounded growth.
- *
- * NOTE: This implementation is intentionally simple. If rate limiting
- * requirements grow, consider replacing it with a library such as
- * `express-rate-limit`.
- */
-function createRateLimiter({ windowMs, max } = {}) {
-  const hits = new Map();
-  return Object.assign(
-    (req, res, next) => {
-      const now = Date.now();
-      const ip = req.ip;
-      let entry = hits.get(ip);
-      if (!entry || now - entry.start > windowMs) {
-        if (entry?.timeout) clearTimeout(entry.timeout);
-        entry = {
-          start: now,
-          count: 0,
-          timeout: setTimeout(() => hits.delete(ip), windowMs)
-        };
-        hits.set(ip, entry);
-      }
-      entry.count++;
-      if (entry.count > max) {
-        res.status(429).json({ error: 'Too many requests' });
-      } else {
-        next();
-      }
-    },
-    {
-      reset: () => {
-        hits.forEach(({ timeout }) => clearTimeout(timeout));
-        hits.clear();
-      }
-    }
-  );
-}
-
 function validateUrl(input) {
   try {
     const url = new URL(String(input));
@@ -134,10 +94,13 @@ if (process.env.TRUST_PROXY) {
   app.set('trust proxy', process.env.TRUST_PROXY);
 }
 
-const rateLimiter = createRateLimiter({
+const rateLimiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_MAX) || 100
+  limit: Number(process.env.RATE_LIMIT_MAX) || 100,
+  standardHeaders: true,
+  legacyHeaders: false
 });
+rateLimiter.reset = () => rateLimiter.store?.resetAll?.();
 app.use(rateLimiter);
 app.use(cors());
 app.use(express.json());
