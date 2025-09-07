@@ -15,6 +15,19 @@ const metricTips = {
 const formatMetricName = (name) =>
   name.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())
 
+const atsBreakdownMetrics = [
+  'layoutSearchability',
+  'atsReadability',
+  'impact',
+  'crispness'
+]
+
+const otherQualityMetricCategories = {
+  'Keyword Optimization': ['keywordDensity'],
+  'Section Headings': ['sectionHeadingClarity'],
+  'Contact Information': ['contactInfoCompleteness']
+}
+
 function App() {
   const [jobUrl, setJobUrl] = useState('')
   const [cvFile, setCvFile] = useState(null)
@@ -333,41 +346,96 @@ function App() {
       {result && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <p className="text-purple-800 mb-2">ATS Score: {result.atsScore}%</p>
+          {result.atsMetrics &&
+            atsBreakdownMetrics.some((m) => result.atsMetrics[m] != null) && (
+              <div className="text-purple-800 mb-2">
+                <p className="font-semibold mb-1">ATS Breakdown</p>
+                <ul>
+                  {atsBreakdownMetrics.map((metric) => {
+                    const score = result.atsMetrics[metric]
+                    if (score == null) return null
+                    const status = getScoreStatus(score)
+                    return (
+                      <li key={metric} className="mb-1">
+                        <span>
+                          {formatMetricName(metric)}: {score}% ({status})
+                        </span>
+                        {score < 70 && (
+                          <>
+                            <button
+                              onClick={() => handleFix(metric)}
+                              className="ml-2 text-blue-600 underline"
+                            >
+                              Fix
+                            </button>
+                            {metricTips[metric] && (
+                              <span className="block text-sm text-purple-600">
+                                {metricTips[metric]}
+                              </span>
+                            )}
+                            {metricSuggestions[metric] && (
+                              <div className="mt-1 text-sm text-purple-700">
+                                {metricSuggestions[metric]}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+
           {result.atsMetrics && (
             <div className="text-purple-800 mb-2">
-              <p className="font-semibold mb-1">ATS Breakdown</p>
-              <ul>
-                {Object.entries(result.atsMetrics).map(([metric, score]) => {
-                  const status = getScoreStatus(score)
-                  return (
-                    <li key={metric} className="mb-1">
-                      <span>
-                        {formatMetricName(metric)}: {score}% ({status})
-                      </span>
-                      {score < 70 && (
-                        <>
-                          <button
-                            onClick={() => handleFix(metric)}
-                            className="ml-2 text-blue-600 underline"
-                          >
-                            Fix
-                          </button>
-                          {metricTips[metric] && (
-                            <span className="block text-sm text-purple-600">
-                              {metricTips[metric]}
-                            </span>
-                          )}
-                          {metricSuggestions[metric] && (
-                            <div className="mt-1 text-sm text-purple-700">
-                              {metricSuggestions[metric]}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </li>
+              <p className="font-semibold mb-1">Other Quality Metrics</p>
+              {Object.entries(otherQualityMetricCategories).map(
+                ([category, metrics]) => {
+                  const available = metrics.filter(
+                    (m) => result.atsMetrics[m] != null
                   )
-                })}
-              </ul>
+                  if (available.length === 0) return null
+                  return (
+                    <div key={category} className="mb-2">
+                      <p className="font-medium">{category}</p>
+                      <ul>
+                        {available.map((metric) => {
+                          const score = result.atsMetrics[metric]
+                          const status = getScoreStatus(score)
+                          return (
+                            <li key={metric} className="mb-1">
+                              <span>
+                                {formatMetricName(metric)}: {score}% ({status})
+                              </span>
+                              {score < 70 && (
+                                <>
+                                  <button
+                                    onClick={() => handleFix(metric)}
+                                    className="ml-2 text-blue-600 underline"
+                                  >
+                                    Fix
+                                  </button>
+                                  {metricTips[metric] && (
+                                    <span className="block text-sm text-purple-600">
+                                      {metricTips[metric]}
+                                    </span>
+                                  )}
+                                  {metricSuggestions[metric] && (
+                                    <div className="mt-1 text-sm text-purple-700">
+                                      {metricSuggestions[metric]}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </div>
+                  )
+                }
+              )}
             </div>
           )}
           <p className="text-purple-800 mb-2">
