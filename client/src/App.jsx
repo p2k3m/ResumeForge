@@ -106,15 +106,18 @@ function App() {
       })
       if (response.status === 400) {
         let data
+        let text
         try {
           data = await response.json()
-        } catch {}
+        } catch {
+          text = await response.text()
+        }
         if (data?.nameRequired) {
           setShowNameModal(true)
           return
         }
-        const text = data?.error || 'Request failed'
-        setError(text)
+        const errText = data?.error || text || 'Request failed'
+        setError(errText)
         return
       }
       if (!response.ok) {
