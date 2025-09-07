@@ -767,10 +767,25 @@ async function extractText(file) {
 
 async function classifyDocument(text) {
   try {
-    return await aiClassifyDocument(text);
+    const docType = await aiClassifyDocument(text);
+    if (docType && docType !== 'unknown') return docType;
   } catch {
-    return 'unknown';
+    /* ignore and fall back */
   }
+  if (generativeModel?.generateContent) {
+    try {
+      const prompt =
+        'Classify the following document. Respond with a short phrase such as "resume", "cover letter", "essay", etc.';
+      const result = await generativeModel.generateContent(
+        `${prompt}\n\n${text.slice(0, 4000)}`
+      );
+      const docType = result?.response?.text?.().trim().toLowerCase();
+      if (docType) return docType;
+    } catch {
+      /* ignore */
+    }
+  }
+  return 'unknown';
 }
 
 async function extractName(text, model = generativeModel) {
