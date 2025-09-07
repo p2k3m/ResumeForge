@@ -290,7 +290,10 @@ export default function registerProcessCv(app, generativeModel) {
           });
           return res
             .status(400)
-            .json({ error: 'Document type could not be determined.' });
+            .json({
+              error:
+                "The document type couldn't be recognized; please upload a CV.",
+            });
         }
         const applicantName =
           req.body.applicantName || (await extractName(resumeText));
@@ -606,7 +609,12 @@ export default function registerProcessCv(app, generativeModel) {
         );
       }
       if (docType === 'unknown') {
-        return next(createError(400, 'Document type could not be determined.'));
+        return next(
+          createError(
+            400,
+            "The document type couldn't be recognized; please upload a CV."
+          )
+        );
       }
       const lines = originalText
         .split(/\r?\n/)
