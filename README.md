@@ -98,7 +98,7 @@ Each item includes:
 
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
-- Allowed file types: `.pdf`
+- Allowed file types: `.pdf`, `.docx`
 - Legacy `.doc` files are rejected.
 
 ## Templates

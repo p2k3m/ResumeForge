@@ -756,7 +756,7 @@ describe('/api/process-cv', () => {
       .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Only .pdf, .doc, .docx files are allowed');
+    expect(res.body.error).toBe('Only .pdf and .docx files are allowed');
   });
 
   test('missing job description URL', async () => {
