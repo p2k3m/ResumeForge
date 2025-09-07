@@ -190,6 +190,10 @@ The middle field accepts a Font Awesome class name or an image URL. The last fie
 - AWS → `fa-brands fa-aws`
 
 
+### PDFKit Fallback
+When headless Chromium is unavailable, ResumeForge automatically renders the résumé using PDFKit. The fallback mirrors the 2025 template design by manually laying out two columns, drawing skill and language bars, embedding icons (Font Awesome classes or images), and inserting a LinkedIn QR code when provided. This keeps the generated PDF visually consistent even without Puppeteer.
+
+
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.

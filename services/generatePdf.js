@@ -355,6 +355,10 @@ export async function generatePdf(
         paragraphGap: 12
       }
     };
+    if (templateId === '2025') {
+      const { render2025Pdf } = await import('./pdfkit2025.js');
+      return await render2025Pdf(data, options, styleMap['2025']);
+    }
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
       const buffers = [];

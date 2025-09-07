@@ -512,6 +512,23 @@ describe('generatePdf and parsing', () => {
     expect(raw).toContain('https://example.com/cert');
   });
 
+  test('fallback PDF includes skills, languages and QR code', async () => {
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockRejectedValue(new Error('no browser'));
+    const input = 'Jane Doe\n# Skills\n- JavaScript | 80\n# Languages\n- English - 100';
+    const buffer = await generatePdf(input, '2025', {
+      linkedinProfileUrl: 'https://www.linkedin.com/in/test'
+    });
+    launchSpy.mockRestore();
+    const raw = buffer.toString();
+    expect(raw).toContain('Skills');
+    expect(raw).toContain('Languages');
+    expect(raw).toContain('JavaScript');
+    expect(raw).toContain('English');
+    expect(raw).toMatch(/PNG/);
+  });
+
   test('PDFKit link annotations stop before following text', async () => {
     const launchSpy = jest
       .spyOn(puppeteer, 'launch')
