@@ -30,9 +30,10 @@ body {
   font-size: 14px;
 }
 
+/* Use a fixed two-column grid for consistent PDF layout */
 .content {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
 }
 
@@ -122,12 +123,8 @@ body {
   background: var(--accent);
 }
 
-@media (min-width: 800px) {
-  .content {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .skills-matrix,
-  .languages {
-    grid-column: span 2;
-  }
+/* Sections that should span both columns */
+.skills-matrix,
+.languages {
+  grid-column: span 2;
 }
