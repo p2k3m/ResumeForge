@@ -17,10 +17,9 @@ import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 import { logEvaluation, logSession } from '../services/dynamo.js';
 
+import { uploadResume, parseUserAgent, validateUrl } from '../lib/serverUtils.js';
+
 import {
-  uploadResume,
-  parseUserAgent,
-  validateUrl,
   extractText,
   classifyDocument,
   extractName,
