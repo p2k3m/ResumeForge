@@ -60,6 +60,7 @@ function App() {
   const [cvTextKey, setCvTextKey] = useState('')
   const [finalScore, setFinalScore] = useState(null)
   const [improvement, setImprovement] = useState(null)
+  const [chanceOfSelection, setChanceOfSelection] = useState(null)
   const [isDragging, setIsDragging] = useState(false)
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
@@ -294,6 +295,7 @@ function App() {
     setError('')
     setCvUrl('')
     setCoverLetterUrl('')
+    setChanceOfSelection(null)
     try {
       // Gather user selections once
       const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
@@ -360,6 +362,7 @@ function App() {
       const data = await compileResp.json()
       setFinalScore(data.atsScore)
       setImprovement(data.improvement)
+      setChanceOfSelection(data.chanceOfSelection)
       setCvUrl(data.cvUrl || '')
       setCoverLetterUrl(data.coverLetterUrl || '')
       setNewAdditions(
@@ -770,6 +773,11 @@ function App() {
           {finalScore !== null && (
             <p className="text-purple-800 mt-2">
               Final ATS Score: {finalScore}% (Improvement: {improvement}% )
+            </p>
+          )}
+          {chanceOfSelection !== null && (
+            <p className="text-purple-800 mt-2">
+              Chance of Selection: {chanceOfSelection}%
             </p>
           )}
           {cvUrl && (
