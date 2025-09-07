@@ -315,7 +315,7 @@ export default function registerProcessCv(app, generativeModel) {
         const s3 = new S3Client({ region });
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
-        const prefix = `${sanitized}/${date}/cv/`;
+        const prefix = `${sanitized}/cv/${date}/`;
         cvKey = `${prefix}${sanitized}${ext}`;
         try {
           await s3.send(
