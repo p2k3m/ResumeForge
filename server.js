@@ -152,16 +152,22 @@ if (process.env.ENFORCE_HTTPS === 'true') {
 }
 
 
+// Multer configuration for resume uploads. Accepts PDFs and modern
+// Word documents (.docx) while rejecting legacy .doc files.
 const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = ['.pdf', '.doc', '.docx'];
-    if (!allowed.includes(ext)) {
-      return cb(new Error('Only .pdf, .doc, .docx files are allowed'));
-    }
     if (ext === '.doc') {
-      return cb(new Error('Legacy .doc files are not supported. Please upload a .pdf or .docx file.'));
+      return cb(
+        new Error(
+          'Legacy .doc files are not supported. Please upload a .pdf or .docx file.'
+        )
+      );
+    }
+    const allowed = ['.pdf', '.docx'];
+    if (!allowed.includes(ext)) {
+      return cb(new Error('Only .pdf and .docx files are allowed'));
     }
     cb(null, true);
   }
