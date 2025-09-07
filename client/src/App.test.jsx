@@ -155,7 +155,9 @@ test('displays new additions section after compile', async () => {
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
 
-  fireEvent.click(await screen.findByText('Generate CV & Cover Letter'))
+  fireEvent.click(
+    await screen.findByText('Improve CV and Generate Cover Letter')
+  )
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
   expect(
     await screen.findByText('New Additions for Interview Prep')
@@ -223,7 +225,9 @@ test('shows curated resource link for known skill', async () => {
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
 
-  fireEvent.click(await screen.findByText('Generate CV & Cover Letter'))
+  fireEvent.click(
+    await screen.findByText('Improve CV and Generate Cover Letter')
+  )
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
 
   const link = await screen.findByText('AWS Training')
