@@ -958,8 +958,8 @@ export default function registerProcessCv(app, generativeModel) {
       );
       const improvedPdf = await generatePdf(improvedCv, '2025', {}, generativeModel);
       const ts = Date.now();
-      const key = `${enhancedPrefix}cv/${ts}-improved.pdf`;
-      const textKey = `${enhancedPrefix}cv/${ts}-improved.txt`;
+      const key = `${enhancedPrefix}${ts}-improved.pdf`;
+      const textKey = `${enhancedPrefix}${ts}-improved.txt`;
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1324,7 +1324,6 @@ export default function registerProcessCv(app, generativeModel) {
         sanitizedName,
         'enhanced',
         date,
-        'cv',
         `${ts}-improved.pdf`
       );
       await s3.send(
@@ -1339,7 +1338,6 @@ export default function registerProcessCv(app, generativeModel) {
         sanitizedName,
         'enhanced',
         date,
-        'cv',
         `${ts}-improved.txt`
       );
       await s3.send(
@@ -1668,7 +1666,6 @@ export default function registerProcessCv(app, generativeModel) {
           sanitizedName,
           'enhanced',
           date,
-          'cv',
           `${Date.now()}-final_cv.pdf`
         );
         await s3.send(
@@ -1686,7 +1683,6 @@ export default function registerProcessCv(app, generativeModel) {
           sanitizedName,
           'enhanced',
           date,
-          'cv',
           `${Date.now()}-final_cv.txt`
         );
         await s3.send(
