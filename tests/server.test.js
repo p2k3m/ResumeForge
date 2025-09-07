@@ -101,6 +101,41 @@ jest.unstable_mockModule('mammoth', () => ({
   }
 }));
 
+jest.unstable_mockModule('express-rate-limit', () => ({
+  default: ({ windowMs, limit }) => {
+    const hits = new Map();
+    const middleware = (req, res, next) => {
+      const now = Date.now();
+      const ip = req.ip;
+      let entry = hits.get(ip);
+      if (!entry || now - entry.start >= windowMs) {
+        if (entry?.timeout) clearTimeout(entry.timeout);
+        entry = {
+          start: now,
+          count: 0,
+          timeout: setTimeout(() => hits.delete(ip), windowMs)
+        };
+        hits.set(ip, entry);
+      }
+      entry.count++;
+      if (entry.count > limit) {
+        const retryAfter = Math.ceil((entry.start + windowMs - now) / 1000);
+        res.set('Retry-After', String(retryAfter));
+        res.status(429).json({ error: 'Too many requests' });
+      } else {
+        next();
+      }
+    };
+    middleware.store = {
+      resetAll: () => {
+        hits.forEach(({ timeout }) => clearTimeout(timeout));
+        hits.clear();
+      }
+    };
+    return middleware;
+  }
+}), { virtual: true });
+
 const serverModule = await import('../server.js');
 const {
   default: app,
@@ -834,6 +869,7 @@ describe('rate limiting', () => {
     await request(app).get('/healthz');
     const res = await request(app).get('/healthz');
     expect(res.status).toBe(429);
+    expect(res.headers['retry-after']).toBe('1');
   });
 });
 
