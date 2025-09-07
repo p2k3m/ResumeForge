@@ -27,7 +27,7 @@ afterEach(() => {
 test('requestEnhancedCV falls back to Gemini on failure', async () => {
   createResponse.mockRejectedValueOnce(new Error('openai fail'));
   generateContentMock.mockResolvedValueOnce({
-    response: { text: () => '{"cv_version1":"a","cv_version2":"b"}' }
+    response: { text: () => '{"cvVersion1":"a","coverLetter1":"b"}' }
   });
   const result = await requestEnhancedCV({
     cvFileId: 'cv',
@@ -35,7 +35,9 @@ test('requestEnhancedCV falls back to Gemini on failure', async () => {
     instructions: 'instr'
   });
   expect(generateContentMock).toHaveBeenCalledTimes(1);
-  expect(result).toBe('{"cv_version1":"a","cv_version2":"b"}');
+  const parsed = JSON.parse(result);
+  expect(parsed).toHaveProperty('cv_version1', 'a');
+  expect(parsed).toHaveProperty('cover_letter1', 'b');
 });
 
 test('requestCoverLetter falls back to Gemini on failure', async () => {
