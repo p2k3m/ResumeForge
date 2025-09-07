@@ -7,7 +7,7 @@ import {
   DeleteItemCommand
 } from '@aws-sdk/client-dynamodb';
 import { getSecrets } from '../config/secrets.js';
-const region = process.env.AWS_REGION || 'ap-south-1';
+import { REGION } from '../config/aws.js';
 
 async function resolveLocation(ipAddress) {
   if (!ipAddress) return 'unknown';
@@ -62,7 +62,7 @@ export async function logEvaluation({
   cvKey = '',
   docType = '',
 }) {
-  const client = new DynamoDBClient({ region });
+  const client = new DynamoDBClient({ region: REGION });
   let tableName = process.env.DYNAMO_TABLE;
   if (!tableName) {
     try {
@@ -116,7 +116,7 @@ export async function logSession({
   atsScore = 0,
   improvement = 0,
 }) {
-  const client = new DynamoDBClient({ region });
+  const client = new DynamoDBClient({ region: REGION });
   let tableName = process.env.DYNAMO_TABLE;
   if (!tableName) {
     try {
@@ -158,7 +158,7 @@ export async function logSession({
 }
 
 export async function cleanupOldRecords({ retentionDays = 30 } = {}) {
-  const client = new DynamoDBClient({ region });
+  const client = new DynamoDBClient({ region: REGION });
   let tableName = process.env.DYNAMO_TABLE;
   if (!tableName) {
     try {

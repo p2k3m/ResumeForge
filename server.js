@@ -33,6 +33,7 @@ import { JOB_FETCH_USER_AGENT } from './config/http.js';
 import { uploadResume, parseUserAgent, validateUrl } from './lib/serverUtils.js';
 import { fetchJobDescription } from './services/jobFetch.js';
 import { BLOCKED_PATTERNS, REQUEST_TIMEOUT_MS } from './config/jobFetch.js';
+import { REGION } from './config/aws.js';
 import {
   parseContent,
   parseLine,
@@ -211,7 +212,6 @@ function selectTemplates({
   return { template1, template2, coverTemplate1, coverTemplate2 };
 }
 
-const region = process.env.AWS_REGION || 'ap-south-1';
 
 async function fetchLinkedInProfile(url) {
   const valid = await validateUrl(url);
@@ -1026,7 +1026,7 @@ export {
   validateUrl,
   extractName,
   sanitizeName,
-  region,
+  REGION as region,
   REQUEST_TIMEOUT_MS,
   rateLimiter,
   PUPPETEER_HEADLESS,

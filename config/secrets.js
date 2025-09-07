@@ -1,13 +1,9 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { REGION } from './aws.js';
 
-const DEFAULT_AWS_REGION = 'ap-south-1';
-
-process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
-
-const region = process.env.AWS_REGION || DEFAULT_AWS_REGION;
-const secretsClient = new SecretsManagerClient({ region });
+const secretsClient = new SecretsManagerClient({ region: REGION });
 
 let secretCache;
 export async function getSecrets() {
