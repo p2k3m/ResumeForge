@@ -19,6 +19,7 @@ import {
   uploadFile as openaiUploadFile,
   requestEnhancedCV,
   classifyDocument as aiClassifyDocument,
+  extractName as openaiExtractName,
 } from './openaiClient.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
@@ -800,16 +801,28 @@ async function classifyDocument(text) {
 }
 
 async function extractName(text, model = generativeModel) {
-  if (!text || !model?.generateContent) return '';
+  if (!text) return '';
+  const prompt =
+    `Extract the candidate's full name from the resume text. ` +
+    `Return only the name or the word "unknown" if unsure.`;
+  const parse = (str) => {
+    const name = str?.trim();
+    return name && !/^unknown$/i.test(name) ? name : '';
+  };
+  if (model?.generateContent) {
+    try {
+      const result = await model.generateContent(`${prompt}\n\n${text}`);
+      const name = parse(result?.response?.text?.());
+      if (name) return name;
+    } catch {
+      /* ignore Gemini errors and fall back */
+    }
+  }
   try {
-    const prompt =
-      `Extract the candidate's full name from the resume text. ` +
-      `Return only the name or the word "unknown" if unsure.\n\n${text}`;
-    const result = await model.generateContent(prompt);
-    const name = result?.response?.text?.().trim();
-    if (name && !/^unknown$/i.test(name)) return name;
+    const name = parse(await openaiExtractName(text, prompt));
+    if (name) return name;
   } catch {
-    /* ignore errors and fall back to manual entry */
+    /* ignore OpenAI errors and fall back to manual entry */
   }
   return '';
 }

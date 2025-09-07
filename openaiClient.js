@@ -415,3 +415,36 @@ export async function classifyDocument(text) {
   }
   throw lastError;
 }
+
+export async function extractName(text, prompt) {
+  const client = await getClient();
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await withTimeout(
+        client.responses.create({
+          model,
+          input: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: `${prompt}\n\n${text.slice(0, 4000)}`,
+                },
+              ],
+            },
+          ],
+        })
+      );
+      const name = response.output_text?.trim();
+      if (name) return name;
+      lastError = new Error('No name result');
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') continue;
+      break;
+    }
+  }
+  throw lastError;
+}
