@@ -20,8 +20,8 @@ import {
   classifyDocument as aiClassifyDocument,
   extractName as openaiExtractName,
 } from './openaiClient.js';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-import mammoth from 'mammoth';
+import { extractText } from './lib/extractText.js';
+import { sanitizeName } from './lib/sanitizeName.js';
 import { getSecrets } from './config/secrets.js';
 import JSON5 from 'json5';
 import { generativeModel } from './geminiClient.js';
@@ -689,23 +689,6 @@ function setGeneratePdf(fn) {
   generatePdf = fn;
 }
 
-async function extractText(file) {
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (ext === '.pdf') {
-    try {
-      const data = await pdfParse(file.buffer);
-      return data.text;
-    } catch (err) {
-      throw new Error('Failed to parse PDF');
-    }
-  }
-  if (ext === '.docx') {
-    const { value } = await mammoth.extractRawText({ buffer: file.buffer });
-    return value;
-  }
-  return file.buffer.toString();
-}
-
 async function classifyDocument(text) {
   try {
     const docType = await aiClassifyDocument(text);
@@ -754,10 +737,6 @@ async function extractName(text, model = generativeModel) {
     /* ignore OpenAI errors and fall back to manual entry */
   }
   return '';
-}
-
-function sanitizeName(name) {
-  return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
 function extractJsonBlock(text) {
@@ -926,7 +905,24 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-registerProcessCv(app, generativeModel);
+registerProcessCv(app, {
+  generativeModel,
+  classifyDocument,
+  extractName,
+  CV_TEMPLATES,
+  CL_TEMPLATES,
+  selectTemplates,
+  analyzeJobDescription,
+  fetchLinkedInProfile,
+  fetchCredlyProfile,
+  collectSectionText,
+  extractResumeSkills,
+  generateProjectSummary,
+  calculateMatchScore,
+  sanitizeGeneratedText,
+  parseAiJson,
+  generatePdf,
+});
 
 // Generic error handler to prevent uncaught exceptions from crashing requests
 app.use((err, req, res, next) => {

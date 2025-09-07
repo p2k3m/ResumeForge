@@ -20,32 +20,16 @@ import { uploadResume, parseUserAgent, validateUrl } from '../lib/serverUtils.js
 import { JOB_FETCH_USER_AGENT } from '../config/http.js';
 import { fetchJobDescription } from '../services/jobFetch.js';
 
+import { extractText } from '../lib/extractText.js';
+import { sanitizeName } from '../lib/sanitizeName.js';
 import {
-  extractText,
-  classifyDocument,
-  extractName,
-  sanitizeName,
-  CV_TEMPLATES,
-  CL_TEMPLATES,
-  selectTemplates,
-  analyzeJobDescription,
-  fetchLinkedInProfile,
-  fetchCredlyProfile,
+  parseContent,
   extractExperience,
   extractEducation,
   extractCertifications,
   extractLanguages,
-  parseContent,
-  collectSectionText,
-  extractResumeSkills,
-  generateProjectSummary,
-  calculateMatchScore,
-  region,
-  REQUEST_TIMEOUT_MS,
-  sanitizeGeneratedText,
-  parseAiJson,
-  generatePdf
-} from '../server.js';
+} from '../services/parseContent.js';
+import { REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 
 const createError = (status, message) => {
   const err = new Error(message);
@@ -164,7 +148,28 @@ function withTimeout(handler, timeoutMs = 10000) {
   };
 }
 
-export default function registerProcessCv(app, generativeModel) {
+export default function registerProcessCv(
+  app,
+  {
+    generativeModel,
+    classifyDocument,
+    extractName,
+    CV_TEMPLATES,
+    CL_TEMPLATES,
+    selectTemplates,
+    analyzeJobDescription,
+    fetchLinkedInProfile,
+    fetchCredlyProfile,
+    collectSectionText,
+    extractResumeSkills,
+    generateProjectSummary,
+    calculateMatchScore,
+    sanitizeGeneratedText,
+    parseAiJson,
+    generatePdf,
+  }
+) {
+  const region = process.env.AWS_REGION || 'ap-south-1';
   app.post(
     '/api/evaluate',
     (req, res, next) => {
