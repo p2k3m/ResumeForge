@@ -1249,6 +1249,7 @@ export default function registerProcessCv(app, generativeModel) {
       let linkedinData = {};
       try {
         linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+        linkedinData.languages = selectedLanguagesArr;
       } catch {}
 
       let credlyCertifications = [];
@@ -1685,9 +1686,17 @@ export default function registerProcessCv(app, generativeModel) {
         );
       }
 
+      let jobDescriptionHtml = '';
       let jobDescription = '';
+      let jobSkills = [];
       try {
-        ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
+        jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
+          timeout: REQUEST_TIMEOUT_MS,
+          userAgent: req.headers['user-agent'] || DEFAULT_USER_AGENT,
+        });
+        ({ skills: jobSkills, text: jobDescription } = analyzeJobDescription(
+          jobDescriptionHtml,
+        ));
       } catch {}
 
       let linkedinData = {};
@@ -1782,6 +1791,9 @@ export default function registerProcessCv(app, generativeModel) {
         Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
           Math.max(Object.keys(atsMetrics).length, 1)
       );
+      const resumeSkills = extractResumeSkills(cvText);
+      const { score: skillMatch } = calculateMatchScore(jobSkills, resumeSkills);
+      const chanceOfSelection = Math.round((atsScore + skillMatch) / 2);
       const improvement = originalScore
         ? Math.round(((atsScore - Number(originalScore)) / Number(originalScore)) * 100)
         : 0;
@@ -1823,6 +1835,7 @@ export default function registerProcessCv(app, generativeModel) {
         cvUrl,
         coverLetterUrl: coverUrl,
         atsScore,
+        chanceOfSelection,
         improvement,
         addedSkills: addedSkillsArr,
         addedLanguages: selectedLanguagesArr,
