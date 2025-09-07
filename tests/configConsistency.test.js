@@ -53,8 +53,10 @@ describe('shared configuration values', () => {
 
   test('fetchJobDescription honors shared BLOCKED_PATTERNS', async () => {
     mockAxiosGet.mockResolvedValueOnce({ data: 'Access Denied' });
-    await fetchJobDescription('http://example.com');
-    expect(mockLaunch).toHaveBeenCalled();
+    await expect(fetchJobDescription('http://example.com')).rejects.toThrow(
+      'Blocked content'
+    );
+    expect(mockLaunch).not.toHaveBeenCalled();
     expect(BLOCKED_PATTERNS.some((re) => re.test('Access Denied'))).toBe(true);
   });
 });
