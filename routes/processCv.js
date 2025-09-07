@@ -272,9 +272,9 @@ export default function registerProcessCv(app, generativeModel) {
           });
           return res
             .status(400)
-            .send(
-              `You have uploaded a ${docType} and not a CV – please upload the correct CV`
-            );
+            .json({
+              error: `You have uploaded a ${docType} and not a CV – please upload the correct CV`,
+            });
         }
         const applicantName =
           req.body.applicantName || (await extractName(resumeText));
