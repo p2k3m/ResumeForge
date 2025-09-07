@@ -16,7 +16,8 @@ const mockResponse = {
     crispness: 90,
     keywordDensity: 40,
     sectionHeadingClarity: 100,
-    contactInfoCompleteness: 30
+    contactInfoCompleteness: 30,
+    grammar: 70
   }
 }
 

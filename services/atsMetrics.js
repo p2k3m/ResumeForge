@@ -91,6 +91,14 @@ export function scoreContactInfoCompleteness(text) {
   return Math.round(score * 100);
 }
 
+export function scoreGrammar(text) {
+  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+  if (sentences.length === 0) return 0;
+  const errors = sentences.filter((s) => !/^[A-Z]/.test(s.trim())).length;
+  const score = 100 - (errors / sentences.length) * 100;
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 export function calculateMetrics(text) {
   return {
     layoutSearchability: scoreLayoutSearchability(text),
@@ -99,7 +107,8 @@ export function calculateMetrics(text) {
     crispness: scoreCrispness(text),
     keywordDensity: scoreKeywordDensity(text),
     sectionHeadingClarity: scoreSectionHeadingClarity(text),
-    contactInfoCompleteness: scoreContactInfoCompleteness(text)
+    contactInfoCompleteness: scoreContactInfoCompleteness(text),
+    grammar: scoreGrammar(text),
   };
 }
 

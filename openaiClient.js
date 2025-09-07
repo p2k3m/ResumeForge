@@ -30,6 +30,7 @@ const metricNames = [
   'keywordDensity',
   'sectionHeadingClarity',
   'contactInfoCompleteness',
+  'grammar',
 ];
 
 // Gemini responses may wrap JSON in additional text or code fences.

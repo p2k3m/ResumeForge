@@ -53,7 +53,8 @@ describe('/api/evaluate metrics', () => {
         crispness: expect.any(Number),
         keywordDensity: expect.any(Number),
         sectionHeadingClarity: expect.any(Number),
-        contactInfoCompleteness: expect.any(Number)
+        contactInfoCompleteness: expect.any(Number),
+        grammar: expect.any(Number)
       })
     );
   });

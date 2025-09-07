@@ -10,7 +10,8 @@ const metricTips = {
   crispness: 'Keep sentences concise.',
   keywordDensity: 'Repeat relevant keywords naturally.',
   sectionHeadingClarity: 'Use clear section headings like Experience.',
-  contactInfoCompleteness: 'Include email, phone, and LinkedIn.'
+  contactInfoCompleteness: 'Include email, phone, and LinkedIn.',
+  grammar: 'Proofread for correct grammar and punctuation.'
 }
 
 const formatMetricName = (name) =>
@@ -20,7 +21,8 @@ const atsBreakdownMetrics = [
   'layoutSearchability',
   'atsReadability',
   'impact',
-  'crispness'
+  'crispness',
+  'grammar'
 ]
 
 const otherQualityMetricCategories = {
