@@ -132,7 +132,7 @@ test('displays new additions section after compile', async () => {
           coverLetterUrl: '',
           atsScore: 80,
           improvement: 10,
-          addedSkills: ['aws'],
+          addedSkills: ['aws', 'python'],
           designation: 'Senior Developer',
         }),
     })
@@ -163,6 +163,7 @@ test('displays new additions section after compile', async () => {
     await screen.findByText('New Additions for Interview Prep')
   ).toBeInTheDocument()
   expect(await screen.findByText('aws')).toBeInTheDocument()
+  expect(await screen.findByText('python')).toBeInTheDocument()
   expect(await screen.findByText('Senior Developer')).toBeInTheDocument()
   expect(await screen.findByText('Project Alpha')).toBeInTheDocument()
   expect(await screen.findByText('AWS Cert - Amazon')).toBeInTheDocument()
@@ -205,7 +206,7 @@ test('shows curated resource link for known skill', async () => {
           coverLetterUrl: '',
           atsScore: 80,
           improvement: 10,
-          addedSkills: ['aws'],
+          addedSkills: ['aws', 'python'],
           designation: 'Senior Developer',
         }),
     })
@@ -232,4 +233,9 @@ test('shows curated resource link for known skill', async () => {
 
   const link = await screen.findByText('AWS Training')
   expect(link).toHaveAttribute('href', 'https://aws.amazon.com/training/')
+  const pyLink = await screen.findByText('Python Official Tutorial')
+  expect(pyLink).toHaveAttribute(
+    'href',
+    'https://docs.python.org/3/tutorial/'
+  )
 })
