@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react'
 import skillResources from './skillResources'
+import certResources from './certResources'
+import languageResources from './languageResources'
 import { getScoreStatus } from './scoreStatus'
 import { getSkillIcon } from '../../skillIcons.js'
 
@@ -828,7 +830,8 @@ function App() {
               <h3 className="font-semibold mb-2">New Additions for Interview Prep</h3>
               <ul className="list-disc list-inside">
                 {newAdditions.map((item, idx) => {
-                  const resources = skillResources[item.toLowerCase().trim()]
+                  const key = item.toLowerCase().trim()
+                  const resources = skillResources[key] || certResources[key] || languageResources[key]
                   return (
                     <li key={idx}>
                       {item}{' '}
