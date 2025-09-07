@@ -938,6 +938,11 @@ export default function registerProcessCv(app, generativeModel) {
           console.error('failed to log error', e);
         }
       }
+      if (err.code === 'AI_TIMEOUT') {
+        return next(
+          createError(504, 'The AI service took too long to respond. Please try again later.')
+        );
+      }
       return next(createError(500, 'processing failed'));
     }
   });
@@ -977,6 +982,11 @@ export default function registerProcessCv(app, generativeModel) {
         res.json({ suggestion });
       } catch (err) {
         console.error('fix metric failed', err);
+        if (err.code === 'AI_TIMEOUT') {
+          return next(
+            createError(504, 'The AI service took too long to respond. Please try again later.')
+          );
+        }
         next(createError(500, 'failed to fix metric'));
       }
     }
@@ -1178,6 +1188,11 @@ export default function registerProcessCv(app, generativeModel) {
       });
     } catch (err) {
       console.error('metric improvement failed', err);
+      if (err.code === 'AI_TIMEOUT') {
+        return next(
+          createError(504, 'The AI service took too long to respond. Please try again later.')
+        );
+      }
       next(createError(500, 'failed to improve metric'));
     }
   });
@@ -1312,6 +1327,12 @@ export default function registerProcessCv(app, generativeModel) {
           credlyFileId: credlyFile?.id,
         });
       } catch (err) {
+        if (err.code === 'AI_TIMEOUT') {
+          console.error('cover letter generation timed out', err);
+          return next(
+            createError(504, 'The AI service took too long to respond. Please try again later.')
+          );
+        }
         console.error('cover letter generation failed', err);
         return next(createError(500, 'cover letter generation failed'));
       }
@@ -1537,6 +1558,12 @@ export default function registerProcessCv(app, generativeModel) {
           credlyFileId: credlyFile?.id,
         });
       } catch (err) {
+        if (err.code === 'AI_TIMEOUT') {
+          console.error('cover letter generation timed out', err);
+          return next(
+            createError(504, 'The AI service took too long to respond. Please try again later.')
+          );
+        }
         console.error('cover letter generation failed', err);
         return next(createError(500, 'cover letter generation failed'));
       }

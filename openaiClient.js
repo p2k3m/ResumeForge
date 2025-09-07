@@ -9,6 +9,19 @@ import { generativeModel } from './geminiClient.js';
 // warnings during résumé generation.
 const preferredModels = ['gpt-4.1', 'gpt-4o-mini'];
 
+const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '10000', 10);
+
+function withTimeout(promise, ms = AI_TIMEOUT_MS) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      const err = new Error('AI request timed out');
+      err.code = 'AI_TIMEOUT';
+      setTimeout(() => reject(err), ms);
+    }),
+  ]);
+}
+
 const metricNames = [
   'layoutSearchability',
   'atsReadability',
@@ -136,18 +149,20 @@ export async function requestEnhancedCV({
   let lastError;
   for (const model of preferredModels) {
     try {
-      const response = await client.responses.create({
-        model,
-        input: [{ role: 'user', content }],
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'EnhancedCV',
-            schema,
-            strict: true,
+      const response = await withTimeout(
+        client.responses.create({
+          model,
+          input: [{ role: 'user', content }],
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'EnhancedCV',
+              schema,
+              strict: true,
+            },
           },
-        },
-      });
+        })
+      );
       console.log(`Using model: ${model}`);
       return response.output_text;
     } catch (err) {
@@ -162,7 +177,7 @@ export async function requestEnhancedCV({
   if (generativeModel?.generateContent) {
     try {
       const prompt = `${refinedInstructions}\nReturn JSON with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics (metric, original, improved, improvement).`;
-      const result = await generativeModel.generateContent(prompt);
+      const result = await withTimeout(generativeModel.generateContent(prompt));
       return result?.response?.text?.();
     } catch (err) {
       lastError = err;
@@ -180,10 +195,12 @@ export async function requestSectionImprovement({ sectionName, sectionText, jobD
   let lastError;
   for (const model of preferredModels) {
     try {
-      const response = await client.responses.create({
-        model,
-        input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
-      });
+      const response = await withTimeout(
+        client.responses.create({
+          model,
+          input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+        })
+      );
       return response.output_text;
     } catch (err) {
       lastError = err;
@@ -218,10 +235,12 @@ export async function requestCoverLetter({
   let lastError;
   for (const model of preferredModels) {
     try {
-      const response = await client.responses.create({
-        model,
-        input: [{ role: 'user', content }],
-      });
+      const response = await withTimeout(
+        client.responses.create({
+          model,
+          input: [{ role: 'user', content }],
+        })
+      );
       return response.output_text;
     } catch (err) {
       lastError = err;
@@ -233,7 +252,7 @@ export async function requestCoverLetter({
     try {
       const prompt =
         'You are an expert career coach. Write a concise and professional cover letter tailored to the provided job description and resume.';
-      const result = await generativeModel.generateContent(prompt);
+      const result = await withTimeout(generativeModel.generateContent(prompt));
       return result?.response?.text?.();
     } catch (err) {
       lastError = err;
@@ -260,23 +279,25 @@ export async function requestAtsAnalysis(text) {
   let lastError;
   for (const model of preferredModels) {
     try {
-      const response = await client.responses.create({
-        model,
-        input: [
-          {
-            role: 'user',
-            content: [{ type: 'input_text', text: `${prompt}\n\n${text}` }],
+      const response = await withTimeout(
+        client.responses.create({
+          model,
+          input: [
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: `${prompt}\n\n${text}` }],
+            },
+          ],
+          text: {
+            format: {
+              type: 'json_schema',
+              name: 'AtsAnalysis',
+              schema,
+              strict: true,
+            },
           },
-        ],
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'AtsAnalysis',
-            schema,
-            strict: true,
-          },
-        },
-      });
+        })
+      );
       const parsed = JSON.parse(response.output_text);
       if (!metricNames.every((m) => typeof parsed[m] === 'number')) {
         throw new Error('invalid metrics');
@@ -289,7 +310,9 @@ export async function requestAtsAnalysis(text) {
   }
   if (generativeModel?.generateContent) {
     try {
-      const result = await generativeModel.generateContent(`${prompt}\n\n${text}`);
+      const result = await withTimeout(
+        generativeModel.generateContent(`${prompt}\n\n${text}`)
+      );
       const parsed = extractJson(result?.response?.text?.());
       if (!metricNames.every((m) => typeof parsed[m] === 'number')) {
         throw new Error('invalid metrics');
@@ -309,15 +332,20 @@ export async function classifyDocument(text) {
   let lastError;
   for (const model of preferredModels) {
     try {
-      const response = await client.responses.create({
-        model,
-        input: [
-          {
-            role: 'user',
-            content: [{ type: 'input_text', text: `${prompt}\n\n${text.slice(0, 4000)}` }],
-          },
-        ],
-      });
+      const response = await withTimeout(
+        client.responses.create({
+          model,
+          input: [
+            {
+              role: 'user',
+              content: [{
+                type: 'input_text',
+                text: `${prompt}\n\n${text.slice(0, 4000)}`,
+              }],
+            },
+          ],
+        })
+      );
       return response.output_text.trim().toLowerCase();
     } catch (err) {
       lastError = err;
