@@ -788,9 +788,19 @@ async function classifyDocument(text) {
   }
 }
 
-function extractName(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  return lines[0] || '';
+async function extractName(text, model = generativeModel) {
+  if (!text || !model?.generateContent) return '';
+  try {
+    const prompt =
+      `Extract the candidate's full name from the resume text. ` +
+      `Return only the name or the word "unknown" if unsure.\n\n${text}`;
+    const result = await model.generateContent(prompt);
+    const name = result?.response?.text?.().trim();
+    if (name && !/^unknown$/i.test(name)) return name;
+  } catch {
+    /* ignore errors and fall back to manual entry */
+  }
+  return '';
 }
 
 function sanitizeName(name) {

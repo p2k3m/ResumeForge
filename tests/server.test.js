@@ -10,6 +10,7 @@ import {
 process.env.MAX_ITERATIONS = '3';
 process.env.RATE_LIMIT_WINDOW_MS = '1000';
 process.env.RATE_LIMIT_MAX = '2';
+process.env.GEMINI_API_KEY = 'test';
 
 const mockS3Send = jest.fn().mockResolvedValue({
   Body: { transformToByteArray: async () => [] },
@@ -187,6 +188,33 @@ describe('rewriteSectionsWithGemini', () => {
 });
 
 describe('/api/process-cv', () => {
+  test('extracts applicant name with model', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({ response: { text: () => 'Jane Doe' } })
+      .mockResolvedValue({ response: { text: () => '' } });
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(200);
+    expect(res.body.applicantName).toBe('Jane Doe');
+  });
+
+  test('prompts for name when model uncertain', async () => {
+    generateContentMock.mockReset();
+    generateContentMock.mockResolvedValue({
+      response: { text: () => 'unknown' }
+    });
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(400);
+    expect(res.body.nameRequired).toBe(true);
+  });
   test('handles DynamoDB table lifecycle', async () => {
     mockDynamoSend
       .mockImplementationOnce(() =>
@@ -205,6 +233,7 @@ describe('/api/process-cv', () => {
       .set('X-Forwarded-For', '203.0.113.42')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res1.status).toBe(200);
     let types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
@@ -259,6 +288,7 @@ describe('/api/process-cv', () => {
       .set('X-Forwarded-For', '203.0.113.42')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res2.status).toBe(200);
     expect(res2.body.urls).toHaveLength(4);
@@ -341,6 +371,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('AI response invalid');
@@ -364,6 +395,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.noImprovement).toBe(true);
@@ -409,6 +441,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(first.status).toBe(200);
     const existingKey = first.body.existingCvKey;
@@ -418,6 +451,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('iteration', '1')
       .field('existingCvKey', existingKey)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -433,6 +467,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(first.status).toBe(200);
     const key = first.body.bestCvKey;
@@ -441,6 +476,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('iteration', '1')
       .field('existingCvKey', key)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -449,6 +485,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('iteration', '2')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(third.status).toBe(200);
@@ -457,6 +494,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('iteration', '3')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(fourth.status).toBe(400);
@@ -485,6 +523,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -517,6 +556,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -546,6 +586,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('template1', 'modern')
       .field('template2', 'professional')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -575,6 +616,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('templates', JSON.stringify(['modern', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -612,6 +654,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(200);
@@ -668,6 +711,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const coverCalls = customGeneratePdf.mock.calls.filter(
@@ -692,6 +736,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Only .pdf, .doc, .docx files are allowed');
@@ -701,6 +746,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('jobDescriptionUrl required');
@@ -731,6 +777,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/cover letter/);
@@ -806,6 +853,7 @@ describe('/api/compile', () => {
       .post('/api/compile')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
       .field('existingCvTextKey', 'cv.txt')
       .field('addedSkills', JSON.stringify(['aws']))
       .field('designation', 'Team Lead');
