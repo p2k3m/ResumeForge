@@ -1749,17 +1749,30 @@ export default function registerProcessCv(app, generativeModel) {
         skipRequiredSections: true,
         defaultHeading: '',
       });
-      const coverBuffer = await generatePdf(sanitizedCover, coverTemplate1, {
-        skipRequiredSections: true,
-        defaultHeading: '',
-      }, generativeModel);
+      const coverBuffer = await generatePdf(
+        sanitizedCover,
+        coverTemplate1,
+        {
+          skipRequiredSections: true,
+          defaultHeading: '',
+        },
+        generativeModel,
+      );
       const coverDate = new Date().toISOString().split('T')[0];
-      const coverKey = path.join(
+      const coverTimestamp = Date.now();
+      const coverBasePath = [
         sanitizedName,
         'enhanced',
         coverDate,
         'cover_letter',
-        `${Date.now()}-cover_letter.pdf`
+      ];
+      const coverKey = path.join(
+        ...coverBasePath,
+        `${coverTimestamp}-cover_letter.pdf`,
+      );
+      const coverTextKey = path.join(
+        ...coverBasePath,
+        `${coverTimestamp}-cover_letter.txt`,
       );
       await s3.send(
         new PutObjectCommand({
@@ -1767,7 +1780,15 @@ export default function registerProcessCv(app, generativeModel) {
           Key: coverKey,
           Body: coverBuffer,
           ContentType: 'application/pdf',
-        })
+        }),
+      );
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: coverTextKey,
+          Body: sanitizedCover,
+          ContentType: 'text/plain',
+        }),
       );
 
       const cvUrl = await getSignedUrl(
@@ -1778,7 +1799,12 @@ export default function registerProcessCv(app, generativeModel) {
       const coverUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: coverKey }),
-        { expiresIn: 3600 }
+        { expiresIn: 3600 },
+      );
+      const coverTextUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: coverTextKey }),
+        { expiresIn: 3600 },
       );
 
       let atsMetrics;
@@ -1835,6 +1861,8 @@ export default function registerProcessCv(app, generativeModel) {
       res.json({
         cvUrl,
         coverLetterUrl: coverUrl,
+        coverLetterTextUrl: coverTextUrl,
+        coverLetterText: sanitizedCover,
         atsScore,
         chanceOfSelection,
         improvement,
