@@ -64,6 +64,8 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
+  const [coverLetterTextUrl, setCoverLetterTextUrl] = useState('')
+  const [coverLetterText, setCoverLetterText] = useState('')
   const [newAdditions, setNewAdditions] = useState([])
   const [addedProjects, setAddedProjects] = useState([])
   const [addedCertifications, setAddedCertifications] = useState([])
@@ -365,6 +367,8 @@ function App() {
       setChanceOfSelection(data.chanceOfSelection)
       setCvUrl(data.cvUrl || '')
       setCoverLetterUrl(data.coverLetterUrl || '')
+      setCoverLetterTextUrl(data.coverLetterTextUrl || '')
+      setCoverLetterText(data.coverLetterText || '')
       setNewAdditions(
         [
           ...(data.addedSkills || []).map((s) =>
@@ -800,6 +804,24 @@ function App() {
                   Download Cover Letter
                 </a>
               )}
+              {coverLetterTextUrl && (
+                <a
+                  href={coverLetterTextUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-green-600 text-white rounded"
+                >
+                  Download Cover Letter Text
+                </a>
+              )}
+            </div>
+          )}
+          {coverLetterText && (
+            <div className="mt-4">
+              <h3 className="font-semibold mb-2">Cover Letter Text</h3>
+              <pre className="bg-gray-100 p-4 rounded whitespace-pre-wrap">
+                {coverLetterText}
+              </pre>
             </div>
           )}
           {newAdditions.length > 0 && (
