@@ -19,6 +19,8 @@ import { logEvaluation, logSession } from '../services/dynamo.js';
 
 import { uploadResume, parseUserAgent, validateUrl } from '../lib/serverUtils.js';
 
+import { JOB_FETCH_USER_AGENT } from '../config/http.js';
+
 import {
   extractText,
   classifyDocument,
@@ -49,15 +51,12 @@ import {
   BLOCKED_PATTERNS
 } from '../server.js';
 
-const DEFAULT_USER_AGENT =
-  process.env.JOB_FETCH_USER_AGENT ||
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const DEFAULT_FETCH_TIMEOUT_MS =
   parseInt(process.env.JOB_FETCH_TIMEOUT_MS || REQUEST_TIMEOUT_MS, 10);
 
 export async function fetchJobDescription(
   url,
-  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = DEFAULT_USER_AGENT } = {},
+  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = JOB_FETCH_USER_AGENT } = {},
 ) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid URL');
@@ -1047,7 +1046,7 @@ export default function registerProcessCv(app, generativeModel) {
         jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
-        const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
+        const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
         let jobDescription = '';
         try {
           jobDescription = await fetchJobDescription(jobDescriptionUrl, {
@@ -1095,7 +1094,7 @@ export default function registerProcessCv(app, generativeModel) {
           jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
           if (!jobDescriptionUrl)
             return next(createError(400, 'invalid jobDescriptionUrl'));
-          const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
+          const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
           let jobDescriptionHtml = '';
           try {
             jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
@@ -1120,7 +1119,7 @@ export default function registerProcessCv(app, generativeModel) {
         jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
-        const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
+        const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
         let jobDescriptionHtml = '';
         try {
           jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
@@ -1694,7 +1693,7 @@ export default function registerProcessCv(app, generativeModel) {
       try {
         jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
-          userAgent: req.headers['user-agent'] || DEFAULT_USER_AGENT,
+          userAgent: req.headers['user-agent'] || JOB_FETCH_USER_AGENT,
         });
         ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
           jobDescriptionHtml,

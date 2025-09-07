@@ -29,6 +29,7 @@ import { generativeModel } from './geminiClient.js';
 import registerProcessCv from './routes/processCv.js';
 import { generatePdf as _generatePdf } from './services/generatePdf.js';
 import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from './config/puppeteer.js';
+import { JOB_FETCH_USER_AGENT } from './config/http.js';
 import { uploadResume, parseUserAgent, validateUrl } from './lib/serverUtils.js';
 import {
   parseContent,
@@ -210,9 +211,6 @@ function selectTemplates({
 
 const region = process.env.AWS_REGION || 'ap-south-1';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
-const JOB_FETCH_USER_AGENT =
-  process.env.JOB_FETCH_USER_AGENT ||
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const BLOCKED_PATTERNS = [
   /captcha/i,
   /access denied/i,
@@ -1027,5 +1025,6 @@ export {
   rateLimiter,
   PUPPETEER_HEADLESS,
   PUPPETEER_ARGS,
-  BLOCKED_PATTERNS
+  BLOCKED_PATTERNS,
+  JOB_FETCH_USER_AGENT
 };

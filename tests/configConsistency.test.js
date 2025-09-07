@@ -10,6 +10,7 @@ jest.unstable_mockModule('axios', () => ({ default: { get: mockAxiosGet } }));
 jest.unstable_mockModule('puppeteer', () => ({ default: { launch: mockLaunch } }));
 
 const { PUPPETEER_HEADLESS } = await import('../config/puppeteer.js');
+const { JOB_FETCH_USER_AGENT } = await import('../config/http.js');
 const serverModule = await import('../server.js');
 const { BLOCKED_PATTERNS } = serverModule;
 const { fetchJobDescription } = await import('../routes/processCv.js');
@@ -42,6 +43,12 @@ describe('shared configuration values', () => {
     expect(mockLaunch).toHaveBeenCalledWith(
       expect.objectContaining({ headless: PUPPETEER_HEADLESS })
     );
+  });
+
+  test('fetchJobDescription uses exported JOB_FETCH_USER_AGENT', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: '' });
+    await fetchJobDescription('http://example.com');
+    expect(mockPage.setUserAgent).toHaveBeenCalledWith(JOB_FETCH_USER_AGENT);
   });
 
   test('fetchJobDescription honors shared BLOCKED_PATTERNS', async () => {
