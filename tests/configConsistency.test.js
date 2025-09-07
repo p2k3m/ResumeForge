@@ -13,7 +13,7 @@ const { PUPPETEER_HEADLESS } = await import('../config/puppeteer.js');
 const { JOB_FETCH_USER_AGENT } = await import('../config/http.js');
 const serverModule = await import('../server.js');
 const { BLOCKED_PATTERNS } = serverModule;
-const { fetchJobDescription } = await import('../routes/processCv.js');
+const { fetchJobDescription } = await import('../services/jobFetch.js');
 
 describe('shared configuration values', () => {
   const mockPage = {

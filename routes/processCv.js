@@ -1,6 +1,4 @@
 import path from 'path';
-import axios from 'axios';
-import puppeteer from 'puppeteer';
 import crypto from 'crypto';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -20,6 +18,7 @@ import { logEvaluation, logSession } from '../services/dynamo.js';
 import { uploadResume, parseUserAgent, validateUrl } from '../lib/serverUtils.js';
 
 import { JOB_FETCH_USER_AGENT } from '../config/http.js';
+import { fetchJobDescription } from '../services/jobFetch.js';
 
 import {
   extractText,
@@ -45,53 +44,8 @@ import {
   REQUEST_TIMEOUT_MS,
   sanitizeGeneratedText,
   parseAiJson,
-  generatePdf,
-  PUPPETEER_HEADLESS,
-  PUPPETEER_ARGS,
-  BLOCKED_PATTERNS
+  generatePdf
 } from '../server.js';
-
-const DEFAULT_FETCH_TIMEOUT_MS =
-  parseInt(process.env.JOB_FETCH_TIMEOUT_MS || REQUEST_TIMEOUT_MS, 10);
-
-export async function fetchJobDescription(
-  url,
-  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = JOB_FETCH_USER_AGENT } = {},
-) {
-  const valid = await validateUrl(url);
-  if (!valid) throw new Error('Invalid URL');
-  try {
-    const { data } = await axios.get(valid, {
-      timeout,
-      headers: { 'User-Agent': userAgent },
-    });
-    if (data && data.trim()) {
-      if (BLOCKED_PATTERNS.some((re) => re.test(data))) {
-        throw new Error('Blocked content');
-      }
-      return data;
-    }
-  } catch (err) {
-    if (err.message === 'Blocked content') throw err;
-    // ignore other errors and fallback to puppeteer
-  }
-  const browser = await puppeteer.launch({
-    headless: PUPPETEER_HEADLESS,
-    args: PUPPETEER_ARGS
-  });
-  try {
-    const page = await browser.newPage();
-    await page.setUserAgent(userAgent);
-    await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
-    const content = await page.content();
-    if (BLOCKED_PATTERNS.some((re) => re.test(content))) {
-      throw new Error('Blocked content');
-    }
-    return content;
-  } finally {
-    await browser.close();
-  }
-}
 
 const createError = (status, message) => {
   const err = new Error(message);
