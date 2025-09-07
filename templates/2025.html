@@ -24,7 +24,7 @@
     <main class="content">
       {{#if skillsMatrix}}
       <section class="section skills-matrix">
-        <h2>Skills</h2>
+        <h2><i class="fa-solid fa-circle section-icon" aria-hidden="true"></i>Skills</h2>
         <div class="skills-grid">
           {{#each skillsMatrix}}
           <div class="skill">
@@ -42,7 +42,7 @@
       {{/if}}
       {{#if languages}}
       <section class="section languages">
-        <h2>Languages</h2>
+        <h2><i class="fa-solid fa-circle section-icon" aria-hidden="true"></i>Languages</h2>
         <div class="languages-grid">
           {{#each languages}}
           <div class="language">
@@ -57,7 +57,7 @@
       {{/if}}
       {{#each sections}}
       <section class="section">
-        {{#if heading}}<h2>{{heading}}</h2>{{/if}}
+        {{#if heading}}<h2><i class="fa-solid fa-circle section-icon" aria-hidden="true"></i>{{heading}}</h2>{{/if}}
         {{#if items}}
           <ul>
             {{#each items}}

@@ -47,6 +47,14 @@ body {
   color: var(--accent);
   border-bottom: 2px solid var(--accent);
   padding-bottom: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.section h2 .section-icon {
+  margin-right: 8px;
+  font-size: 0.9em;
+  color: var(--accent);
 }
 
 .section ul {
