@@ -26,13 +26,15 @@ const isValidUrl = (url) => {
   }
 }
 
-const atsBreakdownMetrics = [
-  'layoutSearchability',
-  'atsReadability',
-  'impact',
-  'crispness',
-  'grammar'
-]
+const atsMetricCategories = {
+  Layout: ['layoutSearchability'],
+  Readability: ['atsReadability'],
+  Impact: ['impact'],
+  Crispness: ['crispness'],
+  Grammar: ['grammar']
+}
+
+const allAtsMetrics = Object.values(atsMetricCategories).flat()
 
 const otherQualityMetricCategories = {
   'Keyword Optimization': ['keywordDensity'],
@@ -492,47 +494,60 @@ function App() {
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
           <p className="text-purple-800 mb-2">ATS Score: {result.atsScore}%</p>
           {result.atsMetrics &&
-            atsBreakdownMetrics.some((m) => result.atsMetrics[m] != null) && (
+            allAtsMetrics.some((m) => result.atsMetrics[m] != null) && (
               <div className="text-purple-800 mb-2">
                 <p className="font-semibold mb-1">ATS Breakdown</p>
-                <ul>
-                  {atsBreakdownMetrics.map((metric) => {
-                    const score = result.atsMetrics[metric]
-                    if (score == null) return null
-                    const status = getScoreStatus(score)
-                    return (
-                      <li key={metric} className="mb-1">
-                        <span>
-                          {formatMetricName(metric)}: {score}% ({status})
-                        </span>
-                        <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {Object.entries(atsMetricCategories).map(
+                    ([category, metrics]) => {
+                      const scores = metrics
+                        .map((m) => result.atsMetrics[m])
+                        .filter((s) => s != null)
+                      if (scores.length === 0) return null
+                      const avgScore = Math.round(
+                        scores.reduce((a, s) => a + s, 0) / scores.length
+                      )
+                      const status = getScoreStatus(avgScore)
+                      const metricKey = metrics[0]
+                      return (
+                        <div
+                          key={category}
+                          className="p-4 bg-white border rounded shadow-sm"
+                        >
+                          <p className="font-medium">{category}</p>
+                          <p>
+                            {avgScore}% ({status})
+                          </p>
                           <button
-                            onClick={() => handleFix(metric)}
-                            className="ml-2 text-blue-600 underline"
+                            onClick={() => handleFix(metricKey)}
+                            className="mt-1 text-blue-600 underline"
                           >
                             Fix
                           </button>
-                          {metricTips[metric] && (
+                          {metricTips[metricKey] && (
                             <span
                               className={`block text-sm ${
-                                score >= 70 ? 'text-green-600' : 'text-purple-600'
+                                avgScore >= 70
+                                  ? 'text-green-600'
+                                  : 'text-purple-600'
                               }`}
                             >
-                              {score >= 70
-                                ? `Great job: ${metricTips[metric]}`
-                                : metricTips[metric]}
+                              {avgScore >= 70
+                                ? `Great job: ${metricTips[metricKey]}`
+                                : metricTips[metricKey]}
                             </span>
                           )}
-                          {score < 70 && metricSuggestions[metric] && (
-                            <div className="mt-1 text-sm text-purple-700">
-                              {metricSuggestions[metric]}
-                            </div>
-                          )}
-                        </>
-                      </li>
-                    )
-                  })}
-                </ul>
+                          {avgScore < 70 &&
+                            metricSuggestions[metricKey] && (
+                              <div className="mt-1 text-sm text-purple-700">
+                                {metricSuggestions[metricKey]}
+                              </div>
+                            )}
+                        </div>
+                      )
+                    }
+                  )}
+                </div>
               </div>
             )}
 
