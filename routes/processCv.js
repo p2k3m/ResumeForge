@@ -52,6 +52,9 @@ const DEFAULT_USER_AGENT =
 const DEFAULT_FETCH_TIMEOUT_MS =
   parseInt(process.env.JOB_FETCH_TIMEOUT_MS || REQUEST_TIMEOUT_MS, 10);
 
+const PUPPETEER_HEADLESS =
+  process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
+
 export async function fetchJobDescription(
   url,
   { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = DEFAULT_USER_AGENT } = {}
@@ -65,8 +68,10 @@ export async function fetchJobDescription(
   } catch (err) {
     // ignore and fallback to puppeteer
   }
-
-  const browser = await puppeteer.launch({ headless: 'new' });
+  const browser = await puppeteer.launch({
+    headless: PUPPETEER_HEADLESS,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
   try {
     const page = await browser.newPage();
     await page.setUserAgent(userAgent);

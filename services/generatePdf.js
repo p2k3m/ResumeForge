@@ -33,6 +33,9 @@ const DEFAULT_SKILL_ICONS = {
   aws: 'fa-brands fa-aws'
 };
 
+const PUPPETEER_HEADLESS =
+  process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';
+
 function proficiencyToLevel(str = '') {
   const s = String(str).toLowerCase();
   if (/native|bilingual/.test(s)) return 100;
@@ -249,7 +252,10 @@ export async function generatePdf(
   let browser;
   try {
     // Launch using Chromium's default sandboxing.
-    browser = await puppeteer.launch();
+    browser = await puppeteer.launch({
+      headless: PUPPETEER_HEADLESS,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
