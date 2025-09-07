@@ -273,7 +273,7 @@ export default function registerProcessCv(app, generativeModel) {
           return res
             .status(400)
             .json({
-              error: `You have uploaded a ${docType} and not a CV – please upload the correct CV`,
+              error: `You have uploaded a ${docType}. Please upload a CV only.`,
             });
         }
         const applicantName =
@@ -585,7 +585,7 @@ export default function registerProcessCv(app, generativeModel) {
         return next(
           createError(
             400,
-            `You have uploaded a ${docType} and not a CV – please upload the correct CV`
+            `You have uploaded a ${docType}. Please upload a CV only.`
           )
         );
       }
