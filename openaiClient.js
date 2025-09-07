@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { File } from 'node:buffer';
 import path from 'path';
 import { getSecrets } from './config/secrets.js';
+import { generativeModel } from './geminiClient.js';
 
 // Ordered list of supported models. Unavailable or experimental models should
 // be placed at the end or removed to avoid unnecessary `model_not_found`
@@ -17,6 +18,14 @@ const metricNames = [
   'sectionHeadingClarity',
   'contactInfoCompleteness',
 ];
+
+// Gemini responses may wrap JSON in additional text or code fences.
+// This helper extracts the first JSON object for parsing.
+function extractJson(text) {
+  const match = text?.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON object found');
+  return JSON.parse(match[0]);
+}
 
 let clientPromise;
 async function getClient() {
@@ -150,6 +159,15 @@ export async function requestEnhancedCV({
       throw err;
     }
   }
+  if (generativeModel?.generateContent) {
+    try {
+      const prompt = `${refinedInstructions}\nReturn JSON with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics (metric, original, improved, improvement).`;
+      const result = await generativeModel.generateContent(prompt);
+      return result?.response?.text?.();
+    } catch (err) {
+      lastError = err;
+    }
+  }
   throw lastError;
 }
 
@@ -211,6 +229,16 @@ export async function requestCoverLetter({
       throw err;
     }
   }
+  if (generativeModel?.generateContent) {
+    try {
+      const prompt =
+        'You are an expert career coach. Write a concise and professional cover letter tailored to the provided job description and resume.';
+      const result = await generativeModel.generateContent(prompt);
+      return result?.response?.text?.();
+    } catch (err) {
+      lastError = err;
+    }
+  }
   throw lastError;
 }
 
@@ -257,6 +285,18 @@ export async function requestAtsAnalysis(text) {
     } catch (err) {
       lastError = err;
       if (err?.code === 'model_not_found') continue;
+    }
+  }
+  if (generativeModel?.generateContent) {
+    try {
+      const result = await generativeModel.generateContent(`${prompt}\n\n${text}`);
+      const parsed = extractJson(result?.response?.text?.());
+      if (!metricNames.every((m) => typeof parsed[m] === 'number')) {
+        throw new Error('invalid metrics');
+      }
+      return parsed;
+    } catch (err) {
+      lastError = err;
     }
   }
   throw lastError;
