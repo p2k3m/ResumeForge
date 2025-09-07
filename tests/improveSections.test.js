@@ -21,11 +21,13 @@ test('missing sections return empty strings and skip OpenAI call', async () => {
     experience: 'Worked hard',
     education: undefined,
     certifications: '',
+    projects: '',
   };
   const result = await improveSections(sections, 'JD');
   expect(result.summary).toBe('');
   expect(result.education).toBe('');
   expect(result.certifications).toBe('');
+  expect(result.projects).toBe('');
   expect(result.experience).toBe('experience-improved');
   expect(requestSectionImprovement).toHaveBeenCalledTimes(1);
   expect(requestSectionImprovement).toHaveBeenCalledWith({
@@ -36,13 +38,38 @@ test('missing sections return empty strings and skip OpenAI call', async () => {
 });
 
 test('all sections empty skip OpenAI entirely', async () => {
-  const sections = { summary: '', experience: '', education: '', certifications: '' };
+  const sections = {
+    summary: '',
+    experience: '',
+    education: '',
+    certifications: '',
+    projects: '',
+  };
   const result = await improveSections(sections, 'JD');
   expect(result).toEqual({
     summary: '',
     experience: '',
     education: '',
     certifications: '',
+    projects: '',
   });
   expect(requestSectionImprovement).not.toHaveBeenCalled();
+});
+
+test('projects section triggers OpenAI call', async () => {
+  const sections = {
+    summary: '',
+    experience: '',
+    education: '',
+    certifications: '',
+    projects: 'Side project',
+  };
+  const result = await improveSections(sections, 'JD');
+  expect(result.projects).toBe('projects-improved');
+  expect(requestSectionImprovement).toHaveBeenCalledTimes(1);
+  expect(requestSectionImprovement).toHaveBeenCalledWith({
+    sectionName: 'projects',
+    sectionText: 'Side project',
+    jobDescription: 'JD',
+  });
 });

@@ -37,6 +37,7 @@ import {
   extractLanguages,
   collectSectionText,
   extractResumeSkills,
+  generateProjectSummary,
   calculateMatchScore,
   region,
   REQUEST_TIMEOUT_MS,
@@ -144,7 +145,13 @@ function computeJdMismatches(resumeText = '', jobHtml = '', jobSkills = []) {
 
 export async function improveSections(sections, jobDescription) {
   const improvedSections = {};
-  for (const key of ['summary', 'experience', 'education', 'certifications']) {
+  for (const key of [
+    'summary',
+    'experience',
+    'education',
+    'certifications',
+    'projects',
+  ]) {
     const text = sections[key]?.trim();
     if (!text) {
       improvedSections[key] = '';
@@ -730,6 +737,13 @@ export default function registerProcessCv(app, generativeModel) {
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
+      const resumeSkills = extractResumeSkills(text);
+      const projectSummary = await generateProjectSummary(
+        jobDescription,
+        resumeSkills,
+        jobSkills,
+        generativeModel
+      );
       let improvedCv = [
         sanitizedName,
         '# Summary',
@@ -741,6 +755,16 @@ export default function registerProcessCv(app, generativeModel) {
         '# Certifications',
         improvedSections.certifications,
       ].join('\n\n');
+      if (improvedSections.projects?.trim() || projectSummary) {
+        const projectLines = [];
+        if (improvedSections.projects?.trim()) {
+          projectLines.push(improvedSections.projects.trim());
+        }
+        if (projectSummary) {
+          projectLines.push(`- ${projectSummary}`);
+        }
+        improvedCv += `\n\n# Projects\n${projectLines.join('\n')}`;
+      }
       if (userSkills.length) {
         improvedCv += `\n\n# Skills\n${userSkills.join(', ')}`;
       }
@@ -754,7 +778,6 @@ export default function registerProcessCv(app, generativeModel) {
           improvedCv += `\n\n# Languages\n${langLines}`;
         }
       }
-      const resumeSkills = extractResumeSkills(text);
       const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
       const enhancedMatch = calculateMatchScore(
         jobSkills,
