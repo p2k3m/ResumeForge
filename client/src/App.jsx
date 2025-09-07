@@ -17,6 +17,15 @@ const metricTips = {
 const formatMetricName = (name) =>
   name.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())
 
+const isValidUrl = (url) => {
+  try {
+    new URL(url)
+    return true
+  } catch {
+    return false
+  }
+}
+
 const atsBreakdownMetrics = [
   'layoutSearchability',
   'atsReadability',
@@ -60,6 +69,9 @@ function App() {
   const [metricSuggestions, setMetricSuggestions] = useState({})
   const [gapSuggestion, setGapSuggestion] = useState('')
   const [showGapModal, setShowGapModal] = useState(false)
+  const [jobUrlError, setJobUrlError] = useState('')
+  const [linkedinUrlError, setLinkedinUrlError] = useState('')
+  const [credlyUrlError, setCredlyUrlError] = useState('')
   const fileInputRef = useRef(null)
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -87,6 +99,30 @@ function App() {
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
     if (file) handleFileChange(file)
+  }
+
+  const handleJobUrlBlur = () => {
+    if (jobUrl && !isValidUrl(jobUrl)) {
+      setJobUrlError('Please enter a valid URL.')
+    } else {
+      setJobUrlError('')
+    }
+  }
+
+  const handleLinkedinBlur = () => {
+    if (linkedinUrl && !isValidUrl(linkedinUrl)) {
+      setLinkedinUrlError('Please enter a valid URL.')
+    } else {
+      setLinkedinUrlError('')
+    }
+  }
+
+  const handleCredlyBlur = () => {
+    if (credlyUrl && !isValidUrl(credlyUrl)) {
+      setCredlyUrlError('Please enter a valid URL.')
+    } else {
+      setCredlyUrlError('')
+    }
   }
 
   const handleSubmit = async (nameOverride) => {
@@ -351,8 +387,12 @@ function App() {
 
       <div
         data-testid="dropzone"
-        className={`mb-4 p-4 border-2 border-dashed rounded ${
-          isDragging ? 'border-blue-500 bg-blue-100' : 'border-purple-300'
+        className={`mb-1 p-4 border-2 border-dashed rounded ${
+          disabled && !cvFile
+            ? 'border-red-500'
+            : isDragging
+            ? 'border-blue-500 bg-blue-100'
+            : 'border-purple-300'
         } cursor-pointer text-center text-purple-700`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -377,29 +417,62 @@ function App() {
         />
       </div>
 
+      {disabled && !cvFile && (
+        <p className="text-red-600 text-sm mb-4">Resume file is required.</p>
+      )}
+
       <input
         type="url"
         placeholder="Job Description URL"
         value={jobUrl}
         onChange={(e) => setJobUrl(e.target.value)}
-        className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+        onBlur={handleJobUrlBlur}
+        className={`w-full max-w-md p-2 border rounded ${
+          (disabled && !jobUrl) || jobUrlError ? 'border-red-500' : 'border-purple-300'
+        } mb-1`}
       />
+
+      {disabled && !jobUrl && (
+        <p className="text-red-600 text-sm mb-4">Job description URL is required.</p>
+      )}
+      {jobUrl && jobUrlError && (
+        <p className="text-red-600 text-sm mb-4">{jobUrlError}</p>
+      )}
 
       <input
         type="url"
         placeholder="LinkedIn Profile URL"
         value={linkedinUrl}
         onChange={(e) => setLinkedinUrl(e.target.value)}
-        className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+        onBlur={handleLinkedinBlur}
+        className={`w-full max-w-md p-2 border rounded ${
+          (disabled && !linkedinUrl) || linkedinUrlError
+            ? 'border-red-500'
+            : 'border-purple-300'
+        } mb-1`}
       />
+
+      {disabled && !linkedinUrl && (
+        <p className="text-red-600 text-sm mb-4">LinkedIn profile URL is required.</p>
+      )}
+      {linkedinUrl && linkedinUrlError && (
+        <p className="text-red-600 text-sm mb-4">{linkedinUrlError}</p>
+      )}
 
       <input
         type="url"
         placeholder="Credly Profile URL (optional)"
         value={credlyUrl}
         onChange={(e) => setCredlyUrl(e.target.value)}
-        className="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+        onBlur={handleCredlyBlur}
+        className={`w-full max-w-md p-2 border rounded ${
+          credlyUrl && credlyUrlError ? 'border-red-500' : 'border-purple-300'
+        } mb-1`}
       />
+
+      {credlyUrl && credlyUrlError && (
+        <p className="text-red-600 text-sm mb-4">{credlyUrlError}</p>
+      )}
 
       <button
         onClick={handleSubmit}
