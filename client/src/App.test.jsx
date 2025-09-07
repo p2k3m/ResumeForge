@@ -68,6 +68,19 @@ test('evaluates CV and displays results', async () => {
   expect(skillInputs.length).toBe(2)
 })
 
+test('updates file label on selection', () => {
+  render(<App />)
+  expect(screen.getByText('Browse... No file selected.')).toBeInTheDocument()
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] }
+    }
+  )
+  expect(screen.getByText('Browse... resume.pdf')).toBeInTheDocument()
+})
+
 test('allows file to be dropped in drop zone', async () => {
   fetch.mockResolvedValueOnce({
     ok: true,
