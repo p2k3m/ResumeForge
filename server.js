@@ -503,8 +503,12 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     .filter(Boolean)
     .join('\n');
   const education = [
-    extractEducation(resumeText).join('\n'),
-    extractEducation(linkedinData.education || []).join('\n'),
+    extractEducation(resumeText)
+      .map((e) => e.entry)
+      .join('\n'),
+    extractEducation(linkedinData.education || [])
+      .map((e) => e.entry)
+      .join('\n'),
   ]
     .filter(Boolean)
     .join('\n');

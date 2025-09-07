@@ -71,7 +71,14 @@
                   </ul>
                 </li>
               {{else}}
-                <li>{{{this}}}</li>
+                {{#if this.entry}}
+                  <li>
+                    <span class="edu-entry">{{{this.entry}}}</span>
+                    {{#if this.gpa}}<span class="edu-gpa">GPA: {{this.gpa}}</span>{{/if}}
+                  </li>
+                {{else}}
+                  <li>{{{this}}}</li>
+                {{/if}}
               {{/if}}
             {{/each}}
           </ul>

@@ -1027,7 +1027,24 @@ function extractExperience(source) {
 
 function extractEducation(source) {
   if (!source) return [];
-  if (Array.isArray(source)) return source.map((s) => String(s));
+
+  const parseEntry = (text = '') => {
+    let gpa = null;
+    const gpaMatch = text.match(/\bGPA[:\s]*([0-9.]+(?:\/[0-9.]+)?)\b/i);
+    if (gpaMatch) {
+      gpa = gpaMatch[1];
+      const gpaText = gpaMatch[0];
+      text = text
+        .replace(gpaText, '')
+        .replace(/[,;\-]+\s*$/, '')
+        .trim();
+    }
+    return { entry: text.trim(), gpa };
+  };
+
+  if (Array.isArray(source)) {
+    return source.map((s) => parseEntry(String(s)));
+  }
   const lines = String(source).split(/\r?\n/);
   const entries = [];
   let inSection = false;
@@ -1044,9 +1061,9 @@ function extractEducation(source) {
     if (inSection) {
       const match = trimmed.match(/^[-*]\s+(.*)/);
       if (match) {
-        entries.push(match[1].trim());
+        entries.push(parseEntry(match[1].trim()));
       } else if (trimmed) {
-        entries.push(trimmed);
+        entries.push(parseEntry(trimmed));
       }
     }
   }
