@@ -125,6 +125,10 @@ function validateUrl(input) {
 }
 
 const app = express();
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', process.env.TRUST_PROXY);
+}
+
 const rateLimiter = createRateLimiter({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 60 * 1000,
   max: Number(process.env.RATE_LIMIT_MAX) || 100
@@ -132,6 +136,16 @@ const rateLimiter = createRateLimiter({
 app.use(rateLimiter);
 app.use(cors());
 app.use(express.json());
+
+if (process.env.ENFORCE_HTTPS === 'true') {
+  app.use((req, res, next) => {
+    if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+      return next();
+    }
+    res.redirect(301, 'https://' + req.headers.host + req.originalUrl);
+  });
+}
+
 
 const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
