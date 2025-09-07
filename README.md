@@ -82,6 +82,52 @@ Each item includes:
 - Optional URLs like `jobDescriptionUrl`, `linkedinProfileUrl`, and `credlyProfileUrl`.
 - Fields such as `docType`, `atsScore`, `improvement`, `cvKey`, and `coverLetterKey` when relevant.
 
+## Scheduled Cleanup
+Old log records are pruned daily to keep the DynamoDB table manageable. Run the provided script which removes items older than a
+retention window (30 days by default).
+
+```bash
+node scripts/cleanupOldRecords.js
+```
+
+### Cron example
+```
+0 0 * * * cd /path/to/ResumeForge && node scripts/cleanupOldRecords.js >> /var/log/resumeforge-cleanup.log 2>&1
+```
+
+### Terraform / Lambda example
+```hcl
+resource "aws_lambda_function" "cleanup" {
+  filename = "cleanup.zip"
+  handler  = "cleanupOldRecords.handler"
+  runtime  = "nodejs18.x"
+  environment {
+    variables = {
+      RETENTION_DAYS = "30"
+      DYNAMO_TABLE   = "ResumeForgeLogs"
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_rule" "daily" {
+  schedule_expression = "rate(1 day)"
+}
+
+resource "aws_cloudwatch_event_target" "cleanup" {
+  rule      = aws_cloudwatch_event_rule.daily.name
+  target_id = "dynamo-cleanup"
+  arn       = aws_lambda_function.cleanup.arn
+}
+
+resource "aws_lambda_permission" "allow_events" {
+  statement_id  = "AllowExecutionFromCloudWatch"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cleanup.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.daily.arn
+}
+```
+
 ## Local Development
 1. Install dependencies in both the server and client directories:
    ```bash

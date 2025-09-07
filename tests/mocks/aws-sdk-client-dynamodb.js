@@ -22,3 +22,17 @@ export class PutItemCommand {
     this.__type = 'PutItemCommand';
   }
 }
+
+export class ScanCommand {
+  constructor(input) {
+    this.input = input;
+    this.__type = 'ScanCommand';
+  }
+}
+
+export class DeleteItemCommand {
+  constructor(input) {
+    this.input = input;
+    this.__type = 'DeleteItemCommand';
+  }
+}
