@@ -8,7 +8,7 @@ import {
   mergeDuplicateSections,
   normalizeHeading
 } from './parseContent.js';
-import { DEFAULT_SKILL_ICONS } from '../skillIcons.js';
+import { getSkillIcon } from '../skillIcons.js';
 
 const ALL_TEMPLATES = [
   'modern',
@@ -212,7 +212,7 @@ export async function generatePdf(
             if (level > 100) level = 100;
           }
           if (!icon) {
-            icon = DEFAULT_SKILL_ICONS[name.toLowerCase()] || null;
+            icon = getSkillIcon(name);
           }
           let iconHtml = '';
           if (icon) {

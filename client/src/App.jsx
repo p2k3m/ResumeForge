@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import skillResources from './skillResources'
 import { getScoreStatus } from './scoreStatus'
-import { DEFAULT_SKILL_ICONS } from '../../skillIcons.js'
+import { getSkillIcon } from '../../skillIcons.js'
 
 const metricTips = {
   layoutSearchability: 'Use bullet points for better scanning.',
@@ -174,7 +174,7 @@ function App() {
       setSkills(
         (data.missingSkills || []).map((s) => ({
           name: s,
-          icon: DEFAULT_SKILL_ICONS[s.toLowerCase()] || '',
+          icon: getSkillIcon(s),
           level: 70
         }))
       )
@@ -208,8 +208,7 @@ function App() {
         if (i !== idx) return s
         const updated = { ...s, [field]: value }
         if (field === 'name') {
-          const icon = DEFAULT_SKILL_ICONS[value.toLowerCase()]
-          if (icon) updated.icon = icon
+          updated.icon = getSkillIcon(value)
           if (!updated.level) updated.level = 70
         }
         return updated
