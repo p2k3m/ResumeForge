@@ -174,6 +174,35 @@ export async function improveSections(sections, jobDescription) {
   return improvedSections;
 }
 
+function withTimeout(handler, timeoutMs = 10000) {
+  return async (req, res, next) => {
+    const start = Date.now();
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      if (!res.headersSent) {
+        next(createError(503, 'processing timeout'));
+      }
+    }, timeoutMs);
+    const end = res.end;
+    res.end = function (...args) {
+      const duration = Date.now() - start;
+      res.setHeader('X-Processing-Time', duration);
+      console.log(
+        `[processCv] ${req.method} ${req.originalUrl} took ${duration}ms`,
+      );
+      end.apply(this, args);
+    };
+    try {
+      await handler(req, res, next);
+    } catch (err) {
+      if (!timedOut) next(err);
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+}
+
 export default function registerProcessCv(app, generativeModel) {
   app.post(
     '/api/evaluate',
@@ -183,7 +212,7 @@ export default function registerProcessCv(app, generativeModel) {
         next();
       });
     },
-    async (req, res, next) => {
+    withTimeout(async (req, res, next) => {
       const jobId = crypto.randomUUID();
       const ipAddress =
         (req.headers['x-forwarded-for'] || '')
@@ -412,7 +441,7 @@ export default function registerProcessCv(app, generativeModel) {
         console.error('evaluation failed', err);
         next(createError(500, 'evaluation failed'));
       }
-    }
+    })
   );
   app.post(
     '/api/process-cv',
@@ -422,7 +451,7 @@ export default function registerProcessCv(app, generativeModel) {
         next();
       });
     },
-    async (req, res, next) => {
+    withTimeout(async (req, res, next) => {
     const jobId = crypto.randomUUID();
     const s3 = new S3Client({ region });
     let bucket;
@@ -1688,7 +1717,7 @@ export default function registerProcessCv(app, generativeModel) {
         addedLanguages: selectedLanguagesArr,
         designation: designation || '',
       });
-    }
+    })
   );
 }
 
