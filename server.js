@@ -364,14 +364,14 @@ async function fetchHtml(url, { timeout = REQUEST_TIMEOUT_MS, userAgent = JOB_FE
       timeout,
       headers: { 'User-Agent': userAgent }
     });
-    if (
-      data &&
-      data.trim() &&
-      !BLOCKED_PATTERNS.some((re) => re.test(data))
-    ) {
+    if (data && data.trim()) {
+      if (BLOCKED_PATTERNS.some((re) => re.test(data))) {
+        throw new Error('Blocked content');
+      }
       return data;
     }
-  } catch {
+  } catch (err) {
+    if (err.message === 'Blocked content') throw err;
     // ignore and fall through to puppeteer
   }
   const browser = await puppeteer.launch({
@@ -382,7 +382,11 @@ async function fetchHtml(url, { timeout = REQUEST_TIMEOUT_MS, userAgent = JOB_FE
     const page = await browser.newPage();
     await page.setUserAgent(userAgent);
     await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
-    return await page.content();
+    const html = await page.content();
+    if (BLOCKED_PATTERNS.some((re) => re.test(html))) {
+      throw new Error('Blocked content');
+    }
+    return html;
   } finally {
     await browser.close();
   }
