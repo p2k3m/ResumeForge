@@ -376,7 +376,8 @@ describe('/api/process-cv', () => {
         expect(url).toContain(`/${sanitized}/enhanced/${date}/cover_letter/`);
         expect(url).toContain('cover_letter');
       } else {
-        expect(url).toContain(`/${sanitized}/enhanced/${date}/cv/`);
+        expect(url).toContain(`/${sanitized}/enhanced/${date}/`);
+        expect(url).not.toContain('/cover_letter/');
       }
     });
 
@@ -385,13 +386,11 @@ describe('/api/process-cv', () => {
       .filter((k) => k && k.endsWith('.pdf'));
     expect(pdfKeys).toHaveLength(5);
     const cvPrefix = `${sanitized}/cv/${date}/`;
-    const enhancedCvPrefix = `${sanitized}/enhanced/${date}/cv/`;
     const coverLetterPrefix = `${sanitized}/enhanced/${date}/cover_letter/`;
     const enhancedPrefix = `${sanitized}/enhanced/${date}/`;
     pdfKeys.forEach((k) => {
       expect(
         k.startsWith(cvPrefix) ||
-          k.startsWith(enhancedCvPrefix) ||
           k.startsWith(coverLetterPrefix) ||
           k.startsWith(enhancedPrefix)
       ).toBe(true);
