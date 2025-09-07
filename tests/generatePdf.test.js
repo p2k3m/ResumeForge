@@ -166,6 +166,25 @@ describe('generatePdf and parsing', () => {
     launchSpy.mockRestore();
   });
 
+  test('includes LinkedIn QR image when LinkedIn contact provided', async () => {
+    const setContent = jest.fn();
+    const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const close = jest.fn();
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockResolvedValue({ newPage, close });
+
+    await generatePdf('text', '2025', {
+      linkedinProfileUrl: 'https://www.linkedin.com/in/test'
+    });
+    expect(setContent).toHaveBeenCalled();
+    const html = setContent.mock.calls[0][0];
+    expect(html).toMatch(/<img[^>]+alt="LinkedIn QR code"/);
+
+    launchSpy.mockRestore();
+  });
+
   test('script tags render as text', () => {
     const tokens = parseContent('Jane Doe\n- uses <script>alert(1)</script> safely')
       .sections[0].items[0];
