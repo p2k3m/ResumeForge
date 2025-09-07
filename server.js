@@ -155,7 +155,37 @@ const upload = multer({
   }
 });
 
-const uploadResume = upload.single('resume');
+const uploadMiddleware = upload.single('resume');
+
+function detectMime(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+  const header = buffer.slice(0, 4).toString('binary');
+  if (header === '%PDF') return 'application/pdf';
+  if (header === 'PK\u0003\u0004') {
+    const ascii = buffer.toString('ascii');
+    if (ascii.includes('[Content_Types].xml') && ascii.includes('word/')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+  }
+  return null;
+}
+
+function uploadResume(req, res, cb) {
+  uploadMiddleware(req, res, (err) => {
+    if (err) return cb(err);
+    if (!req.file) return cb(null);
+    const detected = detectMime(req.file.buffer);
+    const allowed = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    if (!detected || !allowed.includes(detected)) {
+      return cb(new Error('Invalid file type. Only .pdf and .docx files are allowed'));
+    }
+    req.file.mimetype = detected;
+    cb(null);
+  });
+}
 
 const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025', 'sleek'];
 const CL_TEMPLATES = ['cover_modern', 'cover_classic', 'cover_2025'];

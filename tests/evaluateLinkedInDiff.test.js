@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 
+const pdfBuffer = Buffer.from('%PDF-1.4');
+
 jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: '' }) }
 }));
@@ -65,7 +67,7 @@ describe('/api/evaluate LinkedIn diff', () => {
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('credlyProfileUrl', 'https://credly.com/u/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', pdfBuffer, 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.missingExperience).toEqual(['Manager at AnotherCo']);
     expect(res.body.missingEducation).toEqual(['Masters Uni']);

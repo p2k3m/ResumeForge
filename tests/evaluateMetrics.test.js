@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 
+const pdfBuffer = Buffer.from('%PDF-1.4');
+
 jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: '' }) }
 }));
@@ -42,7 +44,7 @@ describe('/api/evaluate metrics', () => {
       .post('/api/evaluate')
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', pdfBuffer, 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.atsMetrics).toBeDefined();
     expect(res.body.atsMetrics).toEqual(
