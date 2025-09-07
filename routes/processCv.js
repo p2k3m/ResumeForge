@@ -19,6 +19,7 @@ import { uploadResume, parseUserAgent, validateUrl } from '../lib/serverUtils.js
 
 import { JOB_FETCH_USER_AGENT } from '../config/http.js';
 import { fetchJobDescription } from '../services/jobFetch.js';
+import { REGION } from '../config/aws.js';
 
 import { extractText } from '../lib/extractText.js';
 import { sanitizeName } from '../lib/sanitizeName.js';
@@ -169,7 +170,6 @@ export default function registerProcessCv(
     generatePdf,
   }
 ) {
-  const region = process.env.AWS_REGION || 'ap-south-1';
   app.post(
     '/api/evaluate',
     (req, res, next) => {
@@ -278,7 +278,7 @@ export default function registerProcessCv(
           console.error('failed to load configuration', err);
           return next(createError(500, 'failed to load configuration'));
         }
-        const s3 = new S3Client({ region });
+        const s3 = new S3Client({ region: REGION });
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
         const prefix = `${sanitized}/cv/${date}/`;
@@ -438,7 +438,7 @@ export default function registerProcessCv(
     },
     withTimeout(async (req, res, next) => {
     const jobId = crypto.randomUUID();
-    const s3 = new S3Client({ region });
+    const s3 = new S3Client({ region: REGION });
     let bucket;
     let secrets;
     try {
@@ -630,7 +630,7 @@ export default function registerProcessCv(
     }
 
     // Store raw file to configured bucket
-    const initialS3 = new S3Client({ region });
+    const initialS3 = new S3Client({ region: REGION });
     try {
       await initialS3.send(
         new PutObjectCommand({
@@ -1128,7 +1128,7 @@ export default function registerProcessCv(
 
   app.post('/api/improve-metric', async (req, res, next) => {
     const jobId = crypto.randomUUID();
-    const s3 = new S3Client({ region });
+    const s3 = new S3Client({ region: REGION });
     let bucket;
     let secrets;
     try {
@@ -1342,7 +1342,7 @@ export default function registerProcessCv(
       });
     },
     async (req, res, next) => {
-      const s3 = new S3Client({ region });
+      const s3 = new S3Client({ region: REGION });
       let bucket;
       let secrets;
       try {
@@ -1521,7 +1521,7 @@ export default function registerProcessCv(
     },
     async (req, res, next) => {
       const jobId = crypto.randomUUID();
-      const s3 = new S3Client({ region });
+      const s3 = new S3Client({ region: REGION });
       let bucket;
       let secrets;
       try {
