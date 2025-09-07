@@ -1512,6 +1512,7 @@ export default function registerProcessCv(app, generativeModel) {
       if (!existingCvKey) {
         existingCvKey = path.join(
           sanitizedName,
+          'enhanced',
           'cv',
           date,
           `${Date.now()}-final_cv.pdf`
@@ -1529,6 +1530,7 @@ export default function registerProcessCv(app, generativeModel) {
       if (!existingCvTextKey) {
         existingCvTextKey = path.join(
           sanitizedName,
+          'enhanced',
           'cv',
           date,
           `${Date.now()}-final_cv.txt`
