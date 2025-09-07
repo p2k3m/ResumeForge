@@ -101,6 +101,9 @@ Each item includes:
 - Allowed file types: `.pdf`, `.docx`
 - Legacy `.doc` files are rejected.
 
+## URL Validation
+Only `http://` and `https://` URLs are accepted for job descriptions and profile links. The host must not resolve to `localhost` or a private/internal IP address (e.g. `10.x.x.x`, `192.168.x.x`, `172.16-31.x.x`, `127.0.0.0/8`, `169.254.x.x`, or IPv6 ranges like `fd00::/8`, `fc00::/7`, `fe80::/10`, and `::1`). Public IP addresses are allowed.
+
 ## Templates
 `/api/process-cv` supports several template parameters for selecting the resume layout:
 

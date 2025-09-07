@@ -69,20 +69,27 @@ function validateUrl(input) {
     const url = new URL(String(input));
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
     const host = url.hostname.toLowerCase();
-    if (
-      net.isIP(host) ||
-      host === 'localhost' ||
-      /^10\./.test(host) ||
-      /^127\./.test(host) ||
-      /^169\.254\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host) ||
-      /^fc00:/i.test(host) ||
-      /^fd00:/i.test(host) ||
-      /^fe80:/i.test(host) ||
-      host === '::1'
-    )
-      return null;
+    if (host === 'localhost') return null;
+    const ipVersion = net.isIP(host);
+    if (ipVersion === 4) {
+      if (
+        /^0\./.test(host) ||
+        /^10\./.test(host) ||
+        /^127\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)
+      )
+        return null;
+    } else if (ipVersion === 6) {
+      if (
+        /^fc00:/i.test(host) ||
+        /^fd00:/i.test(host) ||
+        /^fe80:/i.test(host) ||
+        host === '::1'
+      )
+        return null;
+    }
     return url.toString();
   } catch {
     return null;
