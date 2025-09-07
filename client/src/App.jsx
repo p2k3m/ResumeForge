@@ -432,26 +432,30 @@ function App() {
                         <span>
                           {formatMetricName(metric)}: {score}% ({status})
                         </span>
-                        {score < 70 && (
-                          <>
-                            <button
-                              onClick={() => handleFix(metric)}
-                              className="ml-2 text-blue-600 underline"
+                        <>
+                          <button
+                            onClick={() => handleFix(metric)}
+                            className="ml-2 text-blue-600 underline"
+                          >
+                            Fix
+                          </button>
+                          {metricTips[metric] && (
+                            <span
+                              className={`block text-sm ${
+                                score >= 70 ? 'text-green-600' : 'text-purple-600'
+                              }`}
                             >
-                              Fix
-                            </button>
-                            {metricTips[metric] && (
-                              <span className="block text-sm text-purple-600">
-                                {metricTips[metric]}
-                              </span>
-                            )}
-                            {metricSuggestions[metric] && (
-                              <div className="mt-1 text-sm text-purple-700">
-                                {metricSuggestions[metric]}
-                              </div>
-                            )}
-                          </>
-                        )}
+                              {score >= 70
+                                ? `Great job: ${metricTips[metric]}`
+                                : metricTips[metric]}
+                            </span>
+                          )}
+                          {score < 70 && metricSuggestions[metric] && (
+                            <div className="mt-1 text-sm text-purple-700">
+                              {metricSuggestions[metric]}
+                            </div>
+                          )}
+                        </>
                       </li>
                     )
                   })}
@@ -480,26 +484,30 @@ function App() {
                               <span>
                                 {formatMetricName(metric)}: {score}% ({status})
                               </span>
-                              {score < 70 && (
-                                <>
-                                  <button
-                                    onClick={() => handleFix(metric)}
-                                    className="ml-2 text-blue-600 underline"
+                              <>
+                                <button
+                                  onClick={() => handleFix(metric)}
+                                  className="ml-2 text-blue-600 underline"
+                                >
+                                  Fix
+                                </button>
+                                {metricTips[metric] && (
+                                  <span
+                                    className={`block text-sm ${
+                                      score >= 70 ? 'text-green-600' : 'text-purple-600'
+                                    }`}
                                   >
-                                    Fix
-                                  </button>
-                                  {metricTips[metric] && (
-                                    <span className="block text-sm text-purple-600">
-                                      {metricTips[metric]}
-                                    </span>
-                                  )}
-                                  {metricSuggestions[metric] && (
-                                    <div className="mt-1 text-sm text-purple-700">
-                                      {metricSuggestions[metric]}
-                                    </div>
-                                  )}
-                                </>
-                              )}
+                                    {score >= 70
+                                      ? `Great job: ${metricTips[metric]}`
+                                      : metricTips[metric]}
+                                  </span>
+                                )}
+                                {score < 70 && metricSuggestions[metric] && (
+                                  <div className="mt-1 text-sm text-purple-700">
+                                    {metricSuggestions[metric]}
+                                  </div>
+                                )}
+                              </>
                             </li>
                           )
                         })}
