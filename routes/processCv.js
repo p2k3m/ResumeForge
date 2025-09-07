@@ -60,7 +60,7 @@ export async function fetchJobDescription(
   url,
   { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = DEFAULT_USER_AGENT } = {},
 ) {
-  const valid = validateUrl(url);
+  const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid URL');
   try {
     const { data } = await axios.get(valid, {
@@ -231,18 +231,18 @@ export default function registerProcessCv(app, generativeModel) {
         let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
 
         if (!linkedinProfileUrl)
           return next(createError(400, 'linkedinProfileUrl required'));
-        linkedinProfileUrl = validateUrl(linkedinProfileUrl);
+        linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
         if (!linkedinProfileUrl)
           return next(createError(400, 'invalid linkedinProfileUrl'));
 
         if (credlyProfileUrl) {
-          credlyProfileUrl = validateUrl(credlyProfileUrl);
+          credlyProfileUrl = await validateUrl(credlyProfileUrl);
           if (!credlyProfileUrl)
             return next(createError(400, 'invalid credlyProfileUrl'));
         }
@@ -571,16 +571,16 @@ export default function registerProcessCv(app, generativeModel) {
     if (!linkedinProfileUrl) {
       return next(createError(400, 'linkedinProfileUrl required'));
     }
-    jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+    jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
     if (!jobDescriptionUrl) {
       return next(createError(400, 'invalid jobDescriptionUrl'));
     }
-    linkedinProfileUrl = validateUrl(linkedinProfileUrl);
+    linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
     if (!linkedinProfileUrl) {
       return next(createError(400, 'invalid linkedinProfileUrl'));
     }
     if (credlyProfileUrl) {
-      credlyProfileUrl = validateUrl(credlyProfileUrl);
+      credlyProfileUrl = await validateUrl(credlyProfileUrl);
       if (!credlyProfileUrl) {
         return next(createError(400, 'invalid credlyProfileUrl'));
       }
@@ -1044,7 +1044,7 @@ export default function registerProcessCv(app, generativeModel) {
         if (!metric) return next(createError(400, 'metric required'));
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
         const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
@@ -1092,7 +1092,7 @@ export default function registerProcessCv(app, generativeModel) {
         if (gap) {
           if (!jobDescriptionUrl)
             return next(createError(400, 'jobDescriptionUrl required'));
-          jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+          jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
           if (!jobDescriptionUrl)
             return next(createError(400, 'invalid jobDescriptionUrl'));
           const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
@@ -1115,7 +1115,7 @@ export default function registerProcessCv(app, generativeModel) {
         if (!req.file) return next(createError(400, 'resume file required'));
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
         const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
@@ -1197,14 +1197,14 @@ export default function registerProcessCv(app, generativeModel) {
         createError(400, 'existingCvKey or existingCvTextKey required')
       );
 
-    jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+    jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
     if (!jobDescriptionUrl)
       return next(createError(400, 'invalid jobDescriptionUrl'));
-    linkedinProfileUrl = validateUrl(linkedinProfileUrl);
+    linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
     if (!linkedinProfileUrl)
       return next(createError(400, 'invalid linkedinProfileUrl'));
     if (credlyProfileUrl) {
-      credlyProfileUrl = validateUrl(credlyProfileUrl);
+      credlyProfileUrl = await validateUrl(credlyProfileUrl);
       if (!credlyProfileUrl)
         return next(createError(400, 'invalid credlyProfileUrl'));
     }
@@ -1399,14 +1399,14 @@ export default function registerProcessCv(app, generativeModel) {
       if (!linkedinProfileUrl)
         return next(createError(400, 'linkedinProfileUrl required'));
 
-      jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
       if (!jobDescriptionUrl)
         return next(createError(400, 'invalid jobDescriptionUrl'));
-      linkedinProfileUrl = validateUrl(linkedinProfileUrl);
+      linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
       if (!linkedinProfileUrl)
         return next(createError(400, 'invalid linkedinProfileUrl'));
       if (credlyProfileUrl) {
-        credlyProfileUrl = validateUrl(credlyProfileUrl);
+        credlyProfileUrl = await validateUrl(credlyProfileUrl);
         if (!credlyProfileUrl)
           return next(createError(400, 'invalid credlyProfileUrl'));
       }
@@ -1586,14 +1586,14 @@ export default function registerProcessCv(app, generativeModel) {
           createError(400, 'existingCvKey or existingCvTextKey required')
         );
 
-      jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
       if (!jobDescriptionUrl)
         return next(createError(400, 'invalid jobDescriptionUrl'));
-      linkedinProfileUrl = validateUrl(linkedinProfileUrl);
+      linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
       if (!linkedinProfileUrl)
         return next(createError(400, 'invalid linkedinProfileUrl'));
       if (credlyProfileUrl) {
-        credlyProfileUrl = validateUrl(credlyProfileUrl);
+        credlyProfileUrl = await validateUrl(credlyProfileUrl);
         if (!credlyProfileUrl)
           return next(createError(400, 'invalid credlyProfileUrl'));
       }

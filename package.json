@@ -45,6 +45,7 @@
     "transform": {
       "^.+\\.jsx?$": ["babel-jest", {"presets": ["@babel/preset-env", "@babel/preset-react"]}]
     },
+    "setupFiles": ["<rootDir>/tests/setupDnsMock.js"],
     "moduleNameMapper": {
       "^@google/generative-ai$": "<rootDir>/tests/mocks/google-generative-ai.js",
       "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js",

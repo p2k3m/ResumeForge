@@ -4,6 +4,7 @@ import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import net from 'net';
+import dns from 'dns';
 import axios from 'axios';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -64,29 +65,39 @@ async function parseUserAgent(ua) {
   }
 }
 
-function validateUrl(input) {
+async function validateUrl(input) {
   try {
     const url = new URL(String(input));
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
     const host = url.hostname.toLowerCase();
     if (host === 'localhost') return null;
-    const ipVersion = net.isIP(host);
+    let ip = host;
+    let ipVersion = net.isIP(host);
+    if (!ipVersion) {
+      try {
+        const { address, family } = await dns.promises.lookup(host);
+        ip = address;
+        ipVersion = family;
+      } catch {
+        return null;
+      }
+    }
     if (ipVersion === 4) {
       if (
-        /^0\./.test(host) ||
-        /^10\./.test(host) ||
-        /^127\./.test(host) ||
-        /^169\.254\./.test(host) ||
-        /^192\.168\./.test(host) ||
-        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(host)
+        /^0\./.test(ip) ||
+        /^10\./.test(ip) ||
+        /^127\./.test(ip) ||
+        /^169\.254\./.test(ip) ||
+        /^192\.168\./.test(ip) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)
       )
         return null;
     } else if (ipVersion === 6) {
       if (
-        /^fc00:/i.test(host) ||
-        /^fd00:/i.test(host) ||
-        /^fe80:/i.test(host) ||
-        host === '::1'
+        /^fc00:/i.test(ip) ||
+        /^fd00:/i.test(ip) ||
+        /^fe80:/i.test(ip) ||
+        ip === '::1'
       )
         return null;
     }
@@ -276,7 +287,7 @@ const region = process.env.AWS_REGION || 'ap-south-1';
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT_MS, 10) || 5000;
 
 async function fetchLinkedInProfile(url) {
-  const valid = validateUrl(url);
+  const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid LinkedIn URL');
   try {
     const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
@@ -385,7 +396,7 @@ async function fetchLinkedInProfile(url) {
 }
 
 async function fetchCredlyProfile(url) {
-  const valid = validateUrl(url);
+  const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid Credly URL');
   try {
     const { data: html } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
