@@ -400,9 +400,8 @@ export default function registerProcessCv(app, generativeModel) {
       return next(createError(500, 'Failed to parse user agent'));
     }
     let defaultCvTemplate =
-      req.body.template || req.query.template || CV_TEMPLATES[0];
-    if (!CV_TEMPLATES.includes(defaultCvTemplate))
-      defaultCvTemplate = CV_TEMPLATES[0];
+      req.body.template || req.query.template || '2025';
+    if (!CV_TEMPLATES.includes(defaultCvTemplate)) defaultCvTemplate = '2025';
     const defaultClTemplate =
       req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
     const selection = selectTemplates({

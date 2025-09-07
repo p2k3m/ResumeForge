@@ -210,6 +210,7 @@ const TECHNICAL_TERMS = [
   'ansible'
 ];
 function selectTemplates({
+  defaultCvTemplate = '2025',
   defaultClTemplate = CL_TEMPLATES[0],
   template1,
   template2,
@@ -250,10 +251,10 @@ function selectTemplates({
   };
 
   if (!template1 && !template2) {
-    [template1, template2] =
-      CONTRASTING_PAIRS[Math.floor(Math.random() * CONTRASTING_PAIRS.length)];
+    template1 = defaultCvTemplate;
+    template2 = pickContrasting(template1);
   } else {
-    if (!template1) template1 = '2025';
+    if (!template1) template1 = defaultCvTemplate;
     if (!template2) template2 = pickContrasting(template1);
     if (
       template1 === template2 ||
