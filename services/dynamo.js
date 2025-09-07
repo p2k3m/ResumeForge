@@ -6,7 +6,6 @@ import {
   ScanCommand,
   DeleteItemCommand
 } from '@aws-sdk/client-dynamodb';
-import { createHash } from 'crypto';
 import { getSecrets } from '../config/secrets.js';
 import { region } from '../server.js';
 
@@ -50,10 +49,6 @@ async function ensureTable(client, tableName) {
   }
 }
 
-function hash(value = '') {
-  return createHash('sha256').update(String(value)).digest('hex');
-}
-
 export async function logEvaluation({
   jobId,
   ipAddress = '',
@@ -90,23 +85,17 @@ export async function logEvaluation({
     }
   };
 
-  const addHash = (key, value) => {
-    if (typeof value === 'string' && value.trim()) {
-      item[key] = { S: hash(value) };
-    }
-  };
-
   const location = await resolveLocation(ipAddress);
-  addHash('ipHash', ipAddress);
+  addString('ipAddress', ipAddress);
   addString('location', location);
   addString('userAgent', userAgent);
   addString('browser', browser);
   addString('os', os);
   addString('device', device);
-  addHash('jobDescriptionHash', jobDescriptionUrl);
-  addHash('linkedinProfileHash', linkedinProfileUrl);
-  addHash('credlyProfileHash', credlyProfileUrl);
-  addHash('cvKeyHash', cvKey);
+  addString('jobDescriptionUrl', jobDescriptionUrl);
+  addString('linkedinProfileUrl', linkedinProfileUrl);
+  addString('credlyProfileUrl', credlyProfileUrl);
+  addString('cvKey', cvKey);
   addString('docType', docType);
 
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
@@ -152,24 +141,18 @@ export async function logSession({
     }
   };
 
-  const addHash = (key, value) => {
-    if (typeof value === 'string' && value.trim()) {
-      item[key] = { S: hash(value) };
-    }
-  };
-
   const location = await resolveLocation(ipAddress);
-  addHash('ipHash', ipAddress);
+  addString('ipAddress', ipAddress);
   addString('location', location);
   addString('userAgent', userAgent);
   addString('browser', browser);
   addString('os', os);
   addString('device', device);
-  addHash('jobDescriptionHash', jobDescriptionUrl);
-  addHash('linkedinProfileHash', linkedinProfileUrl);
-  addHash('credlyProfileHash', credlyProfileUrl);
-  addHash('cvKeyHash', cvKey);
-  addHash('coverLetterKeyHash', coverLetterKey);
+  addString('jobDescriptionUrl', jobDescriptionUrl);
+  addString('linkedinProfileUrl', linkedinProfileUrl);
+  addString('credlyProfileUrl', credlyProfileUrl);
+  addString('cvKey', cvKey);
+  addString('coverLetterKey', coverLetterKey);
 
   await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
 }

@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
-import { createHash } from 'crypto';
 import {
   uploadFile,
   requestEnhancedCV,
@@ -402,11 +401,10 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.jobId.S).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
     );
-    const hash = (v) => createHash('sha256').update(v).digest('hex');
-    expect(putCall[0].input.Item.linkedinProfileHash.S).toBe(
-      hash('https://linkedin.com/in/example')
+    expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
+      'https://linkedin.com/in/example'
     );
-    expect(putCall[0].input.Item.ipHash.S).toBe(hash('203.0.113.42'));
+    expect(putCall[0].input.Item.ipAddress.S).toBe('203.0.113.42');
     expect(putCall[0].input.Item.location.S).toBe('Test City, Test Country');
     expect(putCall[0].input.Item.userAgent.S).toContain('iPhone');
     expect(putCall[0].input.Item.os.S).toBe('iOS');
