@@ -8,6 +8,7 @@ import {
   mergeDuplicateSections,
   normalizeHeading
 } from './parseContent.js';
+import { DEFAULT_SKILL_ICONS } from '../skillIcons.js';
 
 const ALL_TEMPLATES = [
   'modern',
@@ -20,17 +21,6 @@ const ALL_TEMPLATES = [
   'cover_classic',
   'cover_2025'
 ];
-
-const DEFAULT_SKILL_ICONS = {
-  javascript: 'fa-brands fa-js',
-  python: 'fa-brands fa-python',
-  html: 'fa-brands fa-html5',
-  css: 'fa-brands fa-css3-alt',
-  node: 'fa-brands fa-node-js',
-  react: 'fa-brands fa-react',
-  docker: 'fa-brands fa-docker',
-  aws: 'fa-brands fa-aws'
-};
 
 const PUPPETEER_HEADLESS =
   process.env.PUPPETEER_HEADLESS === 'false' ? false : 'new';

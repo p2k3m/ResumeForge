@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import skillResources from './skillResources'
 import { getScoreStatus } from './scoreStatus'
+import { DEFAULT_SKILL_ICONS } from '../../skillIcons.js'
 
 const metricTips = {
   layoutSearchability: 'Use bullet points for better scanning.',
@@ -123,7 +124,11 @@ function App() {
       const data = await response.json()
       setResult(data)
       setSkills(
-        (data.missingSkills || []).map((s) => ({ name: s, icon: '', level: '' }))
+        (data.missingSkills || []).map((s) => ({
+          name: s,
+          icon: DEFAULT_SKILL_ICONS[s.toLowerCase()] || '',
+          level: 70
+        }))
       )
       setExpOptions((data.missingExperience || []).map((t) => ({ text: t, checked: false })))
       setEduOptions((data.missingEducation || []).map((t) => ({ text: t, checked: false })))
@@ -151,12 +156,21 @@ function App() {
 
   const handleSkillChange = (idx, field, value) => {
     setSkills((prev) =>
-      prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s))
+      prev.map((s, i) => {
+        if (i !== idx) return s
+        const updated = { ...s, [field]: value }
+        if (field === 'name') {
+          const icon = DEFAULT_SKILL_ICONS[value.toLowerCase()]
+          if (icon) updated.icon = icon
+          if (!updated.level) updated.level = 70
+        }
+        return updated
+      })
     )
   }
 
   const addSkill = () =>
-    setSkills((prev) => [...prev, { name: '', icon: '', level: '' }])
+    setSkills((prev) => [...prev, { name: '', icon: '', level: 70 }])
 
   const toggleOption = (setter) => (idx) => {
     setter((prev) =>
@@ -466,26 +480,40 @@ function App() {
             <div className="text-purple-800 mb-2">
               <p className="mb-2">Missing skills:</p>
               {skills.map((skill, idx) => (
-                <div key={idx} className="flex flex-col md:flex-row gap-2 mb-2">
-                  <input
-                    value={skill.name}
-                    placeholder="Skill"
-                    onChange={(e) => handleSkillChange(idx, 'name', e.target.value)}
-                    className="flex-1 p-2 border border-purple-300 rounded"
-                  />
-                  <input
-                    value={skill.icon || ''}
-                    placeholder="Icon (optional)"
-                    onChange={(e) => handleSkillChange(idx, 'icon', e.target.value)}
-                    className="flex-1 p-2 border border-purple-300 rounded"
-                  />
-                  <input
-                    value={skill.level || ''}
-                    type="number"
-                    placeholder="Level"
-                    onChange={(e) => handleSkillChange(idx, 'level', e.target.value)}
-                    className="w-24 p-2 border border-purple-300 rounded"
-                  />
+                <div key={idx} className="mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    {skill.icon && <i className={`${skill.icon} text-xl`}></i>}
+                    <span className="capitalize">{skill.name}</span>
+                    {skill.level && (
+                      <div className="flex-1 h-2 bg-purple-200 rounded">
+                        <div
+                          className="h-2 bg-purple-600 rounded"
+                          style={{ width: `${skill.level}%` }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col md:flex-row gap-2">
+                    <input
+                      value={skill.name}
+                      placeholder="Skill"
+                      onChange={(e) => handleSkillChange(idx, 'name', e.target.value)}
+                      className="flex-1 p-2 border border-purple-300 rounded"
+                    />
+                    <input
+                      value={skill.icon || ''}
+                      placeholder="Icon (optional)"
+                      onChange={(e) => handleSkillChange(idx, 'icon', e.target.value)}
+                      className="flex-1 p-2 border border-purple-300 rounded"
+                    />
+                    <input
+                      value={skill.level || ''}
+                      type="number"
+                      placeholder="Level"
+                      onChange={(e) => handleSkillChange(idx, 'level', e.target.value)}
+                      className="w-24 p-2 border border-purple-300 rounded"
+                    />
+                  </div>
                 </div>
               ))}
               <button
