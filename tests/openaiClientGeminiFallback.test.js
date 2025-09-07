@@ -57,7 +57,8 @@ test('requestAtsAnalysis falls back to Gemini on failure', async () => {
     crispness: 4,
     keywordDensity: 5,
     sectionHeadingClarity: 6,
-    contactInfoCompleteness: 7
+    contactInfoCompleteness: 7,
+    grammar: 8
   };
   generateContentMock.mockResolvedValueOnce({
     response: { text: () => JSON.stringify(json) }

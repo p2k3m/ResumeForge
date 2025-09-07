@@ -12,6 +12,7 @@ describe('ATS metric calculations', () => {
       'keywordDensity',
       'sectionHeadingClarity',
       'contactInfoCompleteness',
+      'grammar',
     ]);
     for (const score of Object.values(metrics)) {
       expect(score).toBeGreaterThanOrEqual(0);
