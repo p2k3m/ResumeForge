@@ -130,6 +130,24 @@ describe('generatePdf and parsing', () => {
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
+  test('default skill icons render in HTML for PDF generation', async () => {
+    const setContent = jest.fn();
+    const pdf = jest.fn().mockResolvedValue(Buffer.from('PDF'));
+    const close = jest.fn();
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    const launchSpy = jest
+      .spyOn(puppeteer, 'launch')
+      .mockResolvedValue({ newPage, close });
+
+    await generatePdf('Jane Doe\n# Skills\n- JavaScript\n- Python', '2025');
+    expect(setContent).toHaveBeenCalled();
+    const html = setContent.mock.calls[0][0];
+    expect(html).toContain('fa-brands fa-js');
+    expect(html).toContain('fa-brands fa-python');
+
+    launchSpy.mockRestore();
+  });
+
   test('script tags render as text', () => {
     const tokens = parseContent('Jane Doe\n- uses <script>alert(1)</script> safely')
       .sections[0].items[0];
