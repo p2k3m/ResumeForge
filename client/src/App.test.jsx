@@ -102,7 +102,12 @@ test('displays new additions section after compile', async () => {
       ok: true,
       headers: { get: () => 'application/json' },
       json: () =>
-        Promise.resolve({ existingCvKey: 'key.pdf', cvTextKey: 'key.txt' }),
+        Promise.resolve({
+          existingCvKey: 'key.pdf',
+          cvTextKey: 'key.txt',
+          addedProjects: ['Project Alpha'],
+          addedCertifications: ['AWS Cert - Amazon'],
+        }),
     })
     .mockResolvedValueOnce({
       ok: true,
@@ -143,6 +148,8 @@ test('displays new additions section after compile', async () => {
   ).toBeInTheDocument()
   expect(await screen.findByText('aws')).toBeInTheDocument()
   expect(await screen.findByText('Senior Developer')).toBeInTheDocument()
+  expect(await screen.findByText('Project Alpha')).toBeInTheDocument()
+  expect(await screen.findByText('AWS Cert - Amazon')).toBeInTheDocument()
 })
 
 test('highlights drop zone on drag over', () => {

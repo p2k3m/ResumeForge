@@ -37,6 +37,8 @@ function App() {
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
   const [newAdditions, setNewAdditions] = useState([])
+  const [addedProjects, setAddedProjects] = useState([])
+  const [addedCertifications, setAddedCertifications] = useState([])
   const [manualName, setManualName] = useState('')
   const [showNameModal, setShowNameModal] = useState(false)
   const [metricSuggestions, setMetricSuggestions] = useState({})
@@ -212,6 +214,8 @@ function App() {
       const existingTextKey = improveData.cvTextKey || ''
       setCvKey(existingKey)
       setCvTextKey(existingTextKey)
+      setAddedProjects(improveData.addedProjects || [])
+      setAddedCertifications(improveData.addedCertifications || [])
 
       // Step 2: compile final CV & cover letter
       const compileForm = new FormData()
@@ -249,6 +253,8 @@ function App() {
           ),
           ...(data.addedLanguages || []),
           data.designation,
+          ...(addedProjects || []),
+          ...(addedCertifications || []),
         ].filter(Boolean)
       )
     } catch (err) {
