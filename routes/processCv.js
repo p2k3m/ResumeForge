@@ -1050,14 +1050,41 @@ export default function registerProcessCv(app, generativeModel) {
   app.post(
     '/api/fix-gap',
     (req, res, next) => {
-      uploadResume(req, res, (err) => {
-        if (err) return next(createError(400, err.message));
+      if (req.is('multipart/form-data')) {
+        uploadResume(req, res, (err) => {
+          if (err) return next(createError(400, err.message));
+          next();
+        });
+      } else {
         next();
-      });
+      }
     },
     async (req, res, next) => {
       try {
-        let { jobDescriptionUrl } = req.body;
+        let { jobDescriptionUrl, gap } = req.body || {};
+        if (gap) {
+          if (!jobDescriptionUrl)
+            return next(createError(400, 'jobDescriptionUrl required'));
+          jobDescriptionUrl = validateUrl(jobDescriptionUrl);
+          if (!jobDescriptionUrl)
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+          const userAgent = req.headers['user-agent'] || DEFAULT_USER_AGENT;
+          let jobDescriptionHtml = '';
+          try {
+            jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
+              timeout: REQUEST_TIMEOUT_MS,
+              userAgent,
+            });
+          } catch {}
+          const { text: jobDescription } = analyzeJobDescription(jobDescriptionHtml);
+          const suggestion = await requestSectionImprovement({
+            sectionName: 'gap',
+            sectionText: gap,
+            jobDescription,
+          });
+          return res.json({ suggestion });
+        }
+
         if (!req.file) return next(createError(400, 'resume file required'));
         if (!jobDescriptionUrl)
           return next(createError(400, 'jobDescriptionUrl required'));
