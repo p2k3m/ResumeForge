@@ -780,7 +780,7 @@ export default function registerProcessCv(app, generativeModel) {
       const chanceOfSelection = Math.round(
         (enhancedScore + atsScore) / 2
       );
-      const improvedPdf = await convertToPdf(improvedCv);
+      const improvedPdf = await generatePdf(improvedCv, '2025', {}, generativeModel);
       const ts = Date.now();
       const key = `${enhancedPrefix}cv/${ts}-improved.pdf`;
       const textKey = `${enhancedPrefix}cv/${ts}-improved.txt`;
@@ -1004,7 +1004,7 @@ export default function registerProcessCv(app, generativeModel) {
         bestCv = cvVersion2;
         metricTable = metrics2.table;
       }
-      const pdf = await convertToPdf(bestCv);
+      const pdf = await generatePdf(bestCv, '2025', {}, generativeModel);
       const key = path.join(
         sanitizedName,
         'enhanced',
@@ -1306,7 +1306,7 @@ export default function registerProcessCv(app, generativeModel) {
             new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
           );
           cvText = await textObj.Body.transformToString();
-          cvBuffer = await convertToPdf(cvText);
+          cvBuffer = await generatePdf(cvText, '2025', {}, generativeModel);
         } else if (existingCvKey) {
           const obj = await s3.send(
             new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
