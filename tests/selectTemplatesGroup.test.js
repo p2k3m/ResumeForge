@@ -3,11 +3,11 @@ import fs from 'fs/promises';
 import path from 'path';
 
 describe('selectTemplates defaults and overrides', () => {
-  test('defaults to contrasting templates when none provided', () => {
+  test('defaults to 2025 and a contrasting template when none provided', () => {
     const { template1, template2 } = selectTemplates();
-    expect(CV_TEMPLATES).toContain(template1);
+    expect(template1).toBe('2025');
     expect(CV_TEMPLATES).toContain(template2);
-    expect(template1).not.toBe(template2);
+    expect(template2).not.toBe('2025');
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );

@@ -101,17 +101,17 @@ describe('generatePdf and parsing', () => {
     }
   );
 
-  test('selectTemplates returns contrasting templates by default', () => {
+  test('selectTemplates returns 2025 and contrasting templates by default', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
-    expect(CV_TEMPLATES).toContain(template1);
+    expect(template1).toBe('2025');
     expect(CV_TEMPLATES).toContain(template2);
-    expect(template1).not.toBe(template2);
+    expect(template2).not.toBe('2025');
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );
-    expect(coverTemplate1).not.toBe(coverTemplate2);
     expect(CL_TEMPLATES).toContain(coverTemplate1);
     expect(CL_TEMPLATES).toContain(coverTemplate2);
+    expect(coverTemplate1).not.toBe(coverTemplate2);
   });
 
   test('providing one template yields a contrasting default', () => {
