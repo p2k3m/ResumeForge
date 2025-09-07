@@ -203,6 +203,22 @@ describe('/api/process-cv', () => {
     expect(res.body.applicantName).toBe('Jane Doe');
   });
 
+  test('returns added projects and certifications', async () => {
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('applicantName', 'Jane Doe')
+      .field(
+        'selectedCertifications',
+        JSON.stringify([{ name: 'AWS Cert', provider: 'Amazon' }])
+      )
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    expect(res.status).toBe(200);
+    expect(res.body.addedProjects[0]).toMatch(/Led a project/i);
+    expect(res.body.addedCertifications).toEqual(['AWS Cert - Amazon']);
+  });
+
   test('prompts for name when model uncertain', async () => {
     generateContentMock.mockReset();
     generateContentMock.mockResolvedValue({

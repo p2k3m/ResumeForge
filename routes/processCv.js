@@ -35,6 +35,7 @@ import {
   extractEducation,
   extractCertifications,
   extractLanguages,
+  parseContent,
   collectSectionText,
   extractResumeSkills,
   generateProjectSummary,
@@ -747,6 +748,18 @@ export default function registerProcessCv(app, generativeModel) {
       const resumeLanguages = extractLanguages(text);
       const linkedinLanguages = extractLanguages(linkedinData.languages || []);
 
+      const parsedResume = parseContent(text, { skipRequiredSections: true });
+      const resumeProjects = parsedResume.sections
+        .filter(
+          (sec) => sec.heading && sec.heading.toLowerCase() === 'projects'
+        )
+        .flatMap((sec) =>
+          sec.items.map((tokens) =>
+            tokens.map((t) => t.text || '').join('').trim()
+          )
+        )
+        .filter(Boolean);
+
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
       const improvedSections = await improveSections(sections, jobDescription);
       const resumeSkills = extractResumeSkills(text);
@@ -798,6 +811,27 @@ export default function registerProcessCv(app, generativeModel) {
           improvedCv += `\n\n# Languages\n${langLines}`;
         }
       }
+      const improvedProjectLines = [];
+      if (improvedSections.projects?.trim()) {
+        improvedProjectLines.push(
+          ...improvedSections.projects
+            .split(/\n+/)
+            .map((l) => l.replace(/^[-*]\s+/, '').trim())
+            .filter(Boolean),
+        );
+      }
+      if (projectSummary) improvedProjectLines.push(projectSummary);
+      const addedProjects = improvedProjectLines.filter(
+        (p) => !resumeProjects.some((r) => r.toLowerCase() === p.toLowerCase())
+      );
+
+      const fmtCert = (c = {}) =>
+        (c.provider ? `${c.name} - ${c.provider}` : c.name || '').trim();
+      const resumeCertSet = new Set(resumeCertifications.map(fmtCert));
+      const addedCertifications = [
+        ...((linkedinData.certifications || []).map(fmtCert)),
+        ...((credlyCertifications || []).map(fmtCert)),
+      ].filter((c) => c && !resumeCertSet.has(c));
       const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
       const enhancedMatch = calculateMatchScore(
         jobSkills,
@@ -856,6 +890,8 @@ export default function registerProcessCv(app, generativeModel) {
         metrics: atsMetrics,
         table: enhancedMatch.table,
         addedSkills,
+        addedProjects,
+        addedCertifications,
         missingSkills,
         originalScore,
         enhancedScore,
