@@ -240,7 +240,7 @@ export default function registerProcessCv(app, generativeModel) {
             );
         }
         const applicantName =
-          req.body.applicantName || extractName(resumeText);
+          req.body.applicantName || (await extractName(resumeText));
         const sanitized = sanitizeName(applicantName);
         if (!sanitized) {
           return res
@@ -530,7 +530,8 @@ export default function registerProcessCv(app, generativeModel) {
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter(Boolean);
-      applicantName = req.body.applicantName || extractName(originalText);
+      applicantName =
+        req.body.applicantName || (await extractName(originalText));
       originalTitle = lines[1] || '';
       sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName)
@@ -961,7 +962,7 @@ export default function registerProcessCv(app, generativeModel) {
         });
       }
       const applicantName =
-        req.body.applicantName || extractName(originalText);
+        req.body.applicantName || (await extractName(originalText));
       let sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName)
         return res
@@ -1171,7 +1172,7 @@ export default function registerProcessCv(app, generativeModel) {
       }
 
       const applicantName =
-        req.body.applicantName || extractName(originalText);
+        req.body.applicantName || (await extractName(originalText));
       let sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName)
         return res
@@ -1360,7 +1361,7 @@ export default function registerProcessCv(app, generativeModel) {
       }
 
       const applicantName =
-        req.body.applicantName || extractName(cvText);
+        req.body.applicantName || (await extractName(cvText));
       let sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName)
         return res
