@@ -16,7 +16,8 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 jest.unstable_mockModule('../services/dynamo.js', () => ({
-  logEvaluation: jest.fn().mockResolvedValue()
+  logEvaluation: jest.fn().mockResolvedValue(),
+  logSession: jest.fn().mockResolvedValue(),
 }));
 
 const mockS3Send = jest.fn().mockResolvedValue({});
@@ -36,6 +37,7 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   requestEnhancedCV: jest.fn(),
   requestCoverLetter: jest.fn(),
   requestAtsAnalysis: jest.fn(),
+  extractName: jest.fn(),
   classifyDocument: jest.fn(),
 }));
 
@@ -65,8 +67,8 @@ describe('/api/evaluate non-resume', () => {
     );
   });
 
-  test('rejects unknown document type', async () => {
-    classifyDocument.mockResolvedValueOnce('unknown');
+  test.each(['unknown', ''])('rejects %s document type', async (docType) => {
+    classifyDocument.mockResolvedValueOnce(docType);
     const res = await request(app)
       .post('/api/evaluate')
       .unset('User-Agent')
@@ -80,7 +82,7 @@ describe('/api/evaluate non-resume', () => {
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
       expect.objectContaining({
-        docType: 'unknown',
+        docType,
         linkedinProfileUrl: 'https://linkedin.com/in/example',
         cvKey: expect.any(String),
       })
