@@ -30,6 +30,7 @@ import {
   extractLanguages,
 } from '../services/parseContent.js';
 import { REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
+import { PROCESS_TIMEOUT_MS } from '../config/process.js';
 
 const createError = (status, message) => {
   const err = new Error(message);
@@ -426,9 +427,9 @@ export default function registerProcessCv(
         console.error('evaluation failed', err);
         next(createError(500, 'evaluation failed'));
       }
-    })
-  );
-  app.post(
+      }, PROCESS_TIMEOUT_MS)
+    );
+    app.post(
     '/api/process-cv',
     (req, res, next) => {
       uploadResume(req, res, (err) => {
@@ -990,7 +991,7 @@ export default function registerProcessCv(
       }
         return next(createError(500, 'processing failed'));
       }
-    }));
+      }, PROCESS_TIMEOUT_MS));
 
   app.post(
     '/api/fix-metric',
