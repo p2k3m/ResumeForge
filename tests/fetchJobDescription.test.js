@@ -103,8 +103,39 @@ describe('fetchJobDescription', () => {
         timeout: 1000,
         userAgent: 'agent',
       })
-    ).rejects.toThrow('Unable to launch browser. Please ensure Chromium dependencies are installed.');
-    expect(consoleError).toHaveBeenCalledWith('Chromium dependencies missing', launchError);
+    ).rejects.toThrow(
+      `Unable to launch browser on ${process.platform}/${process.arch}. Please ensure Chromium dependencies are installed.`,
+    );
+    expect(consoleError).toHaveBeenCalledWith('Chromium dependencies missing', {
+      platform: process.platform,
+      arch: process.arch,
+      error: launchError.stack,
+      missingLib: undefined,
+    });
+    consoleError.mockRestore();
+  });
+
+  test('logs missing library when puppeteer launch fails due to dependency', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: '' });
+    const launchError = new Error(
+      'error while loading shared libraries: libX11-xcb.so.1: cannot open shared object file',
+    );
+    mockLaunch.mockRejectedValueOnce(launchError);
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const expectedMessage =
+      `Unable to launch browser on ${process.platform}/${process.arch}. Missing dependency: libX11-xcb.so.1. Please ensure Chromium dependencies are installed.`;
+    await expect(
+      fetchJobDescription('http://example.com', {
+        timeout: 1000,
+        userAgent: 'agent',
+      }),
+    ).rejects.toThrow(expectedMessage);
+    expect(consoleError).toHaveBeenCalledWith('Chromium dependencies missing', {
+      platform: process.platform,
+      arch: process.arch,
+      error: launchError.stack,
+      missingLib: 'libX11-xcb.so.1',
+    });
     consoleError.mockRestore();
   });
 });
