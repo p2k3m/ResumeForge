@@ -418,6 +418,8 @@ describe('/api/process-cv', () => {
     });
     expect(res2.body.existingCvKey).toBeTruthy();
     expect(pdfKeys).toContain(res2.body.existingCvKey);
+    const keyPattern = new RegExp(`^${cvPrefix}\\d+-${sanitized}\\.pdf$`);
+    expect(res2.body.existingCvKey).toMatch(keyPattern);
 
     const putCall = mockDynamoSend.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
