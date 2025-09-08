@@ -522,6 +522,7 @@ function App() {
                         ) / available.length
                       )
                       const status = getScoreStatus(avgScore)
+                      const primaryMetric = available[0]
                       return (
                         <div
                           key={category}
@@ -536,7 +537,7 @@ function App() {
                           <p>
                             {avgScore}% ({status})
                             <button
-                              onClick={() => handleFix(category)}
+                              onClick={() => handleFix(primaryMetric)}
                               className="ml-2 text-blue-600 underline"
                             >
                               Fix
@@ -582,9 +583,9 @@ function App() {
                               )
                             })}
                           </ul>
-                          {avgScore < 80 && metricSuggestions[category] && (
+                          {avgScore < 80 && metricSuggestions[primaryMetric] && (
                             <div className="mt-1 text-sm text-purple-700">
-                              {metricSuggestions[category]}
+                              {metricSuggestions[primaryMetric]}
                             </div>
                           )}
                         </div>
