@@ -144,19 +144,24 @@ export function withTimeout(handler, timeoutMs = 10000) {
     req.abortController = controller;
     req.requestStart = Date.now();
     req.stageStatus = {};
+    req.stageDurations = {};
     let summaryLogged = false;
     const logSummary = (result) => {
       if (summaryLogged) return;
       summaryLogged = true;
-      const ts = new Date().toISOString();
       const id = req.jobId || 'unknown';
       const elapsed = Date.now() - req.requestStart;
-      const stages = TRACKED_STAGES.map((s) => {
-        const status = req.stageStatus[s];
-        return `${s}:${status ? (status === 'started' ? 'canceled' : status) : 'skipped'}`;
-      }).join(', ');
+      const stageDurations = Object.fromEntries(
+        Object.entries(req.stageDurations).sort((a, b) => b[1] - a[1])
+      );
       console.log(
-        `[${ts}] [${id}] evaluation_${result} elapsed=${elapsed}ms stages=${stages}`,
+        JSON.stringify({
+          [id]: {
+            status: result,
+            total_ms: elapsed,
+            stage_durations: stageDurations,
+          },
+        })
       );
     };
     controller.signal.addEventListener('abort', () => {
@@ -213,11 +218,13 @@ export function withTimeout(handler, timeoutMs = 10000) {
   };
 }
 
-function startStep(req, event) {
+export function startStep(req, event) {
   const start = Date.now();
   const ts = new Date().toISOString();
   const id = req.jobId || 'unknown';
   const elapsed = start - (req.requestStart || start);
+  req.stageStatus = req.stageStatus || {};
+  req.stageDurations = req.stageDurations || {};
   req.stageStatus[event] = 'started';
   console.log(`[${ts}] [${id}] ${event}_start elapsed=${elapsed}ms`);
   if (req.s3 && req.bucket && req.logKey) {
@@ -242,6 +249,7 @@ async function logStep(req, event, start, message = '') {
   const status = req.signal?.aborted ? 'canceled' : 'end';
   const elapsed = now - (req.requestStart || start);
   req.stageStatus[event] = status === 'end' ? 'completed' : 'canceled';
+  req.stageDurations[event] = duration;
   console.log(
     `[${endTs}] [${id}] ${event}_${status} duration=${duration}ms elapsed=${elapsed}ms${
       message ? ' - ' + message : ''
