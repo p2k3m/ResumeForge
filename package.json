@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:trace": "node --trace-deprecation --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dev": "node server.js",
     "build": "echo 'No build step'"
   },
@@ -43,9 +44,19 @@
   "jest": {
     "testEnvironment": "node",
     "transform": {
-      "^.+\\.jsx?$": ["babel-jest", {"presets": ["@babel/preset-env", "@babel/preset-react"]}]
+      "^.+\\.jsx?$": [
+        "babel-jest",
+        {
+          "presets": [
+            "@babel/preset-env",
+            "@babel/preset-react"
+          ]
+        }
+      ]
     },
-    "setupFiles": ["<rootDir>/tests/setupDnsMock.js"],
+    "setupFiles": [
+      "<rootDir>/tests/setupDnsMock.js"
+    ],
     "moduleNameMapper": {
       "^@google/generative-ai$": "<rootDir>/tests/mocks/google-generative-ai.js",
       "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js",
