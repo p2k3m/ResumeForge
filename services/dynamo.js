@@ -9,10 +9,14 @@ import {
 import { getSecrets } from '../config/secrets.js';
 import { REGION } from '../config/aws.js';
 
-async function resolveLocation(ipAddress) {
+export async function resolveLocation(ipAddress, { timeoutMs = 5000 } = {}) {
   if (!ipAddress) return 'unknown';
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`https://ipapi.co/${ipAddress}/json/`);
+    const res = await fetch(`https://ipapi.co/${ipAddress}/json/`, {
+      signal: controller.signal,
+    });
     const data = await res.json();
     const city = data?.city;
     const country = data?.country_name || data?.country;
@@ -20,6 +24,8 @@ async function resolveLocation(ipAddress) {
     if (country) return country;
   } catch {
     /* ignore errors */
+  } finally {
+    clearTimeout(timeoutId);
   }
   return 'unknown';
 }
@@ -204,5 +210,4 @@ if (process.env.NODE_ENV !== 'test') {
   setInterval(() => cleanupOldRecords().catch(() => {}), interval).unref();
 }
 
-export { resolveLocation };
 export default { logEvaluation, logSession, resolveLocation, cleanupOldRecords };
