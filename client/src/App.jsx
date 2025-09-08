@@ -508,49 +508,64 @@ function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {Object.entries(atsMetricCategories).map(
                     ([category, metrics]) => {
-                      const scores = metrics
-                        .map((m) => result.atsMetrics[m])
-                        .filter((s) => s != null)
-                      if (scores.length === 0) return null
+                      const available = metrics.filter(
+                        (m) => result.atsMetrics[m] != null
+                      )
+                      if (available.length === 0) return null
                       const avgScore = Math.round(
-                        scores.reduce((a, s) => a + s, 0) / scores.length
+                        available.reduce(
+                          (a, m) => a + result.atsMetrics[m],
+                          0
+                        ) / available.length
                       )
                       const status = getScoreStatus(avgScore)
-                      const metricKey = metrics[0]
                       return (
                         <div
                           key={category}
                           className="p-4 bg-white border rounded shadow-sm"
                         >
                           <p className="font-medium">{category}</p>
-                          <p>
-                            {avgScore}% ({status})
-                            <button
-                              onClick={() => handleFix(metricKey)}
-                              className="ml-2 text-blue-600 underline"
-                            >
-                              Fix
-                            </button>
-                          </p>
-                          {metricTips[metricKey] && (
-                            <span
-                              className={`block text-sm ${
-                                avgScore >= 70
-                                  ? 'text-green-600'
-                                  : 'text-purple-600'
-                              }`}
-                            >
-                              {avgScore >= 70
-                                ? `Great job: ${metricTips[metricKey]}`
-                                : metricTips[metricKey]}
-                            </span>
-                          )}
-                          {avgScore < 70 &&
-                            metricSuggestions[metricKey] && (
-                              <div className="mt-1 text-sm text-purple-700">
-                                {metricSuggestions[metricKey]}
-                              </div>
-                            )}
+                          <p>{avgScore}% ({status})</p>
+                          <ul>
+                            {available.map((metricKey) => {
+                              const score = result.atsMetrics[metricKey]
+                              const metricStatus = getScoreStatus(score)
+                              return (
+                                <li key={metricKey} className="mb-1">
+                                  <span>
+                                    {formatMetricName(metricKey)}: {score}%
+                                    {' '}
+                                    ({metricStatus})
+                                  </span>
+                                  <button
+                                    onClick={() => handleFix(metricKey)}
+                                    className="ml-2 text-blue-600 underline"
+                                  >
+                                    Fix
+                                  </button>
+                                  {metricTips[metricKey] && (
+                                    <span
+                                      className={`block text-sm ${
+                                        score >= 70
+                                          ? 'text-green-600'
+                                          : 'text-purple-600'
+                                      }`}
+                                    >
+                                      {score >= 70
+                                        ? `Great job: ${metricTips[metricKey]}`
+                                        : metricTips[metricKey]}
+                                    </span>
+                                  )}
+                                  {score < 70 &&
+                                    metricSuggestions[metricKey] && (
+                                      <div className="mt-1 text-sm text-purple-700">
+                                        {metricSuggestions[metricKey]}
+                                      </div>
+                                    )}
+                                </li>
+                              )
+                            })}
+                          </ul>
                         </div>
                       )
                     }
