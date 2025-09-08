@@ -76,16 +76,24 @@ async function getClient() {
   return clientPromise;
 }
 
-export async function uploadFile(buffer, filename, purpose = 'assistants') {
+export async function uploadFile(
+  buffer,
+  filename,
+  purpose = 'assistants',
+  { signal } = {}
+) {
   const ext = path.extname(filename).toLowerCase();
   if (ext !== '.pdf') {
     throw new Error('Only .pdf files are allowed');
   }
   const client = await getClient();
-  const file = await client.files.create({
-    file: new File([buffer], filename, { type: 'application/pdf' }),
-    purpose,
-  });
+  const file = await client.files.create(
+    {
+      file: new File([buffer], filename, { type: 'application/pdf' }),
+      purpose,
+    },
+    { signal }
+  );
   return file;
 }
 
@@ -96,7 +104,7 @@ export async function requestEnhancedCV({
   credlyFileId,
   instructions,
   priorCvFileId,
-}) {
+}, { signal } = {}) {
   if (!cvFileId) throw new Error('cvFileId is required');
   if (!jobDescFileId) throw new Error('jobDescFileId is required');
   if (typeof instructions !== 'string' || !instructions.trim()) {
@@ -171,18 +179,21 @@ export async function requestEnhancedCV({
   for (const model of preferredModels) {
     try {
       const response = await withTimeout(
-        client.responses.create({
-          model,
-          input: [{ role: 'user', content }],
-          text: {
-            format: {
-              type: 'json_schema',
-              name: 'EnhancedCV',
-              schema,
-              strict: true,
+        client.responses.create(
+          {
+            model,
+            input: [{ role: 'user', content }],
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'EnhancedCV',
+                schema,
+                strict: true,
+              },
             },
           },
-        })
+          { signal }
+        )
       );
       console.log(`Using model: ${model}`);
       return response.output_text;
@@ -229,7 +240,10 @@ export async function requestEnhancedCV({
   throw lastError;
 }
 
-export async function requestSectionImprovement({ sectionName, sectionText, jobDescription }) {
+export async function requestSectionImprovement(
+  { sectionName, sectionText, jobDescription },
+  { signal } = {}
+) {
   if (!sectionText) {
     throw new Error('sectionText is required');
   }
@@ -239,10 +253,13 @@ export async function requestSectionImprovement({ sectionName, sectionText, jobD
   for (const model of preferredModels) {
     try {
       const response = await withTimeout(
-        client.responses.create({
-          model,
-          input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
-        })
+        client.responses.create(
+          {
+            model,
+            input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+          },
+          { signal }
+        )
       );
       return response.output_text;
     } catch (err) {
@@ -254,12 +271,15 @@ export async function requestSectionImprovement({ sectionName, sectionText, jobD
   throw lastError;
 }
 
-export async function requestCoverLetter({
-  cvFileId,
-  jobDescFileId,
-  linkedInFileId,
-  credlyFileId,
-}) {
+export async function requestCoverLetter(
+  {
+    cvFileId,
+    jobDescFileId,
+    linkedInFileId,
+    credlyFileId,
+  },
+  { signal } = {}
+) {
   if (!cvFileId) throw new Error('cvFileId is required');
   if (!jobDescFileId) throw new Error('jobDescFileId is required');
   const client = await getClient();
@@ -279,10 +299,13 @@ export async function requestCoverLetter({
   for (const model of preferredModels) {
     try {
       const response = await withTimeout(
-        client.responses.create({
-          model,
-          input: [{ role: 'user', content }],
-        })
+        client.responses.create(
+          {
+            model,
+            input: [{ role: 'user', content }],
+          },
+          { signal }
+        )
       );
       return response.output_text;
     } catch (err) {
@@ -304,7 +327,7 @@ export async function requestCoverLetter({
   throw lastError;
 }
 
-export async function requestAtsAnalysis(text) {
+export async function requestAtsAnalysis(text, { signal } = {}) {
   if (!text) throw new Error('text is required');
   const client = await getClient();
   const schema = {
@@ -323,23 +346,26 @@ export async function requestAtsAnalysis(text) {
   for (const model of preferredModels) {
     try {
       const response = await withTimeout(
-        client.responses.create({
-          model,
-          input: [
-            {
-              role: 'user',
-              content: [{ type: 'input_text', text: `${prompt}\n\n${text}` }],
-            },
-          ],
-          text: {
-            format: {
-              type: 'json_schema',
-              name: 'AtsAnalysis',
-              schema,
-              strict: true,
+        client.responses.create(
+          {
+            model,
+            input: [
+              {
+                role: 'user',
+                content: [{ type: 'input_text', text: `${prompt}\n\n${text}` }],
+              },
+            ],
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'AtsAnalysis',
+                schema,
+                strict: true,
+              },
             },
           },
-        })
+          { signal }
+        )
       );
       const parsed = JSON.parse(response.output_text);
       if (!metricNames.every((m) => typeof parsed[m] === 'number')) {

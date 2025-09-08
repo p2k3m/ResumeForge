@@ -9,7 +9,17 @@ async function streamToString(stream) {
   });
 }
 
-export async function logEvent({ s3, bucket, key, jobId, event, level = 'info', message, logger = console }) {
+export async function logEvent({
+  s3,
+  bucket,
+  key,
+  jobId,
+  event,
+  level = 'info',
+  message,
+  logger = console,
+  signal
+}) {
   const entry = {
     timestamp: new Date().toISOString(),
     jobId,
@@ -20,7 +30,10 @@ export async function logEvent({ s3, bucket, key, jobId, event, level = 'info', 
 
   let existing = '';
   try {
-    const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const res = await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      { abortSignal: signal }
+    );
     existing = await streamToString(res.Body);
   } catch (err) {
     if (err.name !== 'NoSuchKey' && err.$metadata?.httpStatusCode !== 404) {
@@ -30,7 +43,15 @@ export async function logEvent({ s3, bucket, key, jobId, event, level = 'info', 
 
   const body = existing + JSON.stringify(entry) + '\n';
   try {
-    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: 'application/json' }));
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: 'application/json'
+      }),
+      { abortSignal: signal }
+    );
   } catch (err) {
     logger.error('Error uploading log to S3', err);
   }

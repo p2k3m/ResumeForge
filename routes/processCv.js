@@ -97,7 +97,7 @@ function computeJdMismatches(resumeText = '', jobHtml = '', jobSkills = []) {
   });
 }
 
-export async function improveSections(sections, jobDescription) {
+export async function improveSections(sections, jobDescription, signal) {
   const improvedSections = {};
   for (const key of [
     'summary',
@@ -111,11 +111,14 @@ export async function improveSections(sections, jobDescription) {
       improvedSections[key] = '';
       continue;
     }
-    improvedSections[key] = await requestSectionImprovement({
-      sectionName: key,
-      sectionText: text,
-      jobDescription,
-      });
+    improvedSections[key] = await requestSectionImprovement(
+      {
+        sectionName: key,
+        sectionText: text,
+        jobDescription,
+      },
+      { signal }
+    );
   }
   return improvedSections;
 }
@@ -124,12 +127,13 @@ export function buildS3Key(basePath, filename) {
   return basePath.join('/') + '/' + filename;
 }
 
-function withTimeout(handler, timeoutMs = 10000) {
+export function withTimeout(handler, timeoutMs = 10000) {
   return async (req, res, next) => {
+    const controller = new AbortController();
+    req.signal = controller.signal;
     const start = Date.now();
-    let timedOut = false;
     const timeout = setTimeout(() => {
-      timedOut = true;
+      controller.abort();
       if (!res.headersSent) {
         next(createError(503, 'processing timeout'));
       }
@@ -146,7 +150,7 @@ function withTimeout(handler, timeoutMs = 10000) {
     try {
       await handler(req, res, next);
     } catch (err) {
-      if (!timedOut) next(err);
+      if (!controller.signal.aborted) next(err);
     } finally {
       clearTimeout(timeout);
     }
@@ -218,6 +222,7 @@ export default function registerProcessCv(
         const jobHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
           userAgent,
+          signal: req.signal,
         });
         const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
@@ -237,7 +242,7 @@ export default function registerProcessCv(
             credlyProfileUrl,
             cvKey,
             docType,
-          });
+          }, { signal: req.signal });
           return res.status(400).json({
             error: `You have uploaded a ${docType}. Please upload a CV only.`,
           });
@@ -255,7 +260,7 @@ export default function registerProcessCv(
             credlyProfileUrl,
             cvKey,
             docType,
-          });
+          }, { signal: req.signal });
           return res
             .status(400)
             .json({
@@ -291,7 +296,8 @@ export default function registerProcessCv(
               Key: cvKey,
               Body: req.file.buffer,
               ContentType: req.file.mimetype,
-            })
+            }),
+            { abortSignal: req.signal }
           );
         } catch (err) {
           console.error(`initial upload to bucket ${bucket} failed`, err);
@@ -308,7 +314,7 @@ export default function registerProcessCv(
         );
         let atsMetrics;
         try {
-          atsMetrics = await requestAtsAnalysis(resumeText);
+          atsMetrics = await requestAtsAnalysis(resumeText, { signal: req.signal });
         } catch (err) {
           console.warn('ATS analysis failed, using heuristic metrics', err);
           atsMetrics = calculateMetrics(resumeText);
@@ -329,7 +335,7 @@ export default function registerProcessCv(
         let missingLanguages = [];
         if (linkedinProfileUrl) {
           try {
-            const linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+            const linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
             const linkedinExperience = extractExperience(
               linkedinData.experience || []
             );
@@ -376,7 +382,7 @@ export default function registerProcessCv(
 
         if (credlyProfileUrl) {
           try {
-            const credlyData = await fetchCredlyProfile(credlyProfileUrl);
+            const credlyData = await fetchCredlyProfile(credlyProfileUrl, req.signal);
             const fmtCert = (c = {}) =>
               (c.provider ? `${c.name} - ${c.provider}` : c.name || '').trim();
             const resumeCertSet = new Set(
@@ -408,7 +414,7 @@ export default function registerProcessCv(
           credlyProfileUrl,
           cvKey,
           docType: 'resume',
-        });
+        }, { signal: req.signal });
 
         res.json({
           atsScore,
@@ -598,7 +604,8 @@ export default function registerProcessCv(
             new GetObjectCommand({
               Bucket: bucket,
               Key: existingCvTextKey,
-            })
+            }),
+            { abortSignal: req.signal }
           );
           text = await textObj.Body.transformToString();
         } catch (err) {
@@ -606,7 +613,8 @@ export default function registerProcessCv(
         }
       } else if (existingCvKey) {
         const existingObj = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
+          { abortSignal: req.signal }
         );
         const arr = await existingObj.Body.transformToByteArray();
         existingCvBuffer = Buffer.from(arr);
@@ -644,6 +652,7 @@ export default function registerProcessCv(
           event: 'initial_upload_failed',
           level: 'error',
           message: `Failed to upload to bucket ${bucket}: ${message}`,
+          signal: req.signal,
         });
       } catch (logErr) {
         console.error('failed to log initial upload error', logErr);
@@ -665,6 +674,7 @@ export default function registerProcessCv(
           jobId,
           event: 'request_received',
           message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`,
+          signal: req.signal,
         });
         await logEvent({
           s3,
@@ -673,6 +683,7 @@ export default function registerProcessCv(
           jobId,
           event: 'selected_templates',
           message: `template1=${template1}; template2=${template2}`,
+          signal: req.signal,
         });
       } catch (err) {
         console.error('initial logging failed', err);
@@ -685,6 +696,7 @@ export default function registerProcessCv(
             fetchJobDescription(jobDescriptionUrl, {
               timeout: REQUEST_TIMEOUT_MS,
               userAgent,
+              signal: req.signal,
             }),
           2
         );
@@ -694,6 +706,7 @@ export default function registerProcessCv(
           key: logKey,
           jobId,
           event: 'fetched_job_description',
+          signal: req.signal,
         });
       } catch (err) {
         console.error('Job description fetch failed', err);
@@ -705,6 +718,7 @@ export default function registerProcessCv(
           event: 'job_description_fetch_failed',
           level: 'error',
           message: err.message,
+          signal: req.signal,
         });
         return next(createError(500, 'Job description fetch failed'));
       }
@@ -718,7 +732,7 @@ export default function registerProcessCv(
       let linkedinData = {};
       try {
         linkedinData = await withRetry(
-          () => fetchLinkedInProfile(linkedinProfileUrl),
+          () => fetchLinkedInProfile(linkedinProfileUrl, req.signal),
           2
         );
         const hasContent = Object.values(linkedinData).some((v) =>
@@ -730,7 +744,8 @@ export default function registerProcessCv(
           bucket,
           key: logKey,
           jobId,
-          event: 'fetched_linkedin_profile'
+          event: 'fetched_linkedin_profile',
+          signal: req.signal,
         });
       } catch (err) {
         console.error(
@@ -745,7 +760,8 @@ export default function registerProcessCv(
           jobId,
           event: 'linkedin_profile_fetch_failed',
           level: 'error',
-          message: err.message + (err.status ? ` (status ${err.status})` : '')
+          message: err.message + (err.status ? ` (status ${err.status})` : ''),
+          signal: req.signal,
         });
       }
       linkedinData.experience = selectedExperienceArr;
@@ -756,7 +772,7 @@ export default function registerProcessCv(
       if (!credlyCertifications.length && credlyProfileUrl) {
         try {
           credlyCertifications = await withRetry(
-            () => fetchCredlyProfile(credlyProfileUrl),
+            () => fetchCredlyProfile(credlyProfileUrl, req.signal),
             2
           );
           await logEvent({
@@ -764,7 +780,8 @@ export default function registerProcessCv(
             bucket,
             key: logKey,
             jobId,
-            event: 'fetched_credly_profile'
+            event: 'fetched_credly_profile',
+            signal: req.signal,
           });
         } catch (err) {
           console.error('Credly profile fetch failed', err);
@@ -775,7 +792,8 @@ export default function registerProcessCv(
             jobId,
             event: 'credly_profile_fetch_failed',
             level: 'error',
-            message: err.message
+            message: err.message,
+            signal: req.signal,
           });
         }
       }
@@ -801,7 +819,11 @@ export default function registerProcessCv(
         .filter(Boolean);
 
       const sections = collectSectionText(text, linkedinData, credlyCertifications);
-      const improvedSections = await improveSections(sections, jobDescription);
+      const improvedSections = await improveSections(
+        sections,
+        jobDescription,
+        req.signal
+      );
       if (jobTitle) {
         const lines = (improvedSections.experience || '').split('\n');
         const idx = lines.findIndex((l) => l.trim());
@@ -923,7 +945,8 @@ export default function registerProcessCv(
           Key: key,
           Body: improvedPdf,
           ContentType: 'application/pdf',
-        })
+        }),
+        { abortSignal: req.signal }
       );
       await s3.send(
         new PutObjectCommand({
@@ -931,7 +954,8 @@ export default function registerProcessCv(
           Key: textKey,
           Body: improvedCv,
           ContentType: 'text/plain',
-        })
+        }),
+        { abortSignal: req.signal }
       );
       const cvUrl = await getSignedUrl(
         s3,
@@ -979,6 +1003,7 @@ export default function registerProcessCv(
             event: 'error',
             level: 'error',
             message: err.message,
+            signal: req.signal,
           });
         } catch (e) {
           console.error('failed to log error', e);
@@ -1017,14 +1042,18 @@ export default function registerProcessCv(
           jobDescription = await fetchJobDescription(jobDescriptionUrl, {
             timeout: REQUEST_TIMEOUT_MS,
             userAgent,
+            signal: req.signal,
           });
         } catch {}
         const resumeText = await extractText(req.file);
-        const suggestion = await requestSectionImprovement({
-          sectionName: metric,
-          sectionText: resumeText,
-          jobDescription,
-        });
+        const suggestion = await requestSectionImprovement(
+          {
+            sectionName: metric,
+            sectionText: resumeText,
+            jobDescription,
+          },
+          { signal: req.signal }
+        );
         res.json({ suggestion });
       } catch (err) {
         console.error('fix metric failed', err);
@@ -1065,16 +1094,20 @@ export default function registerProcessCv(
             jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
               timeout: REQUEST_TIMEOUT_MS,
               userAgent,
+              signal: req.signal,
             });
           } catch {}
           const { text: jobDescription } = await analyzeJobDescription(
             jobDescriptionHtml
           );
-          const suggestion = await requestSectionImprovement({
-            sectionName: 'gap',
-            sectionText: gap,
-            jobDescription,
-          });
+          const suggestion = await requestSectionImprovement(
+            {
+              sectionName: 'gap',
+              sectionText: gap,
+              jobDescription,
+            },
+            { signal: req.signal }
+          );
           return res.json({ suggestion });
         }
 
@@ -1090,6 +1123,7 @@ export default function registerProcessCv(
           jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
             timeout: REQUEST_TIMEOUT_MS,
             userAgent,
+            signal: req.signal,
           });
         } catch {}
         const { skills: jobSkills, text: jobDescription } =
@@ -1102,11 +1136,14 @@ export default function registerProcessCv(
         );
         let suggestion = '';
         if (gaps.length) {
-          suggestion = await requestSectionImprovement({
-            sectionName: 'gap analysis',
-            sectionText: gaps.join('\n'),
-            jobDescription,
-          });
+          suggestion = await requestSectionImprovement(
+            {
+              sectionName: 'gap analysis',
+              sectionText: gaps.join('\n'),
+              jobDescription,
+            },
+            { signal: req.signal }
+          );
         }
         res.json({ suggestion, gaps });
       } catch (err) {
@@ -1180,13 +1217,15 @@ export default function registerProcessCv(
     try {
       if (existingCvTextKey) {
         const textObj = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+          new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
+          { abortSignal: req.signal }
         );
         originalText = await textObj.Body.transformToString();
         existingCvBuffer = await convertToPdf(originalText);
       } else if (existingCvKey) {
         const obj = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
+          { abortSignal: req.signal }
         );
         const chunks = [];
         for await (const chunk of obj.Body) chunks.push(chunk);
@@ -1214,41 +1253,67 @@ export default function registerProcessCv(
 
       let linkedinData = {};
       try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
         linkedinData.languages = selectedLanguagesArr;
       } catch {}
 
       let credlyCertifications = [];
       if (credlyProfileUrl) {
         try {
-          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+          credlyCertifications = await fetchCredlyProfile(
+            credlyProfileUrl,
+            req.signal
+          );
         } catch {}
       }
 
-      const cvFile = await openaiUploadFile(existingCvBuffer, 'cv.pdf');
+      const cvFile = await openaiUploadFile(
+        existingCvBuffer,
+        'cv.pdf',
+        'assistants',
+        { signal: req.signal }
+      );
       const jdBuffer = await convertToPdf(jobDescription);
-      const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
+      const jdFile = await openaiUploadFile(
+        jdBuffer,
+        'job.pdf',
+        'assistants',
+        { signal: req.signal }
+      );
       let liFile;
       if (Object.keys(linkedinData).length) {
         const liBuffer = await convertToPdf(linkedinData);
-        liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
+        liFile = await openaiUploadFile(
+          liBuffer,
+          'linkedin.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
       }
       let credlyFile;
       if (credlyCertifications.length) {
         const credlyBuffer = await convertToPdf(credlyCertifications);
-        credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
+        credlyFile = await openaiUploadFile(
+          credlyBuffer,
+          'credly.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
       }
 
       const instructions =
         `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Modify the last job title to match '${jobTitle}' if different. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics.`;
 
-      const responseText = await requestEnhancedCV({
-        cvFileId: cvFile.id,
-        jobDescFileId: jdFile.id,
-        linkedInFileId: liFile?.id,
-        credlyFileId: credlyFile?.id,
-        instructions,
-      });
+      const responseText = await requestEnhancedCV(
+        {
+          cvFileId: cvFile.id,
+          jobDescFileId: jdFile.id,
+          linkedInFileId: liFile?.id,
+          credlyFileId: credlyFile?.id,
+          instructions,
+        },
+        { signal: req.signal }
+      );
 
       const parsed = parseAiJson(responseText);
       let cvVersion1 = '';
@@ -1287,7 +1352,8 @@ export default function registerProcessCv(
           Key: key,
           Body: pdf,
           ContentType: 'application/pdf',
-        })
+        }),
+        { abortSignal: req.signal }
       );
       const textKey = buildS3Key(
         [sanitizedName, 'enhanced', date],
@@ -1299,7 +1365,8 @@ export default function registerProcessCv(
           Key: textKey,
           Body: bestCv,
           ContentType: 'text/plain',
-        })
+        }),
+        { abortSignal: req.signal }
       );
       const url = await getSignedUrl(
         s3,
@@ -1393,7 +1460,8 @@ export default function registerProcessCv(
       try {
         if (existingCvTextKey) {
           const textObj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
+            { abortSignal: req.signal }
           );
           originalText = await textObj.Body.transformToString();
         } else if (req.file) {
@@ -1424,38 +1492,64 @@ export default function registerProcessCv(
 
       let linkedinData = {};
       try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
       } catch {}
 
       let credlyCertifications = selectedCertificationsArr;
       if (!credlyCertifications.length && credlyProfileUrl) {
         try {
-          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+          credlyCertifications = await fetchCredlyProfile(
+            credlyProfileUrl,
+            req.signal
+          );
         } catch {}
       }
 
-      const cvFile = await openaiUploadFile(cvBuffer, 'cv.pdf');
+      const cvFile = await openaiUploadFile(
+        cvBuffer,
+        'cv.pdf',
+        'assistants',
+        { signal: req.signal }
+      );
       const jdBuffer = await convertToPdf(jobDescription);
-      const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
+      const jdFile = await openaiUploadFile(
+        jdBuffer,
+        'job.pdf',
+        'assistants',
+        { signal: req.signal }
+      );
       let liFile;
       if (Object.keys(linkedinData).length) {
         const liBuffer = await convertToPdf(linkedinData);
-        liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
+        liFile = await openaiUploadFile(
+          liBuffer,
+          'linkedin.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
       }
       let credlyFile;
       if (credlyCertifications.length) {
         const credlyBuffer = await convertToPdf(credlyCertifications);
-        credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
+        credlyFile = await openaiUploadFile(
+          credlyBuffer,
+          'credly.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
       }
 
       let coverLetterText;
       try {
-        coverLetterText = await requestCoverLetter({
-          cvFileId: cvFile.id,
-          jobDescFileId: jdFile.id,
-          linkedInFileId: liFile?.id,
-          credlyFileId: credlyFile?.id,
-        });
+        coverLetterText = await requestCoverLetter(
+          {
+            cvFileId: cvFile.id,
+            jobDescFileId: jdFile.id,
+            linkedInFileId: liFile?.id,
+            credlyFileId: credlyFile?.id,
+          },
+          { signal: req.signal }
+        );
       } catch (err) {
         if (err.code === 'AI_TIMEOUT') {
           console.error('cover letter generation timed out', err);
@@ -1487,7 +1581,8 @@ export default function registerProcessCv(
           Key: key,
           Body: clPdf,
           ContentType: 'application/pdf',
-        })
+        }),
+        { abortSignal: req.signal }
       );
       const url = await getSignedUrl(
         s3,
@@ -1581,13 +1676,15 @@ export default function registerProcessCv(
       try {
         if (existingCvTextKey) {
           const textObj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey })
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
+            { abortSignal: req.signal }
           );
           cvText = await textObj.Body.transformToString();
           cvBuffer = await generatePdf(cvText, '2025', {}, generativeModel);
         } else if (existingCvKey) {
           const obj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvKey })
+            new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
+            { abortSignal: req.signal }
           );
           const chunks = [];
           for await (const chunk of obj.Body) chunks.push(chunk);
@@ -1622,7 +1719,8 @@ export default function registerProcessCv(
             Key: existingCvKey,
             Body: cvBuffer,
             ContentType: 'application/pdf',
-          })
+          }),
+          { abortSignal: req.signal }
         );
       }
 
@@ -1637,7 +1735,8 @@ export default function registerProcessCv(
             Key: existingCvTextKey,
             Body: cvText,
             ContentType: 'text/plain',
-          })
+          }),
+          { abortSignal: req.signal }
         );
       }
 
@@ -1649,6 +1748,7 @@ export default function registerProcessCv(
         jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
           userAgent,
+          signal: req.signal,
         });
         ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
           jobDescriptionHtml,
@@ -1657,39 +1757,65 @@ export default function registerProcessCv(
 
       let linkedinData = {};
       try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
         linkedinData.languages = selectedLanguagesArr;
       } catch {}
 
       let credlyCertifications = selectedCertificationsArr;
       if (!credlyCertifications.length && credlyProfileUrl) {
         try {
-          credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+          credlyCertifications = await fetchCredlyProfile(
+            credlyProfileUrl,
+            req.signal
+          );
         } catch {}
       }
 
-      const cvFile = await openaiUploadFile(cvBuffer, 'cv.pdf');
+      const cvFile = await openaiUploadFile(
+        cvBuffer,
+        'cv.pdf',
+        'assistants',
+        { signal: req.signal }
+      );
       const jdBuffer = await convertToPdf(jobDescription);
-      const jdFile = await openaiUploadFile(jdBuffer, 'job.pdf');
+      const jdFile = await openaiUploadFile(
+        jdBuffer,
+        'job.pdf',
+        'assistants',
+        { signal: req.signal }
+      );
       let liFile;
       if (Object.keys(linkedinData).length) {
         const liBuffer = await convertToPdf(linkedinData);
-        liFile = await openaiUploadFile(liBuffer, 'linkedin.pdf');
+        liFile = await openaiUploadFile(
+          liBuffer,
+          'linkedin.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
       }
       let credlyFile;
       if (credlyCertifications.length) {
         const credlyBuffer = await convertToPdf(credlyCertifications);
-        credlyFile = await openaiUploadFile(credlyBuffer, 'credly.pdf');
+        credlyFile = await openaiUploadFile(
+          credlyBuffer,
+          'credly.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
       }
 
       let coverLetterText;
       try {
-        coverLetterText = await requestCoverLetter({
-          cvFileId: cvFile.id,
-          jobDescFileId: jdFile.id,
-          linkedInFileId: liFile?.id,
-          credlyFileId: credlyFile?.id,
-        });
+        coverLetterText = await requestCoverLetter(
+          {
+            cvFileId: cvFile.id,
+            jobDescFileId: jdFile.id,
+            linkedInFileId: liFile?.id,
+            credlyFileId: credlyFile?.id,
+          },
+          { signal: req.signal }
+        );
       } catch (err) {
         if (err.code === 'AI_TIMEOUT') {
           console.error('cover letter generation timed out', err);
@@ -1736,6 +1862,7 @@ export default function registerProcessCv(
           Body: coverBuffer,
           ContentType: 'application/pdf',
         }),
+        { abortSignal: req.signal }
       );
       await s3.send(
         new PutObjectCommand({
@@ -1744,6 +1871,7 @@ export default function registerProcessCv(
           Body: sanitizedCover,
           ContentType: 'text/plain',
         }),
+        { abortSignal: req.signal }
       );
 
       const cvUrl = await getSignedUrl(
@@ -1764,7 +1892,7 @@ export default function registerProcessCv(
 
       let atsMetrics;
       try {
-        atsMetrics = await requestAtsAnalysis(cvText);
+        atsMetrics = await requestAtsAnalysis(cvText, { signal: req.signal });
       } catch (err) {
         console.warn('ATS analysis failed, using heuristic metrics', err);
         atsMetrics = calculateMetrics(cvText);
@@ -1788,21 +1916,24 @@ export default function registerProcessCv(
       const { browser, os, device } = req;
 
       try {
-        await logSession({
-          jobId,
-          ipAddress,
-          userAgent,
-          browser,
-          os,
-          device,
-          jobDescriptionUrl,
-          linkedinProfileUrl,
-          credlyProfileUrl,
-          cvKey: existingCvKey,
-          coverLetterKey: coverKey,
-          atsScore,
-          improvement,
-        });
+        await logSession(
+          {
+            jobId,
+            ipAddress,
+            userAgent,
+            browser,
+            os,
+            device,
+            jobDescriptionUrl,
+            linkedinProfileUrl,
+            credlyProfileUrl,
+            cvKey: existingCvKey,
+            coverLetterKey: coverKey,
+            atsScore,
+            improvement,
+          },
+          { signal: req.signal }
+        );
       } catch (err) {
         console.error('failed to log session', err);
       }
