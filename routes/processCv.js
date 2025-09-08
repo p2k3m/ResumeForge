@@ -359,6 +359,54 @@ export default function registerProcessCv(
     }
   });
 
+  app.delete('/api/session/:jobId', async (req, res) => {
+    const { jobId } = req.params;
+    if (!jobId) {
+      return res.status(400).json({ error: 'jobId required' });
+    }
+    let bucket;
+    let tableName = process.env.DYNAMO_TABLE;
+    try {
+      const secrets = await getSecrets();
+      bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+      if (!tableName) {
+        tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
+      }
+    } catch {
+      bucket = process.env.S3_BUCKET || 'resume-forge-data';
+      if (!tableName) tableName = 'ResumeForgeLogs';
+    }
+    const s3 = new S3Client({ region: REGION });
+    const dynamo = new DynamoDBClient({ region: REGION });
+    try {
+      const { Item } = await dynamo.send(
+        new GetItemCommand({ TableName: tableName, Key: { jobId: { S: jobId } } })
+      );
+      if (!Item) {
+        return res.status(404).json({ error: 'session not found' });
+      }
+      const keys = [];
+      if (Item.cvKey?.S) keys.push(Item.cvKey.S);
+      if (Item.coverLetterKey?.S) keys.push(Item.coverLetterKey.S);
+      const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+      for (const Key of keys) {
+        try {
+          await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key }));
+        } catch (err) {
+          console.warn('failed to delete s3 object', Key, err);
+        }
+      }
+      const { DeleteItemCommand } = await import('@aws-sdk/client-dynamodb');
+      await dynamo.send(
+        new DeleteItemCommand({ TableName: tableName, Key: { jobId: { S: jobId } } })
+      );
+      res.json({ status: 'deleted' });
+    } catch (err) {
+      console.error('failed to delete session', err);
+      res.status(500).json({ error: 'failed to delete session' });
+    }
+  });
+
   app.get('/api/download', async (req, res) => {
     const { sanitizedName, date, sessionId, type, file } = req.query;
     if (!sanitizedName || !date || !sessionId || !type || !file) {
