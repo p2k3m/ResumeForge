@@ -38,13 +38,15 @@ const createError = (status, message) => {
   return err;
 };
 
-async function withRetry(fn, retries = 3, delay = 500) {
+async function withRetry(fn, retries = 3, delay = 500, signal) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (signal?.aborted) throw new Error('Aborted');
     try {
       return await fn();
     } catch (err) {
       lastErr = err;
+      if (signal?.aborted || err.name === 'AbortError') throw err;
       if (attempt === retries) break;
       await new Promise((r) => setTimeout(r, delay));
     }
@@ -131,11 +133,27 @@ export function withTimeout(handler, timeoutMs = 10000) {
   return async (req, res, next) => {
     const controller = new AbortController();
     req.signal = controller.signal;
+    req.abortController = controller;
+    controller.signal.addEventListener('abort', () => {
+      const ts = new Date().toISOString();
+      const id = req.jobId || 'unknown';
+      console.log(`[${ts}] [${id}] abort_triggered`);
+    });
     const start = Date.now();
+    const abortNext = (err) => {
+      if (err && !controller.signal.aborted) {
+        console.log(`[processCv] aborting due to error: ${err.message}`);
+        controller.abort();
+      }
+      next(err);
+    };
     const timeout = setTimeout(() => {
-      controller.abort();
+      if (!controller.signal.aborted) {
+        console.log('[processCv] processing timeout, aborting');
+        controller.abort();
+      }
       if (!res.headersSent) {
-        next(createError(503, 'processing timeout'));
+        abortNext(createError(503, 'processing timeout'));
       }
     }, timeoutMs);
     const end = res.end;
@@ -148,9 +166,9 @@ export function withTimeout(handler, timeoutMs = 10000) {
       end.apply(this, args);
     };
     try {
-      await handler(req, res, next);
+      await handler(req, res, abortNext);
     } catch (err) {
-      if (!controller.signal.aborted) next(err);
+      abortNext(err);
     } finally {
       clearTimeout(timeout);
     }
@@ -179,8 +197,9 @@ async function logStep(req, event, start, message = '') {
   const duration = Date.now() - start;
   const endTs = new Date().toISOString();
   const id = req.jobId || 'unknown';
+  const status = req.signal?.aborted ? 'canceled' : 'end';
   console.log(
-    `[${endTs}] [${id}] ${event}_end duration=${duration}ms${
+    `[${endTs}] [${id}] ${event}_${status} duration=${duration}ms${
       message ? ' - ' + message : ''
     }`,
   );
@@ -191,7 +210,7 @@ async function logStep(req, event, start, message = '') {
         bucket: req.bucket,
         key: req.logKey,
         jobId: id,
-        event: `${event}_end`,
+        event: `${event}_${status}`,
         message: `duration=${duration}ms${
           message ? '; ' + message : ''
         }`,
@@ -748,7 +767,8 @@ export default function registerProcessCv(
           Key: `${prefix}${sanitizedName}${ext}`,
           Body: req.file.buffer,
           ContentType: req.file.mimetype,
-        })
+        }),
+        { abortSignal: req.signal }
       );
       await endInitialUpload();
     } catch (e) {
@@ -811,7 +831,9 @@ export default function registerProcessCv(
               signal: req.signal,
               jobId,
             }),
-          2
+          2,
+          500,
+          req.signal
         );
         await endJdFetch();
       } catch (err) {
@@ -830,7 +852,9 @@ export default function registerProcessCv(
       try {
         linkedinData = await withRetry(
           () => fetchLinkedInProfile(linkedinProfileUrl, req.signal),
-          2
+          2,
+          500,
+          req.signal
         );
         const hasContent = Object.values(linkedinData).some((v) =>
           Array.isArray(v) ? v.length > 0 : v
@@ -870,7 +894,9 @@ export default function registerProcessCv(
         try {
           credlyCertifications = await withRetry(
             () => fetchCredlyProfile(credlyProfileUrl, req.signal),
-            2
+            2,
+            500,
+            req.signal
           );
           await logEvent({
             s3,

@@ -37,6 +37,11 @@ export async function fetchJobDescription(
     console.log(`[${ts}]${idPart} [jobFetch] ${msg}`);
   };
 
+  if (signal?.aborted) {
+    log('aborted_before_start');
+    throw new Error('Aborted');
+  }
+
   const isBlocked = (content) =>
     !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
 
