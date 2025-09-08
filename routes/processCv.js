@@ -14,6 +14,7 @@ import {
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 import { logEvaluation, logSession } from '../services/dynamo.js';
+import { Document, Packer, Paragraph } from 'docx';
 
 import { uploadResume, validateUrl } from '../lib/serverUtils.js';
 import userAgentMiddleware from '../middlewares/userAgent.js';
@@ -296,6 +297,14 @@ async function convertToPdfLogged(req, content) {
     await end(err.message);
     throw err;
   }
+}
+
+function generateDocxBuffer(text = '') {
+  const paragraphs = String(text)
+    .split(/\r?\n/)
+    .map((line) => new Paragraph({ text: line }));
+  const doc = new Document({ sections: [{ children: paragraphs }] });
+  return Packer.toBuffer(doc);
 }
 
 export default function registerProcessCv(
@@ -2289,6 +2298,208 @@ export default function registerProcessCv(
         addedLanguages: selectedLanguagesArr,
         designation: designation || '',
       });
+    });
+
+    app.post('/api/enhance', async (req, res, next) => {
+      const jobId = crypto.randomUUID();
+      const s3 = new S3Client({ region: REGION });
+      let bucket;
+      try {
+        const secrets = await getSecrets();
+        bucket =
+          process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+      } catch (err) {
+        console.error('failed to load configuration', err);
+        return next(createError(500, 'failed to load configuration'));
+      }
+
+      try {
+        let {
+          cvKey,
+          cvText,
+          jobDescription,
+          linkedinProfileUrl,
+          credlyProfileUrl,
+        } = req.body || {};
+        if (!cvText && !cvKey)
+          return next(createError(400, 'cvKey or cvText required'));
+        if (!jobDescription)
+          return next(createError(400, 'jobDescription required'));
+
+        if (!cvText && cvKey) {
+          const obj = await s3.send(
+            new GetObjectCommand({ Bucket: bucket, Key: cvKey }),
+            { abortSignal: req.signal }
+          );
+          const buf = Buffer.from(await obj.Body.transformToByteArray());
+          cvText = await extractText({
+            originalname: path.basename(cvKey),
+            buffer: buf,
+          });
+        }
+
+        const applicantName = sanitizeName(
+          (await extractName(cvText)) || 'candidate'
+        );
+        const date = new Date().toISOString().split('T')[0];
+        const uuid = crypto.randomUUID();
+        const basePath = [applicantName, date, uuid, 'generated'];
+
+        const cvPdf = await convertToPdf(cvText);
+        const jdPdf = await convertToPdf(jobDescription);
+        const cvFile = await openaiUploadFile(cvPdf, 'resume.pdf', 'assistants', {
+          signal: req.signal,
+        });
+        const jdFile = await openaiUploadFile(
+          jdPdf,
+          'jobdesc.pdf',
+          'assistants',
+          { signal: req.signal }
+        );
+
+        let linkedinFile;
+        if (linkedinProfileUrl) {
+          const data = await fetchLinkedInProfile(
+            linkedinProfileUrl,
+            req.signal
+          );
+          const pdf = await convertToPdf(data);
+          linkedinFile = await openaiUploadFile(
+            pdf,
+            'linkedin.pdf',
+            'assistants',
+            { signal: req.signal }
+          );
+        }
+        let credlyFile;
+        if (credlyProfileUrl) {
+          const data = await fetchCredlyProfile(credlyProfileUrl, req.signal);
+          const pdf = await convertToPdf(data);
+          credlyFile = await openaiUploadFile(
+            pdf,
+            'credly.pdf',
+            'assistants',
+            { signal: req.signal }
+          );
+        }
+
+        const instructions =
+          'You are an expert resume writer. Improve the resume to match the job description. Provide two distinct improved CV versions and a cover letter.';
+        const raw1 = await requestEnhancedCV(
+          {
+            cvFileId: cvFile.id,
+            jobDescFileId: jdFile.id,
+            linkedInFileId: linkedinFile?.id,
+            credlyFileId: credlyFile?.id,
+            instructions,
+          },
+          { signal: req.signal }
+        );
+        const resp1 = JSON.parse(raw1);
+
+        const raw2 = await requestEnhancedCV(
+          {
+            cvFileId: cvFile.id,
+            jobDescFileId: jdFile.id,
+            linkedInFileId: linkedinFile?.id,
+            credlyFileId: credlyFile?.id,
+            instructions,
+          },
+          { signal: req.signal }
+        );
+        const resp2 = JSON.parse(raw2);
+
+        const cvVariants = [
+          resp1.cv_version1,
+          resp1.cv_version2,
+          resp2.cv_version1,
+          resp2.cv_version2,
+        ];
+        const coverLetterText =
+          resp1.cover_letter1 || resp1.cover_letter2 || resp2.cover_letter1 || '';
+
+        const variantUrls = [];
+        for (let i = 0; i < cvVariants.length; i++) {
+          const text = cvVariants[i];
+          const docxBuf = await generateDocxBuffer(text);
+          const pdfBuf = await generatePdf(text, 'modern', {}, generativeModel);
+          const docxKey = buildS3Key(basePath, `cv_variant${i + 1}.docx`);
+          const pdfKey = buildS3Key(basePath, `cv_variant${i + 1}.pdf`);
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: docxKey,
+              Body: docxBuf,
+              ContentType:
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            })
+          );
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: pdfKey,
+              Body: pdfBuf,
+              ContentType: 'application/pdf',
+            })
+          );
+          const docxUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: bucket, Key: docxKey }),
+            { expiresIn: 3600 }
+          );
+          const pdfUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: bucket, Key: pdfKey }),
+            { expiresIn: 3600 }
+          );
+          variantUrls.push({ docxUrl, pdfUrl });
+        }
+
+        const coverUrls = {};
+        if (coverLetterText) {
+          const clDocx = await generateDocxBuffer(coverLetterText);
+          const clPdf = await generatePdf(
+            coverLetterText,
+            'cover_modern',
+            {},
+            generativeModel
+          );
+          const clDocxKey = buildS3Key(basePath, 'cover_letter.docx');
+          const clPdfKey = buildS3Key(basePath, 'cover_letter.pdf');
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: clDocxKey,
+              Body: clDocx,
+              ContentType:
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            })
+          );
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: clPdfKey,
+              Body: clPdf,
+              ContentType: 'application/pdf',
+            })
+          );
+          coverUrls.docxUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: bucket, Key: clDocxKey }),
+            { expiresIn: 3600 }
+          );
+          coverUrls.pdfUrl = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: bucket, Key: clPdfKey }),
+            { expiresIn: 3600 }
+          );
+        }
+
+        res.json({ variants: variantUrls, coverLetter: coverUrls });
+      } catch (err) {
+        console.error('enhance failed', err);
+        next(createError(500, 'failed to enhance CV'));
+      }
     });
   }
 
