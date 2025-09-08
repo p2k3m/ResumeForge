@@ -296,6 +296,27 @@ function App() {
     }
   }
 
+  const pollProgress = (jobId) => {
+    const interval = setInterval(async () => {
+      try {
+        const resp = await fetch(`${API_BASE_URL}/api/progress/${jobId}`)
+        const data = await resp.json()
+        if (data && Object.values(data).every((v) => v === 'completed')) {
+          clearInterval(interval)
+        }
+      } catch {
+        clearInterval(interval)
+      }
+    }, 1000)
+  }
+
+  const getDownloadUrl = async (jobId, file) => {
+    const resp = await fetch(`${API_BASE_URL}/api/download/${jobId}/${file}`)
+    if (!resp.ok) throw new Error('Request failed')
+    const info = await resp.json()
+    return info.url || ''
+  }
+
   const handleCompile = async () => {
     setIsProcessing(true)
     setError('')
@@ -334,6 +355,7 @@ function App() {
         throw new Error(text || 'Request failed')
       }
       const improveData = await improveResp.json()
+      if (improveData.jobId) pollProgress(improveData.jobId)
       const existingKey = improveData.existingCvKey || ''
       const existingTextKey = improveData.cvTextKey || ''
       setCvKey(existingKey)
@@ -366,12 +388,16 @@ function App() {
         throw new Error(text || 'Request failed')
       }
       const data = await compileResp.json()
+      pollProgress(data.jobId)
       setFinalScore(data.atsScore)
       setImprovement(data.improvement)
       setChanceOfSelection(data.chanceOfSelection)
-      setCvUrl(data.cvUrl || '')
-      setCoverLetterUrl(data.coverLetterUrl || '')
-      setCoverLetterTextUrl(data.coverLetterTextUrl || '')
+      const cvDownload = await getDownloadUrl(data.jobId, 'cv.pdf')
+      const clDownload = await getDownloadUrl(data.jobId, 'cover_letter.pdf')
+      const clTextDownload = await getDownloadUrl(data.jobId, 'cover_letter.txt')
+      setCvUrl(cvDownload)
+      setCoverLetterUrl(clDownload)
+      setCoverLetterTextUrl(clTextDownload)
       setCoverLetterText(data.coverLetterText || '')
       setNewAdditions(
         [

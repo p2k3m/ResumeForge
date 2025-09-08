@@ -2,6 +2,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { getSecrets } from '../config/secrets.js';
 import { logEvent } from '../logger.js';
 import {
@@ -32,6 +33,8 @@ import {
 } from '../services/parseContent.js';
 import { REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 import { PROCESS_TIMEOUT_MS } from '../config/process.js';
+
+const activeJobs = new Map();
 
 const TRACKED_STAGES = [
   'ats_analysis',
@@ -146,6 +149,9 @@ export function withTimeout(handler, timeoutMs = 10000) {
     req.requestStart = Date.now();
     req.stageStatus = {};
     req.stageDurations = {};
+    if (req.jobId) {
+      activeJobs.set(req.jobId, req);
+    }
     let summaryLogged = false;
     const logSummary = (result) => {
       if (summaryLogged) return;
@@ -207,6 +213,9 @@ export function withTimeout(handler, timeoutMs = 10000) {
         `[processCv] [${id}] ${req.method} ${req.originalUrl} took ${duration}ms elapsed=${elapsed}ms`,
       );
       logSummary('finished');
+      if (req.jobId) {
+        activeJobs.delete(req.jobId);
+      }
       end.apply(this, args);
     };
     try {
@@ -325,10 +334,64 @@ export default function registerProcessCv(
     calculateMatchScore,
     sanitizeGeneratedText,
     parseAiJson,
-    generatePdf,
+  generatePdf,
   }
 ) {
   app.use(userAgentMiddleware);
+
+  app.get('/api/progress/:jobId', async (req, res) => {
+    const { jobId } = req.params;
+    const active = activeJobs.get(jobId);
+    if (active) {
+      return res.json(active.stageStatus || {});
+    }
+    try {
+      const dynamo = new DynamoDBClient({ region: REGION });
+      let tableName = process.env.DYNAMO_TABLE;
+      if (!tableName) {
+        try {
+          const secrets = await getSecrets();
+          tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
+        } catch {
+          tableName = 'ResumeForgeLogs';
+        }
+      }
+      const { Item } = await dynamo.send(
+        new GetItemCommand({ TableName: tableName, Key: { jobId: { S: jobId } } })
+      );
+      if (!Item) return res.status(404).json({ error: 'job not found' });
+      res.json(Item);
+    } catch (err) {
+      console.error('failed to fetch progress', err);
+      res.status(500).json({ error: 'failed to fetch progress' });
+    }
+  });
+
+  app.get('/api/download/:jobId/:file', async (req, res) => {
+    const { jobId, file } = req.params;
+    if (!jobId) return res.status(400).json({ error: 'invalid jobId' });
+    const s3 = new S3Client({ region: REGION });
+    let bucket;
+    try {
+      const secrets = await getSecrets();
+      bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+    } catch (err) {
+      console.error('failed to load configuration', err);
+      return res.status(500).json({ error: 'failed to load configuration' });
+    }
+    const key = buildS3Key([jobId], file);
+    try {
+      const url = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: 3600 }
+      );
+      res.json({ url });
+    } catch (err) {
+      console.error('failed to generate download url', err);
+      res.status(404).json({ error: 'file not found' });
+    }
+  });
   app.post(
     '/api/evaluate',
     (req, res, next) => {
@@ -609,6 +672,7 @@ export default function registerProcessCv(
         }, { signal: req.signal });
 
         res.json({
+          jobId,
           atsScore,
           atsMetrics,
           jobTitle,
@@ -1228,6 +1292,7 @@ export default function registerProcessCv(
       );
       iteration += 1;
       return res.json({
+        jobId,
         applicantName,
         sections: improvedSections,
         cv: improvedCv,
@@ -2287,6 +2352,7 @@ export default function registerProcessCv(
       }
 
       res.json({
+        jobId,
         cvUrl,
         coverLetterUrl: coverUrl,
         coverLetterTextUrl: coverTextUrl,
