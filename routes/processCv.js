@@ -367,9 +367,11 @@ export default function registerProcessCv(
     }
   });
 
-  app.get('/api/download/:jobId/:file', async (req, res) => {
-    const { jobId, file } = req.params;
-    if (!jobId) return res.status(400).json({ error: 'invalid jobId' });
+  app.get('/api/download', async (req, res) => {
+    const { sanitizedName, date, sessionId, type, file } = req.query;
+    if (!sanitizedName || !date || !sessionId || !type || !file) {
+      return res.status(400).json({ error: 'invalid parameters' });
+    }
     const s3 = new S3Client({ region: REGION });
     let bucket;
     try {
@@ -379,7 +381,7 @@ export default function registerProcessCv(
       console.error('failed to load configuration', err);
       return res.status(500).json({ error: 'failed to load configuration' });
     }
-    const key = buildS3Key([jobId], file);
+    const key = buildS3Key([sanitizedName, date, sessionId, type], file);
     try {
       const url = await getSignedUrl(
         s3,
@@ -509,6 +511,8 @@ export default function registerProcessCv(
           sanitized = 'candidate';
           applicantName = 'Candidate';
         }
+        const sessionId = crypto.randomUUID();
+        req.sessionId = sessionId;
         let bucket;
         try {
           const secrets = await getSecrets();
@@ -523,9 +527,10 @@ export default function registerProcessCv(
         req.bucket = bucket;
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
-        const prefix = `${sanitized}/cv/${date}/`;
-        cvKey = `${prefix}${Date.now()}-${sanitized}${ext}`;
-        req.logKey = `${prefix}logs/processing.jsonl`;
+        const basePath = [sanitized, date, sessionId];
+        const filename = `${Date.now()}-${sanitized}${ext}`;
+        cvKey = buildS3Key([...basePath, 'original'], filename);
+        req.logKey = buildS3Key([...basePath, 'logs'], 'processing.jsonl');
         const endS3 = startStep(req, 'uploads');
         try {
           await s3.send(
@@ -673,6 +678,7 @@ export default function registerProcessCv(
 
         res.json({
           jobId,
+          sessionId,
           atsScore,
           atsMetrics,
           jobTitle,
@@ -845,7 +851,7 @@ export default function registerProcessCv(
       applicantName,
       sanitizedName,
       ext,
-      prefix,
+      basePath,
       existingCvBuffer,
       originalText,
       originalTitle;
@@ -880,10 +886,17 @@ export default function registerProcessCv(
         sanitizedName = 'candidate';
         applicantName = 'Candidate';
       }
+      const sessionId = crypto.randomUUID();
+      req.sessionId = sessionId;
       ext = path.extname(req.file.originalname).toLowerCase();
       const date = new Date().toISOString().split('T')[0];
-      prefix = `${sanitizedName}/cv/${date}/`;
-      logKey = `${prefix}logs/processing.jsonl`;
+      basePath = [sanitizedName, date, sessionId];
+      const originalKey = buildS3Key(
+        [...basePath, 'original'],
+        req.file.originalname
+      );
+      existingCvKey = originalKey;
+      logKey = buildS3Key([...basePath, 'logs'], 'processing.jsonl');
       req.logKey = logKey;
       text = null;
       if (existingCvTextKey) {
@@ -928,7 +941,7 @@ export default function registerProcessCv(
       await initialS3.send(
         new PutObjectCommand({
           Bucket: bucket,
-          Key: `${prefix}${sanitizedName}${ext}`,
+          Key: existingCvKey,
           Body: req.file.buffer,
           ContentType: req.file.mimetype,
         }),
@@ -1246,11 +1259,11 @@ export default function registerProcessCv(
       }
       const ts = Date.now();
       const key = buildS3Key(
-        [sanitizedName, 'enhanced', date],
+        [...basePath, 'generated'],
         `${ts}-improved.pdf`
       );
       const textKey = buildS3Key(
-        [sanitizedName, 'enhanced', date],
+        [...basePath, 'generated'],
         `${ts}-improved.txt`
       );
       const endPdfUpload = startStep(req, 'uploads');
@@ -1293,6 +1306,7 @@ export default function registerProcessCv(
       iteration += 1;
       return res.json({
         jobId,
+        sessionId,
         applicantName,
         sections: improvedSections,
         cv: improvedCv,
