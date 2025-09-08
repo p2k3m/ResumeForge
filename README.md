@@ -10,6 +10,8 @@ This hierarchy replaces older examples that stored documents directly under the 
 
 Job descriptions are fetched with an initial Axios request and fall back to a Puppeteer-rendered page when direct access fails or requires client-side rendering. This approach cannot bypass authentication or strict anti-bot measures, so some postings may still be unreachable.
 
+If a LinkedIn posting requires authentication, the server returns a `LINKEDIN_AUTH_REQUIRED` error. For these protected URLs, copy and paste the job description text directly instead of providing the link.
+
 ## Environment Variables
 The server relies on the following environment variables:
 
