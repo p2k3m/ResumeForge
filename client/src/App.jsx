@@ -68,9 +68,12 @@ function App() {
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
   const [coverLetterTextUrl, setCoverLetterTextUrl] = useState('')
   const [coverLetterText, setCoverLetterText] = useState('')
-  const [newAdditions, setNewAdditions] = useState([])
+  const [enhancedCvUrls, setEnhancedCvUrls] = useState([])
+  const [enhancedCoverUrls, setEnhancedCoverUrls] = useState([])
+  const [addedSkills, setAddedSkills] = useState([])
   const [addedProjects, setAddedProjects] = useState([])
   const [addedCertifications, setAddedCertifications] = useState([])
+  const [studyTips, setStudyTips] = useState([])
   const [manualName, setManualName] = useState('')
   const [showNameModal, setShowNameModal] = useState(false)
   const [metricSuggestions, setMetricSuggestions] = useState({})
@@ -392,6 +395,8 @@ function App() {
       setFinalScore(data.atsScore)
       setImprovement(data.improvement)
       setChanceOfSelection(data.chanceOfSelection)
+      setAddedSkills([...(data.addedSkills || []), ...(data.addedLanguages || [])])
+      setStudyTips(data.studyTips || [])
       const cvDownload = await getDownloadUrl(data.jobId, 'cv.pdf')
       const clDownload = await getDownloadUrl(data.jobId, 'cover_letter.pdf')
       const clTextDownload = await getDownloadUrl(data.jobId, 'cover_letter.txt')
@@ -399,17 +404,58 @@ function App() {
       setCoverLetterUrl(clDownload)
       setCoverLetterTextUrl(clTextDownload)
       setCoverLetterText(data.coverLetterText || '')
-      setNewAdditions(
-        [
-          ...(data.addedSkills || []).map((s) =>
-            typeof s === 'string' ? s : s.name
-          ),
-          ...(data.addedLanguages || []),
-          data.designation,
-          ...(addedProjects || []),
-          ...(addedCertifications || []),
-        ].filter(Boolean)
-      )
+    } catch (err) {
+      setError(err.message || 'Something went wrong.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleEnhance = async () => {
+    setIsProcessing(true)
+    setError('')
+    setEnhancedCvUrls([])
+    setEnhancedCoverUrls([])
+    try {
+      const form = new FormData()
+      form.append('resume', cvFile)
+      form.append('jobDescriptionUrl', jobUrl)
+      form.append('linkedinProfileUrl', linkedinUrl)
+      if (credlyUrl.trim()) form.append('credlyProfileUrl', credlyUrl.trim())
+      const resp = await fetch(`${API_BASE_URL}/api/enhance`, {
+        method: 'POST',
+        body: form
+      })
+      if (!resp.ok) {
+        const text = await resp.text()
+        throw new Error(text || 'Request failed')
+      }
+      const data = await resp.json()
+      if (data.jobId) {
+        pollProgress(data.jobId)
+        const variantFiles = data.variantFiles || data.variants || []
+        const coverFiles = data.coverFiles || data.coverLetters || []
+        const variantLinks = []
+        for (let i = 0; i < variantFiles.length; i++) {
+          try {
+            const url = await getDownloadUrl(data.jobId, variantFiles[i])
+            variantLinks.push({ label: `Download CV Version ${i + 1}`, url })
+          } catch {}
+        }
+        const coverLinks = []
+        for (let i = 0; i < coverFiles.length; i++) {
+          try {
+            const url = await getDownloadUrl(data.jobId, coverFiles[i])
+            coverLinks.push({ label: `Download Cover Letter${coverFiles.length > 1 ? ` ${i + 1}` : ''}`, url })
+          } catch {}
+        }
+        setEnhancedCvUrls(variantLinks)
+        setEnhancedCoverUrls(coverLinks)
+      }
+      setAddedSkills([...(data.addedSkills || []), ...(data.addedLanguages || [])])
+      setAddedProjects(data.addedProjects || [])
+      setAddedCertifications(data.addedCertifications || [])
+      setStudyTips(data.studyTips || [])
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -864,6 +910,12 @@ function App() {
             >
               Improve CV and Generate Cover Letter
             </button>
+            <button
+              onClick={handleEnhance}
+              className="px-4 py-2 bg-green-600 text-white rounded"
+            >
+              Enhance CV
+            </button>
           </div>
           {finalScore !== null && (
             <p className="text-purple-800 mt-2">
@@ -907,6 +959,32 @@ function App() {
               )}
             </div>
           )}
+          {enhancedCvUrls.length > 0 && (
+            <div className="flex flex-col gap-2 mt-2">
+              {enhancedCvUrls.map((link, idx) => (
+                <a
+                  key={idx}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-green-600 text-white rounded"
+                >
+                  {link.label}
+                </a>
+              ))}
+              {enhancedCoverUrls.map((link, idx) => (
+                <a
+                  key={`cover-${idx}`}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-green-600 text-white rounded"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          )}
           {coverLetterText && (
             <div className="mt-4">
               <h3 className="font-semibold mb-2">Cover Letter Text</h3>
@@ -915,46 +993,127 @@ function App() {
               </pre>
             </div>
           )}
-          {newAdditions.length > 0 && (
+          {(addedSkills.length > 0 ||
+            addedProjects.length > 0 ||
+            addedCertifications.length > 0 ||
+            studyTips.length > 0) && (
             <div className="text-purple-800 mt-4">
               <h3 className="font-semibold mb-2">New Additions for Interview Prep</h3>
-              <ul className="list-disc list-inside">
-                {newAdditions.map((item, idx) => {
-                  const key = item.toLowerCase().trim()
-                  const resources = skillResources[key] || certResources[key] || languageResources[key]
-                  return (
-                    <li key={idx}>
-                      {item}{' '}
-                      {resources ? (
-                        resources.map((r, i) => (
-                          <span key={i}>
+
+              {addedSkills.length > 0 && (
+                <div className="mb-2">
+                  <p className="font-semibold">Skills</p>
+                  <ul className="list-disc list-inside">
+                    {addedSkills.map((item, idx) => {
+                      const name = typeof item === 'string' ? item : item.name
+                      const key = name.toLowerCase().trim()
+                      const resources =
+                        skillResources[key] ||
+                        certResources[key] ||
+                        languageResources[key]
+                      return (
+                        <li key={idx}>
+                          {name}{' '}
+                          {resources ? (
+                            resources.map((r, i) => (
+                              <span key={i}>
+                                <a
+                                  href={r.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 underline"
+                                >
+                                  {r.label}
+                                </a>
+                                {i < resources.length - 1 ? ', ' : ''}
+                              </span>
+                            ))
+                          ) : (
                             <a
-                              href={r.url}
+                              href={`https://www.google.com/search?q=${encodeURIComponent(
+                                name + ' interview questions'
+                              )}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 underline"
                             >
-                              {r.label}
+                              Learning Resources
                             </a>
-                            {i < resources.length - 1 ? ', ' : ''}
-                          </span>
-                        ))
-                      ) : (
-                        <a
-                          href={`https://www.google.com/search?q=${encodeURIComponent(
-                            item + ' interview questions'
-                          )}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline"
-                        >
-                          Learning Resources
-                        </a>
-                      )}
-                    </li>
-                  )
-                })}
-              </ul>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {addedProjects.length > 0 && (
+                <div className="mb-2">
+                  <p className="font-semibold">Projects</p>
+                  <ul className="list-disc list-inside">
+                    {addedProjects.map((p, idx) => (
+                      <li key={idx}>{p}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {addedCertifications.length > 0 && (
+                <div className="mb-2">
+                  <p className="font-semibold">Certifications</p>
+                  <ul className="list-disc list-inside">
+                    {addedCertifications.map((c, idx) => {
+                      const name = c.provider
+                        ? `${c.name} - ${c.provider}`
+                        : c.name || c
+                      const key = (c.name || c).toLowerCase().trim()
+                      const resources = certResources[key] || []
+                      return (
+                        <li key={idx}>
+                          {name}{' '}
+                          {resources.length > 0 ? (
+                            resources.map((r, i) => (
+                              <span key={i}>
+                                <a
+                                  href={r.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 underline"
+                                >
+                                  {r.label}
+                                </a>
+                                {i < resources.length - 1 ? ', ' : ''}
+                              </span>
+                            ))
+                          ) : (
+                            <a
+                              href={`https://www.google.com/search?q=${encodeURIComponent(
+                                name + ' interview questions'
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 underline"
+                            >
+                              Learning Resources
+                            </a>
+                          )}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {studyTips.length > 0 && (
+                <div className="mb-2">
+                  <p className="font-semibold">Study Tips</p>
+                  <ul className="list-disc list-inside">
+                    {studyTips.map((t, idx) => (
+                      <li key={idx}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>
