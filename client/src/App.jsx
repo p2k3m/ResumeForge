@@ -605,17 +605,42 @@ function App() {
                     (m) => result.atsMetrics[m] != null
                   )
                   if (available.length === 0) return null
+                  const avgScore = Math.round(
+                    available.reduce(
+                      (a, m) => a + result.atsMetrics[m],
+                      0
+                    ) / available.length
+                  )
+                  const status = getScoreStatus(avgScore)
+                  const primaryMetric = available[0]
                   return (
-                    <div key={category} className="mb-2">
+                    <div
+                      key={category}
+                      className="p-4 bg-white border rounded shadow-sm mb-2"
+                    >
                       <p className="font-medium">{category}</p>
+                      {avgScore < 80 && (
+                        <p className="text-sm text-purple-600">
+                          Target ≥80. Click to FIX
+                        </p>
+                      )}
+                      <p>
+                        {avgScore}% ({status})
+                        <button
+                          onClick={() => handleFix(primaryMetric)}
+                          className="ml-2 text-blue-600 underline"
+                        >
+                          Fix
+                        </button>
+                      </p>
                       <ul>
                         {available.map((metric) => {
                           const score = result.atsMetrics[metric]
-                          const status = getScoreStatus(score)
+                          const metricStatus = getScoreStatus(score)
                           return (
                             <li key={metric} className="mb-1">
                               <span>
-                                {formatMetricName(metric)}: {score}% ({status})
+                                {formatMetricName(metric)}: {score}% ({metricStatus})
                               </span>
                               <>
                                 <button
@@ -627,7 +652,9 @@ function App() {
                                 {metricTips[metric] && (
                                   <span
                                     className={`block text-sm ${
-                                      score >= 70 ? 'text-green-600' : 'text-purple-600'
+                                      score >= 70
+                                        ? 'text-green-600'
+                                        : 'text-purple-600'
                                     }`}
                                   >
                                     {score >= 70
