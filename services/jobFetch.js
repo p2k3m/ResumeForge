@@ -14,34 +14,34 @@ export async function fetchJobDescription(
 ) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid URL');
+  let html = '';
   try {
     const { data } = await axios.get(valid, {
       timeout,
       headers: { 'User-Agent': userAgent },
     });
-    if (data && data.trim()) {
-      if (BLOCKED_PATTERNS.some((re) => re.test(data))) {
-        throw new Error('Blocked content');
-      }
-      return data;
-    }
-  } catch (err) {
-    if (err.message === 'Blocked content') throw err;
+    html = data;
+  } catch {
+    // Ignore axios errors and fall back to puppeteer
   }
-  const browser = await puppeteer.launch({
-    headless: PUPPETEER_HEADLESS,
-    args: PUPPETEER_ARGS,
-  });
-  try {
-    const page = await browser.newPage();
-    await page.setUserAgent(userAgent);
-    await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
-    const content = await page.content();
-    if (BLOCKED_PATTERNS.some((re) => re.test(content))) {
-      throw new Error('Blocked content');
+
+  if (!html || !html.trim() || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+    const browser = await puppeteer.launch({
+      headless: PUPPETEER_HEADLESS,
+      args: PUPPETEER_ARGS,
+    });
+    try {
+      const page = await browser.newPage();
+      await page.setUserAgent(userAgent);
+      await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
+      html = await page.content();
+    } finally {
+      await browser.close();
     }
-    return content;
-  } finally {
-    await browser.close();
   }
+
+  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+    throw new Error('Blocked content');
+  }
+  return html;
 }
