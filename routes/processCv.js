@@ -261,13 +261,12 @@ export default function registerProcessCv(
                 "The document type couldn't be recognized; please upload a CV.",
             });
         }
-        const applicantName =
+        let applicantName =
           req.body.applicantName || (await extractName(resumeText));
-        const sanitized = sanitizeName(applicantName);
+        let sanitized = sanitizeName(applicantName);
         if (!sanitized) {
-          return res
-            .status(400)
-            .json({ error: 'name required', nameRequired: true });
+          sanitized = 'candidate';
+          applicantName = 'Candidate';
         }
         let bucket;
         try {
@@ -590,10 +589,10 @@ export default function registerProcessCv(
         req.body.applicantName || (await extractName(originalText));
       originalTitle = lines[1] || '';
       sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName)
-        return res
-          .status(400)
-          .json({ error: 'name required', nameRequired: true });
+      if (!sanitizedName) {
+        sanitizedName = 'candidate';
+        applicantName = 'Candidate';
+      }
       ext = path.extname(req.file.originalname).toLowerCase();
       const date = new Date().toISOString().split('T')[0];
       prefix = `${sanitizedName}/cv/${date}/`;
@@ -1198,13 +1197,13 @@ export default function registerProcessCv(
           buffer: existingCvBuffer,
         });
       }
-      const applicantName =
+      let applicantName =
         req.body.applicantName || (await extractName(originalText));
       let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName)
-        return res
-          .status(400)
-          .json({ error: 'name required', nameRequired: true });
+      if (!sanitizedName) {
+        sanitizedName = 'candidate';
+        applicantName = 'Candidate';
+      }
 
       let jobDescription = '';
       let jobTitle = '';
@@ -1415,13 +1414,13 @@ export default function registerProcessCv(
         return next(createError(500, 'failed to process cv'));
       }
 
-      const applicantName =
+      let applicantName =
         req.body.applicantName || (await extractName(originalText));
       let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName)
-        return res
-          .status(400)
-          .json({ error: 'name required', nameRequired: true });
+      if (!sanitizedName) {
+        sanitizedName = 'candidate';
+        applicantName = 'Candidate';
+      }
 
       let jobDescription = '';
       try {
@@ -1610,13 +1609,13 @@ export default function registerProcessCv(
         return next(createError(500, 'failed to load cv'));
       }
 
-      const applicantName =
+      let applicantName =
         req.body.applicantName || (await extractName(cvText));
       let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName)
-        return res
-          .status(400)
-          .json({ error: 'name required', nameRequired: true });
+      if (!sanitizedName) {
+        sanitizedName = 'candidate';
+        applicantName = 'Candidate';
+      }
       const date = new Date().toISOString().split('T')[0];
 
       if (!existingCvKey) {
