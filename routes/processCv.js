@@ -286,7 +286,7 @@ export default function registerProcessCv(
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
         const prefix = `${sanitized}/cv/${date}/`;
-        cvKey = `${prefix}${sanitized}${ext}`;
+        cvKey = `${prefix}${Date.now()}-${sanitized}${ext}`;
         try {
           await s3.send(
             new PutObjectCommand({
