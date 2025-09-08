@@ -1486,10 +1486,8 @@ export default function registerProcessCv(
         defaultHeading: '',
       }, generativeModel);
       const date = new Date().toISOString().split('T')[0];
-      const key = path.join(
-        sanitizedName,
-        'enhanced',
-        date,
+      const key = buildS3Key(
+        [sanitizedName, 'enhanced', date],
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
