@@ -32,6 +32,14 @@ import {
 import { REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 import { PROCESS_TIMEOUT_MS } from '../config/process.js';
 
+const TRACKED_STAGES = [
+  'ats_analysis',
+  'pdf_generation',
+  'text_extraction',
+  'uploads',
+  'summary_generation',
+];
+
 const createError = (status, message) => {
   const err = new Error(message);
   err.status = status;
@@ -134,22 +142,49 @@ export function withTimeout(handler, timeoutMs = 10000) {
     const controller = new AbortController();
     req.signal = controller.signal;
     req.abortController = controller;
+    req.requestStart = Date.now();
+    req.stageStatus = {};
+    let summaryLogged = false;
+    const logSummary = (result) => {
+      if (summaryLogged) return;
+      summaryLogged = true;
+      const ts = new Date().toISOString();
+      const id = req.jobId || 'unknown';
+      const elapsed = Date.now() - req.requestStart;
+      const stages = TRACKED_STAGES.map((s) => {
+        const status = req.stageStatus[s];
+        return `${s}:${status ? (status === 'started' ? 'canceled' : status) : 'skipped'}`;
+      }).join(', ');
+      console.log(
+        `[${ts}] [${id}] evaluation_${result} elapsed=${elapsed}ms stages=${stages}`,
+      );
+    };
     controller.signal.addEventListener('abort', () => {
       const ts = new Date().toISOString();
       const id = req.jobId || 'unknown';
-      console.log(`[${ts}] [${id}] abort_triggered`);
+      const elapsed = Date.now() - req.requestStart;
+      console.log(`[${ts}] [${id}] abort_triggered elapsed=${elapsed}ms`);
+      logSummary('aborted');
     });
     const start = Date.now();
     const abortNext = (err) => {
       if (err && !controller.signal.aborted) {
-        console.log(`[processCv] aborting due to error: ${err.message}`);
+        const elapsed = Date.now() - req.requestStart;
+        const id = req.jobId || 'unknown';
+        console.log(
+          `[processCv] [${id}] aborting due to error: ${err.message} elapsed=${elapsed}ms`,
+        );
         controller.abort();
       }
       next(err);
     };
     const timeout = setTimeout(() => {
       if (!controller.signal.aborted) {
-        console.log('[processCv] processing timeout, aborting');
+        const elapsed = Date.now() - req.requestStart;
+        const id = req.jobId || 'unknown';
+        console.log(
+          `[processCv] [${id}] processing timeout, aborting elapsed=${elapsed}ms`,
+        );
         controller.abort();
       }
       if (!res.headersSent) {
@@ -160,9 +195,12 @@ export function withTimeout(handler, timeoutMs = 10000) {
     res.end = function (...args) {
       const duration = Date.now() - start;
       res.setHeader('X-Processing-Time', duration);
+      const elapsed = Date.now() - req.requestStart;
+      const id = req.jobId || 'unknown';
       console.log(
-        `[processCv] ${req.method} ${req.originalUrl} took ${duration}ms`,
+        `[processCv] [${id}] ${req.method} ${req.originalUrl} took ${duration}ms elapsed=${elapsed}ms`,
       );
+      logSummary('finished');
       end.apply(this, args);
     };
     try {
@@ -179,7 +217,9 @@ function startStep(req, event) {
   const start = Date.now();
   const ts = new Date().toISOString();
   const id = req.jobId || 'unknown';
-  console.log(`[${ts}] [${id}] ${event}_start`);
+  const elapsed = start - (req.requestStart || start);
+  req.stageStatus[event] = 'started';
+  console.log(`[${ts}] [${id}] ${event}_start elapsed=${elapsed}ms`);
   if (req.s3 && req.bucket && req.logKey) {
     logEvent({
       s3: req.s3,
@@ -187,6 +227,7 @@ function startStep(req, event) {
       key: req.logKey,
       jobId: id,
       event: `${event}_start`,
+      message: `elapsed=${elapsed}ms`,
       signal: req.signal,
     }).catch((err) => console.error(`failed to log ${event}_start`, err));
   }
@@ -194,12 +235,15 @@ function startStep(req, event) {
 }
 
 async function logStep(req, event, start, message = '') {
-  const duration = Date.now() - start;
+  const now = Date.now();
+  const duration = now - start;
   const endTs = new Date().toISOString();
   const id = req.jobId || 'unknown';
   const status = req.signal?.aborted ? 'canceled' : 'end';
+  const elapsed = now - (req.requestStart || start);
+  req.stageStatus[event] = status === 'end' ? 'completed' : 'canceled';
   console.log(
-    `[${endTs}] [${id}] ${event}_${status} duration=${duration}ms${
+    `[${endTs}] [${id}] ${event}_${status} duration=${duration}ms elapsed=${elapsed}ms${
       message ? ' - ' + message : ''
     }`,
   );
@@ -211,7 +255,7 @@ async function logStep(req, event, start, message = '') {
         key: req.logKey,
         jobId: id,
         event: `${event}_${status}`,
-        message: `duration=${duration}ms${
+        message: `duration=${duration}ms; elapsed=${elapsed}ms${
           message ? '; ' + message : ''
         }`,
         signal: req.signal,
@@ -219,6 +263,30 @@ async function logStep(req, event, start, message = '') {
     } catch (err) {
       console.error(`failed to log ${event}_end`, err);
     }
+  }
+}
+
+async function extractTextLogged(req, file) {
+  const end = startStep(req, 'text_extraction');
+  try {
+    const text = await extractText(file);
+    await end();
+    return text;
+  } catch (err) {
+    await end(err.message);
+    throw err;
+  }
+}
+
+async function convertToPdfLogged(req, content) {
+  const end = startStep(req, 'pdf_generation');
+  try {
+    const pdf = await convertToPdf(content);
+    await end();
+    return pdf;
+  } catch (err) {
+    await end(err.message);
+    throw err;
   }
 }
 
@@ -248,7 +316,7 @@ export default function registerProcessCv(
     '/api/evaluate',
     (req, res, next) => {
       req.jobId = crypto.randomUUID();
-      const endUpload = startStep(req, 'resume_upload');
+      const endUpload = startStep(req, 'uploads');
       uploadResume(req, res, (err) => {
         endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
@@ -257,7 +325,9 @@ export default function registerProcessCv(
     },
     withTimeout(async (req, res, next) => {
       const { jobId } = req;
-      console.log(`Received /api/evaluate request [${jobId}]`);
+      console.log(
+        `Received /api/evaluate request [${jobId}] elapsed=${Date.now() - req.requestStart}ms`,
+      );
       const ipAddress =
         (req.headers['x-forwarded-for'] || '')
           .split(',')
@@ -311,15 +381,7 @@ export default function registerProcessCv(
         const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
         );
-        let resumeText;
-        const endParse = startStep(req, 'resume_parsing');
-        try {
-          resumeText = await extractText(req.file);
-          await endParse();
-        } catch (err) {
-          await endParse(err.message);
-          throw err;
-        }
+        const resumeText = await extractTextLogged(req, req.file);
         const docType = await classifyDocument(resumeText);
         if (docType && docType !== 'resume' && docType !== 'unknown') {
           await logEvaluation({
@@ -384,7 +446,7 @@ export default function registerProcessCv(
         const prefix = `${sanitized}/cv/${date}/`;
         cvKey = `${prefix}${Date.now()}-${sanitized}${ext}`;
         req.logKey = `${prefix}logs/processing.jsonl`;
-        const endS3 = startStep(req, 's3_initial_upload');
+        const endS3 = startStep(req, 'uploads');
         try {
           await s3.send(
             new PutObjectCommand({
@@ -552,7 +614,7 @@ export default function registerProcessCv(
     '/api/process-cv',
     (req, res, next) => {
       req.jobId = crypto.randomUUID();
-      const endUpload = startStep(req, 'resume_upload');
+      const endUpload = startStep(req, 'uploads');
       uploadResume(req, res, (err) => {
         endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
@@ -707,7 +769,7 @@ export default function registerProcessCv(
       originalText,
       originalTitle;
     try {
-      originalText = await extractText(req.file);
+      originalText = await extractTextLogged(req, req.file);
       docType = await classifyDocument(originalText);
       if (docType && docType !== 'resume' && docType !== 'unknown') {
         return next(
@@ -767,7 +829,7 @@ export default function registerProcessCv(
         await logStep('s3_get_existing_cv_pdf', { startTime: getStart });
         const arr = await existingObj.Body.transformToByteArray();
         existingCvBuffer = Buffer.from(arr);
-        text = await extractText({
+        text = await extractTextLogged(req, {
           originalname: path.basename(existingCvKey),
           buffer: existingCvBuffer,
         });
@@ -781,7 +843,7 @@ export default function registerProcessCv(
     // Store raw file to configured bucket
     const initialS3 = new S3Client({ region: REGION });
     try {
-      const endInitialUpload = startStep(req, 's3_initial_upload');
+      const endInitialUpload = startStep(req, 'uploads');
       await initialS3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1110,7 +1172,7 @@ export default function registerProcessCv(
         [sanitizedName, 'enhanced', date],
         `${ts}-improved.txt`
       );
-      const endPdfUpload = startStep(req, 's3_upload_improved_pdf');
+      const endPdfUpload = startStep(req, 'uploads');
       try {
         await s3.send(
           new PutObjectCommand({
@@ -1126,7 +1188,7 @@ export default function registerProcessCv(
         await endPdfUpload(err.message);
         throw err;
       }
-      const endTextUpload = startStep(req, 's3_upload_improved_text');
+      const endTextUpload = startStep(req, 'uploads');
       try {
         await s3.send(
           new PutObjectCommand({
@@ -1231,7 +1293,7 @@ export default function registerProcessCv(
             jobId: req.jobId,
           });
         } catch {}
-        const resumeText = await extractText(req.file);
+        const resumeText = await extractTextLogged(req, req.file);
         const suggestion = await requestSectionImprovement(
           {
             sectionName: metric,
@@ -1316,7 +1378,7 @@ export default function registerProcessCv(
         } catch {}
         const { skills: jobSkills, text: jobDescription } =
           await analyzeJobDescription(jobDescriptionHtml);
-        const resumeText = await extractText(req.file);
+        const resumeText = await extractTextLogged(req, req.file);
         const gaps = computeJdMismatches(
           resumeText,
           jobDescriptionHtml,
@@ -1409,7 +1471,7 @@ export default function registerProcessCv(
           { abortSignal: req.signal }
         );
         originalText = await textObj.Body.transformToString();
-        existingCvBuffer = await convertToPdf(originalText);
+        existingCvBuffer = await convertToPdfLogged(req, originalText);
       } else if (existingCvKey) {
         const obj = await s3.send(
           new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
@@ -1418,7 +1480,7 @@ export default function registerProcessCv(
         const chunks = [];
         for await (const chunk of obj.Body) chunks.push(chunk);
         existingCvBuffer = Buffer.concat(chunks);
-        originalText = await extractText({
+        originalText = await extractTextLogged(req, {
           originalname: path.basename(existingCvKey),
           buffer: existingCvBuffer,
         });
@@ -1461,7 +1523,7 @@ export default function registerProcessCv(
         'assistants',
         { signal: req.signal }
       );
-      const jdBuffer = await convertToPdf(jobDescription);
+      const jdBuffer = await convertToPdfLogged(req, jobDescription);
       const jdFile = await openaiUploadFile(
         jdBuffer,
         'job.pdf',
@@ -1470,7 +1532,7 @@ export default function registerProcessCv(
       );
       let liFile;
       if (Object.keys(linkedinData).length) {
-        const liBuffer = await convertToPdf(linkedinData);
+        const liBuffer = await convertToPdfLogged(req, linkedinData);
         liFile = await openaiUploadFile(
           liBuffer,
           'linkedin.pdf',
@@ -1480,7 +1542,7 @@ export default function registerProcessCv(
       }
       let credlyFile;
       if (credlyCertifications.length) {
-        const credlyBuffer = await convertToPdf(credlyCertifications);
+        const credlyBuffer = await convertToPdfLogged(req, credlyCertifications);
         credlyFile = await openaiUploadFile(
           credlyBuffer,
           'credly.pdf',
@@ -1529,7 +1591,15 @@ export default function registerProcessCv(
         bestCv = cvVersion2;
         metricTable = metrics2.table;
       }
-      const pdf = await generatePdf(bestCv, '2025', {}, generativeModel);
+      const endPdfGen = startStep(req, 'pdf_generation');
+      let pdf;
+      try {
+        pdf = await generatePdf(bestCv, '2025', {}, generativeModel);
+        await endPdfGen();
+      } catch (err) {
+        await endPdfGen(err.message);
+        throw err;
+      }
       const key = buildS3Key(
         [sanitizedName, 'enhanced', date],
         `${ts}-improved.pdf`
@@ -1586,7 +1656,7 @@ export default function registerProcessCv(
     '/api/generate-cover-letter',
     (req, res, next) => {
       req.jobId = crypto.randomUUID();
-      const endUpload = startStep(req, 'resume_upload');
+      const endUpload = startStep(req, 'uploads');
       uploadResume(req, res, (err) => {
         endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
@@ -1682,13 +1752,13 @@ export default function registerProcessCv(
           await logStep('s3_get_existing_cv_text', { startTime: getStart });
           originalText = await textObj.Body.transformToString();
         } else if (req.file) {
-          originalText = await extractText(req.file);
+          originalText = await extractTextLogged(req, req.file);
         } else {
           return next(
             createError(400, 'resume or existingCvTextKey required')
           );
         }
-        cvBuffer = await convertToPdf(originalText);
+        cvBuffer = await convertToPdfLogged(req, originalText);
       } catch (err) {
         console.error('failed to process cv', err);
         return next(createError(500, 'failed to process cv'));
@@ -1736,7 +1806,7 @@ export default function registerProcessCv(
         'assistants',
         { signal: req.signal }
       );
-      const jdBuffer = await convertToPdf(jobDescription);
+      const jdBuffer = await convertToPdfLogged(req, jobDescription);
       const jdFile = await openaiUploadFile(
         jdBuffer,
         'job.pdf',
@@ -1745,7 +1815,7 @@ export default function registerProcessCv(
       );
       let liFile;
       if (Object.keys(linkedinData).length) {
-        const liBuffer = await convertToPdf(linkedinData);
+        const liBuffer = await convertToPdfLogged(req, linkedinData);
         liFile = await openaiUploadFile(
           liBuffer,
           'linkedin.pdf',
@@ -1755,7 +1825,7 @@ export default function registerProcessCv(
       }
       let credlyFile;
       if (credlyCertifications.length) {
-        const credlyBuffer = await convertToPdf(credlyCertifications);
+        const credlyBuffer = await convertToPdfLogged(req, credlyCertifications);
         credlyFile = await openaiUploadFile(
           credlyBuffer,
           'credly.pdf',
@@ -1807,7 +1877,7 @@ export default function registerProcessCv(
         [sanitizedName, 'enhanced', date],
         `${Date.now()}-cover_letter.pdf`
       );
-      const endCoverUpload = startStep(req, 's3_upload_cover_pdf');
+      const endCoverUpload = startStep(req, 'uploads');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1914,7 +1984,14 @@ export default function registerProcessCv(
             { abortSignal: req.signal }
           );
           cvText = await textObj.Body.transformToString();
-          cvBuffer = await generatePdf(cvText, '2025', {}, generativeModel);
+          const endPdfGen = startStep(req, 'pdf_generation');
+          try {
+            cvBuffer = await generatePdf(cvText, '2025', {}, generativeModel);
+            await endPdfGen();
+          } catch (err) {
+            await endPdfGen(err.message);
+            throw err;
+          }
         } else if (existingCvKey) {
           const obj = await s3.send(
             new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
@@ -1923,7 +2000,7 @@ export default function registerProcessCv(
           const chunks = [];
           for await (const chunk of obj.Body) chunks.push(chunk);
           cvBuffer = Buffer.concat(chunks);
-          cvText = await extractText({
+          cvText = await extractTextLogged(req, {
             originalname: path.basename(existingCvKey),
             buffer: cvBuffer,
           });
@@ -2016,7 +2093,7 @@ export default function registerProcessCv(
         'assistants',
         { signal: req.signal }
       );
-      const jdBuffer = await convertToPdf(jobDescription);
+      const jdBuffer = await convertToPdfLogged(req, jobDescription);
       const jdFile = await openaiUploadFile(
         jdBuffer,
         'job.pdf',
@@ -2025,7 +2102,7 @@ export default function registerProcessCv(
       );
       let liFile;
       if (Object.keys(linkedinData).length) {
-        const liBuffer = await convertToPdf(linkedinData);
+        const liBuffer = await convertToPdfLogged(req, linkedinData);
         liFile = await openaiUploadFile(
           liBuffer,
           'linkedin.pdf',
@@ -2035,7 +2112,7 @@ export default function registerProcessCv(
       }
       let credlyFile;
       if (credlyCertifications.length) {
-        const credlyBuffer = await convertToPdf(credlyCertifications);
+        const credlyBuffer = await convertToPdfLogged(req, credlyCertifications);
         credlyFile = await openaiUploadFile(
           credlyBuffer,
           'credly.pdf',
@@ -2070,15 +2147,23 @@ export default function registerProcessCv(
         skipRequiredSections: true,
         defaultHeading: '',
       });
-      const coverBuffer = await generatePdf(
-        sanitizedCover,
-        coverTemplate1,
-        {
-          skipRequiredSections: true,
-          defaultHeading: '',
-        },
-        generativeModel,
-      );
+      const endPdfGen = startStep(req, 'pdf_generation');
+      let coverBuffer;
+      try {
+        coverBuffer = await generatePdf(
+          sanitizedCover,
+          coverTemplate1,
+          {
+            skipRequiredSections: true,
+            defaultHeading: '',
+          },
+          generativeModel,
+        );
+        await endPdfGen();
+      } catch (err) {
+        await endPdfGen(err.message);
+        throw err;
+      }
       const coverDate = new Date().toISOString().split('T')[0];
       const coverTimestamp = Date.now();
       const coverBasePath = [
@@ -2094,7 +2179,7 @@ export default function registerProcessCv(
         coverBasePath,
         `${coverTimestamp}-cover_letter.txt`,
       );
-      const endCoverPdf = startStep(req, 's3_upload_cover_pdf');
+      const endCoverPdf = startStep(req, 'uploads');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -2105,7 +2190,7 @@ export default function registerProcessCv(
         { abortSignal: req.signal }
       );
       await endCoverPdf();
-      const endCoverText = startStep(req, 's3_upload_cover_text');
+      const endCoverText = startStep(req, 'uploads');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
