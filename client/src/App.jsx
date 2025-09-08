@@ -46,6 +46,7 @@ const otherQualityMetricCategories = {
 
 function App() {
   const [jobUrl, setJobUrl] = useState('')
+  const [jobDescriptionText, setJobDescriptionText] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [result, setResult] = useState(null)
   const [skills, setSkills] = useState([])
@@ -146,6 +147,8 @@ function App() {
       const formData = new FormData()
       formData.append('resume', cvFile)
       formData.append('jobDescriptionUrl', jobUrl)
+      if (jobDescriptionText.trim())
+        formData.append('jobDescriptionText', jobDescriptionText)
       formData.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim())
         formData.append('credlyProfileUrl', credlyUrl.trim())
@@ -205,7 +208,7 @@ function App() {
     }
   }
 
-  const disabled = !jobUrl || !cvFile || !linkedinUrl || isProcessing
+  const disabled = (!jobUrl && !jobDescriptionText) || !cvFile || !linkedinUrl || isProcessing
 
   const handleSkillChange = (idx, field, value) => {
     setSkills((prev) =>
@@ -235,6 +238,8 @@ function App() {
       const form = new FormData()
       form.append('resume', cvFile)
       form.append('jobDescriptionUrl', jobUrl)
+      if (jobDescriptionText.trim())
+        form.append('jobDescriptionText', jobDescriptionText)
       form.append('metric', metricOrCategory)
       const resp = await fetch(`${API_BASE_URL}/api/fix-metric`, {
         method: 'POST',
@@ -262,6 +267,8 @@ function App() {
       const form = new FormData()
       form.append('resume', cvFile)
       form.append('jobDescriptionUrl', jobUrl)
+      if (jobDescriptionText.trim())
+        form.append('jobDescriptionText', jobDescriptionText)
       const resp = await fetch(`${API_BASE_URL}/api/fix-gap`, {
         method: 'POST',
         body: form
@@ -284,7 +291,7 @@ function App() {
       const resp = await fetch(`${API_BASE_URL}/api/fix-gap`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gap, jobDescriptionUrl: jobUrl })
+        body: JSON.stringify({ gap, jobDescriptionUrl: jobUrl, jobDescriptionText })
       })
       if (!resp.ok) {
         const text = await resp.text()
@@ -339,6 +346,8 @@ function App() {
       const improveForm = new FormData()
       improveForm.append('resume', cvFile)
       improveForm.append('jobDescriptionUrl', jobUrl)
+      if (jobDescriptionText.trim())
+        improveForm.append('jobDescriptionText', jobDescriptionText)
       improveForm.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) improveForm.append('credlyProfileUrl', credlyUrl.trim())
       if (manualName) improveForm.append('applicantName', manualName)
@@ -369,6 +378,8 @@ function App() {
       // Step 2: compile final CV & cover letter
       const compileForm = new FormData()
       compileForm.append('jobDescriptionUrl', jobUrl)
+      if (jobDescriptionText.trim())
+        compileForm.append('jobDescriptionText', jobDescriptionText)
       compileForm.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) compileForm.append('credlyProfileUrl', credlyUrl.trim())
       if (manualName) compileForm.append('applicantName', manualName)
@@ -420,6 +431,8 @@ function App() {
       const form = new FormData()
       form.append('resume', cvFile)
       form.append('jobDescriptionUrl', jobUrl)
+      if (jobDescriptionText.trim())
+        form.append('jobDescriptionText', jobDescriptionText)
       form.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) form.append('credlyProfileUrl', credlyUrl.trim())
       const resp = await fetch(`${API_BASE_URL}/api/enhance`, {
@@ -513,12 +526,22 @@ function App() {
         onChange={(e) => setJobUrl(e.target.value)}
         onBlur={handleJobUrlBlur}
         className={`w-full max-w-md p-2 border rounded ${
-          (disabled && !jobUrl) || jobUrlError ? 'border-red-500' : 'border-purple-300'
+          (disabled && !jobUrl && !jobDescriptionText) || jobUrlError
+            ? 'border-red-500'
+            : 'border-purple-300'
         } mb-1`}
       />
+      <textarea
+        placeholder="Job Description Text"
+        value={jobDescriptionText}
+        onChange={(e) => setJobDescriptionText(e.target.value)}
+        className="w-full max-w-md p-2 border rounded border-purple-300 mb-1"
+      />
 
-      {disabled && !jobUrl && (
-        <p className="text-red-600 text-sm mb-4">Job description URL is required.</p>
+      {disabled && !jobUrl && !jobDescriptionText && (
+        <p className="text-red-600 text-sm mb-4">
+          Job description URL or text is required.
+        </p>
       )}
       {jobUrl && jobUrlError && (
         <p className="text-red-600 text-sm mb-4">{jobUrlError}</p>

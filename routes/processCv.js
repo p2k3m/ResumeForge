@@ -412,12 +412,24 @@ export default function registerProcessCv(
         if (!req.file) return next(createError(400, 'resume file required'));
         let cvKey =
           req.file.key || req.file.filename || req.file.originalname || '';
-        let { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'invalid jobDescriptionUrl'));
+        let {
+          jobDescriptionUrl,
+          jobDescriptionText = '',
+          linkedinProfileUrl,
+          credlyProfileUrl,
+        } = req.body;
+        if (!jobDescriptionUrl && !jobDescriptionText)
+          return next(
+            createError(
+              400,
+              'jobDescriptionUrl or jobDescriptionText required',
+            ),
+          );
+        if (jobDescriptionUrl) {
+          jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+          if (!jobDescriptionUrl)
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+        }
 
         if (!linkedinProfileUrl)
           return next(createError(400, 'linkedinProfileUrl required'));
@@ -433,24 +445,32 @@ export default function registerProcessCv(
 
         const endJd = startStep(req, 'job_description_fetch');
         let jobHtml;
-        try {
-          jobHtml = await fetchJobDescription(jobDescriptionUrl, {
-            timeout: REQUEST_TIMEOUT_MS,
-            userAgent,
-            signal: req.signal,
-            jobId,
-          });
-          await endJd();
-        } catch (err) {
-          await endJd(err.code || err.message);
-          if (err.code === LINKEDIN_AUTH_REQUIRED) {
-            return res.status(403).json({
-              error:
-                'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
-              code: LINKEDIN_AUTH_REQUIRED,
+        if (jobDescriptionUrl) {
+          try {
+            jobHtml = await fetchJobDescription(jobDescriptionUrl, {
+              timeout: REQUEST_TIMEOUT_MS,
+              userAgent,
+              signal: req.signal,
+              jobId,
             });
+            await endJd();
+          } catch (err) {
+            await endJd(err.code || err.message);
+            if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
+              jobHtml = jobDescriptionText;
+            } else if (err.code === LINKEDIN_AUTH_REQUIRED) {
+              return res.status(403).json({
+                error:
+                  'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
+                code: LINKEDIN_AUTH_REQUIRED,
+              });
+            } else {
+              throw err;
+            }
           }
-          throw err;
+        } else {
+          jobHtml = jobDescriptionText;
+          await endJd('job_description_text');
         }
         const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
@@ -745,6 +765,7 @@ export default function registerProcessCv(
 
     let {
       jobDescriptionUrl,
+      jobDescriptionText = '',
       linkedinProfileUrl,
       credlyProfileUrl,
       existingCvKey,
@@ -817,15 +838,19 @@ export default function registerProcessCv(
     if (!req.file) {
       return next(createError(400, 'resume file required'));
     }
-    if (!jobDescriptionUrl) {
-      return next(createError(400, 'jobDescriptionUrl required'));
+    if (!jobDescriptionUrl && !jobDescriptionText) {
+      return next(
+        createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
+      );
     }
     if (!linkedinProfileUrl) {
       return next(createError(400, 'linkedinProfileUrl required'));
     }
-    jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-    if (!jobDescriptionUrl) {
-      return next(createError(400, 'invalid jobDescriptionUrl'));
+    if (jobDescriptionUrl) {
+      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+      if (!jobDescriptionUrl) {
+        return next(createError(400, 'invalid jobDescriptionUrl'));
+      }
     }
     linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
     if (!linkedinProfileUrl) {
@@ -991,31 +1016,39 @@ export default function registerProcessCv(
 
       let jobDescriptionHtml;
       const endJdFetch = startStep(req, 'job_description_fetch');
-      try {
-        jobDescriptionHtml = await withRetry(
-          () =>
-            fetchJobDescription(jobDescriptionUrl, {
-              timeout: REQUEST_TIMEOUT_MS,
-              userAgent,
-              signal: req.signal,
-              jobId,
-            }),
-          2,
-          500,
-          req.signal
-        );
-        await endJdFetch();
-      } catch (err) {
-        await endJdFetch(err.code || err.message);
-        if (err.code === LINKEDIN_AUTH_REQUIRED) {
-          return res.status(403).json({
-            error:
-              'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
-            code: LINKEDIN_AUTH_REQUIRED,
-          });
+      if (jobDescriptionUrl) {
+        try {
+          jobDescriptionHtml = await withRetry(
+            () =>
+              fetchJobDescription(jobDescriptionUrl, {
+                timeout: REQUEST_TIMEOUT_MS,
+                userAgent,
+                signal: req.signal,
+                jobId,
+              }),
+            2,
+            500,
+            req.signal,
+          );
+          await endJdFetch();
+        } catch (err) {
+          await endJdFetch(err.code || err.message);
+          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
+            jobDescriptionHtml = jobDescriptionText;
+          } else if (err.code === LINKEDIN_AUTH_REQUIRED) {
+            return res.status(403).json({
+              error:
+                'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
+              code: LINKEDIN_AUTH_REQUIRED,
+            });
+          } else {
+            console.error('Job description fetch failed', err);
+            return next(createError(500, 'Job description fetch failed'));
+          }
         }
-        console.error('Job description fetch failed', err);
-        return next(createError(500, 'Job description fetch failed'));
+      } else {
+        jobDescriptionHtml = jobDescriptionText;
+        await endJdFetch('job_description_text');
       }
       let { title: jobTitle, skills: jobSkills, text: jobDescription } =
         await analyzeJobDescription(jobDescriptionHtml);
@@ -1363,24 +1396,37 @@ export default function registerProcessCv(
     },
     async (req, res, next) => {
       try {
-        let { metric, jobDescriptionUrl } = req.body;
+        let { metric, jobDescriptionUrl, jobDescriptionText = '' } = req.body;
         if (!req.file) return next(createError(400, 'resume file required'));
         if (!metric) return next(createError(400, 'metric required'));
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'invalid jobDescriptionUrl'));
+        if (!jobDescriptionUrl && !jobDescriptionText)
+          return next(
+            createError(
+              400,
+              'jobDescriptionUrl or jobDescriptionText required',
+            ),
+          );
+        if (jobDescriptionUrl) {
+          jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+          if (!jobDescriptionUrl)
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+        }
         const { userAgent } = req;
-        let jobDescription = '';
-        try {
-          jobDescription = await fetchJobDescription(jobDescriptionUrl, {
-            timeout: REQUEST_TIMEOUT_MS,
-            userAgent,
-            signal: req.signal,
-            jobId: req.jobId,
-          });
-        } catch {}
+        let jobDescription = jobDescriptionText;
+        if (jobDescriptionUrl) {
+          try {
+            jobDescription = await fetchJobDescription(jobDescriptionUrl, {
+              timeout: REQUEST_TIMEOUT_MS,
+              userAgent,
+              signal: req.signal,
+              jobId: req.jobId,
+            });
+          } catch (err) {
+            if (!(err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText)) {
+              return next(createError(400, 'invalid jobDescriptionUrl'));
+            }
+          }
+        }
         const resumeText = await extractTextLogged(req, req.file);
         const suggestion = await requestSectionImprovement(
           {
@@ -1417,25 +1463,38 @@ export default function registerProcessCv(
     },
     async (req, res, next) => {
       try {
-        let { jobDescriptionUrl, gap } = req.body || {};
+        let { jobDescriptionUrl, jobDescriptionText = '', gap } = req.body || {};
         if (gap) {
-          if (!jobDescriptionUrl)
-            return next(createError(400, 'jobDescriptionUrl required'));
-          jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-          if (!jobDescriptionUrl)
-            return next(createError(400, 'invalid jobDescriptionUrl'));
+          if (!jobDescriptionUrl && !jobDescriptionText)
+            return next(
+              createError(
+                400,
+                'jobDescriptionUrl or jobDescriptionText required',
+              ),
+            );
+          if (jobDescriptionUrl) {
+            jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+            if (!jobDescriptionUrl)
+              return next(createError(400, 'invalid jobDescriptionUrl'));
+          }
           const { userAgent } = req;
-          let jobDescriptionHtml = '';
-          try {
-            jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
-              timeout: REQUEST_TIMEOUT_MS,
-              userAgent,
-              signal: req.signal,
-              jobId: req.jobId,
-            });
-          } catch {}
+          let jobDescriptionHtml = jobDescriptionText;
+          if (jobDescriptionUrl) {
+            try {
+              jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
+                timeout: REQUEST_TIMEOUT_MS,
+                userAgent,
+                signal: req.signal,
+                jobId: req.jobId,
+              });
+            } catch (err) {
+              if (!(err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText)) {
+                return next(createError(400, 'invalid jobDescriptionUrl'));
+              }
+            }
+          }
           const { text: jobDescription } = await analyzeJobDescription(
-            jobDescriptionHtml
+            jobDescriptionHtml,
           );
           const suggestion = await requestSectionImprovement(
             {
@@ -1449,21 +1508,31 @@ export default function registerProcessCv(
         }
 
         if (!req.file) return next(createError(400, 'resume file required'));
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'jobDescriptionUrl required'));
-        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'invalid jobDescriptionUrl'));
+        if (!jobDescriptionUrl && !jobDescriptionText)
+          return next(
+            createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
+          );
+        if (jobDescriptionUrl) {
+          jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+          if (!jobDescriptionUrl)
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+        }
         const { userAgent } = req;
-        let jobDescriptionHtml = '';
-        try {
-          jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
-            timeout: REQUEST_TIMEOUT_MS,
-            userAgent,
-            signal: req.signal,
-            jobId: req.jobId,
-          });
-        } catch {}
+        let jobDescriptionHtml = jobDescriptionText;
+        if (jobDescriptionUrl) {
+          try {
+            jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
+              timeout: REQUEST_TIMEOUT_MS,
+              userAgent,
+              signal: req.signal,
+              jobId: req.jobId,
+            });
+          } catch (err) {
+            if (!(err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText)) {
+              return next(createError(400, 'invalid jobDescriptionUrl'));
+            }
+          }
+        }
         const { skills: jobSkills, text: jobDescription } =
           await analyzeJobDescription(jobDescriptionHtml);
         const resumeText = await extractTextLogged(req, req.file);
@@ -1515,6 +1584,7 @@ export default function registerProcessCv(
     let {
       metric,
       jobDescriptionUrl,
+      jobDescriptionText = '',
       linkedinProfileUrl,
       credlyProfileUrl,
       existingCvKey,
@@ -1529,8 +1599,10 @@ export default function registerProcessCv(
     if (maxIterations && iteration >= maxIterations)
       return next(createError(400, 'max improvements reached'));
     if (!metric) return next(createError(400, 'metric required'));
-    if (!jobDescriptionUrl)
-      return next(createError(400, 'jobDescriptionUrl required'));
+    if (!jobDescriptionUrl && !jobDescriptionText)
+      return next(
+        createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
+      );
     if (!linkedinProfileUrl)
       return next(createError(400, 'linkedinProfileUrl required'));
     if (!existingCvKey && !existingCvTextKey)
@@ -1538,9 +1610,11 @@ export default function registerProcessCv(
         createError(400, 'existingCvKey or existingCvTextKey required')
       );
 
-    jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-    if (!jobDescriptionUrl)
-      return next(createError(400, 'invalid jobDescriptionUrl'));
+    if (jobDescriptionUrl) {
+      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+      if (!jobDescriptionUrl)
+        return next(createError(400, 'invalid jobDescriptionUrl'));
+    }
     linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
     if (!linkedinProfileUrl)
       return next(createError(400, 'invalid linkedinProfileUrl'));
@@ -1581,13 +1655,27 @@ export default function registerProcessCv(
         applicantName = 'Candidate';
       }
 
-      let jobDescription = '';
+      let jobDescription = jobDescriptionText;
       let jobTitle = '';
-      try {
+      if (jobDescriptionUrl) {
+        try {
+          ({ jobDescription, jobTitle } = await analyzeJobDescription(
+            jobDescriptionUrl,
+          ));
+        } catch (err) {
+          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
+            ({ jobDescription, jobTitle } = await analyzeJobDescription(
+              jobDescriptionText,
+            ));
+          } else {
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+          }
+        }
+      } else if (jobDescriptionText) {
         ({ jobDescription, jobTitle } = await analyzeJobDescription(
-          jobDescriptionUrl
+          jobDescriptionText,
         ));
-      } catch {}
+      }
 
       let linkedinData = {};
       try {
@@ -1790,6 +1878,7 @@ export default function registerProcessCv(
 
       let {
         jobDescriptionUrl,
+        jobDescriptionText = '',
         linkedinProfileUrl,
         credlyProfileUrl,
         existingCvTextKey,
@@ -1797,14 +1886,18 @@ export default function registerProcessCv(
         coverTemplate,
       } = req.body;
 
-      if (!jobDescriptionUrl)
-        return next(createError(400, 'jobDescriptionUrl required'));
+      if (!jobDescriptionUrl && !jobDescriptionText)
+        return next(
+          createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
+        );
       if (!linkedinProfileUrl)
         return next(createError(400, 'linkedinProfileUrl required'));
 
-      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-      if (!jobDescriptionUrl)
-        return next(createError(400, 'invalid jobDescriptionUrl'));
+      if (jobDescriptionUrl) {
+        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'invalid jobDescriptionUrl'));
+      }
       linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
       if (!linkedinProfileUrl)
         return next(createError(400, 'invalid linkedinProfileUrl'));
@@ -1864,13 +1957,22 @@ export default function registerProcessCv(
       logKey = `${prefix}logs/processing.jsonl`;
       req.logKey = logKey;
 
-      let jobDescription = '';
+      let jobDescription = jobDescriptionText;
       const endJd3 = startStep(req, 'job_description_fetch');
-      try {
-        ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
-        await endJd3();
-      } catch (err) {
-        await endJd3(err.message);
+      if (jobDescriptionUrl) {
+        try {
+          ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
+          await endJd3();
+        } catch (err) {
+          await endJd3(err.code || err.message);
+          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
+            ({ jobDescription } = await analyzeJobDescription(jobDescriptionText));
+          } else {
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+          }
+        }
+      } else {
+        await endJd3('job_description_text');
       }
 
       let linkedinData = {};
@@ -2012,6 +2114,7 @@ export default function registerProcessCv(
 
       let {
         jobDescriptionUrl,
+        jobDescriptionText = '',
         linkedinProfileUrl,
         credlyProfileUrl,
         existingCvKey,
@@ -2025,18 +2128,22 @@ export default function registerProcessCv(
         selectedLanguages,
       } = req.body;
 
-      if (!jobDescriptionUrl)
-        return next(createError(400, 'jobDescriptionUrl required'));
+      if (!jobDescriptionUrl && !jobDescriptionText)
+        return next(
+          createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
+        );
       if (!linkedinProfileUrl)
         return next(createError(400, 'linkedinProfileUrl required'));
       if (!existingCvKey && !existingCvTextKey)
         return next(
-          createError(400, 'existingCvKey or existingCvTextKey required')
+          createError(400, 'existingCvKey or existingCvTextKey required'),
         );
 
-      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-      if (!jobDescriptionUrl)
-        return next(createError(400, 'invalid jobDescriptionUrl'));
+      if (jobDescriptionUrl) {
+        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
+        if (!jobDescriptionUrl)
+          return next(createError(400, 'invalid jobDescriptionUrl'));
+      }
       linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
       if (!linkedinProfileUrl)
         return next(createError(400, 'invalid linkedinProfileUrl'));
@@ -2140,23 +2247,41 @@ export default function registerProcessCv(
       }
 
       const { userAgent } = req;
-      let jobDescriptionHtml = '';
-      let jobDescription = '';
+      let jobDescriptionHtml = jobDescriptionText;
+      let jobDescription = jobDescriptionText;
       let jobSkills = [];
       const endJd2 = startStep(req, 'job_description_fetch');
-      try {
-        jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
-          timeout: REQUEST_TIMEOUT_MS,
-          userAgent,
-          signal: req.signal,
-          jobId,
-        });
+      if (jobDescriptionUrl) {
+        try {
+          jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
+            timeout: REQUEST_TIMEOUT_MS,
+            userAgent,
+            signal: req.signal,
+            jobId,
+          });
+          ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
+            jobDescriptionHtml,
+          ));
+          await endJd2();
+        } catch (err) {
+          await endJd2(err.code || err.message);
+          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
+            ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
+              jobDescriptionText,
+            ));
+          } else if (jobDescriptionText) {
+            ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
+              jobDescriptionText,
+            ));
+          } else {
+            return next(createError(400, 'invalid jobDescriptionUrl'));
+          }
+        }
+      } else {
         ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
-          jobDescriptionHtml,
+          jobDescriptionText,
         ));
-        await endJd2();
-      } catch (err) {
-        await endJd2(err.message);
+        await endJd2('job_description_text');
       }
 
       let linkedinData = {};
