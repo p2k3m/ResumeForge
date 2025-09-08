@@ -3,6 +3,11 @@ import request from 'supertest';
 
 const pdfBuffer = Buffer.from('%PDF-1.4');
 
+const mockFetchJobDescription = jest.fn().mockResolvedValue('<html></html>');
+jest.unstable_mockModule('../services/jobFetch.js', () => ({
+  fetchJobDescription: mockFetchJobDescription,
+}));
+
 jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: '' }) }
 }));
@@ -35,29 +40,38 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   requestAtsAnalysis: jest.fn().mockRejectedValue(new Error('no ai')),
 }));
 
+const { JOB_FETCH_USER_AGENT } = await import('../config/http.js');
 const serverModule = await import('../server.js');
 const app = serverModule.default;
 
-describe('/api/evaluate metrics', () => {
-  test('returns individual ats metrics', async () => {
-    const res = await request(app)
-      .post('/api/evaluate')
-      .field('jobDescriptionUrl', 'https://indeed.com/job')
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .attach('resume', pdfBuffer, 'resume.pdf');
-    expect(res.status).toBe(200);
-    expect(res.body.atsMetrics).toBeDefined();
-    expect(res.body.atsMetrics).toEqual(
-      expect.objectContaining({
-        layoutSearchability: expect.any(Number),
-        atsReadability: expect.any(Number),
-        impact: expect.any(Number),
-        crispness: expect.any(Number),
-        keywordDensity: expect.any(Number),
-        sectionHeadingClarity: expect.any(Number),
-        contactInfoCompleteness: expect.any(Number),
-        grammar: expect.any(Number)
-      })
-    );
+  describe('/api/evaluate metrics', () => {
+    test('returns individual ats metrics', async () => {
+      const res = await request(app)
+        .post('/api/evaluate')
+        .unset('User-Agent')
+        .field('jobDescriptionUrl', 'https://indeed.com/job')
+        .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+        .attach('resume', pdfBuffer, 'resume.pdf');
+      expect(res.status).toBe(200);
+      expect(res.body.atsMetrics).toBeDefined();
+      expect(res.body.atsMetrics).toEqual(
+        expect.objectContaining({
+          layoutSearchability: expect.any(Number),
+          atsReadability: expect.any(Number),
+          impact: expect.any(Number),
+          crispness: expect.any(Number),
+          keywordDensity: expect.any(Number),
+          sectionHeadingClarity: expect.any(Number),
+          contactInfoCompleteness: expect.any(Number),
+          grammar: expect.any(Number)
+        })
+      );
+      expect(mockFetchJobDescription).toHaveBeenCalledWith(
+        'https://indeed.com/job',
+        expect.objectContaining({
+          timeout: expect.any(Number),
+          userAgent: JOB_FETCH_USER_AGENT,
+        })
+      );
+    });
   });
-});

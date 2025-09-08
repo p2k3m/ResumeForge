@@ -47,6 +47,7 @@ describe('/api/evaluate non-resume', () => {
     classifyDocument.mockResolvedValueOnce(docType);
     const res = await request(app)
       .post('/api/evaluate')
+      .unset('User-Agent')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', pdfBuffer, 'file.pdf');
@@ -68,6 +69,7 @@ describe('/api/evaluate non-resume', () => {
     classifyDocument.mockResolvedValueOnce('unknown');
     const res = await request(app)
       .post('/api/evaluate')
+      .unset('User-Agent')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', pdfBuffer, 'file.pdf');
