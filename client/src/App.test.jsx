@@ -1,6 +1,6 @@
 /** @jest-environment jsdom */
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import App from './App.jsx'
 
 const mockResponse = {
@@ -103,6 +103,46 @@ test('allows file to be dropped in drop zone', async () => {
   })
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+})
+
+test('shows category tip and fetches category fix suggestion', async () => {
+  fetch
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve(mockResponse)
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: () => Promise.resolve({ suggestion: 'Improve layout' })
+    })
+
+  render(<App />)
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] }
+    }
+  )
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://indeed.com/job' }
+  })
+
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+
+  const layoutCategory = await screen.findByText('Layout')
+  const categoryContainer = layoutCategory.closest('div')
+  expect(
+    within(categoryContainer).getByText('Target ≥80. Click to FIX')
+  ).toBeInTheDocument()
+
+  const fixButtons = within(categoryContainer).getAllByText('Fix')
+  fireEvent.click(fixButtons[0])
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+  expect(await screen.findByText('Improve layout')).toBeInTheDocument()
 })
 
 test('displays new additions section after compile', async () => {
