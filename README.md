@@ -3,6 +3,8 @@
 ## Overview
 ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation and stores the original CV and generated files in Amazon S3 using candidate- and date-based paths.
 
+Job descriptions are fetched with an initial Axios request and fall back to a Puppeteer-rendered page when direct access fails or requires client-side rendering. This approach cannot bypass authentication or strict anti-bot measures, so some postings may still be unreachable.
+
 ## Environment Variables
 The server relies on the following environment variables:
 
@@ -196,7 +198,7 @@ When headless Chromium is unavailable, ResumeForge automatically renders the ré
 
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
-- **Job description scraping limitations:** The job description is fetched via an axios HTTP request, falling back to a Puppeteer-rendered page if the content is blocked or requires client-side rendering. Pages requiring login or heavy anti-bot defenses may still return empty or restricted content.
+- **Job description scraping limitations:** ResumeForge first tries to fetch job descriptions with an Axios request and falls back to a Puppeteer-rendered page when direct access is blocked or requires client-side rendering. Sites requiring login or employing strict anti-bot measures may still return empty or restricted content.
 
 ## API Response
 The `/api/process-cv` endpoint returns JSON containing the uploaded CV and any generated files along with match statistics and an estimated chance of selection. Files use candidate- and date-based S3 prefixes: the original résumé is placed under `<candidate>/cv/<date>/`, while enhanced CVs and cover letters live under `<candidate>/enhanced/<date>/`:
