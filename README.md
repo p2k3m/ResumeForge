@@ -136,17 +136,21 @@ resource "aws_lambda_permission" "allow_events" {
    npm install
    cd client && npm install
    ```
-2. Provide the environment variables and AWS secret as shown above.
-3. Start the server:
+2. Provide the environment variables and AWS secret as shown above. The server listens on
+   `process.env.PORT` (defaults to `3000`). To change the port, set `PORT` before starting the
+   server and update `client/vite.config.js` so the proxy target matches.
+3. Start the server and verify the log output shows the expected port:
    ```bash
-   npm run dev
+   PORT=3000 npm run dev
+   # ... Server running on port 3000
    ```
 4. In another terminal, start the client:
    ```bash
    cd client && npm run dev
    ```
-5. The client issues requests to `/api`. During development the Vite dev server proxies these paths to `http://localhost:3000`.
-   If the backend runs elsewhere (e.g., in production), set `VITE_API_BASE_URL` to the server's base URL before starting the client.
+   The Vite dev server runs on port `5173` and proxies `/api` requests to the backend.
+5. Visit `http://localhost:5173` in the browser. If the backend runs elsewhere (e.g., in
+   production), set `VITE_API_BASE_URL` to the server's base URL before starting the client.
 
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
