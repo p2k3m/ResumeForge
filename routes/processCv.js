@@ -1487,7 +1487,6 @@ export default function registerProcessCv(
         sanitizedName,
         'enhanced',
         date,
-        'cover_letter',
         `${Date.now()}-cover_letter.pdf`
       );
       await s3.send(
@@ -1732,7 +1731,6 @@ export default function registerProcessCv(
         sanitizedName,
         'enhanced',
         coverDate,
-        'cover_letter',
       ];
       const coverKey = path.join(
         ...coverBasePath,
