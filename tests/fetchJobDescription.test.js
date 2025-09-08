@@ -92,4 +92,19 @@ describe('fetchJobDescription', () => {
     expect(html).toBe('<html>local</html>');
     expect(mockLaunch).not.toHaveBeenCalled();
   });
+
+  test('throws descriptive error when puppeteer launch fails', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: '' });
+    const launchError = new Error('spawn ENOENT');
+    mockLaunch.mockRejectedValueOnce(launchError);
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(
+      fetchJobDescription('http://example.com', {
+        timeout: 1000,
+        userAgent: 'agent',
+      })
+    ).rejects.toThrow('Unable to launch browser. Please ensure Chromium dependencies are installed.');
+    expect(consoleError).toHaveBeenCalledWith('Chromium dependencies missing', launchError);
+    consoleError.mockRestore();
+  });
 });
