@@ -14,6 +14,10 @@ export async function fetchJobDescription(
 ) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid URL');
+
+  const isBlocked = (content) =>
+    !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
+
   let html = '';
   try {
     const { data } = await axios.get(valid, {
@@ -23,24 +27,31 @@ export async function fetchJobDescription(
     html = data;
   } catch {
     // Ignore axios errors and fall back to puppeteer
+    html = '';
   }
 
-  if (!html || !html.trim() || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+  if (isBlocked(html)) {
     const browser = await puppeteer.launch({
       headless: PUPPETEER_HEADLESS,
       args: PUPPETEER_ARGS,
     });
+    let page;
     try {
-      const page = await browser.newPage();
+      page = await browser.newPage();
       await page.setUserAgent(userAgent);
       await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
       html = await page.content();
     } finally {
+      try {
+        await page?.close();
+      } catch {
+        /* ignore */
+      }
       await browser.close();
     }
   }
 
-  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+  if (isBlocked(html)) {
     throw new Error('Blocked content');
   }
   return html;
