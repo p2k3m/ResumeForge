@@ -5,6 +5,8 @@ import { JOB_FETCH_USER_AGENT } from '../config/http.js';
 import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from '../config/puppeteer.js';
 import { BLOCKED_PATTERNS, REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 
+export const LINKEDIN_AUTH_REQUIRED = 'LINKEDIN_AUTH_REQUIRED';
+
 // Default timeout comes from config and can be overridden via environment
 // variables as defined in config/jobFetch.js
 const DEFAULT_FETCH_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
@@ -75,7 +77,9 @@ export async function fetchJobDescription(
     if (requiresAuth) {
       const message = 'LinkedIn job descriptions require authentication';
       log(`linkedin_auth_required host=${host}`);
-      throw new Error(message);
+      const err = new Error(message);
+      err.code = LINKEDIN_AUTH_REQUIRED;
+      throw err;
     }
   }
 
@@ -178,7 +182,9 @@ export async function fetchJobDescription(
   if (isLinkedInHost && linkedinLoginPatterns.some((re) => re.test(html))) {
     const errorMessage = 'LinkedIn job descriptions require authentication';
     log(`job_fetch_blocked host=${host} error=${errorMessage}`);
-    throw new Error(errorMessage);
+    const err = new Error(errorMessage);
+    err.code = LINKEDIN_AUTH_REQUIRED;
+    throw err;
   }
   if (isBlocked(html)) {
     const errorMessage = axiosErrorMessage

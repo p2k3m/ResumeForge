@@ -17,7 +17,7 @@ import { logEvaluation, logSession } from '../services/dynamo.js';
 
 import { uploadResume, validateUrl } from '../lib/serverUtils.js';
 import userAgentMiddleware from '../middlewares/userAgent.js';
-import { fetchJobDescription } from '../services/jobFetch.js';
+import { fetchJobDescription, LINKEDIN_AUTH_REQUIRED } from '../services/jobFetch.js';
 import { REGION } from '../config/aws.js';
 
 import { extractText } from '../lib/extractText.js';
@@ -288,13 +288,26 @@ export default function registerProcessCv(
         }
 
         const endJd = startStep(req, 'job_description_fetch');
-        const jobHtml = await fetchJobDescription(jobDescriptionUrl, {
-          timeout: REQUEST_TIMEOUT_MS,
-          userAgent,
-          signal: req.signal,
-          jobId,
-        });
-        await endJd();
+        let jobHtml;
+        try {
+          jobHtml = await fetchJobDescription(jobDescriptionUrl, {
+            timeout: REQUEST_TIMEOUT_MS,
+            userAgent,
+            signal: req.signal,
+            jobId,
+          });
+          await endJd();
+        } catch (err) {
+          await endJd(err.code || err.message);
+          if (err.code === LINKEDIN_AUTH_REQUIRED) {
+            return res.status(403).json({
+              error:
+                'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
+              code: LINKEDIN_AUTH_REQUIRED,
+            });
+          }
+          throw err;
+        }
         const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
         );
@@ -845,7 +858,14 @@ export default function registerProcessCv(
         );
         await endJdFetch();
       } catch (err) {
-        await endJdFetch(err.message);
+        await endJdFetch(err.code || err.message);
+        if (err.code === LINKEDIN_AUTH_REQUIRED) {
+          return res.status(403).json({
+            error:
+              'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
+            code: LINKEDIN_AUTH_REQUIRED,
+          });
+        }
         console.error('Job description fetch failed', err);
         return next(createError(500, 'Job description fetch failed'));
       }
