@@ -6,6 +6,7 @@ import {
   requestEnhancedCV,
   requestCoverLetter,
 } from './mocks/openai.js';
+import { JOB_FETCH_USER_AGENT } from '../config/http.js';
 
 const pdfBuffer = Buffer.from('%PDF-1.4');
 
@@ -93,6 +94,8 @@ jest.unstable_mockModule('axios', () => ({
 
 const axios = (await import('axios')).default;
 
+const jobFetch = await import('../services/jobFetch.js');
+
 jest.unstable_mockModule('pdf-parse/lib/pdf-parse.js', () => ({
   default: jest.fn().mockResolvedValue({ text: 'Education\nExperience\nSkills' })
 }));
@@ -156,6 +159,10 @@ setGeneratePdf(generatePdfMock);
 beforeEach(() => {
   rateLimiter.reset();
   setupDefaultDynamoMock();
+  mockS3Send.mockReset();
+  mockS3Send.mockResolvedValue({
+    Body: { transformToByteArray: async () => [] }
+  });
   uploadFile.mockReset();
   uploadFile.mockResolvedValue({ id: 'file-id' });
   requestEnhancedCV.mockReset();
@@ -228,6 +235,21 @@ describe('rewriteSectionsWithGemini', () => {
 });
 
 describe('/api/process-cv', () => {
+  test('uses default user agent when header missing', async () => {
+    const spy = jest
+      .spyOn(jobFetch, 'fetchJobDescription')
+      .mockResolvedValue('<h1>JD</h1>');
+    const res = await request(app)
+      .post('/api/process-cv')
+      .unset('User-Agent')
+      .field('jobDescriptionUrl', 'https://indeed.com/job')
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', pdfBuffer, 'resume.pdf');
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls[0][1].userAgent).toBe(JOB_FETCH_USER_AGENT);
+    spy.mockRestore();
+  });
   test('extracts applicant name with model', async () => {
     generateContentMock.mockReset();
     generateContentMock
@@ -853,6 +875,32 @@ describe('/api/process-cv', () => {
 });
 
 describe('/api/improve-metric', () => {
+  test('uses default user agent when header missing', async () => {
+    mockS3Send.mockImplementation((cmd) => {
+      if (cmd.input?.Key === 'cv.txt') {
+        return Promise.resolve({
+          Body: { transformToString: async () => 'Experience\nDeveloper\nSkills' },
+        });
+      }
+      return Promise.resolve({});
+    });
+    const spy = jest
+      .spyOn(jobFetch, 'fetchJobDescription')
+      .mockResolvedValue('<h1>JD</h1>');
+    const res = await request(app)
+      .post('/api/improve-metric')
+      .unset('User-Agent')
+      .send({
+        metric: 'impact',
+        jobDescriptionUrl: 'https://indeed.com/job',
+        linkedinProfileUrl: 'https://linkedin.com/in/example',
+        existingCvTextKey: 'cv.txt',
+      });
+    expect(res.status).toBe(200);
+    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls[0][1].userAgent).toBe(JOB_FETCH_USER_AGENT);
+    spy.mockRestore();
+  });
   test('rejects improvement beyond configured limit', async () => {
     const res = await request(app)
       .post('/api/improve-metric')
