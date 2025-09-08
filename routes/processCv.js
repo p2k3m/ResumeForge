@@ -648,7 +648,6 @@ export default function registerProcessCv(
       sanitizedName,
       ext,
       prefix,
-      logKey,
       existingCvBuffer,
       originalText,
       originalTitle;
