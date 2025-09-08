@@ -1,7 +1,12 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation and stores files in Amazon S3 under a candidate-based hierarchy: the uploaded résumé lives at `<candidate>/cv/<date>/`, while generated cover letters and CVs are placed in `<candidate>/enhanced/<date>/`.
+ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation. All files are now organized in Amazon S3 under a candidate-specific root with two clear subfolders:
+
+- `<candidate>/cv/<date>/` – the original résumé upload.
+- `<candidate>/enhanced/<date>/` – generated cover letters and improved CVs.
+
+This hierarchy replaces older examples that stored documents directly under the candidate's name, and it clarifies the separation between uploaded and generated files.
 
 Job descriptions are fetched with an initial Axios request and fall back to a Puppeteer-rendered page when direct access fails or requires client-side rendering. This approach cannot bypass authentication or strict anti-bot measures, so some postings may still be unreachable.
 
