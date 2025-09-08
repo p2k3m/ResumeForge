@@ -189,7 +189,7 @@ export default function registerProcessCv(
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean)[0] || req.ip;
-      const userAgent = req.headers['user-agent'] || '';
+      const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
       let browser = '', os = '', device = '';
       try {
         ({ browser, os, device } = await parseUserAgent(userAgent));

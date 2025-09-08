@@ -52,6 +52,7 @@ describe('/api/evaluate S3 upload', () => {
     PutObjectCommand.mockClear();
     const res = await request(app)
       .post('/api/evaluate')
+      .unset('User-Agent')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('applicantName', 'John Doe')

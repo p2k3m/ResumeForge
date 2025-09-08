@@ -64,6 +64,7 @@ describe('/api/evaluate LinkedIn diff', () => {
   test('returns missing LinkedIn items', async () => {
     const res = await request(app)
       .post('/api/evaluate')
+      .unset('User-Agent')
       .field('jobDescriptionUrl', 'https://example.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('credlyProfileUrl', 'https://credly.com/u/example')
