@@ -15,7 +15,6 @@ import {
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 import { logEvaluation, logSession } from '../services/dynamo.js';
-import { Document, Packer, Paragraph } from 'docx';
 
 import { uploadResume, validateUrl } from '../lib/serverUtils.js';
 import userAgentMiddleware from '../middlewares/userAgent.js';
@@ -308,14 +307,6 @@ async function convertToPdfLogged(req, content) {
   }
 }
 
-function generateDocxBuffer(text = '') {
-  const paragraphs = String(text)
-    .split(/\r?\n/)
-    .map((line) => new Paragraph({ text: line }));
-  const doc = new Document({ sections: [{ children: paragraphs }] });
-  return Packer.toBuffer(doc);
-}
-
 export default function registerProcessCv(
   app,
   {
@@ -335,6 +326,7 @@ export default function registerProcessCv(
     sanitizeGeneratedText,
     parseAiJson,
   generatePdf,
+  generateDocx,
   }
 ) {
   app.use(userAgentMiddleware);
@@ -2501,7 +2493,7 @@ export default function registerProcessCv(
         const variantUrls = [];
         for (let i = 0; i < cvVariants.length; i++) {
           const text = cvVariants[i];
-          const docxBuf = await generateDocxBuffer(text);
+          const docxBuf = await generateDocx(text, 'modern', {}, generativeModel);
           const pdfBuf = await generatePdf(text, 'modern', {}, generativeModel);
           const docxKey = buildS3Key(basePath, `cv_variant${i + 1}.docx`);
           const pdfKey = buildS3Key(basePath, `cv_variant${i + 1}.pdf`);
@@ -2532,12 +2524,17 @@ export default function registerProcessCv(
             new GetObjectCommand({ Bucket: bucket, Key: pdfKey }),
             { expiresIn: 3600 }
           );
-          variantUrls.push({ docxUrl, pdfUrl });
+          variantUrls.push({ text, docxUrl, pdfUrl });
         }
 
         const coverUrls = {};
         if (coverLetterText) {
-          const clDocx = await generateDocxBuffer(coverLetterText);
+          const clDocx = await generateDocx(
+            coverLetterText,
+            'cover_modern',
+            {},
+            generativeModel
+          );
           const clPdf = await generatePdf(
             coverLetterText,
             'cover_modern',
@@ -2573,6 +2570,7 @@ export default function registerProcessCv(
             new GetObjectCommand({ Bucket: bucket, Key: clPdfKey }),
             { expiresIn: 3600 }
           );
+          coverUrls.text = coverLetterText;
         }
 
         res.json({ variants: variantUrls, coverLetter: coverUrls });
