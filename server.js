@@ -213,6 +213,9 @@ function selectTemplates({
 }
 
 
+const isBlocked = (content) =>
+  !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
+
 async function fetchLinkedInProfile(url) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid LinkedIn URL');
@@ -233,23 +236,29 @@ async function fetchLinkedInProfile(url) {
       throw error;
     }
   }
-  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+  if (isBlocked(html)) {
     const browser = await puppeteer.launch({
       headless: PUPPETEER_HEADLESS,
       args: PUPPETEER_ARGS,
     });
+    let page;
     try {
-      const page = await browser.newPage();
+      page = await browser.newPage();
       await page.goto(valid, {
         timeout: REQUEST_TIMEOUT_MS,
         waitUntil: 'networkidle2',
       });
       html = await page.content();
     } finally {
+      try {
+        await page?.close();
+      } catch {
+        /* ignore */
+      }
       await browser.close();
     }
   }
-  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+  if (isBlocked(html)) {
     if (status === 999) {
       return {
         headline: '',
@@ -276,7 +285,7 @@ async function fetchLinkedInProfile(url) {
     );
     const sectionMatch = html.match(sectionRegex);
     if (!sectionMatch) return [];
-    const itemRegex = /<li[^>]*>([\\s\\S]*?)<\/li>/gi;
+    const itemRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
     const items = [];
     let m;
     while ((m = itemRegex.exec(sectionMatch[1])) !== null) {
@@ -358,23 +367,29 @@ async function fetchCredlyProfile(url) {
   } catch {
     // ignore axios error and fall back to puppeteer
   }
-  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+  if (isBlocked(html)) {
     const browser = await puppeteer.launch({
       headless: PUPPETEER_HEADLESS,
       args: PUPPETEER_ARGS,
     });
+    let page;
     try {
-      const page = await browser.newPage();
+      page = await browser.newPage();
       await page.goto(valid, {
         timeout: REQUEST_TIMEOUT_MS,
         waitUntil: 'networkidle2',
       });
       html = await page.content();
     } finally {
+      try {
+        await page?.close();
+      } catch {
+        /* ignore */
+      }
       await browser.close();
     }
   }
-  if (!html || BLOCKED_PATTERNS.some((re) => re.test(html))) {
+  if (isBlocked(html)) {
     throw new Error('Blocked content');
   }
   const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
