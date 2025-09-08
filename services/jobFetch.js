@@ -5,8 +5,9 @@ import { JOB_FETCH_USER_AGENT } from '../config/http.js';
 import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from '../config/puppeteer.js';
 import { BLOCKED_PATTERNS, REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 
-const DEFAULT_FETCH_TIMEOUT_MS =
-  parseInt(process.env.JOB_FETCH_TIMEOUT_MS || REQUEST_TIMEOUT_MS, 10);
+// Default timeout comes from config and can be overridden via environment
+// variables as defined in config/jobFetch.js
+const DEFAULT_FETCH_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
 
 export async function fetchJobDescription(
   url,
@@ -35,11 +36,13 @@ export async function fetchJobDescription(
     if (signal?.aborted) throw err;
     axiosErrorMessage = err.message;
     console.error('Axios job fetch error:', axiosErrorMessage);
+    console.log('Axios fallback triggered, attempting Puppeteer fetch');
     // Ignore axios errors and fall back to puppeteer
     html = '';
   }
 
   if (isBlocked(html)) {
+    console.log('Falling back to Puppeteer for job fetch');
     let browser;
     try {
       browser = await puppeteer.launch({
@@ -71,7 +74,38 @@ export async function fetchJobDescription(
     try {
       page = await browser.newPage();
       await page.setUserAgent(userAgent);
-      await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
+
+      let navigationSucceeded = false;
+      for (let attempt = 1; attempt <= 2 && !navigationSucceeded; attempt++) {
+        try {
+          console.log(
+            `Navigating to ${valid} (attempt ${attempt}) with timeout ${timeout}ms`,
+          );
+          await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
+          console.log('Navigation finished');
+          navigationSucceeded = true;
+        } catch (navErr) {
+          if (signal?.aborted) throw new Error('Aborted');
+          if (
+            navErr.message?.toLowerCase().includes('timeout') &&
+            attempt < 2
+          ) {
+            console.warn(
+              `Navigation timed out after ${timeout}ms, retrying...`,
+            );
+          } else {
+            const message = navErr.message?.toLowerCase().includes('timeout')
+              ? `Navigation to ${valid} timed out after ${timeout}ms`
+              : navErr.message;
+            throw new Error(message);
+          }
+        }
+      }
+
+      if (!navigationSucceeded) {
+        throw new Error(`Navigation to ${valid} failed`);
+      }
+
       if (signal?.aborted) throw new Error('Aborted');
       html = await page.content();
     } finally {
