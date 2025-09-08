@@ -38,8 +38,21 @@ export async function fetchJobDescription(
         args: PUPPETEER_ARGS,
       });
     } catch (err) {
-      console.error('Chromium dependencies missing', err);
-      throw new Error('Unable to launch browser. Please ensure Chromium dependencies are installed.');
+      const missingLibMatch = err.message.match(/lib[^\s:]*\.so[^\s:]*/i);
+      const missingLib = missingLibMatch ? missingLibMatch[0] : undefined;
+      const envDetails = {
+        platform: process.platform,
+        arch: process.arch,
+        error: err.stack,
+        missingLib,
+      };
+      console.error('Chromium dependencies missing', envDetails);
+      const messageParts = [
+        `Unable to launch browser on ${process.platform}/${process.arch}.`,
+        missingLib ? `Missing dependency: ${missingLib}.` : '',
+        'Please ensure Chromium dependencies are installed.',
+      ].filter(Boolean);
+      throw new Error(messageParts.join(' '));
     }
     let page;
     try {
