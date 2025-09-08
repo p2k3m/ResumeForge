@@ -298,7 +298,15 @@ export default function registerProcessCv(
         const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
         );
-        const resumeText = await extractText(req.file);
+        let resumeText;
+        const endParse = startStep(req, 'resume_parsing');
+        try {
+          resumeText = await extractText(req.file);
+          await endParse();
+        } catch (err) {
+          await endParse(err.message);
+          throw err;
+        }
         const docType = await classifyDocument(resumeText);
         if (docType && docType !== 'resume' && docType !== 'unknown') {
           await logEvaluation({
@@ -958,12 +966,19 @@ export default function registerProcessCv(
         }
       }
       const resumeSkills = extractResumeSkills(text);
-      const projectSummary = await generateProjectSummary(
-        jobDescription,
-        resumeSkills,
-        jobSkills,
-        generativeModel
-      );
+      let projectSummary = '';
+      const endSummary = startStep(req, 'summary_generation');
+      try {
+        projectSummary = await generateProjectSummary(
+          jobDescription,
+          resumeSkills,
+          jobSkills,
+          generativeModel
+        );
+        await endSummary();
+      } catch (err) {
+        await endSummary(err.message);
+      }
       let improvedCv = [
         sanitizedName,
         '# Summary',
@@ -1053,13 +1068,19 @@ export default function registerProcessCv(
         (enhancedScore + atsScore) / 2
       );
       const endPdfGen = startStep(req, 'pdf_generation');
-      const improvedPdf = await generatePdf(
-        improvedCv,
-        '2025',
-        {},
-        generativeModel,
-      );
-      await endPdfGen();
+      let improvedPdf;
+      try {
+        improvedPdf = await generatePdf(
+          improvedCv,
+          '2025',
+          {},
+          generativeModel,
+        );
+        await endPdfGen();
+      } catch (err) {
+        await endPdfGen(err.message);
+        throw err;
+      }
       const ts = Date.now();
       const key = buildS3Key(
         [sanitizedName, 'enhanced', date],
@@ -1070,27 +1091,37 @@ export default function registerProcessCv(
         `${ts}-improved.txt`
       );
       const endPdfUpload = startStep(req, 's3_upload_improved_pdf');
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: improvedPdf,
-          ContentType: 'application/pdf',
-        }),
-        { abortSignal: req.signal }
-      );
-      await endPdfUpload();
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: improvedPdf,
+            ContentType: 'application/pdf',
+          }),
+          { abortSignal: req.signal }
+        );
+        await endPdfUpload();
+      } catch (err) {
+        await endPdfUpload(err.message);
+        throw err;
+      }
       const endTextUpload = startStep(req, 's3_upload_improved_text');
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: textKey,
-          Body: improvedCv,
-          ContentType: 'text/plain',
-        }),
-        { abortSignal: req.signal }
-      );
-      await endTextUpload();
+      try {
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: textKey,
+            Body: improvedCv,
+            ContentType: 'text/plain',
+          }),
+          { abortSignal: req.signal }
+        );
+        await endTextUpload();
+      } catch (err) {
+        await endTextUpload(err.message);
+        throw err;
+      }
       const cvUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: key }),
