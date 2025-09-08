@@ -504,7 +504,7 @@ export default function registerProcessCv(
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)[0] || req.ip;
-    const userAgent = req.headers['user-agent'] || '';
+    const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
     let browser, os, device;
     try {
       ({ browser, os, device } = await parseUserAgent(userAgent));
@@ -1650,13 +1650,14 @@ export default function registerProcessCv(
         );
       }
 
+      const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
       let jobDescriptionHtml = '';
       let jobDescription = '';
       let jobSkills = [];
       try {
         jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
-          userAgent: req.headers['user-agent'] || JOB_FETCH_USER_AGENT,
+          userAgent,
         });
         ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
           jobDescriptionHtml,
@@ -1793,7 +1794,6 @@ export default function registerProcessCv(
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean)[0] || req.ip;
-      const userAgent = req.headers['user-agent'] || '';
       let browser = '',
         os = '',
         device = '';
