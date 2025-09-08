@@ -561,7 +561,6 @@ export default function registerProcessCv(
       sanitizedName,
       ext,
       prefix,
-      enhancedPrefix,
       logKey,
       existingCvBuffer,
       originalText,
@@ -600,7 +599,6 @@ export default function registerProcessCv(
       ext = path.extname(req.file.originalname).toLowerCase();
       const date = new Date().toISOString().split('T')[0];
       prefix = `${sanitizedName}/cv/${date}/`;
-      enhancedPrefix = `${sanitizedName}/enhanced/${date}/`;
       logKey = `${prefix}logs/processing.jsonl`;
       text = null;
       if (existingCvTextKey) {
@@ -920,8 +918,14 @@ export default function registerProcessCv(
       );
       const improvedPdf = await generatePdf(improvedCv, '2025', {}, generativeModel);
       const ts = Date.now();
-      const key = `${enhancedPrefix}${ts}-improved.pdf`;
-      const textKey = `${enhancedPrefix}${ts}-improved.txt`;
+      const key = buildS3Key(
+        [sanitizedName, 'enhanced', date],
+        `${ts}-improved.pdf`
+      );
+      const textKey = buildS3Key(
+        [sanitizedName, 'enhanced', date],
+        `${ts}-improved.txt`
+      );
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1282,10 +1286,8 @@ export default function registerProcessCv(
         metricTable = metrics2.table;
       }
       const pdf = await generatePdf(bestCv, '2025', {}, generativeModel);
-      const key = path.join(
-        sanitizedName,
-        'enhanced',
-        date,
+      const key = buildS3Key(
+        [sanitizedName, 'enhanced', date],
         `${ts}-improved.pdf`
       );
       await s3.send(
@@ -1296,10 +1298,8 @@ export default function registerProcessCv(
           ContentType: 'application/pdf',
         })
       );
-      const textKey = path.join(
-        sanitizedName,
-        'enhanced',
-        date,
+      const textKey = buildS3Key(
+        [sanitizedName, 'enhanced', date],
         `${ts}-improved.txt`
       );
       await s3.send(
@@ -1621,10 +1621,8 @@ export default function registerProcessCv(
       const date = new Date().toISOString().split('T')[0];
 
       if (!existingCvKey) {
-        existingCvKey = path.join(
-          sanitizedName,
-          'enhanced',
-          date,
+        existingCvKey = buildS3Key(
+          [sanitizedName, 'enhanced', date],
           `${Date.now()}-final_cv.pdf`
         );
         await s3.send(
@@ -1638,10 +1636,8 @@ export default function registerProcessCv(
       }
 
       if (!existingCvTextKey) {
-        existingCvTextKey = path.join(
-          sanitizedName,
-          'enhanced',
-          date,
+        existingCvTextKey = buildS3Key(
+          [sanitizedName, 'enhanced', date],
           `${Date.now()}-final_cv.txt`
         );
         await s3.send(
