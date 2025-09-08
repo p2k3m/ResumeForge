@@ -6,22 +6,27 @@ import { REGION } from './aws.js';
 const secretsClient = new SecretsManagerClient({ region: REGION });
 
 let secretCache;
+
 export async function getSecrets() {
   if (secretCache) return secretCache;
 
   const secretId = process.env.SECRET_ID;
-  if (secretId) {
-    try {
-      const { SecretString } = await secretsClient.send(
-        new GetSecretValueCommand({ SecretId: secretId })
-      );
-      secretCache = JSON.parse(SecretString ?? '{}');
-      return secretCache;
-    } catch (err) {
-      // If AWS lookup fails, fall back to local file
-    }
+  if (!secretId) {
+    return loadLocalSecrets();
   }
 
+  try {
+    const { SecretString } = await secretsClient.send(
+      new GetSecretValueCommand({ SecretId: secretId })
+    );
+    secretCache = JSON.parse(SecretString ?? '{}');
+    return secretCache;
+  } catch (err) {
+    return loadLocalSecrets(secretId);
+  }
+}
+
+async function loadLocalSecrets(secretId) {
   try {
     const data = await fs.readFile(path.resolve('local-secrets.json'), 'utf-8');
     secretCache = JSON.parse(data);
