@@ -60,5 +60,8 @@ describe('shared AWS region configuration', () => {
     expect(content).toMatch(/from '\.\.\/config\/aws\.js'/);
     expect(content).not.toMatch(/AWS_REGION/);
     expect(content).not.toMatch(/ap-south-1/);
+    const s3Clients = content.match(/new S3Client\(/g) || [];
+    const withRegion = content.match(/new S3Client\(\{ region: REGION \}\)/g) || [];
+    expect(s3Clients.length).toBe(withRegion.length);
   });
 });
