@@ -41,8 +41,13 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   classifyDocument: jest.fn(),
 }));
 
+jest.unstable_mockModule('../services/documentClassifier.js', () => ({
+  describeDocument: jest.fn(),
+}));
+
 const app = (await import('../server.js')).default;
 const { classifyDocument } = await import('../openaiClient.js');
+const { describeDocument } = await import('../services/documentClassifier.js');
 
 describe('/api/evaluate non-resume', () => {
   test.each(['cover letter', 'essay'])('rejects %s', async (docType) => {
@@ -69,6 +74,7 @@ describe('/api/evaluate non-resume', () => {
 
   test.each(['unknown', ''])('rejects %s document type', async (docType) => {
     classifyDocument.mockResolvedValueOnce(docType);
+    describeDocument.mockResolvedValueOnce('essay');
     const res = await request(app)
       .post('/api/evaluate')
       .unset('User-Agent')
@@ -77,7 +83,7 @@ describe('/api/evaluate non-resume', () => {
       .attach('resume', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
-      "The document type couldn't be recognized; please upload a CV."
+      'This document looks like a essay. Please upload a CV.'
     );
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(

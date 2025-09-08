@@ -32,6 +32,7 @@ import {
 } from '../services/parseContent.js';
 import { REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 import { PROCESS_TIMEOUT_MS } from '../config/process.js';
+import { describeDocument } from '../services/documentClassifier.js';
 
 const activeJobs = new Map();
 
@@ -557,11 +558,11 @@ export default function registerProcessCv(
             cvKey,
             docType,
           }, { signal: req.signal });
+          const docType = await describeDocument(resumeText);
           return res
             .status(400)
             .json({
-              error:
-                "The document type couldn't be recognized; please upload a CV.",
+              error: `This document looks like a ${docType}. Please upload a CV.`,
             });
         }
         let applicantName =
