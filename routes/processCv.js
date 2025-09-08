@@ -120,6 +120,10 @@ export async function improveSections(sections, jobDescription) {
   return improvedSections;
 }
 
+export function buildS3Key(basePath, filename) {
+  return basePath.join('/') + '/' + filename;
+}
+
 function withTimeout(handler, timeoutMs = 10000) {
   return async (req, res, next) => {
     const start = Date.now();
@@ -1731,12 +1735,12 @@ export default function registerProcessCv(
         'enhanced',
         coverDate,
       ];
-      const coverKey = path.join(
-        ...coverBasePath,
+      const coverKey = buildS3Key(
+        coverBasePath,
         `${coverTimestamp}-cover_letter.pdf`,
       );
-      const coverTextKey = path.join(
-        ...coverBasePath,
+      const coverTextKey = buildS3Key(
+        coverBasePath,
         `${coverTimestamp}-cover_letter.txt`,
       );
       await s3.send(
