@@ -19,13 +19,16 @@ export async function fetchJobDescription(
     !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
 
   let html = '';
+  let axiosErrorMessage;
   try {
     const { data } = await axios.get(valid, {
       timeout,
       headers: { 'User-Agent': userAgent },
     });
     html = data;
-  } catch {
+  } catch (err) {
+    axiosErrorMessage = err.message;
+    console.error('Axios job fetch error:', axiosErrorMessage);
     // Ignore axios errors and fall back to puppeteer
     html = '';
   }
@@ -71,7 +74,10 @@ export async function fetchJobDescription(
   }
 
   if (isBlocked(html)) {
-    throw new Error('Blocked content');
+    const errorMessage = axiosErrorMessage
+      ? `Blocked content. Axios error: ${axiosErrorMessage}`
+      : 'Blocked content';
+    throw new Error(errorMessage);
   }
   return html;
 }

@@ -77,6 +77,21 @@ describe('fetchJobDescription', () => {
     expect(mockLaunch).toHaveBeenCalled();
   });
 
+  test('includes axios error message when all retrieval methods fail', async () => {
+    const axiosError = new Error('network down');
+    mockAxiosGet.mockRejectedValueOnce(axiosError);
+    mockPage.content.mockResolvedValueOnce('Access Denied');
+    await expect(
+      fetchJobDescription('http://example.com', {
+        timeout: 1000,
+        userAgent: 'agent',
+      }),
+    ).rejects.toThrow(
+      `Blocked content. Axios error: ${axiosError.message}`,
+    );
+    expect(mockLaunch).toHaveBeenCalled();
+  });
+
   test('rejects invalid URL', async () => {
     await expect(fetchJobDescription('http://')).rejects.toThrow('Invalid URL');
     expect(mockAxiosGet).not.toHaveBeenCalled();
