@@ -172,32 +172,35 @@ function startStep(req, event) {
       signal: req.signal,
     }).catch((err) => console.error(`failed to log ${event}_start`, err));
   }
-  return async (message = '') => {
-    const duration = Date.now() - start;
-    const endTs = new Date().toISOString();
-    console.log(
-      `[${endTs}] [${id}] ${event}_end duration=${duration}ms${
-        message ? ' - ' + message : ''
-      }`,
-    );
-    if (req.s3 && req.bucket && req.logKey) {
-      try {
-        await logEvent({
-          s3: req.s3,
-          bucket: req.bucket,
-          key: req.logKey,
-          jobId: id,
-          event: `${event}_end`,
-          message: `duration=${duration}ms${
-            message ? '; ' + message : ''
-          }`,
-          signal: req.signal,
-        });
-      } catch (err) {
-        console.error(`failed to log ${event}_end`, err);
-      }
+  return (message = '') => logStep(req, event, start, message);
+}
+
+async function logStep(req, event, start, message = '') {
+  const duration = Date.now() - start;
+  const endTs = new Date().toISOString();
+  const id = req.jobId || 'unknown';
+  console.log(
+    `[${endTs}] [${id}] ${event}_end duration=${duration}ms${
+      message ? ' - ' + message : ''
+    }`,
+  );
+  if (req.s3 && req.bucket && req.logKey) {
+    try {
+      await logEvent({
+        s3: req.s3,
+        bucket: req.bucket,
+        key: req.logKey,
+        jobId: id,
+        event: `${event}_end`,
+        message: `duration=${duration}ms${
+          message ? '; ' + message : ''
+        }`,
+        signal: req.signal,
+      });
+    } catch (err) {
+      console.error(`failed to log ${event}_end`, err);
     }
-  };
+  }
 }
 
 export default function registerProcessCv(
@@ -392,16 +395,20 @@ export default function registerProcessCv(
         let missingCertifications = [];
         let missingLanguages = [];
         if (linkedinProfileUrl) {
+          const endLinkedIn = startStep(req, 'linkedin_fetch');
           try {
-            const linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
+            const linkedinData = await fetchLinkedInProfile(
+              linkedinProfileUrl,
+              req.signal,
+            );
             const linkedinExperience = extractExperience(
-              linkedinData.experience || []
+              linkedinData.experience || [],
             );
             const linkedinEducation = extractEducation(
-              linkedinData.education || []
+              linkedinData.education || [],
             );
             const linkedinLanguages = extractLanguages(
-              linkedinData.languages || []
+              linkedinData.languages || [],
             );
             if (linkedinExperience[0]?.title) {
               originalTitle = linkedinExperience[0].title;
@@ -409,48 +416,56 @@ export default function registerProcessCv(
             const fmtExp = (e = {}) =>
               `${e.title || ''} at ${e.company || ''}`.trim();
             const resumeExpSet = new Set(
-              resumeExperience.map((e) => fmtExp(e))
+              resumeExperience.map((e) => fmtExp(e)),
             );
             missingExperience = linkedinExperience
               .map((e) => fmtExp(e))
               .filter((e) => e && !resumeExpSet.has(e));
             const resumeEduSet = new Set(
-              resumeEducation.map((e) => e.entry.toLowerCase())
+              resumeEducation.map((e) => e.entry.toLowerCase()),
             );
             missingEducation = linkedinEducation
               .map((e) => e.entry)
               .filter((e) => e && !resumeEduSet.has(e.toLowerCase()));
             const resumeLangSet = new Set(
-              resumeLanguages.map((l) => l.language.toLowerCase())
+              resumeLanguages.map((l) => l.language.toLowerCase()),
             );
             missingLanguages = linkedinLanguages
               .map((l) =>
                 l.proficiency
                   ? `${l.language} - ${l.proficiency}`
-                  : l.language
+                  : l.language,
               )
               .filter((l) => {
                 const name = l.split('-')[0].trim().toLowerCase();
                 return name && !resumeLangSet.has(name);
               });
-          } catch {
+            await endLinkedIn();
+          } catch (err) {
+            await endLinkedIn(err.message);
             // ignore LinkedIn fetch errors
           }
         }
 
         if (credlyProfileUrl) {
+          const endCredly = startStep(req, 'credly_fetch');
           try {
-            const credlyData = await fetchCredlyProfile(credlyProfileUrl, req.signal);
+            const credlyData = await fetchCredlyProfile(
+              credlyProfileUrl,
+              req.signal,
+            );
             const fmtCert = (c = {}) =>
               (c.provider ? `${c.name} - ${c.provider}` : c.name || '').trim();
             const resumeCertSet = new Set(
-              resumeCertifications.map((c) => fmtCert(c))
+              resumeCertifications.map((c) => fmtCert(c)),
             );
             missingCertifications = credlyData.filter((c) => {
               const key = fmtCert(c);
               return key && !resumeCertSet.has(key);
             });
-          } catch {
+            await endCredly();
+          } catch (err) {
+            await endCredly(err.message);
             // ignore Credly fetch errors
           }
         }
