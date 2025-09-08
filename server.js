@@ -219,6 +219,7 @@ const isBlocked = (content) =>
 async function fetchLinkedInProfile(url, signal) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid LinkedIn URL');
+  if (signal?.aborted) throw new Error('Aborted');
   let html = '';
   let status;
   try {
@@ -368,6 +369,7 @@ async function fetchLinkedInProfile(url, signal) {
 async function fetchCredlyProfile(url, signal) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid Credly URL');
+  if (signal?.aborted) throw new Error('Aborted');
   let html = '';
   try {
     const { data } = await axios.get(valid, {

@@ -20,6 +20,10 @@ export async function logEvent({
   logger = console,
   signal
 }) {
+  if (signal?.aborted) {
+    logger.warn('logEvent aborted: signal already triggered');
+    return;
+  }
   const entry = {
     timestamp: new Date().toISOString(),
     jobId,
