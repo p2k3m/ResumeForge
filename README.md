@@ -22,6 +22,7 @@ The server relies on the following environment variables:
   "S3_BUCKET": "resume-forge-data",
   "DYNAMO_TABLE": "ResumeForgeLogs",
   "REQUEST_TIMEOUT_MS": "5000",
+  "PROCESS_TIMEOUT_MS": "300000",
   "TRUST_PROXY": "1",
   "ENFORCE_HTTPS": "true"
 }
@@ -39,6 +40,8 @@ requiring external services will be disabled.
 `ResumeForgeLogs`.
 
 `REQUEST_TIMEOUT_MS` sets the timeout in milliseconds for outbound HTTP requests when fetching external profiles and job descriptions. It defaults to `5000`.
+
+`PROCESS_TIMEOUT_MS` defines the maximum time in milliseconds allowed for processing `/api/evaluate` and `/api/process-cv` requests. It defaults to `300000` (5 minutes).
 
 When deploying behind a reverse proxy or load balancer, set `TRUST_PROXY` to the number of trusted hops (typically `1`) so Express honors `X-Forwarded-*` headers. Combine this with `ENFORCE_HTTPS=true` to redirect all HTTP requests to `https://`.
 
