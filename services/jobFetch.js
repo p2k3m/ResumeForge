@@ -31,10 +31,16 @@ export async function fetchJobDescription(
   }
 
   if (isBlocked(html)) {
-    const browser = await puppeteer.launch({
-      headless: PUPPETEER_HEADLESS,
-      args: PUPPETEER_ARGS,
-    });
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: PUPPETEER_HEADLESS,
+        args: PUPPETEER_ARGS,
+      });
+    } catch (err) {
+      console.error('Chromium dependencies missing', err);
+      throw new Error('Unable to launch browser. Please ensure Chromium dependencies are installed.');
+    }
     let page;
     try {
       page = await browser.newPage();
