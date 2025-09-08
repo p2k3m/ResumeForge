@@ -82,7 +82,7 @@ function extractResponsibilitiesFromJd(html = '', jobSkills = []) {
       if (!verbs.some((v) => lower.includes(v))) return false;
       const words = lower.split(/[^a-z0-9+]+/);
       return !words.some((w) => skillSet.has(w));
-    });
+      });
 }
 
 function computeJdMismatches(resumeText = '', jobHtml = '', jobSkills = []) {
@@ -115,7 +115,7 @@ export async function improveSections(sections, jobDescription) {
       sectionName: key,
       sectionText: text,
       jobDescription,
-    });
+      });
   }
   return improvedSections;
 }
@@ -183,6 +183,7 @@ export default function registerProcessCv(
       });
     },
     withTimeout(async (req, res, next) => {
+      console.log('Received /api/evaluate request');
       const jobId = crypto.randomUUID();
       const ipAddress =
         (req.headers['x-forwarded-for'] || '')
@@ -998,9 +999,9 @@ export default function registerProcessCv(
           createError(504, 'The AI service took too long to respond. Please try again later.')
         );
       }
-      return next(createError(500, 'processing failed'));
-    }
-  });
+        return next(createError(500, 'processing failed'));
+      }
+    }));
 
   app.post(
     '/api/fix-metric',
@@ -1833,7 +1834,6 @@ export default function registerProcessCv(
         addedLanguages: selectedLanguagesArr,
         designation: designation || '',
       });
-    })
-  );
-}
+    });
+  }
 

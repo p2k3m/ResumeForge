@@ -152,6 +152,16 @@ resource "aws_lambda_permission" "allow_events" {
 5. Visit `http://localhost:5173` in the browser. If the backend runs elsewhere (e.g., in
    production), set `VITE_API_BASE_URL` to the server's base URL before starting the client.
 
+### Viewing logs during development
+
+Run the backend with `npm run dev` and watch the terminal output:
+
+- If the server fails to bind to the port, an error like `Server failed to start: ...` is printed.
+- Successful startup logs `Server running on port <port>`.
+- Each request to `/api/evaluate` logs `Received /api/evaluate request`, confirming the backend saw the request.
+
+These messages appear in the same terminal where `npm run dev` was executed.
+
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
 - Allowed file types: `.pdf`, `.docx`
