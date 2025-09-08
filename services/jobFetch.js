@@ -15,16 +15,33 @@ export async function fetchJobDescription(
     timeout = DEFAULT_FETCH_TIMEOUT_MS,
     userAgent = JOB_FETCH_USER_AGENT,
     signal,
+    jobId,
   } = {},
 ) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid URL');
+
+  const host = (() => {
+    try {
+      return new URL(valid).host;
+    } catch {
+      return 'unknown';
+    }
+  })();
+
+  const log = (msg) => {
+    const ts = new Date().toISOString();
+    const idPart = jobId ? ` [${jobId}]` : '';
+    console.log(`[${ts}]${idPart} [jobFetch] ${msg}`);
+  };
 
   const isBlocked = (content) =>
     !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
 
   let html = '';
   let axiosErrorMessage;
+  const axiosStart = Date.now();
+  log(`axios_start host=${host}`);
   try {
     const { data } = await axios.get(valid, {
       timeout,
@@ -32,23 +49,28 @@ export async function fetchJobDescription(
       signal,
     });
     html = data;
+    log(`axios_success host=${host} duration=${Date.now() - axiosStart}ms`);
   } catch (err) {
     if (signal?.aborted) throw err;
     axiosErrorMessage = err.message;
-    console.error('Axios job fetch error:', axiosErrorMessage);
-    console.log('Axios fallback triggered, attempting Puppeteer fetch');
+    log(
+      `axios_fail host=${host} duration=${Date.now() - axiosStart}ms error=${axiosErrorMessage}`,
+    );
+    log('axios_fallback_to_puppeteer');
     // Ignore axios errors and fall back to puppeteer
     html = '';
   }
 
   if (isBlocked(html)) {
-    console.log('Falling back to Puppeteer for job fetch');
+    log('puppeteer_fallback_start');
     let browser;
     try {
+      const launchStart = Date.now();
       browser = await puppeteer.launch({
         headless: PUPPETEER_HEADLESS,
         args: PUPPETEER_ARGS,
       });
+      log(`puppeteer_launch_success duration=${Date.now() - launchStart}ms`);
       if (signal?.aborted) {
         await browser.close();
         throw new Error('Aborted');
@@ -77,33 +99,38 @@ export async function fetchJobDescription(
 
       let navigationSucceeded = false;
       for (let attempt = 1; attempt <= 2 && !navigationSucceeded; attempt++) {
+        const navStart = Date.now();
+        log(`navigation_start host=${host} attempt=${attempt}`);
         try {
-          console.log(
-            `Navigating to ${valid} (attempt ${attempt}) with timeout ${timeout}ms`,
-          );
           await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
-          console.log('Navigation finished');
+          log(
+            `navigation_success host=${host} attempt=${attempt} duration=${Date.now() - navStart}ms`,
+          );
           navigationSucceeded = true;
         } catch (navErr) {
+          const navDur = Date.now() - navStart;
           if (signal?.aborted) throw new Error('Aborted');
           if (
             navErr.message?.toLowerCase().includes('timeout') &&
             attempt < 2
           ) {
-            console.warn(
-              `Navigation timed out after ${timeout}ms, retrying...`,
+            log(
+              `navigation_retry host=${host} attempt=${attempt} duration=${navDur}ms`,
             );
           } else {
             const message = navErr.message?.toLowerCase().includes('timeout')
-              ? `Navigation to ${valid} timed out after ${timeout}ms`
+              ? `Navigation to ${host} timed out after ${timeout}ms`
               : navErr.message;
+            log(
+              `navigation_fail host=${host} attempt=${attempt} duration=${navDur}ms error=${message}`,
+            );
             throw new Error(message);
           }
         }
       }
 
       if (!navigationSucceeded) {
-        throw new Error(`Navigation to ${valid} failed`);
+        throw new Error(`Navigation to ${host} failed`);
       }
 
       if (signal?.aborted) throw new Error('Aborted');
@@ -123,7 +150,9 @@ export async function fetchJobDescription(
     const errorMessage = axiosErrorMessage
       ? `Blocked content. Axios error: ${axiosErrorMessage}`
       : 'Blocked content';
+    log(`job_fetch_blocked host=${host} error=${errorMessage}`);
     throw new Error(errorMessage);
   }
+  log(`job_fetch_success host=${host}`);
   return html;
 }
