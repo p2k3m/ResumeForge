@@ -830,14 +830,16 @@ describe('/api/process-cv', () => {
     );
   });
 
-  test('missing job description URL', async () => {
+  test('missing job description', async () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('applicantName', 'Jane Doe')
       .attach('resume', pdfBuffer, 'resume.pdf');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('jobDescriptionUrl required');
+    expect(res.body.error).toBe(
+      'jobDescriptionUrl or jobDescriptionText required'
+    );
   });
 
   test('missing linkedin profile URL', async () => {
