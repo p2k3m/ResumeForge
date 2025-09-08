@@ -29,6 +29,8 @@ export async function fetchJobDescription(
     }
   })();
 
+  const isLinkedInHost = /(^|\.)linkedin\.com$/i.test(host);
+
   const log = (msg) => {
     const ts = new Date().toISOString();
     const idPart = jobId ? ` [${jobId}]` : '';
@@ -59,6 +61,17 @@ export async function fetchJobDescription(
     log('axios_fallback_to_puppeteer');
     // Ignore axios errors and fall back to puppeteer
     html = '';
+  }
+
+  const linkedinLoginPatterns = [/authwall/i, /sign\s?in/i, /login/i];
+  if (isLinkedInHost) {
+    const requiresAuth =
+      !html || linkedinLoginPatterns.some((re) => re.test(html));
+    if (requiresAuth) {
+      const message = 'LinkedIn job descriptions require authentication';
+      log(`linkedin_auth_required host=${host}`);
+      throw new Error(message);
+    }
   }
 
   if (isBlocked(html)) {
@@ -98,11 +111,14 @@ export async function fetchJobDescription(
       await page.setUserAgent(userAgent);
 
       let navigationSucceeded = false;
-      for (let attempt = 1; attempt <= 2 && !navigationSucceeded; attempt++) {
+      const maxAttempts = 2;
+      const baseTimeout = Math.max(5000, Math.floor(timeout / 2));
+      for (let attempt = 1; attempt <= maxAttempts && !navigationSucceeded; attempt++) {
+        const attemptTimeout = Math.min(timeout, baseTimeout * 2 ** (attempt - 1));
         const navStart = Date.now();
         log(`navigation_start host=${host} attempt=${attempt}`);
         try {
-          await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
+          await page.goto(valid, { timeout: attemptTimeout, waitUntil: 'networkidle2' });
           log(
             `navigation_success host=${host} attempt=${attempt} duration=${Date.now() - navStart}ms`,
           );
@@ -112,24 +128,32 @@ export async function fetchJobDescription(
           if (signal?.aborted) throw new Error('Aborted');
           if (
             navErr.message?.toLowerCase().includes('timeout') &&
-            attempt < 2
+            attempt < maxAttempts
           ) {
+            const backoff = 500 * 2 ** (attempt - 1);
             log(
-              `navigation_retry host=${host} attempt=${attempt} duration=${navDur}ms`,
+              `navigation_retry host=${host} attempt=${attempt} duration=${navDur}ms backoff=${backoff}ms`,
             );
+            await new Promise((r) => setTimeout(r, backoff));
           } else {
-            const message = navErr.message?.toLowerCase().includes('timeout')
-              ? `Navigation to ${host} timed out after ${timeout}ms`
+            const message = isLinkedInHost
+              ? 'LinkedIn job descriptions require authentication'
+              : navErr.message?.toLowerCase().includes('timeout')
+              ? `Navigation to ${host} timed out after ${attemptTimeout}ms`
               : navErr.message;
             log(
               `navigation_fail host=${host} attempt=${attempt} duration=${navDur}ms error=${message}`,
             );
+            if (attempt === maxAttempts) {
+              log(`navigation_retries_exhausted host=${host}`);
+            }
             throw new Error(message);
           }
         }
       }
 
       if (!navigationSucceeded) {
+        log(`navigation_retries_exhausted host=${host}`);
         throw new Error(`Navigation to ${host} failed`);
       }
 
@@ -146,6 +170,11 @@ export async function fetchJobDescription(
   }
 
   if (signal?.aborted) throw new Error('Aborted');
+  if (isLinkedInHost && linkedinLoginPatterns.some((re) => re.test(html))) {
+    const errorMessage = 'LinkedIn job descriptions require authentication';
+    log(`job_fetch_blocked host=${host} error=${errorMessage}`);
+    throw new Error(errorMessage);
+  }
   if (isBlocked(html)) {
     const errorMessage = axiosErrorMessage
       ? `Blocked content. Axios error: ${axiosErrorMessage}`
