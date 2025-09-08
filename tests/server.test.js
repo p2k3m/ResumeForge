@@ -7,6 +7,7 @@ import {
   requestCoverLetter,
 } from './mocks/openai.js';
 import { JOB_FETCH_USER_AGENT } from '../config/http.js';
+import { sanitizeName } from '../lib/sanitizeName.js';
 
 const pdfBuffer = Buffer.from('%PDF-1.4');
 
@@ -386,12 +387,7 @@ describe('/api/process-cv', () => {
     expect(res2.body.aiSkillsAdded).toEqual(['skill1']);
     expect(res2.body.improvementSummary).toBe('summary');
 
-    const sanitized = res2.body.applicantName
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .join('_')
-      .toLowerCase();
+    const sanitized = sanitizeName(res2.body.applicantName);
     const date = new Date().toISOString().split('T')[0];
 
     res2.body.urls.forEach(({ type, url }) => {
