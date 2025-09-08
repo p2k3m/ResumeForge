@@ -11,30 +11,29 @@ export async function getSecrets() {
   if (secretCache) return secretCache;
 
   const secretId = process.env.SECRET_ID;
-  if (!secretId) {
-    return loadLocalSecrets();
+  if (secretId) {
+    try {
+      const { SecretString } = await secretsClient.send(
+        new GetSecretValueCommand({ SecretId: secretId })
+      );
+      secretCache = JSON.parse(SecretString ?? '{}');
+      return secretCache;
+    } catch (err) {
+      console.warn(`Failed to load AWS secrets for ${secretId}: ${err.message}`);
+    }
   }
 
-  try {
-    const { SecretString } = await secretsClient.send(
-      new GetSecretValueCommand({ SecretId: secretId })
-    );
-    secretCache = JSON.parse(SecretString ?? '{}');
-    return secretCache;
-  } catch (err) {
-    return loadLocalSecrets(secretId);
-  }
+  return loadLocalSecrets();
 }
 
-async function loadLocalSecrets(secretId) {
+async function loadLocalSecrets() {
   try {
     const data = await fs.readFile(path.resolve('local-secrets.json'), 'utf-8');
     secretCache = JSON.parse(data);
     return secretCache;
   } catch (err) {
-    if (secretId) {
-      throw new Error(`Failed to load secrets for ${secretId} and local-secrets.json is missing`);
-    }
-    throw new Error('SECRET_ID environment variable is not set and local-secrets.json is missing');
+    console.warn('local-secrets.json not found; proceeding without secrets');
+    secretCache = {};
+    return secretCache;
   }
 }
