@@ -258,7 +258,7 @@ describe('/api/process-cv', () => {
     expect(res.body.addedCertifications).toEqual(['AWS Cert - Amazon']);
   });
 
-  test('prompts for name when model uncertain', async () => {
+  test('uses placeholder name when model uncertain', async () => {
     generateContentMock.mockReset();
     generateContentMock.mockResolvedValue({
       response: { text: () => 'unknown' }
@@ -268,8 +268,9 @@ describe('/api/process-cv', () => {
       .field('jobDescriptionUrl', 'https://indeed.com/job')
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', pdfBuffer, 'resume.pdf');
-    expect(res.status).toBe(400);
-    expect(res.body.nameRequired).toBe(true);
+    expect(res.status).toBe(200);
+    expect(res.body.applicantName).toBe('Candidate');
+    expect(res.body.bestCvKey.startsWith('candidate/')).toBe(true);
   });
   test('handles DynamoDB table lifecycle', async () => {
     mockDynamoSend
