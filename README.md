@@ -12,6 +12,29 @@ Job descriptions are fetched with an initial Axios request and fall back to a Pu
 
 If a LinkedIn posting requires authentication, the server returns a `LINKEDIN_AUTH_REQUIRED` error. For these protected URLs, copy and paste the job description text directly instead of providing the link.
 
+## Usage
+
+Submit a résumé and job description to generate tailored documents:
+
+```bash
+curl -F "resume=@resume.pdf" -F "jobDescriptionUrl=https://example.com/job" \
+  http://localhost:3000/api/process-cv
+```
+
+Monitor processing progress using the returned `jobId`:
+
+```bash
+curl http://localhost:3000/api/progress/<jobId>
+```
+
+Delete all stored files and logs for a session when finished:
+
+```bash
+curl -X DELETE http://localhost:3000/api/session/<jobId>
+```
+
+Uploaded data is retained for up to 30 days and is removed automatically afterwards. Use the delete endpoint above to purge a session immediately if needed.
+
 ## Environment Variables
 The server relies on the following environment variables:
 
