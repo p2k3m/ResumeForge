@@ -55,19 +55,22 @@ async function ensureTable(client, tableName) {
   }
 }
 
-export async function logEvaluation({
-  jobId,
-  ipAddress = '',
-  userAgent = '',
-  browser = '',
-  os = '',
-  device = '',
-  jobDescriptionUrl = '',
-  linkedinProfileUrl = '',
-  credlyProfileUrl = '',
-  cvKey = '',
-  docType = '',
-}) {
+export async function logEvaluation(
+  {
+    jobId,
+    ipAddress = '',
+    userAgent = '',
+    browser = '',
+    os = '',
+    device = '',
+    jobDescriptionUrl = '',
+    linkedinProfileUrl = '',
+    credlyProfileUrl = '',
+    cvKey = '',
+    docType = '',
+  },
+  { signal } = {}
+) {
   const client = new DynamoDBClient({ region: REGION });
   let tableName = process.env.DYNAMO_TABLE;
   if (!tableName) {
@@ -104,24 +107,30 @@ export async function logEvaluation({
   addString('cvKey', cvKey);
   addString('docType', docType);
 
-  await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
+  await client.send(
+    new PutItemCommand({ TableName: tableName, Item: item }),
+    { abortSignal: signal }
+  );
 }
 
-export async function logSession({
-  jobId,
-  ipAddress = '',
-  userAgent = '',
-  browser = '',
-  os = '',
-  device = '',
-  jobDescriptionUrl = '',
-  linkedinProfileUrl = '',
-  credlyProfileUrl = '',
-  cvKey = '',
-  coverLetterKey = '',
-  atsScore = 0,
-  improvement = 0,
-}) {
+export async function logSession(
+  {
+    jobId,
+    ipAddress = '',
+    userAgent = '',
+    browser = '',
+    os = '',
+    device = '',
+    jobDescriptionUrl = '',
+    linkedinProfileUrl = '',
+    credlyProfileUrl = '',
+    cvKey = '',
+    coverLetterKey = '',
+    atsScore = 0,
+    improvement = 0,
+  },
+  { signal } = {}
+) {
   const client = new DynamoDBClient({ region: REGION });
   let tableName = process.env.DYNAMO_TABLE;
   if (!tableName) {
@@ -160,7 +169,10 @@ export async function logSession({
   addString('cvKey', cvKey);
   addString('coverLetterKey', coverLetterKey);
 
-  await client.send(new PutItemCommand({ TableName: tableName, Item: item }));
+  await client.send(
+    new PutItemCommand({ TableName: tableName, Item: item }),
+    { abortSignal: signal }
+  );
 }
 
 export async function cleanupOldRecords({ retentionDays = 30 } = {}) {

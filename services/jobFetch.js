@@ -10,7 +10,11 @@ const DEFAULT_FETCH_TIMEOUT_MS =
 
 export async function fetchJobDescription(
   url,
-  { timeout = DEFAULT_FETCH_TIMEOUT_MS, userAgent = JOB_FETCH_USER_AGENT } = {},
+  {
+    timeout = DEFAULT_FETCH_TIMEOUT_MS,
+    userAgent = JOB_FETCH_USER_AGENT,
+    signal,
+  } = {},
 ) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid URL');
@@ -24,9 +28,11 @@ export async function fetchJobDescription(
     const { data } = await axios.get(valid, {
       timeout,
       headers: { 'User-Agent': userAgent },
+      signal,
     });
     html = data;
   } catch (err) {
+    if (signal?.aborted) throw err;
     axiosErrorMessage = err.message;
     console.error('Axios job fetch error:', axiosErrorMessage);
     // Ignore axios errors and fall back to puppeteer
@@ -40,6 +46,10 @@ export async function fetchJobDescription(
         headless: PUPPETEER_HEADLESS,
         args: PUPPETEER_ARGS,
       });
+      if (signal?.aborted) {
+        await browser.close();
+        throw new Error('Aborted');
+      }
     } catch (err) {
       const missingLibMatch = err.message.match(/lib[^\s:]*\.so[^\s:]*/i);
       const missingLib = missingLibMatch ? missingLibMatch[0] : undefined;
@@ -62,6 +72,7 @@ export async function fetchJobDescription(
       page = await browser.newPage();
       await page.setUserAgent(userAgent);
       await page.goto(valid, { timeout, waitUntil: 'networkidle2' });
+      if (signal?.aborted) throw new Error('Aborted');
       html = await page.content();
     } finally {
       try {
@@ -73,6 +84,7 @@ export async function fetchJobDescription(
     }
   }
 
+  if (signal?.aborted) throw new Error('Aborted');
   if (isBlocked(html)) {
     const errorMessage = axiosErrorMessage
       ? `Blocked content. Axios error: ${axiosErrorMessage}`

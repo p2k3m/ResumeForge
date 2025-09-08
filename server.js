@@ -216,13 +216,16 @@ function selectTemplates({
 const isBlocked = (content) =>
   !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
 
-async function fetchLinkedInProfile(url) {
+async function fetchLinkedInProfile(url, signal) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid LinkedIn URL');
   let html = '';
   let status;
   try {
-    const { data } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
+    const { data } = await axios.get(valid, {
+      timeout: REQUEST_TIMEOUT_MS,
+      signal,
+    });
     html = data;
   } catch (err) {
     status = err?.response?.status;
@@ -241,6 +244,10 @@ async function fetchLinkedInProfile(url) {
       headless: PUPPETEER_HEADLESS,
       args: PUPPETEER_ARGS,
     });
+    if (signal?.aborted) {
+      await browser.close();
+      throw new Error('Aborted');
+    }
     let page;
     try {
       page = await browser.newPage();
@@ -248,6 +255,7 @@ async function fetchLinkedInProfile(url) {
         timeout: REQUEST_TIMEOUT_MS,
         waitUntil: 'networkidle2',
       });
+      if (signal?.aborted) throw new Error('Aborted');
       html = await page.content();
     } finally {
       try {
@@ -357,12 +365,15 @@ async function fetchLinkedInProfile(url) {
   };
 }
 
-async function fetchCredlyProfile(url) {
+async function fetchCredlyProfile(url, signal) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid Credly URL');
   let html = '';
   try {
-    const { data } = await axios.get(valid, { timeout: REQUEST_TIMEOUT_MS });
+    const { data } = await axios.get(valid, {
+      timeout: REQUEST_TIMEOUT_MS,
+      signal,
+    });
     html = data;
   } catch {
     // ignore axios error and fall back to puppeteer
@@ -372,6 +383,10 @@ async function fetchCredlyProfile(url) {
       headless: PUPPETEER_HEADLESS,
       args: PUPPETEER_ARGS,
     });
+    if (signal?.aborted) {
+      await browser.close();
+      throw new Error('Aborted');
+    }
     let page;
     try {
       page = await browser.newPage();
@@ -379,6 +394,7 @@ async function fetchCredlyProfile(url) {
         timeout: REQUEST_TIMEOUT_MS,
         waitUntil: 'networkidle2',
       });
+      if (signal?.aborted) throw new Error('Aborted');
       html = await page.content();
     } finally {
       try {
@@ -389,6 +405,7 @@ async function fetchCredlyProfile(url) {
       await browser.close();
     }
   }
+  if (signal?.aborted) throw new Error('Aborted');
   if (isBlocked(html)) {
     throw new Error('Blocked content');
   }
