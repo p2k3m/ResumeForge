@@ -982,9 +982,12 @@ app.use((err, req, res, next) => {
 
 const port = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Server running on port ${port}`);
   });
+  server.on('error', (err) =>
+    console.error('Server failed to start:', err)
+  );
 }
 
 export default app;
