@@ -227,12 +227,12 @@ function App() {
     )
   }
 
-  const handleFix = async (metric) => {
+  const handleFix = async (metricOrCategory) => {
     try {
       const form = new FormData()
       form.append('resume', cvFile)
       form.append('jobDescriptionUrl', jobUrl)
-      form.append('metric', metric)
+      form.append('metric', metricOrCategory)
       const resp = await fetch(`${API_BASE_URL}/api/fix-metric`, {
         method: 'POST',
         body: form
@@ -242,11 +242,14 @@ function App() {
         throw new Error(text || 'Request failed')
       }
       const data = await resp.json()
-      setMetricSuggestions((prev) => ({ ...prev, [metric]: data.suggestion }))
+      setMetricSuggestions((prev) => ({
+        ...prev,
+        [metricOrCategory]: data.suggestion
+      }))
     } catch (err) {
       setMetricSuggestions((prev) => ({
         ...prev,
-        [metric]: err.message || 'Failed to fetch suggestion'
+        [metricOrCategory]: err.message || 'Failed to fetch suggestion'
       }))
     }
   }
@@ -525,7 +528,20 @@ function App() {
                           className="p-4 bg-white border rounded shadow-sm"
                         >
                           <p className="font-medium">{category}</p>
-                          <p>{avgScore}% ({status})</p>
+                          {avgScore < 80 && (
+                            <p className="text-sm text-purple-600">
+                              Target ≥80. Click to FIX
+                            </p>
+                          )}
+                          <p>
+                            {avgScore}% ({status})
+                            <button
+                              onClick={() => handleFix(category)}
+                              className="ml-2 text-blue-600 underline"
+                            >
+                              Fix
+                            </button>
+                          </p>
                           <ul>
                             {available.map((metricKey) => {
                               const score = result.atsMetrics[metricKey]
@@ -566,6 +582,11 @@ function App() {
                               )
                             })}
                           </ul>
+                          {avgScore < 80 && metricSuggestions[category] && (
+                            <div className="mt-1 text-sm text-purple-700">
+                              {metricSuggestions[category]}
+                            </div>
+                          )}
                         </div>
                       )
                     }
