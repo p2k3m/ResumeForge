@@ -245,7 +245,7 @@ export default function registerProcessCv(
             error: `You have uploaded a ${docType}. Please upload a CV only.`,
           });
         }
-        if (docType === 'unknown') {
+        if (!docType || docType === 'unknown') {
           await logEvaluation({
             jobId,
             ipAddress,
@@ -577,7 +577,7 @@ export default function registerProcessCv(
           )
         );
       }
-      if (docType === 'unknown') {
+      if (!docType || docType === 'unknown') {
         return next(
           createError(
             400,
