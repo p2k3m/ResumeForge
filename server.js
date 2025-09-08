@@ -27,7 +27,7 @@ import { getSecrets } from './config/secrets.js';
 import JSON5 from 'json5';
 import { generativeModel } from './geminiClient.js';
 import registerProcessCv from './routes/processCv.js';
-import { generatePdf as _generatePdf } from './services/generatePdf.js';
+import { generatePdf as _generatePdf, generateDocx as _generateDocx } from './services/generatePdf.js';
 import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from './config/puppeteer.js';
 import { JOB_FETCH_USER_AGENT } from './config/http.js';
 import { uploadResume, parseUserAgent, validateUrl } from './lib/serverUtils.js';
@@ -766,9 +766,15 @@ function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
 
 let generatePdf = (text, templateId, options, gm = generativeModel) =>
   _generatePdf(text, templateId, options, gm);
+let generateDocx = (text, templateId, options, gm = generativeModel) =>
+  _generateDocx(text, templateId, options, gm);
 
 function setGeneratePdf(fn) {
   generatePdf = fn;
+}
+
+function setGenerateDocx(fn) {
+  generateDocx = fn;
 }
 
 async function classifyDocument(text) {
@@ -1004,6 +1010,7 @@ registerProcessCv(app, {
   sanitizeGeneratedText,
   parseAiJson,
   generatePdf,
+  generateDocx,
 });
 
 // Generic error handler to prevent uncaught exceptions from crashing requests
@@ -1028,7 +1035,9 @@ export default app;
 export {
   extractText,
   generatePdf,
+  generateDocx,
   setGeneratePdf,
+  setGenerateDocx,
   parseContent,
   parseLine,
   parseAiJson,

@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import puppeteer from 'puppeteer';
+import htmlDocx from 'html-docx-js';
 import Handlebars from '../lib/handlebars.js';
 import {
   parseContent,
@@ -42,12 +43,7 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
-export async function generatePdf(
-  text,
-  templateId = 'modern',
-  options = {},
-  generativeModel
-) {
+async function renderTemplate(text, templateId = 'modern', options = {}, generativeModel) {
   if (!ALL_TEMPLATES.includes(templateId)) templateId = 'modern';
   const data = parseContent(text, options);
   data.sections.forEach((sec) => {
@@ -259,7 +255,17 @@ export async function generatePdf(
     if (css) {
       html = html.replace('</head>', `<style>${css}</style></head>`);
     }
-  }  
+  }
+  return { html, data };
+}
+
+export async function generatePdf(
+  text,
+  templateId = 'modern',
+  options = {},
+  generativeModel
+) {
+  const { html, data } = await renderTemplate(text, templateId, options, generativeModel);
   let browser;
   try {
     // Launch using Chromium's default sandboxing.
@@ -449,6 +455,16 @@ export async function generatePdf(
   } finally {
     if (browser) await browser.close();
   }
+}
+
+export async function generateDocx(
+  text,
+  templateId = 'modern',
+  options = {},
+  generativeModel
+) {
+  const { html } = await renderTemplate(text, templateId, options, generativeModel);
+  return htmlDocx.asBuffer(html);
 }
 
 export default generatePdf;
