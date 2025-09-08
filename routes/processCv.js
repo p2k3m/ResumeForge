@@ -15,9 +15,8 @@ import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 import { logEvaluation, logSession } from '../services/dynamo.js';
 
-import { uploadResume, parseUserAgent, validateUrl } from '../lib/serverUtils.js';
-
-import { JOB_FETCH_USER_AGENT } from '../config/http.js';
+import { uploadResume, validateUrl } from '../lib/serverUtils.js';
+import userAgentMiddleware from '../middlewares/userAgent.js';
 import { fetchJobDescription } from '../services/jobFetch.js';
 import { REGION } from '../config/aws.js';
 
@@ -174,6 +173,7 @@ export default function registerProcessCv(
     generatePdf,
   }
 ) {
+  app.use(userAgentMiddleware);
   app.post(
     '/api/evaluate',
     (req, res, next) => {
@@ -190,11 +190,7 @@ export default function registerProcessCv(
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean)[0] || req.ip;
-      const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
-      let browser = '', os = '', device = '';
-      try {
-        ({ browser, os, device } = await parseUserAgent(userAgent));
-      } catch {}
+      const { userAgent, browser, os, device } = req;
       try {
         if (!req.file) return next(createError(400, 'resume file required'));
         let cvKey =
@@ -505,14 +501,7 @@ export default function registerProcessCv(
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean)[0] || req.ip;
-    const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
-    let browser, os, device;
-    try {
-      ({ browser, os, device } = await parseUserAgent(userAgent));
-    } catch (err) {
-      console.error('User agent parsing failed', err);
-      return next(createError(500, 'Failed to parse user agent'));
-    }
+    const { userAgent, browser, os, device } = req;
     let defaultCvTemplate =
       req.body.template || req.query.template || '2025';
     if (!CV_TEMPLATES.includes(defaultCvTemplate)) defaultCvTemplate = '2025';
@@ -1021,7 +1010,7 @@ export default function registerProcessCv(
         jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
-        const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
+        const { userAgent } = req;
         let jobDescription = '';
         try {
           jobDescription = await fetchJobDescription(jobDescriptionUrl, {
@@ -1069,7 +1058,7 @@ export default function registerProcessCv(
           jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
           if (!jobDescriptionUrl)
             return next(createError(400, 'invalid jobDescriptionUrl'));
-          const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
+          const { userAgent } = req;
           let jobDescriptionHtml = '';
           try {
             jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
@@ -1094,7 +1083,7 @@ export default function registerProcessCv(
         jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
         if (!jobDescriptionUrl)
           return next(createError(400, 'invalid jobDescriptionUrl'));
-        const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
+        const { userAgent } = req;
         let jobDescriptionHtml = '';
         try {
           jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
@@ -1651,7 +1640,7 @@ export default function registerProcessCv(
         );
       }
 
-      const userAgent = req.headers['user-agent'] || JOB_FETCH_USER_AGENT;
+      const { userAgent } = req;
       let jobDescriptionHtml = '';
       let jobDescription = '';
       let jobSkills = [];
@@ -1795,12 +1784,7 @@ export default function registerProcessCv(
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean)[0] || req.ip;
-      let browser = '',
-        os = '',
-        device = '';
-      try {
-        ({ browser, os, device } = await parseUserAgent(userAgent));
-      } catch {}
+      const { browser, os, device } = req;
 
       try {
         await logSession({
