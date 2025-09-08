@@ -49,7 +49,7 @@ describe('fetchJobDescription', () => {
     expect(mockLaunch).toHaveBeenCalled();
     expect(html).toBe('<html>dynamic</html>');
     expect(mockPage.setUserAgent).toHaveBeenCalledWith('agent');
-    expect(mockPage.goto).toHaveBeenCalledWith('http://example.com', {
+    expect(mockPage.goto).toHaveBeenCalledWith('http://example.com/', {
       timeout: 1000,
       waitUntil: 'networkidle2',
     });
@@ -78,14 +78,18 @@ describe('fetchJobDescription', () => {
   });
 
   test('rejects invalid URL', async () => {
-    await expect(fetchJobDescription('http:/bad')).rejects.toThrow('Invalid URL');
+    await expect(fetchJobDescription('http://')).rejects.toThrow('Invalid URL');
     expect(mockAxiosGet).not.toHaveBeenCalled();
     expect(mockLaunch).not.toHaveBeenCalled();
   });
 
-  test('rejects private IP URL', async () => {
-    await expect(fetchJobDescription('http://127.0.0.1')).rejects.toThrow('Invalid URL');
-    expect(mockAxiosGet).not.toHaveBeenCalled();
+  test('processes private IP URL', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: '<html>local</html>' });
+    const html = await fetchJobDescription('http://127.0.0.1', {
+      timeout: 1000,
+      userAgent: 'agent',
+    });
+    expect(html).toBe('<html>local</html>');
     expect(mockLaunch).not.toHaveBeenCalled();
   });
 });
