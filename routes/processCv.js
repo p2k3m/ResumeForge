@@ -157,6 +157,49 @@ export function withTimeout(handler, timeoutMs = 10000) {
   };
 }
 
+function startStep(req, event) {
+  const start = Date.now();
+  const ts = new Date().toISOString();
+  const id = req.jobId || 'unknown';
+  console.log(`[${ts}] [${id}] ${event}_start`);
+  if (req.s3 && req.bucket && req.logKey) {
+    logEvent({
+      s3: req.s3,
+      bucket: req.bucket,
+      key: req.logKey,
+      jobId: id,
+      event: `${event}_start`,
+      signal: req.signal,
+    }).catch((err) => console.error(`failed to log ${event}_start`, err));
+  }
+  return async (message = '') => {
+    const duration = Date.now() - start;
+    const endTs = new Date().toISOString();
+    console.log(
+      `[${endTs}] [${id}] ${event}_end duration=${duration}ms${
+        message ? ' - ' + message : ''
+      }`,
+    );
+    if (req.s3 && req.bucket && req.logKey) {
+      try {
+        await logEvent({
+          s3: req.s3,
+          bucket: req.bucket,
+          key: req.logKey,
+          jobId: id,
+          event: `${event}_end`,
+          message: `duration=${duration}ms${
+            message ? '; ' + message : ''
+          }`,
+          signal: req.signal,
+        });
+      } catch (err) {
+        console.error(`failed to log ${event}_end`, err);
+      }
+    }
+  };
+}
+
 export default function registerProcessCv(
   app,
   {
@@ -182,14 +225,17 @@ export default function registerProcessCv(
   app.post(
     '/api/evaluate',
     (req, res, next) => {
+      req.jobId = crypto.randomUUID();
+      const endUpload = startStep(req, 'resume_upload');
       uploadResume(req, res, (err) => {
+        endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
         next();
       });
     },
     withTimeout(async (req, res, next) => {
-      console.log('Received /api/evaluate request');
-      const jobId = crypto.randomUUID();
+      const { jobId } = req;
+      console.log(`Received /api/evaluate request [${jobId}]`);
       const ipAddress =
         (req.headers['x-forwarded-for'] || '')
           .split(',')
@@ -219,11 +265,14 @@ export default function registerProcessCv(
             return next(createError(400, 'invalid credlyProfileUrl'));
         }
 
+        const endJd = startStep(req, 'job_description_fetch');
         const jobHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
           userAgent,
           signal: req.signal,
+          jobId,
         });
+        await endJd();
         const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
           jobHtml
         );
@@ -285,10 +334,14 @@ export default function registerProcessCv(
           return next(createError(500, 'failed to load configuration'));
         }
         const s3 = new S3Client({ region: REGION });
+        req.s3 = s3;
+        req.bucket = bucket;
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
         const prefix = `${sanitized}/cv/${date}/`;
         cvKey = `${prefix}${Date.now()}-${sanitized}${ext}`;
+        req.logKey = `${prefix}logs/processing.jsonl`;
+        const endS3 = startStep(req, 's3_initial_upload');
         try {
           await s3.send(
             new PutObjectCommand({
@@ -299,7 +352,9 @@ export default function registerProcessCv(
             }),
             { abortSignal: req.signal }
           );
+          await endS3();
         } catch (err) {
+          await endS3(err.message);
           console.error(`initial upload to bucket ${bucket} failed`, err);
         }
         const resumeSkills = extractResumeSkills(resumeText);
@@ -313,14 +368,12 @@ export default function registerProcessCv(
           jobSkills
         );
         let atsMetrics;
-        let atsStart;
+        const endAts = startStep(req, 'ats_analysis');
         try {
-          atsStart = Date.now();
           atsMetrics = await requestAtsAnalysis(resumeText, { signal: req.signal });
-          console.log(
-            `[${new Date().toISOString()}] ats_analysis completed in ${Date.now() - atsStart}ms`
-          );
+          await endAts();
         } catch (err) {
+          await endAts(err.message);
           console.warn('ATS analysis failed, using heuristic metrics', err);
           atsMetrics = calculateMetrics(resumeText);
         }
@@ -443,19 +496,18 @@ export default function registerProcessCv(
     app.post(
     '/api/process-cv',
     (req, res, next) => {
-      const start = Date.now();
+      req.jobId = crypto.randomUUID();
+      const endUpload = startStep(req, 'resume_upload');
       uploadResume(req, res, (err) => {
-        const duration = Date.now() - start;
-        const logMsg = `resume upload completed in ${duration}ms`;
-        console.log(`[${new Date().toISOString()}] ${logMsg}`);
-        req.resumeUploadDuration = duration;
+        endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
         next();
       });
     },
     withTimeout(async (req, res, next) => {
-    const jobId = crypto.randomUUID();
+    const jobId = req.jobId;
     const s3 = new S3Client({ region: REGION });
+    req.s3 = s3;
     let bucket;
     let secrets;
     try {
@@ -466,10 +518,16 @@ export default function registerProcessCv(
       console.error('failed to load configuration', err);
       return next(createError(500, 'failed to load configuration'));
     }
+    req.bucket = bucket;
+    let logKey;
     const logStep = async (event, { startTime, duration, message } = {}) => {
       const dur = duration ?? (Date.now() - startTime);
-      const msg = `${event} completed in ${dur}ms${message ? ' - ' + message : ''}`;
-      console.log(`[${new Date().toISOString()}] ${msg}`);
+      const ts = new Date().toISOString();
+      console.log(
+        `[${ts}] [${jobId}] ${event} completed in ${dur}ms${
+          message ? ' - ' + message : ''
+        }`,
+      );
       if (bucket && logKey) {
         try {
           await logEvent({
@@ -478,7 +536,9 @@ export default function registerProcessCv(
             key: logKey,
             jobId,
             event,
-            message: `duration=${dur}ms${message ? '; ' + message : ''}`,
+            message: `duration=${dur}ms${
+              message ? '; ' + message : ''
+            }`,
             signal: req.signal,
           });
         } catch (err) {
@@ -627,9 +687,7 @@ export default function registerProcessCv(
       const date = new Date().toISOString().split('T')[0];
       prefix = `${sanitizedName}/cv/${date}/`;
       logKey = `${prefix}logs/processing.jsonl`;
-      if (req.resumeUploadDuration != null) {
-        await logStep('resume_upload', { duration: req.resumeUploadDuration });
-      }
+      req.logKey = logKey;
       text = null;
       if (existingCvTextKey) {
         try {
@@ -669,7 +727,7 @@ export default function registerProcessCv(
     // Store raw file to configured bucket
     const initialS3 = new S3Client({ region: REGION });
     try {
-      const s3Start = Date.now();
+      const endInitialUpload = startStep(req, 's3_initial_upload');
       await initialS3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -678,7 +736,7 @@ export default function registerProcessCv(
           ContentType: req.file.mimetype,
         })
       );
-      await logStep('s3_initial_upload', { startTime: s3Start });
+      await endInitialUpload();
     } catch (e) {
       console.error(`initial upload to bucket ${bucket} failed`, e);
       const message = e.message || 'initial S3 upload failed';
@@ -729,25 +787,22 @@ export default function registerProcessCv(
       }
 
       let jobDescriptionHtml;
-      let jdStart;
+      const endJdFetch = startStep(req, 'job_description_fetch');
       try {
-        jdStart = Date.now();
         jobDescriptionHtml = await withRetry(
           () =>
             fetchJobDescription(jobDescriptionUrl, {
               timeout: REQUEST_TIMEOUT_MS,
               userAgent,
               signal: req.signal,
+              jobId,
             }),
           2
         );
-        await logStep('job_description_fetch', { startTime: jdStart });
+        await endJdFetch();
       } catch (err) {
+        await endJdFetch(err.message);
         console.error('Job description fetch failed', err);
-        await logStep('job_description_fetch_failed', {
-          startTime: jdStart,
-          message: err.message,
-        });
         return next(createError(500, 'Job description fetch failed'));
       }
       let { title: jobTitle, skills: jobSkills, text: jobDescription } =
@@ -957,7 +1012,14 @@ export default function registerProcessCv(
       const chanceOfSelection = Math.round(
         (enhancedScore + atsScore) / 2
       );
-      const improvedPdf = await generatePdf(improvedCv, '2025', {}, generativeModel);
+      const endPdfGen = startStep(req, 'pdf_generation');
+      const improvedPdf = await generatePdf(
+        improvedCv,
+        '2025',
+        {},
+        generativeModel,
+      );
+      await endPdfGen();
       const ts = Date.now();
       const key = buildS3Key(
         [sanitizedName, 'enhanced', date],
@@ -967,7 +1029,7 @@ export default function registerProcessCv(
         [sanitizedName, 'enhanced', date],
         `${ts}-improved.txt`
       );
-      const pdfStart = Date.now();
+      const endPdfUpload = startStep(req, 's3_upload_improved_pdf');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -977,8 +1039,8 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
-      await logStep('s3_upload_improved_pdf', { startTime: pdfStart });
-      const textStart = Date.now();
+      await endPdfUpload();
+      const endTextUpload = startStep(req, 's3_upload_improved_text');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -988,7 +1050,7 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
-      await logStep('s3_upload_improved_text', { startTime: textStart });
+      await endTextUpload();
       const cvUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -1075,6 +1137,7 @@ export default function registerProcessCv(
             timeout: REQUEST_TIMEOUT_MS,
             userAgent,
             signal: req.signal,
+            jobId: req.jobId,
           });
         } catch {}
         const resumeText = await extractText(req.file);
@@ -1127,6 +1190,7 @@ export default function registerProcessCv(
               timeout: REQUEST_TIMEOUT_MS,
               userAgent,
               signal: req.signal,
+              jobId: req.jobId,
             });
           } catch {}
           const { text: jobDescription } = await analyzeJobDescription(
@@ -1156,6 +1220,7 @@ export default function registerProcessCv(
             timeout: REQUEST_TIMEOUT_MS,
             userAgent,
             signal: req.signal,
+            jobId: req.jobId,
           });
         } catch {}
         const { skills: jobSkills, text: jobDescription } =
@@ -1429,19 +1494,18 @@ export default function registerProcessCv(
   app.post(
     '/api/generate-cover-letter',
     (req, res, next) => {
-      const start = Date.now();
+      req.jobId = crypto.randomUUID();
+      const endUpload = startStep(req, 'resume_upload');
       uploadResume(req, res, (err) => {
-        const duration = Date.now() - start;
-        const logMsg = `resume upload completed in ${duration}ms`;
-        console.log(`[${new Date().toISOString()}] ${logMsg}`);
-        req.resumeUploadDuration = duration;
+        endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
         next();
       });
     },
     async (req, res, next) => {
-      const jobId = crypto.randomUUID();
+      const jobId = req.jobId;
       const s3 = new S3Client({ region: REGION });
+      req.s3 = s3;
       let bucket;
       let secrets;
       let logKey;
@@ -1453,6 +1517,7 @@ export default function registerProcessCv(
         console.error('failed to load configuration', err);
         return next(createError(500, 'failed to load configuration'));
       }
+      req.bucket = bucket;
       const logStep = async (event, { startTime, duration, message } = {}) => {
         const dur = duration ?? (Date.now() - startTime);
         const msg = `${event} completed in ${dur}ms${message ? ' - ' + message : ''}`;
@@ -1548,21 +1613,15 @@ export default function registerProcessCv(
       const logDate = new Date().toISOString().split('T')[0];
       const prefix = `${sanitizedName}/cover/${logDate}/`;
       logKey = `${prefix}logs/processing.jsonl`;
-      if (req.resumeUploadDuration != null) {
-        await logStep('resume_upload', { duration: req.resumeUploadDuration });
-      }
+      req.logKey = logKey;
 
       let jobDescription = '';
-      let jdStart;
+      const endJd3 = startStep(req, 'job_description_fetch');
       try {
-        jdStart = Date.now();
         ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
-        await logStep('job_description_fetch', { startTime: jdStart });
+        await endJd3();
       } catch (err) {
-        await logStep('job_description_fetch_failed', {
-          startTime: jdStart,
-          message: err.message,
-        });
+        await endJd3(err.message);
       }
 
       let linkedinData = {};
@@ -1641,15 +1700,23 @@ export default function registerProcessCv(
         defaultHeading: '',
       });
 
-      const clPdf = await generatePdf(sanitizedCoverLetter, coverTemplateId, {
-        skipRequiredSections: true,
-        defaultHeading: '',
-      }, generativeModel);
+      const endCoverPdfGen = startStep(req, 'pdf_generation');
+      const clPdf = await generatePdf(
+        sanitizedCoverLetter,
+        coverTemplateId,
+        {
+          skipRequiredSections: true,
+          defaultHeading: '',
+        },
+        generativeModel,
+      );
+      await endCoverPdfGen();
       const date = new Date().toISOString().split('T')[0];
       const key = buildS3Key(
         [sanitizedName, 'enhanced', date],
         `${Date.now()}-cover_letter.pdf`
       );
+      const endCoverUpload = startStep(req, 's3_upload_cover_pdf');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1659,6 +1726,7 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
+      await endCoverUpload();
       const url = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -1819,16 +1887,21 @@ export default function registerProcessCv(
       let jobDescriptionHtml = '';
       let jobDescription = '';
       let jobSkills = [];
+      const endJd2 = startStep(req, 'job_description_fetch');
       try {
         jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
           timeout: REQUEST_TIMEOUT_MS,
           userAgent,
           signal: req.signal,
+          jobId,
         });
         ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
           jobDescriptionHtml,
         ));
-      } catch {}
+        await endJd2();
+      } catch (err) {
+        await endJd2(err.message);
+      }
 
       let linkedinData = {};
       try {
@@ -1930,7 +2003,7 @@ export default function registerProcessCv(
         coverBasePath,
         `${coverTimestamp}-cover_letter.txt`,
       );
-      const coverUploadStart = Date.now();
+      const endCoverPdf = startStep(req, 's3_upload_cover_pdf');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1940,8 +2013,8 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
-      await logStep('s3_upload_cover_pdf', { startTime: coverUploadStart });
-      const coverTextUploadStart = Date.now();
+      await endCoverPdf();
+      const endCoverText = startStep(req, 's3_upload_cover_text');
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1951,7 +2024,7 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
-      await logStep('s3_upload_cover_text', { startTime: coverTextUploadStart });
+      await endCoverText();
 
       const cvUrl = await getSignedUrl(
         s3,
@@ -1970,16 +2043,12 @@ export default function registerProcessCv(
       );
 
       let atsMetrics;
-      let atsStart;
+      const endAts = startStep(req, 'ats_analysis');
       try {
-        atsStart = Date.now();
         atsMetrics = await requestAtsAnalysis(cvText, { signal: req.signal });
-        await logStep('ats_analysis', { startTime: atsStart });
+        await endAts();
       } catch (err) {
-        await logStep('ats_analysis_failed', {
-          startTime: atsStart,
-          message: err.message,
-        });
+        await endAts(err.message);
         console.warn('ATS analysis failed, using heuristic metrics', err);
         atsMetrics = calculateMetrics(cvText);
       }
