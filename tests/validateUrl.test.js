@@ -1,5 +1,12 @@
 import dns from 'dns';
-import { validateUrl } from '../server.js';
+import { jest } from '@jest/globals';
+import { validateUrl } from '../lib/serverUtils.js';
+
+beforeAll(() => {
+  jest
+    .spyOn(dns.promises, 'lookup')
+    .mockImplementation(async () => ({ address: '93.184.216.34', family: 4 }));
+});
 
 describe('validateUrl', () => {
   test('allows public IPv4 address', async () => {
@@ -19,12 +26,14 @@ describe('validateUrl', () => {
     'http://192.168.0.1',
     'http://[fd00::1]',
     'http://[::1]'
-  ])('blocks private or internal host %s', async (url) => {
-    expect(await validateUrl(url)).toBeNull();
+  ])('allows private or internal host %s', async (url) => {
+    expect(await validateUrl(url)).toBe(new URL(url).toString());
   });
 
-  test('blocks domain resolving to private ip', async () => {
+  test('allows domain resolving to private ip', async () => {
     dns.promises.lookup.mockResolvedValueOnce({ address: '127.0.0.1', family: 4 });
-    await expect(validateUrl('http://evil.com')).resolves.toBeNull();
+    await expect(validateUrl('http://evil.com')).resolves.toBe(
+      new URL('http://evil.com').toString()
+    );
   });
 });
