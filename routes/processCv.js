@@ -313,8 +313,13 @@ export default function registerProcessCv(
           jobSkills
         );
         let atsMetrics;
+        let atsStart;
         try {
+          atsStart = Date.now();
           atsMetrics = await requestAtsAnalysis(resumeText, { signal: req.signal });
+          console.log(
+            `[${new Date().toISOString()}] ats_analysis completed in ${Date.now() - atsStart}ms`
+          );
         } catch (err) {
           console.warn('ATS analysis failed, using heuristic metrics', err);
           atsMetrics = calculateMetrics(resumeText);
@@ -438,7 +443,12 @@ export default function registerProcessCv(
     app.post(
     '/api/process-cv',
     (req, res, next) => {
+      const start = Date.now();
       uploadResume(req, res, (err) => {
+        const duration = Date.now() - start;
+        const logMsg = `resume upload completed in ${duration}ms`;
+        console.log(`[${new Date().toISOString()}] ${logMsg}`);
+        req.resumeUploadDuration = duration;
         if (err) return next(createError(400, err.message));
         next();
       });
@@ -456,6 +466,26 @@ export default function registerProcessCv(
       console.error('failed to load configuration', err);
       return next(createError(500, 'failed to load configuration'));
     }
+    const logStep = async (event, { startTime, duration, message } = {}) => {
+      const dur = duration ?? (Date.now() - startTime);
+      const msg = `${event} completed in ${dur}ms${message ? ' - ' + message : ''}`;
+      console.log(`[${new Date().toISOString()}] ${msg}`);
+      if (bucket && logKey) {
+        try {
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event,
+            message: `duration=${dur}ms${message ? '; ' + message : ''}`,
+            signal: req.signal,
+          });
+        } catch (err) {
+          console.error(`failed to log ${event}`, err);
+        }
+      }
+    };
 
     let {
       jobDescriptionUrl,
@@ -597,9 +627,13 @@ export default function registerProcessCv(
       const date = new Date().toISOString().split('T')[0];
       prefix = `${sanitizedName}/cv/${date}/`;
       logKey = `${prefix}logs/processing.jsonl`;
+      if (req.resumeUploadDuration != null) {
+        await logStep('resume_upload', { duration: req.resumeUploadDuration });
+      }
       text = null;
       if (existingCvTextKey) {
         try {
+          const getStart = Date.now();
           const textObj = await s3.send(
             new GetObjectCommand({
               Bucket: bucket,
@@ -607,15 +641,18 @@ export default function registerProcessCv(
             }),
             { abortSignal: req.signal }
           );
+          await logStep('s3_get_existing_cv_text', { startTime: getStart });
           text = await textObj.Body.transformToString();
         } catch (err) {
           console.error('failed to fetch existing CV text', err);
         }
       } else if (existingCvKey) {
+        const getStart = Date.now();
         const existingObj = await s3.send(
           new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
           { abortSignal: req.signal }
         );
+        await logStep('s3_get_existing_cv_pdf', { startTime: getStart });
         const arr = await existingObj.Body.transformToByteArray();
         existingCvBuffer = Buffer.from(arr);
         text = await extractText({
@@ -632,6 +669,7 @@ export default function registerProcessCv(
     // Store raw file to configured bucket
     const initialS3 = new S3Client({ region: REGION });
     try {
+      const s3Start = Date.now();
       await initialS3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -640,6 +678,7 @@ export default function registerProcessCv(
           ContentType: req.file.mimetype,
         })
       );
+      await logStep('s3_initial_upload', { startTime: s3Start });
     } catch (e) {
       console.error(`initial upload to bucket ${bucket} failed`, e);
       const message = e.message || 'initial S3 upload failed';
@@ -690,7 +729,9 @@ export default function registerProcessCv(
       }
 
       let jobDescriptionHtml;
+      let jdStart;
       try {
+        jdStart = Date.now();
         jobDescriptionHtml = await withRetry(
           () =>
             fetchJobDescription(jobDescriptionUrl, {
@@ -700,25 +741,12 @@ export default function registerProcessCv(
             }),
           2
         );
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'fetched_job_description',
-          signal: req.signal,
-        });
+        await logStep('job_description_fetch', { startTime: jdStart });
       } catch (err) {
         console.error('Job description fetch failed', err);
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'job_description_fetch_failed',
-          level: 'error',
+        await logStep('job_description_fetch_failed', {
+          startTime: jdStart,
           message: err.message,
-          signal: req.signal,
         });
         return next(createError(500, 'Job description fetch failed'));
       }
@@ -939,6 +967,7 @@ export default function registerProcessCv(
         [sanitizedName, 'enhanced', date],
         `${ts}-improved.txt`
       );
+      const pdfStart = Date.now();
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -948,6 +977,8 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
+      await logStep('s3_upload_improved_pdf', { startTime: pdfStart });
+      const textStart = Date.now();
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -957,6 +988,7 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
+      await logStep('s3_upload_improved_text', { startTime: textStart });
       const cvUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -1397,15 +1429,22 @@ export default function registerProcessCv(
   app.post(
     '/api/generate-cover-letter',
     (req, res, next) => {
+      const start = Date.now();
       uploadResume(req, res, (err) => {
+        const duration = Date.now() - start;
+        const logMsg = `resume upload completed in ${duration}ms`;
+        console.log(`[${new Date().toISOString()}] ${logMsg}`);
+        req.resumeUploadDuration = duration;
         if (err) return next(createError(400, err.message));
         next();
       });
     },
     async (req, res, next) => {
+      const jobId = crypto.randomUUID();
       const s3 = new S3Client({ region: REGION });
       let bucket;
       let secrets;
+      let logKey;
       try {
         secrets = await getSecrets();
         bucket =
@@ -1414,6 +1453,26 @@ export default function registerProcessCv(
         console.error('failed to load configuration', err);
         return next(createError(500, 'failed to load configuration'));
       }
+      const logStep = async (event, { startTime, duration, message } = {}) => {
+        const dur = duration ?? (Date.now() - startTime);
+        const msg = `${event} completed in ${dur}ms${message ? ' - ' + message : ''}`;
+        console.log(`[${new Date().toISOString()}] ${msg}`);
+        if (bucket && logKey) {
+          try {
+            await logEvent({
+              s3,
+              bucket,
+              key: logKey,
+              jobId,
+              event,
+              message: `duration=${dur}ms${message ? '; ' + message : ''}`,
+              signal: req.signal,
+            });
+          } catch (err) {
+            console.error(`failed to log ${event}`, err);
+          }
+        }
+      };
 
       let {
         jobDescriptionUrl,
@@ -1459,10 +1518,12 @@ export default function registerProcessCv(
       let cvBuffer;
       try {
         if (existingCvTextKey) {
+          const getStart = Date.now();
           const textObj = await s3.send(
             new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
             { abortSignal: req.signal }
           );
+          await logStep('s3_get_existing_cv_text', { startTime: getStart });
           originalText = await textObj.Body.transformToString();
         } else if (req.file) {
           originalText = await extractText(req.file);
@@ -1484,11 +1545,25 @@ export default function registerProcessCv(
         sanitizedName = 'candidate';
         applicantName = 'Candidate';
       }
+      const logDate = new Date().toISOString().split('T')[0];
+      const prefix = `${sanitizedName}/cover/${logDate}/`;
+      logKey = `${prefix}logs/processing.jsonl`;
+      if (req.resumeUploadDuration != null) {
+        await logStep('resume_upload', { duration: req.resumeUploadDuration });
+      }
 
       let jobDescription = '';
+      let jdStart;
       try {
+        jdStart = Date.now();
         ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
-      } catch {}
+        await logStep('job_description_fetch', { startTime: jdStart });
+      } catch (err) {
+        await logStep('job_description_fetch_failed', {
+          startTime: jdStart,
+          message: err.message,
+        });
+      }
 
       let linkedinData = {};
       try {
@@ -1855,6 +1930,7 @@ export default function registerProcessCv(
         coverBasePath,
         `${coverTimestamp}-cover_letter.txt`,
       );
+      const coverUploadStart = Date.now();
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1864,6 +1940,8 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
+      await logStep('s3_upload_cover_pdf', { startTime: coverUploadStart });
+      const coverTextUploadStart = Date.now();
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -1873,6 +1951,7 @@ export default function registerProcessCv(
         }),
         { abortSignal: req.signal }
       );
+      await logStep('s3_upload_cover_text', { startTime: coverTextUploadStart });
 
       const cvUrl = await getSignedUrl(
         s3,
@@ -1891,9 +1970,16 @@ export default function registerProcessCv(
       );
 
       let atsMetrics;
+      let atsStart;
       try {
+        atsStart = Date.now();
         atsMetrics = await requestAtsAnalysis(cvText, { signal: req.signal });
+        await logStep('ats_analysis', { startTime: atsStart });
       } catch (err) {
+        await logStep('ats_analysis_failed', {
+          startTime: atsStart,
+          message: err.message,
+        });
         console.warn('ATS analysis failed, using heuristic metrics', err);
         atsMetrics = calculateMetrics(cvText);
       }
