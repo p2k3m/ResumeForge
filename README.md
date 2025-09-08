@@ -167,6 +167,20 @@ Run the backend with `npm run dev` and watch the terminal output:
 
 These messages appear in the same terminal where `npm run dev` was executed.
 
+### Diagnosing deprecation warnings
+
+Node can emit deprecation warnings such as the removal of `util._extend`. To trace
+where a warning originates, start the server with:
+
+```bash
+node --trace-deprecation server.js
+```
+
+The stack trace in the output points to the module triggering the warning. If the
+reference lives in application code, replace `util._extend` with
+`Object.assign`. When it comes from a third-party package, upgrade that
+dependency or apply a patch so future runs start cleanly.
+
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
 - Allowed file types: `.pdf`, `.docx`
