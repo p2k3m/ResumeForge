@@ -18,7 +18,11 @@ import { logEvaluation, logSession } from '../services/dynamo.js';
 
 import { uploadResume, validateUrl } from '../lib/serverUtils.js';
 import userAgentMiddleware from '../middlewares/userAgent.js';
-import { fetchJobDescription, LINKEDIN_AUTH_REQUIRED } from '../services/jobFetch.js';
+import {
+  fetchJobDescription,
+  LINKEDIN_AUTH_REQUIRED,
+  JD_UNREADABLE,
+} from '../services/jobFetch.js';
 import { REGION } from '../config/aws.js';
 
 import { extractText } from '../lib/extractText.js';
@@ -554,6 +558,11 @@ export default function registerProcessCv(
                 error:
                   'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
                 code: LINKEDIN_AUTH_REQUIRED,
+              });
+            } else if (err.code === JD_UNREADABLE) {
+              return res.status(400).json({
+                error:
+                  'Job URL not readable. Please paste the job description text directly.',
               });
             } else {
               throw err;
@@ -1132,6 +1141,11 @@ export default function registerProcessCv(
                 'LinkedIn job descriptions require authentication. Please paste the job description text directly.',
               code: LINKEDIN_AUTH_REQUIRED,
             });
+          } else if (err.code === JD_UNREADABLE) {
+            return res.status(400).json({
+              error:
+                'Job URL not readable. Please paste the job description text directly.',
+            });
           } else {
             console.error('Job description fetch failed', err);
             return next(createError(500, 'Job description fetch failed'));
@@ -1513,6 +1527,12 @@ export default function registerProcessCv(
               jobId: req.jobId,
             });
           } catch (err) {
+            if (err.code === JD_UNREADABLE) {
+              return res.status(400).json({
+                error:
+                  'Job URL not readable. Please paste the job description text directly.',
+              });
+            }
             if (!(err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText)) {
               return next(createError(400, 'invalid jobDescriptionUrl'));
             }
@@ -1579,6 +1599,12 @@ export default function registerProcessCv(
                 jobId: req.jobId,
               });
             } catch (err) {
+              if (err.code === JD_UNREADABLE) {
+                return res.status(400).json({
+                  error:
+                    'Job URL not readable. Please paste the job description text directly.',
+                });
+              }
               if (!(err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText)) {
                 return next(createError(400, 'invalid jobDescriptionUrl'));
               }
@@ -1619,6 +1645,12 @@ export default function registerProcessCv(
               jobId: req.jobId,
             });
           } catch (err) {
+            if (err.code === JD_UNREADABLE) {
+              return res.status(400).json({
+                error:
+                  'Job URL not readable. Please paste the job description text directly.',
+              });
+            }
             if (!(err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText)) {
               return next(createError(400, 'invalid jobDescriptionUrl'));
             }
@@ -1758,6 +1790,11 @@ export default function registerProcessCv(
             ({ jobDescription, jobTitle } = await analyzeJobDescription(
               jobDescriptionText,
             ));
+          } else if (err.code === JD_UNREADABLE) {
+            return res.status(400).json({
+              error:
+                'Job URL not readable. Please paste the job description text directly.',
+            });
           } else {
             return next(createError(400, 'invalid jobDescriptionUrl'));
           }
@@ -2058,6 +2095,11 @@ export default function registerProcessCv(
           await endJd3(err.code || err.message);
           if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
             ({ jobDescription } = await analyzeJobDescription(jobDescriptionText));
+          } else if (err.code === JD_UNREADABLE) {
+            return res.status(400).json({
+              error:
+                'Job URL not readable. Please paste the job description text directly.',
+            });
           } else {
             return next(createError(400, 'invalid jobDescriptionUrl'));
           }
@@ -2360,6 +2402,11 @@ export default function registerProcessCv(
             ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
               jobDescriptionText,
             ));
+          } else if (err.code === JD_UNREADABLE) {
+            return res.status(400).json({
+              error:
+                'Job URL not readable. Please paste the job description text directly.',
+            });
           } else if (jobDescriptionText) {
             ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
               jobDescriptionText,
