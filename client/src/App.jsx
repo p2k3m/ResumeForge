@@ -479,9 +479,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-blue-200 to-purple-300 flex flex-col items-center p-4">
-      <h1 className="text-3xl font-bold mb-4 text-center text-purple-800">Evaluate Your CV</h1>
+      <h1 className="text-3xl font-bold mb-4 text-center text-purple-800">
+        Make your resume speak the job’s language.
+      </h1>
       <p className="mb-6 text-center max-w-xl text-indigo-800">
-        Upload your CV and provide the job description URL to evaluate how well it matches.
+        Upload your CV, paste a job link, get four tailored versions aligned to the role—ATS-friendly and ready to send.
       </p>
 
       <div
