@@ -39,7 +39,13 @@ jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn(() => ({ send: mockDynamoSend })),
   CreateTableCommand: jest.fn((input) => ({ input, __type: 'CreateTableCommand' })),
   DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
-  PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' }))
+  PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' })),
+  GetItemCommand: jest.fn((input) => ({ input, __type: 'GetItemCommand' }))
+}));
+
+const mockGetSignedUrl = jest.fn(async () => 'https://example.com/signed');
+jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: mockGetSignedUrl,
 }));
 
 jest.unstable_mockModule('../logger.js', () => ({
@@ -874,12 +880,29 @@ describe('/api/process-cv', () => {
   });
 });
 
-describe('/api/improve-metric', () => {
-  test('uses default user agent when header missing', async () => {
-    mockS3Send.mockImplementation((cmd) => {
-      if (cmd.input?.Key === 'cv.txt') {
+describe('/api/improve', () => {
+  test('generates variants and returns urls', async () => {
+    mockDynamoSend.mockImplementation((cmd) => {
+      if (cmd.__type === 'DescribeTableCommand') {
+        return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+      }
+      if (cmd.__type === 'GetItemCommand') {
         return Promise.resolve({
-          Body: { transformToString: async () => 'Experience\nDeveloper\nSkills' },
+          Item: {
+            sanitizedName: { S: 'candidate' },
+            date: { S: '2024-01-01' },
+            sessionId: { S: 'job123' },
+            jobDescriptionUrl: { S: 'https://indeed.com/job' },
+            cvKey: { S: 'cv.pdf' },
+          },
+        });
+      }
+      return Promise.resolve({});
+    });
+    mockS3Send.mockImplementation((cmd) => {
+      if (cmd.input?.Key === 'cv.pdf') {
+        return Promise.resolve({
+          Body: { transformToByteArray: async () => [] },
         });
       }
       return Promise.resolve({});
@@ -888,55 +911,12 @@ describe('/api/improve-metric', () => {
       .spyOn(jobFetch, 'fetchJobDescription')
       .mockResolvedValue('<h1>JD</h1>');
     const res = await request(app)
-      .post('/api/improve-metric')
-      .unset('User-Agent')
-      .send({
-        metric: 'impact',
-        jobDescriptionUrl: 'https://indeed.com/job',
-        linkedinProfileUrl: 'https://linkedin.com/in/example',
-        existingCvTextKey: 'cv.txt',
-      });
+      .post('/api/improve')
+      .send({ jobId: 'job123', seniority: 'mid' });
     expect(res.status).toBe(200);
-    expect(spy).toHaveBeenCalled();
-    expect(spy.mock.calls[0][1].userAgent).toBe(JOB_FETCH_USER_AGENT);
+    expect(res.body.urls.ats).toBe('https://example.com/signed');
+    expect(res.body.insights.original_score).toBe(40);
     spy.mockRestore();
-  });
-  test('rejects improvement beyond configured limit', async () => {
-    const res = await request(app)
-      .post('/api/improve-metric')
-      .send({ iteration: 3 });
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('max improvements reached');
-  });
-
-  test('returns designation when job title differs', async () => {
-    mockS3Send.mockReset();
-    mockS3Send.mockImplementation((cmd) => {
-      if (cmd.input?.Key === 'cv.txt') {
-        return Promise.resolve({
-          Body: { transformToString: async () => 'Experience\nDeveloper\nSkills' },
-        });
-      }
-      return Promise.resolve({});
-    });
-
-    axios.get.mockResolvedValueOnce({ data: '<h1>Team Lead</h1>' });
-
-    const res = await request(app)
-      .post('/api/improve-metric')
-      .send({
-        metric: 'impact',
-        jobDescriptionUrl: 'https://indeed.com/job',
-        linkedinProfileUrl: 'https://linkedin.com/in/example',
-        existingCvTextKey: 'cv.txt',
-      });
-
-    expect(res.status).toBe(200);
-    const { instructions } = requestEnhancedCV.mock.calls[0][0];
-    expect(instructions).toContain(
-      "Modify the last job title to match 'Team Lead'"
-    );
-    expect(res.body.designation).toBe('Team Lead');
   });
 });
 
