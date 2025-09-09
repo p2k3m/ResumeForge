@@ -636,10 +636,8 @@ export default function registerProcessCv(
           console.error(`initial upload to bucket ${bucket} failed`, err);
         }
         const resumeSkills = extractResumeSkills(resumeText);
-        const { newSkills: missingSkills } = calculateMatchScore(
-          jobSkills,
-          resumeSkills
-        );
+        const { score: keywordMatch, newSkills: missingSkills } =
+          calculateMatchScore(jobSkills, resumeSkills);
         const jdMismatches = computeJdMismatches(
           resumeText,
           jobHtml,
@@ -659,6 +657,7 @@ export default function registerProcessCv(
           Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
             Math.max(Object.keys(atsMetrics).length, 1)
         );
+        atsMetrics.keywordMatch = keywordMatch;
         const resumeExperience = extractExperience(resumeText);
         const resumeEducation = extractEducation(resumeText);
         const resumeCertifications = extractCertifications(resumeText);
@@ -768,6 +767,7 @@ export default function registerProcessCv(
           jobId,
           sessionId,
           atsScore,
+          keywordMatch,
           atsMetrics,
           jobTitle,
           originalTitle,

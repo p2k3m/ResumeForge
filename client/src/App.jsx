@@ -33,7 +33,8 @@ const atsMetricCategories = {
   Readability: ['atsReadability'],
   Impact: ['impact'],
   Crispness: ['crispness'],
-  Grammar: ['grammar']
+  Grammar: ['grammar'],
+  'Keyword Match %': ['keywordMatch']
 }
 
 const allAtsMetrics = Object.values(atsMetricCategories).flat()
