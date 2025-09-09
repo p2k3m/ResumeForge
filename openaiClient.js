@@ -4,10 +4,12 @@ import path from 'path';
 import { getSecrets } from './config/secrets.js';
 import { generativeModel } from './geminiClient.js';
 
+const MODEL_NAME = process.env.MODEL_NAME || 'gpt-5';
+
 // Ordered list of supported models. Unavailable or experimental models should
 // be placed at the end or removed to avoid unnecessary `model_not_found`
 // warnings during résumé generation.
-const preferredModels = ['gpt-4.1', 'gpt-4o-mini'];
+const preferredModels = [MODEL_NAME, 'gpt-4.1', 'gpt-4o'];
 
 const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS || '10000', 10);
 
