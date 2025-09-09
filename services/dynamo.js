@@ -128,6 +128,9 @@ export async function logSession(
     coverLetterKey = '',
     atsScore = 0,
     improvement = 0,
+    sanitizedName = '',
+    date = '',
+    sessionId = '',
   },
   { signal } = {}
 ) {
@@ -168,6 +171,9 @@ export async function logSession(
   addString('credlyProfileUrl', credlyProfileUrl);
   addString('cvKey', cvKey);
   addString('coverLetterKey', coverLetterKey);
+  addString('sanitizedName', sanitizedName);
+  addString('date', date);
+  addString('sessionId', sessionId);
 
   await client.send(
     new PutItemCommand({ TableName: tableName, Item: item }),

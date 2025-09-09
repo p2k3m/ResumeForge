@@ -408,10 +408,37 @@ export default function registerProcessCv(
     }
   });
 
-  app.get('/api/download', async (req, res) => {
-    const { sanitizedName, date, sessionId, type, file } = req.query;
-    if (!sanitizedName || !date || !sessionId || !type || !file) {
+  app.get('/api/download/:jobId/:file', async (req, res) => {
+    const { jobId, file } = req.params;
+    if (!jobId || !file) {
       return res.status(400).json({ error: 'invalid parameters' });
+    }
+    const dynamo = new DynamoDBClient({ region: REGION });
+    let tableName = process.env.DYNAMO_TABLE;
+    if (!tableName) {
+      try {
+        const secrets = await getSecrets();
+        tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
+      } catch {
+        tableName = 'ResumeForgeLogs';
+      }
+    }
+    let item;
+    try {
+      ({ Item: item } = await dynamo.send(
+        new GetItemCommand({
+          TableName: tableName,
+          Key: { jobId: { S: jobId } },
+        })
+      ));
+    } catch (err) {
+      console.error('failed to lookup job', err);
+    }
+    const sanitizedName = item?.sanitizedName?.S;
+    const date = item?.date?.S;
+    const sessionId = item?.sessionId?.S;
+    if (!sanitizedName || !date || !sessionId) {
+      return res.status(404).json({ error: 'job not found' });
     }
     const s3 = new S3Client({ region: REGION });
     let bucket;
@@ -422,7 +449,7 @@ export default function registerProcessCv(
       console.error('failed to load configuration', err);
       return res.status(500).json({ error: 'failed to load configuration' });
     }
-    const key = buildS3Key([sanitizedName, date, sessionId, type], file);
+    const key = buildS3Key([sanitizedName, date, sessionId, 'generated'], file);
     try {
       const url = await getSignedUrl(
         s3,
@@ -2584,12 +2611,12 @@ export default function registerProcessCv(
           });
         }
 
-        const applicantName = sanitizeName(
+        const sanitizedName = sanitizeName(
           (await extractName(cvText)) || 'candidate'
         );
         const date = new Date().toISOString().split('T')[0];
         const uuid = crypto.randomUUID();
-        const basePath = [applicantName, date, uuid, 'generated'];
+        const basePath = [sanitizedName, date, uuid, 'generated'];
 
         const cvPdf = await convertToPdf(cvText);
         const jdPdf = await convertToPdf(jobDescription);
@@ -2664,7 +2691,7 @@ export default function registerProcessCv(
         const coverLetterText =
           resp1.cover_letter1 || resp1.cover_letter2 || resp2.cover_letter1 || '';
 
-        const variantUrls = [];
+        const variantFiles = [];
         for (let i = 0; i < cvVariants.length; i++) {
           const text = cvVariants[i];
           const docxBuf = await generateDocx(text, 'modern', {}, generativeModel);
@@ -2688,20 +2715,10 @@ export default function registerProcessCv(
               ContentType: 'application/pdf',
             })
           );
-          const docxUrl = await getSignedUrl(
-            s3,
-            new GetObjectCommand({ Bucket: bucket, Key: docxKey }),
-            { expiresIn: 3600 }
-          );
-          const pdfUrl = await getSignedUrl(
-            s3,
-            new GetObjectCommand({ Bucket: bucket, Key: pdfKey }),
-            { expiresIn: 3600 }
-          );
-          variantUrls.push({ text, docxUrl, pdfUrl });
+          variantFiles.push(`cv_variant${i + 1}.pdf`);
         }
 
-        const coverUrls = {};
+        const coverFiles = [];
         if (coverLetterText) {
           const clDocx = await generateDocx(
             coverLetterText,
@@ -2734,20 +2751,19 @@ export default function registerProcessCv(
               ContentType: 'application/pdf',
             })
           );
-          coverUrls.docxUrl = await getSignedUrl(
-            s3,
-            new GetObjectCommand({ Bucket: bucket, Key: clDocxKey }),
-            { expiresIn: 3600 }
-          );
-          coverUrls.pdfUrl = await getSignedUrl(
-            s3,
-            new GetObjectCommand({ Bucket: bucket, Key: clPdfKey }),
-            { expiresIn: 3600 }
-          );
-          coverUrls.text = coverLetterText;
+          coverFiles.push('cover_letter.pdf');
         }
 
-        res.json({ variants: variantUrls, coverLetter: coverUrls });
+        try {
+          await logSession(
+            { jobId, sanitizedName, date, sessionId: uuid },
+            { signal: req.signal }
+          );
+        } catch (err) {
+          console.error('failed to log session', err);
+        }
+
+        res.json({ jobId, variantFiles, coverFiles });
       } catch (err) {
         console.error('enhance failed', err);
         next(createError(500, 'failed to enhance CV'));
