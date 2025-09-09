@@ -40,46 +40,27 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
 const serverModule = await import('../server.js');
 const app = serverModule.default;
 jest
-  .spyOn(serverModule, 'fetchLinkedInProfile')
-  .mockResolvedValue({
-    experience: [
-      { title: 'Engineer', company: 'Company' },
-      { title: 'Manager', company: 'AnotherCo' }
-    ],
-    education: ['Uni', 'Masters Uni'],
-    certifications: [
-      { name: 'CertA', provider: 'OrgA' },
-      { name: 'CertB', provider: 'OrgB' }
-    ]
-  });
-
-jest
   .spyOn(serverModule, 'fetchCredlyProfile')
   .mockResolvedValue([
     { name: 'CertA', provider: 'OrgA' },
     { name: 'CertB', provider: 'OrgB' }
   ]);
-
-describe('/api/evaluate LinkedIn diff', () => {
-  test('returns missing LinkedIn items', async () => {
+describe('/api/evaluate Credly diff', () => {
+  test('returns missing Credly certifications', async () => {
     const res = await request(app)
       .post('/api/evaluate')
       .unset('User-Agent')
-      .field('jobDescriptionUrl', 'https://example.com/job')
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .field('credlyProfileUrl', 'https://credly.com/u/example')
-      .attach('resume', pdfBuffer, 'resume.pdf');
+      .field('jobUrl', 'https://example.com/job')
+      .field('credlyUrl', 'https://credly.com/u/example')
+      .attach('file', pdfBuffer, 'resume.pdf');
     expect(res.status).toBe(200);
-    expect(res.body.missingExperience).toEqual(['Manager at AnotherCo']);
-    expect(res.body.missingEducation).toEqual(['Masters Uni']);
-    expect(res.body.missingCertifications).toEqual([
+    expect(res.body.issues.certifications).toEqual([
       { name: 'CertB', provider: 'OrgB' }
     ]);
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
       expect.objectContaining({
         docType: 'resume',
-        linkedinProfileUrl: 'https://linkedin.com/in/example',
         cvKey: expect.any(String),
       })
     );

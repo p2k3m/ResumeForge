@@ -49,12 +49,11 @@ const app = serverModule.default;
       const res = await request(app)
         .post('/api/evaluate')
         .unset('User-Agent')
-        .field('jobDescriptionUrl', 'https://indeed.com/job')
-        .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-        .attach('resume', pdfBuffer, 'resume.pdf');
+        .field('jobUrl', 'https://indeed.com/job')
+        .attach('file', pdfBuffer, 'resume.pdf');
       expect(res.status).toBe(200);
-      expect(res.body.atsMetrics).toBeDefined();
-      expect(res.body.atsMetrics).toEqual(
+      expect(res.body.scores.metrics).toBeDefined();
+      expect(res.body.scores.metrics).toEqual(
         expect.objectContaining({
           layoutSearchability: expect.any(Number),
           atsReadability: expect.any(Number),

@@ -5,16 +5,11 @@ import App from '../client/src/App.jsx'
 
 test('Fix buttons work in each metric category', async () => {
   const evaluationResponse = {
-    atsScore: 50,
-    atsMetrics: { impact: 60, keywordDensity: 40 },
-    jobTitle: 'Dev',
-    originalTitle: 'Dev',
-    designationMatch: true,
-    missingSkills: [],
-    missingExperience: [],
-    missingEducation: [],
-    missingCertifications: [],
-    missingLanguages: []
+    jobId: '1',
+    scores: { ats: 50, metrics: { impact: 60, keywordDensity: 40 } },
+    keywords: [],
+    selectionProbability: 50,
+    issues: {}
   }
   global.fetch = jest
     .fn()

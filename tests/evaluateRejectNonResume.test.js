@@ -55,9 +55,8 @@ describe('/api/evaluate non-resume', () => {
     const res = await request(app)
       .post('/api/evaluate')
       .unset('User-Agent')
-      .field('jobDescriptionUrl', 'https://example.com/job')
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .attach('resume', pdfBuffer, 'file.pdf');
+      .field('jobUrl', 'https://example.com/job')
+      .attach('file', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
       `You have uploaded a ${docType}. Please upload a CV only.`
@@ -66,7 +65,6 @@ describe('/api/evaluate non-resume', () => {
     expect(logEvaluation).toHaveBeenCalledWith(
       expect.objectContaining({
         docType,
-        linkedinProfileUrl: 'https://linkedin.com/in/example',
         cvKey: expect.any(String),
       })
     );
@@ -78,9 +76,8 @@ describe('/api/evaluate non-resume', () => {
     const res = await request(app)
       .post('/api/evaluate')
       .unset('User-Agent')
-      .field('jobDescriptionUrl', 'https://example.com/job')
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
-      .attach('resume', pdfBuffer, 'file.pdf');
+      .field('jobUrl', 'https://example.com/job')
+      .attach('file', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
       'This document looks like a essay. Please upload a CV.'
@@ -89,7 +86,6 @@ describe('/api/evaluate non-resume', () => {
     expect(logEvaluation).toHaveBeenCalledWith(
       expect.objectContaining({
         docType,
-        linkedinProfileUrl: 'https://linkedin.com/in/example',
         cvKey: expect.any(String),
       })
     );

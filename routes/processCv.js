@@ -490,7 +490,7 @@ export default function registerProcessCv(
         endUpload(err ? err.message : '');
         if (err) return next(createError(400, err.message));
         next();
-      });
+      }, 'file');
     },
     withTimeout(async (req, res, next) => {
       const { jobId } = req;
@@ -507,42 +507,28 @@ export default function registerProcessCv(
         if (!req.file) return next(createError(400, 'resume file required'));
         let cvKey =
           req.file.key || req.file.filename || req.file.originalname || '';
-        let {
-          jobDescriptionUrl,
-          jobDescriptionText = '',
-          linkedinProfileUrl,
-          credlyProfileUrl,
-        } = req.body;
-        if (!jobDescriptionUrl && !jobDescriptionText)
+        let { jobUrl, jdText = '', credlyUrl } = req.body;
+        if (!jobUrl && !jdText)
           return next(
-            createError(
-              400,
-              'jobDescriptionUrl or jobDescriptionText required',
-            ),
+            createError(400, 'jobUrl or jdText required')
           );
-        if (jobDescriptionUrl) {
-          jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-          if (!jobDescriptionUrl)
-            return next(createError(400, 'invalid jobDescriptionUrl'));
+        if (jobUrl) {
+          jobUrl = await validateUrl(jobUrl);
+          if (!jobUrl)
+            return next(createError(400, 'invalid jobUrl'));
         }
 
-        if (!linkedinProfileUrl)
-          return next(createError(400, 'linkedinProfileUrl required'));
-        linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
-        if (!linkedinProfileUrl)
-          return next(createError(400, 'invalid linkedinProfileUrl'));
-
-        if (credlyProfileUrl) {
-          credlyProfileUrl = await validateUrl(credlyProfileUrl);
-          if (!credlyProfileUrl)
-            return next(createError(400, 'invalid credlyProfileUrl'));
+        if (credlyUrl) {
+          credlyUrl = await validateUrl(credlyUrl);
+          if (!credlyUrl)
+            return next(createError(400, 'invalid credlyUrl'));
         }
 
         const endJd = startStep(req, 'job_description_fetch');
         let jobHtml;
-        if (jobDescriptionUrl) {
+        if (jobUrl) {
           try {
-            jobHtml = await fetchJobDescription(jobDescriptionUrl, {
+            jobHtml = await fetchJobDescription(jobUrl, {
               timeout: REQUEST_TIMEOUT_MS,
               userAgent,
               signal: req.signal,
@@ -551,8 +537,8 @@ export default function registerProcessCv(
             await endJd();
           } catch (err) {
             await endJd(err.code || err.message);
-            if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
-              jobHtml = jobDescriptionText;
+            if (err.code === LINKEDIN_AUTH_REQUIRED && jdText) {
+              jobHtml = jdText;
             } else if (err.code === LINKEDIN_AUTH_REQUIRED) {
               return res.status(403).json({
                 error:
@@ -569,12 +555,10 @@ export default function registerProcessCv(
             }
           }
         } else {
-          jobHtml = jobDescriptionText;
+          jobHtml = jdText;
           await endJd('job_description_text');
         }
-        const { title: jobTitle, skills: jobSkills } = await analyzeJobDescription(
-          jobHtml
-        );
+        const { skills: jobSkills } = await analyzeJobDescription(jobHtml);
         const resumeText = await extractTextLogged(req, req.file);
         const docType = await classifyDocument(resumeText);
         if (docType && docType !== 'resume' && docType !== 'unknown') {
@@ -585,9 +569,8 @@ export default function registerProcessCv(
             browser,
             os,
             device,
-            jobDescriptionUrl,
-            linkedinProfileUrl,
-            credlyProfileUrl,
+            jobDescriptionUrl: jobUrl,
+            credlyProfileUrl: credlyUrl,
             cvKey,
             docType,
           }, { signal: req.signal });
@@ -603,9 +586,8 @@ export default function registerProcessCv(
             browser,
             os,
             device,
-            jobDescriptionUrl,
-            linkedinProfileUrl,
-            credlyProfileUrl,
+            jobDescriptionUrl: jobUrl,
+            credlyProfileUrl: credlyUrl,
             cvKey,
             docType,
           }, { signal: req.signal });
@@ -682,74 +664,13 @@ export default function registerProcessCv(
             Math.max(Object.keys(atsMetrics).length, 1)
         );
         atsMetrics.keywordMatch = keywordMatch;
-        const resumeExperience = extractExperience(resumeText);
-        const resumeEducation = extractEducation(resumeText);
         const resumeCertifications = extractCertifications(resumeText);
-        const resumeLanguages = extractLanguages(resumeText);
-        let originalTitle = resumeExperience[0]?.title || '';
-
-        let missingExperience = [];
-        let missingEducation = [];
         let missingCertifications = [];
-        let missingLanguages = [];
-        if (linkedinProfileUrl) {
-          const endLinkedIn = startStep(req, 'linkedin_fetch');
-          try {
-            const linkedinData = await fetchLinkedInProfile(
-              linkedinProfileUrl,
-              req.signal,
-            );
-            const linkedinExperience = extractExperience(
-              linkedinData.experience || [],
-            );
-            const linkedinEducation = extractEducation(
-              linkedinData.education || [],
-            );
-            const linkedinLanguages = extractLanguages(
-              linkedinData.languages || [],
-            );
-            if (linkedinExperience[0]?.title) {
-              originalTitle = linkedinExperience[0].title;
-            }
-            const fmtExp = (e = {}) =>
-              `${e.title || ''} at ${e.company || ''}`.trim();
-            const resumeExpSet = new Set(
-              resumeExperience.map((e) => fmtExp(e)),
-            );
-            missingExperience = linkedinExperience
-              .map((e) => fmtExp(e))
-              .filter((e) => e && !resumeExpSet.has(e));
-            const resumeEduSet = new Set(
-              resumeEducation.map((e) => e.entry.toLowerCase()),
-            );
-            missingEducation = linkedinEducation
-              .map((e) => e.entry)
-              .filter((e) => e && !resumeEduSet.has(e.toLowerCase()));
-            const resumeLangSet = new Set(
-              resumeLanguages.map((l) => l.language.toLowerCase()),
-            );
-            missingLanguages = linkedinLanguages
-              .map((l) =>
-                l.proficiency
-                  ? `${l.language} - ${l.proficiency}`
-                  : l.language,
-              )
-              .filter((l) => {
-                const name = l.split('-')[0].trim().toLowerCase();
-                return name && !resumeLangSet.has(name);
-              });
-            await endLinkedIn();
-          } catch (err) {
-            await endLinkedIn(err.message);
-            // ignore LinkedIn fetch errors
-          }
-        }
-
-        if (credlyProfileUrl) {
+        if (credlyUrl) {
           const endCredly = startStep(req, 'credly_fetch');
           try {
             const credlyData = await fetchCredlyProfile(
-              credlyProfileUrl,
+              credlyUrl,
               req.signal,
             );
             const fmtCert = (c = {}) =>
@@ -767,12 +688,7 @@ export default function registerProcessCv(
             // ignore Credly fetch errors
           }
         }
-
-        const designationMatch =
-          originalTitle && jobTitle
-            ? originalTitle.toLowerCase() === jobTitle.toLowerCase()
-            : false;
-
+        const selectionProbability = Math.round((atsScore + keywordMatch) / 2);
         await logEvaluation({
           jobId,
           ipAddress,
@@ -780,28 +696,18 @@ export default function registerProcessCv(
           browser,
           os,
           device,
-          jobDescriptionUrl,
-          linkedinProfileUrl,
-          credlyProfileUrl,
+          jobDescriptionUrl: jobUrl,
+          credlyProfileUrl: credlyUrl,
           cvKey,
           docType: 'resume',
         }, { signal: req.signal });
 
         res.json({
           jobId,
-          sessionId,
-          atsScore,
-          keywordMatch,
-          atsMetrics,
-          jobTitle,
-          originalTitle,
-          designationMatch,
-          missingSkills: missingSkills || [],
-          jdMismatches,
-          missingExperience,
-          missingEducation,
-          missingCertifications,
-          missingLanguages,
+          scores: { ats: atsScore, keywordMatch, metrics: atsMetrics },
+          keywords: missingSkills || [],
+          selectionProbability,
+          issues: { jdMismatches, certifications: missingCertifications },
         });
       } catch (err) {
         console.error('evaluation failed', err);
