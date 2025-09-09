@@ -35,6 +35,40 @@ const metricNames = [
   'grammar',
 ];
 
+// Centralized prompt definitions used for all OpenAI requests.
+const prompts = {
+  enhancedCv: {
+    system:
+      'You are ResumeForge, a service that rewrites resumes and cover letters to better match a job description.',
+    developer:
+      'Generate two improved resume versions and two cover letters using the provided files. Respond in JSON matching the EnhancedCV schema.'
+  },
+  atsAnalysis: {
+    system: "You are ResumeForge's ATS evaluation assistant.",
+    developer:
+      `Score the resume for the following metrics and return a JSON object with numeric values from 0 to 100: ${metricNames.join(', ')}.`
+  },
+  coverLetter: {
+    system: 'You are ResumeForge, an expert career coach.',
+    developer:
+      'Write a concise and professional cover letter tailored to the provided resume and job description.'
+  },
+  sectionImprovement: {
+    system: 'You are ResumeForge, an expert resume writer.',
+    developer:
+      'Improve the specified resume section to align with the job description. Return only the rewritten section text.'
+  },
+  classify: {
+    system: 'You are ResumeForge, a document classification assistant.',
+    developer:
+      'Classify the document with a short label such as "resume" or "cover letter".'
+  },
+  extractName: {
+    system: 'You are ResumeForge, an assistant that extracts a person\'s name from text.',
+    developer: 'Return only the full name if one is present.'
+  }
+};
+
 // Gemini responses may wrap JSON in additional text or code fences.
 // This helper extracts the first JSON object for parsing.
 function extractJson(text) {
@@ -116,15 +150,16 @@ export async function requestEnhancedCV({
   const refinedInstructions = priorCvFileId
     ? `${instructions}\nRefine the already improved CV.`
     : instructions;
-  const content = [
+  const userContent = [
     { type: 'input_text', text: refinedInstructions },
     { type: 'input_file', file_id: cvFileId },
   ];
   if (priorCvFileId)
-    content.push({ type: 'input_file', file_id: priorCvFileId });
-  content.push({ type: 'input_file', file_id: jobDescFileId });
-  if (linkedInFileId) content.push({ type: 'input_file', file_id: linkedInFileId });
-  if (credlyFileId) content.push({ type: 'input_file', file_id: credlyFileId });
+    userContent.push({ type: 'input_file', file_id: priorCvFileId });
+  userContent.push({ type: 'input_file', file_id: jobDescFileId });
+  if (linkedInFileId)
+    userContent.push({ type: 'input_file', file_id: linkedInFileId });
+  if (credlyFileId) userContent.push({ type: 'input_file', file_id: credlyFileId });
   const schema = {
     type: 'object',
     properties: {
@@ -184,7 +219,17 @@ export async function requestEnhancedCV({
         client.responses.create(
           {
             model,
-            input: [{ role: 'user', content }],
+            input: [
+              {
+                role: 'system',
+                content: [{ type: 'input_text', text: prompts.enhancedCv.system }],
+              },
+              {
+                role: 'developer',
+                content: [{ type: 'input_text', text: prompts.enhancedCv.developer }],
+              },
+              { role: 'user', content: userContent },
+            ],
             text: {
               format: {
                 type: 'json_schema',
@@ -211,20 +256,19 @@ export async function requestEnhancedCV({
   }
   if (generativeModel?.generateContent) {
     try {
+      const parts = [
+        {
+          text: `${prompts.enhancedCv.system}\n${prompts.enhancedCv.developer}\n${refinedInstructions}`,
+        },
+        ...userContent
+          .slice(1)
+          .map((part) => ({
+            fileData: { fileUri: part.file_id, mimeType: 'application/pdf' },
+          })),
+      ];
       const result = await withTimeout(
         generativeModel.generateContent({
-          contents: [
-            {
-              role: 'user',
-              parts: content.map((part) =>
-                part.type === 'input_text'
-                  ? { text: part.text }
-                  : {
-                      fileData: { fileUri: part.file_id, mimeType: 'application/pdf' },
-                    }
-              ),
-            },
-          ],
+          contents: [{ role: 'user', parts }],
           generationConfig: {
             responseMimeType: 'application/json',
             responseSchema: schema,
@@ -250,7 +294,7 @@ export async function requestSectionImprovement(
     throw new Error('sectionText is required');
   }
   const client = await getClient();
-  const prompt = `You are an expert resume writer. Improve the ${sectionName} section of a resume so that it aligns with the job description. Return only the rewritten ${sectionName} text.\nJob Description: ${jobDescription}\n${sectionName}: ${sectionText}`;
+  const userText = `Job Description: ${jobDescription}\n${sectionName}: ${sectionText}`;
   let lastError;
   for (const model of preferredModels) {
     try {
@@ -258,7 +302,17 @@ export async function requestSectionImprovement(
         client.responses.create(
           {
             model,
-            input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+            input: [
+              {
+                role: 'system',
+                content: [{ type: 'input_text', text: prompts.sectionImprovement.system }],
+              },
+              {
+                role: 'developer',
+                content: [{ type: 'input_text', text: prompts.sectionImprovement.developer }],
+              },
+              { role: 'user', content: [{ type: 'input_text', text: userText }] },
+            ],
           },
           { signal }
         )
@@ -285,18 +339,14 @@ export async function requestCoverLetter(
   if (!cvFileId) throw new Error('cvFileId is required');
   if (!jobDescFileId) throw new Error('jobDescFileId is required');
   const client = await getClient();
-  const content = [
-    {
-      type: 'input_text',
-      text: 'You are an expert career coach. Write a concise and professional cover letter tailored to the provided job description and resume.',
-    },
+  const userContent = [
     { type: 'input_file', file_id: cvFileId },
     { type: 'input_file', file_id: jobDescFileId },
   ];
   if (linkedInFileId)
-    content.push({ type: 'input_file', file_id: linkedInFileId });
+    userContent.push({ type: 'input_file', file_id: linkedInFileId });
   if (credlyFileId)
-    content.push({ type: 'input_file', file_id: credlyFileId });
+    userContent.push({ type: 'input_file', file_id: credlyFileId });
   let lastError;
   for (const model of preferredModels) {
     try {
@@ -304,7 +354,17 @@ export async function requestCoverLetter(
         client.responses.create(
           {
             model,
-            input: [{ role: 'user', content }],
+            input: [
+              {
+                role: 'system',
+                content: [{ type: 'input_text', text: prompts.coverLetter.system }],
+              },
+              {
+                role: 'developer',
+                content: [{ type: 'input_text', text: prompts.coverLetter.developer }],
+              },
+              { role: 'user', content: userContent },
+            ],
           },
           { signal }
         )
@@ -318,8 +378,7 @@ export async function requestCoverLetter(
   }
   if (generativeModel?.generateContent) {
     try {
-      const prompt =
-        'You are an expert career coach. Write a concise and professional cover letter tailored to the provided job description and resume.';
+      const prompt = `${prompts.coverLetter.system}\n${prompts.coverLetter.developer}`;
       const result = await withTimeout(generativeModel.generateContent(prompt));
       return result?.response?.text?.();
     } catch (err) {
@@ -341,9 +400,7 @@ export async function requestAtsAnalysis(text, { signal } = {}) {
     required: metricNames,
     additionalProperties: false,
   };
-  const prompt = `You are an ATS evaluation expert. Analyze the resume text and score each metric from 0-100: ${metricNames.join(
-    ', '
-  )}. Return a JSON object with these metrics.`;
+  const userText = text;
   let lastError;
   for (const model of preferredModels) {
     try {
@@ -353,9 +410,14 @@ export async function requestAtsAnalysis(text, { signal } = {}) {
             model,
             input: [
               {
-                role: 'user',
-                content: [{ type: 'input_text', text: `${prompt}\n\n${text}` }],
+                role: 'system',
+                content: [{ type: 'input_text', text: prompts.atsAnalysis.system }],
               },
+              {
+                role: 'developer',
+                content: [{ type: 'input_text', text: prompts.atsAnalysis.developer }],
+              },
+              { role: 'user', content: [{ type: 'input_text', text: userText }] },
             ],
             text: {
               format: {
@@ -381,9 +443,8 @@ export async function requestAtsAnalysis(text, { signal } = {}) {
   }
   if (generativeModel?.generateContent) {
     try {
-      const result = await withTimeout(
-        generativeModel.generateContent(`${prompt}\n\n${text}`)
-      );
+      const prompt = `${prompts.atsAnalysis.system}\n${prompts.atsAnalysis.developer}\n${text}`;
+      const result = await withTimeout(generativeModel.generateContent(prompt));
       const parsed = extractJson(result?.response?.text?.());
       if (!metricNames.every((m) => typeof parsed[m] === 'number')) {
         throw new Error('invalid metrics');
@@ -398,8 +459,7 @@ export async function requestAtsAnalysis(text, { signal } = {}) {
 
 export async function classifyDocument(text) {
   const client = await getClient();
-  const prompt =
-    'Classify the following document. Respond with a short phrase such as "resume", "cover letter", "essay", etc.';
+  const userText = text.slice(0, 4000);
   let lastError;
   for (const model of preferredModels) {
     try {
@@ -408,11 +468,16 @@ export async function classifyDocument(text) {
           model,
           input: [
             {
+              role: 'system',
+              content: [{ type: 'input_text', text: prompts.classify.system }],
+            },
+            {
+              role: 'developer',
+              content: [{ type: 'input_text', text: prompts.classify.developer }],
+            },
+            {
               role: 'user',
-              content: [{
-                type: 'input_text',
-                text: `${prompt}\n\n${text.slice(0, 4000)}`,
-              }],
+              content: [{ type: 'input_text', text: userText }],
             },
           ],
         })
@@ -429,11 +494,8 @@ export async function classifyDocument(text) {
   }
   if (generativeModel?.generateContent) {
     try {
-      const result = await withTimeout(
-        generativeModel.generateContent(
-          `${prompt}\n\n${text.slice(0, 4000)}`
-        )
-      );
+      const prompt = `${prompts.classify.system}\n${prompts.classify.developer}\n${userText}`;
+      const result = await withTimeout(generativeModel.generateContent(prompt));
       const classification = result?.response?.text?.().trim().toLowerCase();
       if (classification) return classification;
       lastError = new Error('No classification result');
@@ -453,6 +515,14 @@ export async function extractName(text, prompt) {
         client.responses.create({
           model,
           input: [
+            {
+              role: 'system',
+              content: [{ type: 'input_text', text: prompts.extractName.system }],
+            },
+            {
+              role: 'developer',
+              content: [{ type: 'input_text', text: prompts.extractName.developer }],
+            },
             {
               role: 'user',
               content: [
