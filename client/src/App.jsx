@@ -773,6 +773,32 @@ function App() {
               )}
             </div>
           )}
+          {result?.tips && Object.keys(result.tips).length > 0 && (
+            <div className="text-purple-800 mb-2">
+              <p className="mb-2">Tips:</p>
+              <ul>
+                {Object.entries(result.tips).map(([category, tip]) => (
+                  <li key={category} className="mb-1" id={category}>
+                    <span>
+                      {formatMetricName(category)}: {tip}
+                    </span>
+                    <a
+                      href="#"
+                      className="ml-2 text-blue-600 underline"
+                      onClick={() => handleFix(category)}
+                    >
+                      Click to FIX
+                    </a>
+                    {metricSuggestions[category] && (
+                      <div className="mt-1 text-sm text-purple-700">
+                        {metricSuggestions[category]}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {result.issues?.jdMismatches?.length > 0 && (
             <div className="text-purple-800 mb-2">
               <p className="mb-2">JD responsibility gaps:</p>

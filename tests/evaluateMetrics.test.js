@@ -6,6 +6,8 @@ const pdfBuffer = Buffer.from('%PDF-1.4');
 const mockFetchJobDescription = jest.fn().mockResolvedValue('<html></html>');
 jest.unstable_mockModule('../services/jobFetch.js', () => ({
   fetchJobDescription: mockFetchJobDescription,
+  JD_UNREADABLE: 'JD_UNREADABLE',
+  LINKEDIN_AUTH_REQUIRED: 'LINKEDIN_AUTH_REQUIRED',
 }));
 
 jest.unstable_mockModule('axios', () => ({
@@ -21,7 +23,8 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 jest.unstable_mockModule('../services/dynamo.js', () => ({
-  logEvaluation: jest.fn().mockResolvedValue()
+  logEvaluation: jest.fn().mockResolvedValue(),
+  logSession: jest.fn().mockResolvedValue(),
 }));
 
 const mockS3Send = jest.fn().mockResolvedValue({});
@@ -38,6 +41,9 @@ jest.unstable_mockModule('../config/secrets.js', () => ({
 jest.unstable_mockModule('../openaiClient.js', () => ({
   classifyDocument: jest.fn().mockResolvedValue('resume'),
   requestAtsAnalysis: jest.fn().mockRejectedValue(new Error('no ai')),
+  requestEvaluation: jest
+    .fn()
+    .mockResolvedValue({ seniority: 'mid', keywords: { must_have: [], nice_to_have: [] }, tips: {} }),
 }));
 
 const { JOB_FETCH_USER_AGENT } = await import('../config/http.js');

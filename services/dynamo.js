@@ -69,6 +69,7 @@ export async function logEvaluation(
     cvKey = '',
     s3Prefix = '',
     docType = '',
+    seniority = '',
     scores = null,
     selectionProbability = null,
     status = '',
@@ -128,6 +129,7 @@ export async function logEvaluation(
   addString('cvKey', cvKey);
   addString('s3Prefix', s3Prefix);
   addString('docType', docType);
+  addString('seniority', seniority);
   addObject('scores', scores);
   addNumber('selectionProbability', selectionProbability);
   addString('status', status);

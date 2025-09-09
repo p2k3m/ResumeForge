@@ -11,7 +11,10 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   uploadFile: jest.fn(),
   requestEnhancedCV: jest.fn(),
   classifyDocument: jest.fn(),
-  extractName: openaiExtractNameMock
+  extractName: openaiExtractNameMock,
+  requestEvaluation: jest
+    .fn()
+    .mockResolvedValue({ seniority: 'mid', keywords: { must_have: [], nice_to_have: [] }, tips: {} })
 }));
 
 const { extractName } = await import('../server.js');

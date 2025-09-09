@@ -10,6 +10,7 @@ import {
   uploadFile as openaiUploadFile,
   requestEnhancedCV,
   requestAtsAnalysis,
+  requestEvaluation,
 } from '../openaiClient.js';
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
 import {
@@ -684,13 +685,25 @@ export default function registerProcessCv(
           console.error(`initial upload to bucket ${bucket} failed`, err);
         }
         const resumeSkills = extractResumeSkills(resumeText);
-        const { score: keywordMatch, newSkills: missingSkills } =
-          calculateMatchScore(jobSkills, resumeSkills);
+        const { score: keywordMatch } = calculateMatchScore(
+          jobSkills,
+          resumeSkills
+        );
         const jdMismatches = computeJdMismatches(
           resumeText,
           jobHtml,
           jobSkills
         );
+        const evaluation = await requestEvaluation(resumeText, jobHtml, {
+          signal: req.signal,
+        });
+        const {
+          seniority = '',
+          keywords: evalKeywords = {},
+          tips = {},
+        } = evaluation || {};
+        const mustHave = evalKeywords.must_have || [];
+        const niceToHave = evalKeywords.nice_to_have || [];
         let atsMetrics;
         const endAts = startStep(req, 'ats_analysis');
         try {
@@ -743,42 +756,45 @@ export default function registerProcessCv(
           atsScore,
           keywordMatch,
         });
-        await logEvaluation({
-          jobId,
-          ipAddress,
-          userAgent,
-          browser,
-          os,
-          device,
-          jobDescriptionUrl: jobUrl,
-          credlyProfileUrl: credlyUrl,
-          cvKey,
-          s3Prefix,
-          docType: 'resume',
-          scores: {
-            ats: atsScore,
-            keywordMatch,
-            metrics: atsMetrics,
-            cardScores,
-            overallScore,
-          },
-          selectionProbability,
-          status: 'success',
-        }, { signal: req.signal });
+          await logEvaluation({
+            jobId,
+            ipAddress,
+            userAgent,
+            browser,
+            os,
+            device,
+            jobDescriptionUrl: jobUrl,
+            credlyProfileUrl: credlyUrl,
+            cvKey,
+            s3Prefix,
+            docType: 'resume',
+            seniority,
+            scores: {
+              ats: atsScore,
+              keywordMatch,
+              metrics: atsMetrics,
+              cardScores,
+              overallScore,
+            },
+            selectionProbability,
+            status: 'success',
+          }, { signal: req.signal });
 
-        res.json({
-          jobId,
-          scores: {
-            ats: atsScore,
-            keywordMatch,
-            metrics: atsMetrics,
-            cardScores,
-            overallScore,
-          },
-          keywords: missingSkills || [],
-          selectionProbability,
-          issues: { jdMismatches, certifications: missingCertifications },
-        });
+          res.json({
+            jobId,
+            scores: {
+              ats: atsScore,
+              keywordMatch,
+              metrics: atsMetrics,
+              cardScores,
+              overallScore,
+            },
+            seniority,
+            keywords: { mustHave, niceToHave },
+            tips,
+            selectionProbability,
+            issues: { jdMismatches, certifications: missingCertifications },
+          });
       } catch (err) {
         console.error('evaluation failed', err);
         try {

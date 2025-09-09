@@ -7,7 +7,9 @@ test('Fix buttons work in each metric category', async () => {
   const evaluationResponse = {
     jobId: '1',
     scores: { ats: 50, metrics: { impact: 60, keywordDensity: 40 } },
-    keywords: [],
+    seniority: 'mid',
+    keywords: { mustHave: [], niceToHave: [] },
+    tips: {},
     selectionProbability: 50,
     issues: {}
   }
