@@ -492,7 +492,7 @@ export default function registerProcessCv(
       console.error('failed to load configuration', err);
       return res.status(500).json({ error: 'failed to load configuration' });
     }
-    const key = buildS3Key([sanitizedName, date, sessionId, 'generated'], file);
+    const key = buildS3Key(['resumes', `${sanitizedName}_${date}`, sessionId, 'generated'], file);
     try {
       const url = await getSignedUrl(
         s3,
@@ -645,7 +645,8 @@ export default function registerProcessCv(
         req.bucket = bucket;
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
-        const basePath = [sanitized, date, sessionId];
+        const basePath = ['resumes', `${sanitized}_${date}`, sessionId];
+        const s3Prefix = basePath.join('/');
         const filename = `${Date.now()}-${sanitized}${ext}`;
         cvKey = buildS3Key([...basePath, 'original'], filename);
         req.logKey = buildS3Key([...basePath, 'logs'], 'processing.jsonl');
@@ -723,6 +724,7 @@ export default function registerProcessCv(
           jobDescriptionUrl: jobUrl,
           credlyProfileUrl: credlyUrl,
           cvKey,
+          s3Prefix,
           docType: 'resume',
         }, { signal: req.signal });
 
@@ -937,7 +939,7 @@ export default function registerProcessCv(
       req.sessionId = sessionId;
       ext = path.extname(req.file.originalname).toLowerCase();
       const date = new Date().toISOString().split('T')[0];
-      basePath = [sanitizedName, date, sessionId];
+      basePath = ['resumes', `${sanitizedName}_${date}`, sessionId];
       const originalKey = buildS3Key(
         [...basePath, 'original'],
         req.file.originalname
@@ -1706,7 +1708,7 @@ export default function registerProcessCv(
         signal: req.signal,
       });
 
-      const basePath = [sanitizedName, date, sessionId, 'generated'];
+      const basePath = ['resumes', `${sanitizedName}_${date}`, sessionId, 'generated'];
       const urls = {};
       let insights = {};
 
@@ -1842,7 +1844,7 @@ export default function registerProcessCv(
         );
         const date = new Date().toISOString().split('T')[0];
         const uuid = crypto.randomUUID();
-        const basePath = [sanitizedName, date, uuid, 'generated'];
+        const basePath = ['resumes', `${sanitizedName}_${date}`, uuid, 'generated'];
 
         const { title: jobTitle } = await analyzeJobDescription(jobDescription);
 
@@ -1988,8 +1990,9 @@ export default function registerProcessCv(
         }
 
         try {
+          const s3Prefix = ['resumes', `${sanitizedName}_${date}`, uuid].join('/');
           await logSession(
-            { jobId, sanitizedName, date, sessionId: uuid },
+            { jobId, sanitizedName, date, sessionId: uuid, s3Prefix },
             { signal: req.signal }
           );
         } catch (err) {
