@@ -40,26 +40,18 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
 
 const serverModule = await import('../server.js');
 const app = serverModule.default;
-jest.spyOn(serverModule, 'fetchLinkedInProfile').mockResolvedValue({
-  experience: [],
-  education: [],
-  certifications: [],
-  languages: [],
-});
-
 describe('/api/evaluate S3 upload', () => {
   test('uploads resume to S3 with expected key', async () => {
     PutObjectCommand.mockClear();
     const res = await request(app)
       .post('/api/evaluate')
       .unset('User-Agent')
-      .field('jobDescriptionUrl', 'https://example.com/job')
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('jobUrl', 'https://example.com/job')
       .field('applicantName', 'John Doe')
-      .attach('resume', pdfBuffer, 'resume.pdf');
+      .attach('file', pdfBuffer, 'resume.pdf');
     expect(res.status).toBe(200);
     expect(PutObjectCommand).toHaveBeenCalled();
     const key = PutObjectCommand.mock.calls[0][0].Key;
-    expect(key).toMatch(/^john_doe\/cv\/\d{4}-\d{2}-\d{2}\/john_doe\.pdf$/);
+    expect(key).toMatch(/^john_doe\/\d{4}-\d{2}-\d{2}\/[^/]+\/original\/\d+-john_doe\.pdf$/);
   });
 });

@@ -4,21 +4,23 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import App from './App.jsx'
 
 const mockResponse = {
-  atsScore: 70,
-  jobTitle: 'Senior Developer',
-  originalTitle: 'Developer',
-  designationMatch: false,
-  missingSkills: ['aws'],
-  atsMetrics: {
-    layoutSearchability: 50,
-    atsReadability: 60,
-    impact: 80,
-    crispness: 90,
-    keywordDensity: 40,
-    sectionHeadingClarity: 100,
-    contactInfoCompleteness: 30,
-    grammar: 70
-  }
+  jobId: '1',
+  scores: {
+    ats: 70,
+    metrics: {
+      layoutSearchability: 50,
+      atsReadability: 60,
+      impact: 80,
+      crispness: 90,
+      keywordDensity: 40,
+      sectionHeadingClarity: 100,
+      contactInfoCompleteness: 30,
+      grammar: 70
+    }
+  },
+  keywords: ['aws'],
+  selectionProbability: 70,
+  issues: {}
 }
 
 global.fetch = jest.fn()
@@ -55,13 +57,6 @@ test('evaluates CV and displays results', async () => {
   ).toBeInTheDocument()
   expect(
     await screen.findByText('Include email, phone, and LinkedIn.')
-  ).toBeInTheDocument()
-  expect(
-    await screen.findByText(/Designation: Developer vs Senior Developer/)
-  ).toBeInTheDocument()
-  expect(await screen.findByText(/Designation mismatch/)).toBeInTheDocument()
-  expect(
-    await screen.findByPlaceholderText('Revised Designation')
   ).toBeInTheDocument()
   expect(await screen.findByDisplayValue('aws')).toBeInTheDocument()
   fireEvent.click(await screen.findByText('Add Skill'))

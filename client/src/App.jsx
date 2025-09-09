@@ -85,7 +85,7 @@ function App() {
   const [linkedinUrlError, setLinkedinUrlError] = useState('')
   const [credlyUrlError, setCredlyUrlError] = useState('')
   const fileInputRef = useRef(null)
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+  const API_BASE_URL = (typeof process !== 'undefined' && process.env.VITE_API_BASE_URL) || ''
 
   const handleFileChange = (e) => {
     const file = e.target ? e.target.files[0] : e
@@ -142,17 +142,13 @@ function App() {
     setError('')
     setDesignationOverride('')
     try {
-      if (!linkedinUrl.trim()) {
-        throw new Error('LinkedIn profile URL is required.')
-      }
       const formData = new FormData()
-      formData.append('resume', cvFile)
-      formData.append('jobDescriptionUrl', jobUrl)
+      formData.append('file', cvFile)
+      formData.append('jobUrl', jobUrl)
       if (jobDescriptionText.trim())
-        formData.append('jobDescriptionText', jobDescriptionText)
-      formData.append('linkedinProfileUrl', linkedinUrl)
+        formData.append('jdText', jobDescriptionText)
       if (credlyUrl.trim())
-        formData.append('credlyProfileUrl', credlyUrl.trim())
+        formData.append('credlyUrl', credlyUrl.trim())
       if (nameOverride) formData.append('applicantName', nameOverride)
       const response = await fetch(`${API_BASE_URL}/api/evaluate`, {
         method: 'POST',
@@ -181,27 +177,26 @@ function App() {
       const data = await response.json()
       setResult(data)
       setSkills(
-        (data.missingSkills || []).map((s) => ({
+        (data.keywords || []).map((s) => ({
           name: s,
           icon: getSkillIcon(s),
           level: 70
         }))
       )
-      setExpOptions((data.missingExperience || []).map((t) => ({ text: t, checked: false })))
-      setEduOptions((data.missingEducation || []).map((t) => ({ text: t, checked: false })))
+      setExpOptions((data.issues?.experience || []).map((t) => ({ text: t, checked: false })))
+      setEduOptions((data.issues?.education || []).map((t) => ({ text: t, checked: false })))
       setCertOptions(
-        (data.missingCertifications || []).map((c) => ({
+        (data.issues?.certifications || []).map((c) => ({
           text: c.provider ? `${c.name} - ${c.provider}` : c.name,
           data: c,
           checked: false
         }))
       )
       setLangOptions(
-        (data.missingLanguages || []).map((t) => ({ text: t, checked: false }))
+        (data.issues?.languages || []).map((t) => ({ text: t, checked: false }))
       )
-      if (!data.designationMatch) {
-        setDesignationOverride(data.jobTitle || '')
-      }
+      if (data.selectionProbability != null)
+        setChanceOfSelection(data.selectionProbability)
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -209,7 +204,7 @@ function App() {
     }
   }
 
-  const disabled = (!jobUrl && !jobDescriptionText) || !cvFile || !linkedinUrl || isProcessing
+  const disabled = (!jobUrl && !jobDescriptionText) || !cvFile || isProcessing
 
   const handleSkillChange = (idx, field, value) => {
     setSkills((prev) =>
@@ -386,7 +381,7 @@ function App() {
       if (manualName) compileForm.append('applicantName', manualName)
       compileForm.append('existingCvKey', existingKey)
       compileForm.append('existingCvTextKey', existingTextKey)
-      compileForm.append('originalScore', result?.atsScore || 0)
+      compileForm.append('originalScore', result?.scores?.ats || 0)
       compileForm.append('addedSkills', JSON.stringify(skills))
       compileForm.append('selectedExperience', JSON.stringify(selectedExperience))
       compileForm.append('selectedEducation', JSON.stringify(selectedEducation))
@@ -601,21 +596,21 @@ function App() {
 
       {result && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
-          <p className="text-purple-800 mb-2">ATS Score: {result.atsScore}%</p>
-          {result.atsMetrics &&
-            allAtsMetrics.some((m) => result.atsMetrics[m] != null) && (
+          <p className="text-purple-800 mb-2">ATS Score: {result.scores?.ats}%</p>
+          {result.scores?.metrics &&
+            allAtsMetrics.some((m) => result.scores.metrics[m] != null) && (
               <div className="text-purple-800 mb-2">
                 <p className="font-semibold mb-1">ATS Breakdown</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {Object.entries(atsMetricCategories).map(
                     ([category, metrics]) => {
                       const available = metrics.filter(
-                        (m) => result.atsMetrics[m] != null
+                        (m) => result.scores.metrics[m] != null
                       )
                       if (available.length === 0) return null
                       const avgScore = Math.round(
                         available.reduce(
-                          (a, m) => a + result.atsMetrics[m],
+                          (a, m) => a + result.scores.metrics[m],
                           0
                         ) / available.length
                       )
@@ -643,7 +638,7 @@ function App() {
                           </p>
                           <ul>
                             {available.map((metricKey) => {
-                              const score = result.atsMetrics[metricKey]
+                              const score = result.scores.metrics[metricKey]
                               const metricStatus = getScoreStatus(score)
                               return (
                                 <li key={metricKey} className="mb-1">
@@ -694,18 +689,18 @@ function App() {
               </div>
             )}
 
-          {result.atsMetrics && (
+          {result.scores?.metrics && (
             <div className="text-purple-800 mb-2">
               <p className="font-semibold mb-1">Other Quality Metrics</p>
               {Object.entries(otherQualityMetricCategories).map(
                 ([category, metrics]) => {
                   const available = metrics.filter(
-                    (m) => result.atsMetrics[m] != null
+                    (m) => result.scores.metrics[m] != null
                   )
                   if (available.length === 0) return null
                   const avgScore = Math.round(
                     available.reduce(
-                      (a, m) => a + result.atsMetrics[m],
+                      (a, m) => a + result.scores.metrics[m],
                       0
                     ) / available.length
                   )
@@ -733,7 +728,7 @@ function App() {
                       </p>
                       <ul>
                         {available.map((metric) => {
-                          const score = result.atsMetrics[metric]
+                          const score = result.scores.metrics[metric]
                           const metricStatus = getScoreStatus(score)
                           return (
                             <li key={metric} className="mb-1">
@@ -776,27 +771,12 @@ function App() {
               )}
             </div>
           )}
-          <p className="text-purple-800 mb-2">
-            Designation: {result.originalTitle || 'N/A'} vs {result.jobTitle || 'N/A'}
-            {!result.designationMatch ? ' (Mismatch)' : ''}
-          </p>
           <button
             onClick={handleGap}
             className="px-4 py-2 bg-purple-600 text-white rounded mb-2"
           >
             Get Targeted Suggestions
           </button>
-          {!result.designationMatch && (
-            <div className="mb-2">
-              <input
-                type="text"
-                placeholder="Revised Designation"
-                value={designationOverride}
-                onChange={(e) => setDesignationOverride(e.target.value)}
-                className="w-full p-2 border border-purple-300 rounded"
-              />
-            </div>
-          )}
           {skills.length > 0 && (
             <div className="text-purple-800 mb-2">
               <p className="mb-2">Missing skills:</p>
@@ -846,11 +826,11 @@ function App() {
               </button>
             </div>
           )}
-          {result.jdMismatches?.length > 0 && (
+          {result.issues?.jdMismatches?.length > 0 && (
             <div className="text-purple-800 mb-2">
               <p className="mb-2">JD responsibility gaps:</p>
               <ul>
-                {result.jdMismatches.map((gap, idx) => (
+                {result.issues.jdMismatches.map((gap, idx) => (
                   <li key={idx} className="mb-1">
                     {gap}
                     <a
