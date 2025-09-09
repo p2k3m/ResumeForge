@@ -352,10 +352,30 @@ export default function registerProcessCv(
 
   app.get('/api/progress/:jobId', async (req, res) => {
     const { jobId } = req.params;
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+
+    const send = (data) => {
+      res.write(`event: step\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
     const active = activeJobs.get(jobId);
     if (active) {
-      return res.json(active.stageStatus || {});
+      // Stream active job progress every second
+      const interval = setInterval(() => {
+        send(active.stageStatus || {});
+        if (
+          active.stageStatus &&
+          Object.values(active.stageStatus).every((v) => v === 'completed')
+        ) {
+          clearInterval(interval);
+          res.end();
+        }
+      }, 1000);
+      res.on('close', () => clearInterval(interval));
+      return;
     }
+
     try {
       const dynamo = new DynamoDBClient({ region: REGION });
       let tableName = process.env.DYNAMO_TABLE;
@@ -370,11 +390,16 @@ export default function registerProcessCv(
       const { Item } = await dynamo.send(
         new GetItemCommand({ TableName: tableName, Key: { jobId: { S: jobId } } })
       );
-      if (!Item) return res.status(404).json({ error: 'job not found' });
-      res.json(Item);
+      if (!Item) {
+        send({ error: 'job not found' });
+      } else {
+        send(Item);
+      }
     } catch (err) {
       console.error('failed to fetch progress', err);
-      res.status(500).json({ error: 'failed to fetch progress' });
+      send({ error: 'failed to fetch progress' });
+    } finally {
+      res.end();
     }
   });
 
