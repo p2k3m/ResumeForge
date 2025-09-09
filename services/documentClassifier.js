@@ -5,7 +5,8 @@ const prompt =
 
 export async function describeDocument(text) {
   if (!generativeModel?.generateContent) {
-    throw new Error('Gemini model not initialized');
+    console.warn('Gemini model not initialized');
+    return 'unknown';
   }
   try {
     const result = await generativeModel.generateContent(
