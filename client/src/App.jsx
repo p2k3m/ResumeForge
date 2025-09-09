@@ -303,17 +303,19 @@ function App() {
   }
 
   const pollProgress = (jobId) => {
-    const interval = setInterval(async () => {
+    const source = new EventSource(`${API_BASE_URL}/api/progress/${jobId}`)
+    const handleMessage = (event) => {
       try {
-        const resp = await fetch(`${API_BASE_URL}/api/progress/${jobId}`)
-        const data = await resp.json()
+        const data = JSON.parse(event.data)
         if (data && Object.values(data).every((v) => v === 'completed')) {
-          clearInterval(interval)
+          source.close()
         }
       } catch {
-        clearInterval(interval)
+        source.close()
       }
-    }, 1000)
+    }
+    source.addEventListener('step', handleMessage)
+    source.onerror = () => source.close()
   }
 
   const getDownloadUrl = async (jobId, file) => {
