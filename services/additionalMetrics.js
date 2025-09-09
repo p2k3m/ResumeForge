@@ -103,14 +103,16 @@ export const CARD_METRICS = {
   hygiene: ['contactHygiene', 'dateConsistency'],
   risk: ['redFlagScan'],
 };
-
-export const CARD_WEIGHTS = {
-  ats: 0.25,
-  alignment: 0.25,
-  accomplishments: 0.2,
-  format: 0.15,
-  hygiene: 0.1,
-  risk: 0.05,
+export const METRIC_WEIGHTS = {
+  atsReadability: 0.18,
+  keywordDensity: 0.22,
+  impact: 0.15,
+  crispness: 0.1,
+  experienceRelevance: 0.12,
+  layoutSearchability: 0.08,
+  grammar: 0.05,
+  formatParsability: 0.05,
+  sectionCompleteness: 0.03,
 };
 
 export function aggregateCardScores(metrics = {}, atsScore = 0) {
@@ -126,12 +128,21 @@ export function aggregateCardScores(metrics = {}, atsScore = 0) {
   return cardScores;
 }
 
-export function computeOverallScore(cardScores = {}) {
-  let score = 0;
-  for (const [card, weight] of Object.entries(CARD_WEIGHTS)) {
-    score += (cardScores[card] || 0) * weight;
-  }
-  return Math.round(score);
+export function computeOverallScore(metrics = {}) {
+  const score =
+    (metrics.atsReadability || 0) * METRIC_WEIGHTS.atsReadability +
+    (metrics.keywordDensity || 0) * METRIC_WEIGHTS.keywordDensity +
+    (metrics.impact || 0) * METRIC_WEIGHTS.impact +
+    (metrics.crispness || 0) * METRIC_WEIGHTS.crispness +
+    (metrics.experienceRelevance || 0) *
+      METRIC_WEIGHTS.experienceRelevance +
+    (metrics.layoutSearchability || 0) * METRIC_WEIGHTS.layoutSearchability +
+    (metrics.grammar || 0) * METRIC_WEIGHTS.grammar +
+    (metrics.formatParsability || 0) * METRIC_WEIGHTS.formatParsability +
+    (metrics.sectionCompleteness || 0) *
+      METRIC_WEIGHTS.sectionCompleteness;
+  const penalty = ((100 - (metrics.redFlagScan ?? 100)) / 100) * 8;
+  return Math.round(Math.max(0, score - penalty));
 }
 
 export function calculateSelectionProbability({
@@ -139,9 +150,11 @@ export function calculateSelectionProbability({
   atsScore = 0,
   keywordMatch = 0,
 } = {}) {
-  const weighted =
-    overallScore * 0.5 + atsScore * 0.25 + keywordMatch * 0.25;
-  const prob = 1 / (1 + Math.exp(-(weighted - 50) / 10));
+  const logistic = (x) => 1 / (1 + Math.exp(-(x - 50) / 10));
+  const prob =
+    0.5 * logistic(overallScore) +
+    0.3 * logistic(keywordMatch) +
+    0.2 * logistic(atsScore);
   return Math.round(prob * 100);
 }
 

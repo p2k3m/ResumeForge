@@ -726,7 +726,7 @@ export default function registerProcessCv(
         });
         Object.assign(atsMetrics, extraMetrics);
         const cardScores = aggregateCardScores(extraMetrics, atsScore);
-        const overallScore = computeOverallScore(cardScores);
+        const overallScore = computeOverallScore(atsMetrics);
         const resumeCertifications = extractCertifications(resumeText);
         let missingCertifications = [];
         if (credlyUrl) {
