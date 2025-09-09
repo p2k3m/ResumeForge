@@ -2,7 +2,6 @@ import { calculateMatchScore, extractResumeSkills } from '../server.js';
 import { compareMetrics } from '../services/atsMetrics.js';
 import {
   calculateAdditionalMetrics,
-  aggregateCardScores,
   computeOverallScore,
   calculateSelectionProbability,
 } from '../services/additionalMetrics.js';
@@ -23,8 +22,7 @@ describe('chance of selection computation', () => {
       jobSkills,
       resumeSkills,
     });
-    const cardScores = aggregateCardScores(extra, atsScore);
-    const overallScore = computeOverallScore(cardScores);
+    const overallScore = computeOverallScore({ ...improved, ...extra });
     const chanceOfSelection = calculateSelectionProbability({
       overallScore,
       atsScore,

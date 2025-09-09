@@ -67,6 +67,7 @@ function App() {
   const [finalScore, setFinalScore] = useState(null)
   const [improvement, setImprovement] = useState(null)
   const [chanceOfSelection, setChanceOfSelection] = useState(null)
+  const [chanceBand, setChanceBand] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
@@ -149,6 +150,20 @@ function App() {
       setJobDescriptionText('')
     }
   }, [jobUrl])
+
+  useEffect(() => {
+    if (chanceOfSelection === null) {
+      setChanceBand('')
+    } else {
+      setChanceBand(
+        chanceOfSelection >= 80
+          ? 'High'
+          : chanceOfSelection >= 50
+          ? 'Medium'
+          : 'Low'
+      )
+    }
+  }, [chanceOfSelection])
 
   const handleSubmit = async (nameOverride) => {
     setIsProcessing(true)
@@ -897,7 +912,7 @@ function App() {
           )}
           {chanceOfSelection !== null && (
             <p className="text-purple-800 mt-2">
-              Chance of Selection: {chanceOfSelection}%
+              Chance of Selection: {chanceOfSelection}% ({chanceBand})
             </p>
           )}
           {cvUrl && (
