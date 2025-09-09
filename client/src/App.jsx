@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import skillResources from './skillResources'
 import certResources from './certResources'
 import languageResources from './languageResources'
@@ -48,6 +48,8 @@ const otherQualityMetricCategories = {
 function App() {
   const [jobUrl, setJobUrl] = useState('')
   const [jobDescriptionText, setJobDescriptionText] = useState('')
+  const [showJobDescription, setShowJobDescription] = useState(false)
+  const [showJdBanner, setShowJdBanner] = useState(false)
   const [cvFile, setCvFile] = useState(null)
   const [result, setResult] = useState(null)
   const [skills, setSkills] = useState([])
@@ -137,6 +139,14 @@ function App() {
     }
   }
 
+  useEffect(() => {
+    if (jobUrl && isValidUrl(jobUrl)) {
+      setShowJobDescription(false)
+      setShowJdBanner(false)
+      setJobDescriptionText('')
+    }
+  }, [jobUrl])
+
   const handleSubmit = async (nameOverride) => {
     setIsProcessing(true)
     setError('')
@@ -167,7 +177,13 @@ function App() {
           return
         }
         const errText = data?.error || text || 'Request failed'
-        setError(errText)
+        if (errText.includes('Job URL not readable')) {
+          setShowJdBanner(true)
+          setShowJobDescription(true)
+          setError('')
+        } else {
+          setError(errText)
+        }
         return
       }
       if (!response.ok) {
@@ -531,12 +547,19 @@ function App() {
             : 'border-purple-300'
         } mb-1`}
       />
-      <textarea
-        placeholder="Job Description Text"
-        value={jobDescriptionText}
-        onChange={(e) => setJobDescriptionText(e.target.value)}
-        className="w-full max-w-md p-2 border rounded border-purple-300 mb-1"
-      />
+      {showJdBanner && (
+        <div className="text-red-600 text-sm mb-4">
+          Job URL not readable. Please paste the job description text.
+        </div>
+      )}
+      {showJobDescription && (
+        <textarea
+          placeholder="Job Description Text"
+          value={jobDescriptionText}
+          onChange={(e) => setJobDescriptionText(e.target.value)}
+          className="w-full max-w-md p-2 border rounded border-purple-300 mb-1"
+        />
+      )}
 
       {disabled && !jobUrl && !jobDescriptionText && (
         <p className="text-red-600 text-sm mb-4">
