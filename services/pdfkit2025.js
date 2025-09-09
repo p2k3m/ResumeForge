@@ -27,24 +27,6 @@ export async function render2025Pdf(data, options = {}, style) {
         .map((t) => (t.text ? t.text : t.href ? t.href : ''))
         .join('');
     }
-    let linkedInUrl =
-      options.linkedinProfileUrl ||
-      data.contactTokens?.find(
-        (t) => t.type === 'link' && /linkedin\.com/i.test(t.href || '')
-      )?.href;
-    let linkedInQr = null;
-    if (linkedInUrl) {
-      try {
-        const { default: QRCode } = await import('qrcode').catch(() => ({
-          default: null
-        }));
-        if (QRCode)
-          linkedInQr = await QRCode.toDataURL(linkedInUrl, { margin: 0 });
-      } catch {
-        /* ignore */
-      }
-    }
-
     const sections = [...data.sections];
     const skillsIdx = sections.findIndex(
       (s) => s.heading?.toLowerCase() === 'skills'
@@ -117,21 +99,6 @@ export async function render2025Pdf(data, options = {}, style) {
       .fillColor(style.textColor)
       .fontSize(10)
       .text(contact);
-
-    if (linkedInQr) {
-      try {
-        const qrBuf = Buffer.from(linkedInQr.split(',')[1], 'base64');
-        const size = 80;
-        doc.image(
-          qrBuf,
-          doc.page.width - doc.page.margins.right - size,
-          doc.page.margins.top,
-          { width: size }
-        );
-      } catch {
-        /* ignore */
-      }
-    }
 
     doc.moveDown(2);
     const contentWidth =

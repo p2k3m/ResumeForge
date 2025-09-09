@@ -343,7 +343,6 @@ export default function registerProcessCv(
     CL_TEMPLATES,
     selectTemplates,
     analyzeJobDescription,
-    fetchLinkedInProfile,
     fetchCredlyProfile,
     collectSectionText,
     extractResumeSkills,
@@ -876,17 +875,13 @@ export default function registerProcessCv(
     let {
       jobDescriptionUrl,
       jobDescriptionText = '',
-      linkedinProfileUrl,
       credlyProfileUrl,
       existingCvKey,
       existingCvTextKey,
       iteration,
       designation,
       addedSkills,
-      selectedExperience,
-      selectedEducation,
       selectedCertifications,
-      selectedLanguages,
     } = req.body;
     let userSkills = [];
     try {
@@ -909,10 +904,7 @@ export default function registerProcessCv(
       } catch {}
       return [];
     };
-    const selectedExperienceArr = parseArrayField(selectedExperience);
-    const selectedEducationArr = parseArrayField(selectedEducation);
     const selectedCertificationsArr = parseArrayField(selectedCertifications);
-    const selectedLanguagesArr = parseArrayField(selectedLanguages);
     iteration = parseInt(iteration) || 0;
     const maxIterations = parseInt(
       process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
@@ -953,18 +945,11 @@ export default function registerProcessCv(
         createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
       );
     }
-    if (!linkedinProfileUrl) {
-      return next(createError(400, 'linkedinProfileUrl required'));
-    }
     if (jobDescriptionUrl) {
       jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
       if (!jobDescriptionUrl) {
         return next(createError(400, 'invalid jobDescriptionUrl'));
       }
-    }
-    linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
-    if (!linkedinProfileUrl) {
-      return next(createError(400, 'invalid linkedinProfileUrl'));
     }
     if (credlyProfileUrl) {
       credlyProfileUrl = await validateUrl(credlyProfileUrl);
@@ -1113,7 +1098,7 @@ export default function registerProcessCv(
           key: logKey,
           jobId,
           event: 'request_received',
-          message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`,
+          message: `jobDescriptionUrl=${jobDescriptionUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`,
           signal: req.signal,
         });
         await logEvent({
@@ -1177,47 +1162,6 @@ export default function registerProcessCv(
       }
       // Original skills and score can be computed here if needed in future
 
-      let linkedinData = {};
-      try {
-        linkedinData = await withRetry(
-          () => fetchLinkedInProfile(linkedinProfileUrl, req.signal),
-          2,
-          500,
-          req.signal
-        );
-        const hasContent = Object.values(linkedinData).some((v) =>
-          Array.isArray(v) ? v.length > 0 : v
-        );
-        if (!hasContent) linkedinData = {};
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'fetched_linkedin_profile',
-          signal: req.signal,
-        });
-      } catch (err) {
-        console.error(
-          'LinkedIn profile fetch failed',
-          err.message,
-          err.status
-        );
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'linkedin_profile_fetch_failed',
-          level: 'error',
-          message: err.message + (err.status ? ` (status ${err.status})` : ''),
-          signal: req.signal,
-        });
-      }
-      linkedinData.experience = selectedExperienceArr;
-      linkedinData.education = selectedEducationArr;
-      linkedinData.languages = selectedLanguagesArr;
-
       let credlyCertifications = selectedCertificationsArr;
       if (!credlyCertifications.length && credlyProfileUrl) {
         try {
@@ -1251,12 +1195,9 @@ export default function registerProcessCv(
       }
 
       const resumeExperience = extractExperience(text);
-      const linkedinExperience = extractExperience(linkedinData.experience || []);
       const resumeEducation = extractEducation(text);
-      const linkedinEducation = extractEducation(linkedinData.education || []);
       const resumeCertifications = extractCertifications(text);
       const resumeLanguages = extractLanguages(text);
-      const linkedinLanguages = extractLanguages(linkedinData.languages || []);
 
       const parsedResume = parseContent(text, { skipRequiredSections: true });
       const resumeProjects = parsedResume.sections
@@ -1270,7 +1211,7 @@ export default function registerProcessCv(
         )
         .filter(Boolean);
 
-      const sections = collectSectionText(text, linkedinData, credlyCertifications);
+      const sections = collectSectionText(text, credlyCertifications);
       const improvedSections = await improveSections(
         sections,
         jobDescription,
@@ -1360,7 +1301,6 @@ export default function registerProcessCv(
         (c.provider ? `${c.name} - ${c.provider}` : c.name || '').trim();
       const resumeCertSet = new Set(resumeCertifications.map(fmtCert));
       const addedCertifications = [
-        ...((linkedinData.certifications || []).map(fmtCert)),
         ...((credlyCertifications || []).map(fmtCert)),
       ].filter((c) => c && !resumeCertSet.has(c));
       const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
@@ -1977,7 +1917,6 @@ export default function registerProcessCv(
           cvKey,
           cvText,
           jobDescription,
-          linkedinProfileUrl,
           credlyProfileUrl,
         } = req.body || {};
         if (!cvText && !cvKey)
@@ -2025,20 +1964,6 @@ export default function registerProcessCv(
           { signal: req.signal }
         );
 
-        let linkedinFile;
-        if (linkedinProfileUrl) {
-          const data = await fetchLinkedInProfile(
-            linkedinProfileUrl,
-            req.signal
-          );
-          const pdf = await convertToPdf(data);
-          linkedinFile = await openaiUploadFile(
-            pdf,
-            'linkedin.pdf',
-            'assistants',
-            { signal: req.signal }
-          );
-        }
         let credlyFile;
         if (credlyProfileUrl) {
           const data = await fetchCredlyProfile(credlyProfileUrl, req.signal);
@@ -2056,7 +1981,6 @@ export default function registerProcessCv(
           {
             cvFileId: cvFile.id,
             jobDescFileId: jdFile.id,
-            linkedInFileId: linkedinFile?.id,
             credlyFileId: credlyFile?.id,
             instructions,
           },
@@ -2068,7 +1992,6 @@ export default function registerProcessCv(
           {
             cvFileId: cvFile.id,
             jobDescFileId: jdFile.id,
-            linkedInFileId: linkedinFile?.id,
             credlyFileId: credlyFile?.id,
             instructions,
           },

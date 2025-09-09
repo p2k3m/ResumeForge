@@ -7,16 +7,7 @@ import { generateContentMock } from './mocks/generateContentMock.js';
 describe('rewriteSectionsWithGemini', () => {
   test('populates sections with Gemini bullets', async () => {
     const resumeText = 'John Doe\n# Summary\nOld summary\n# Skills\nJavaScript';
-    const linkedinData = {
-      headline: 'Developer',
-      experience: ['Engineer at Acme (2020-2021)'],
-      education: ['BS University'],
-      skills: ['Node.js'],
-      certifications: [
-        { name: 'Cert A', provider: 'Org', url: 'https://example.com/cert' },
-      ],
-    };
-    const sections = collectSectionText(resumeText, linkedinData, []);
+    const sections = collectSectionText(resumeText, []);
     generateContentMock.mockReset();
     generateContentMock.mockResolvedValueOnce({
       response: {

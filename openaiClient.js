@@ -141,7 +141,6 @@ export async function uploadFile(
 export async function requestEnhancedCV({
   cvFileId,
   jobDescFileId,
-  linkedInFileId,
   credlyFileId,
   instructions,
   priorCvFileId,
@@ -162,8 +161,6 @@ export async function requestEnhancedCV({
   if (priorCvFileId)
     userContent.push({ type: 'input_file', file_id: priorCvFileId });
   userContent.push({ type: 'input_file', file_id: jobDescFileId });
-  if (linkedInFileId)
-    userContent.push({ type: 'input_file', file_id: linkedInFileId });
   if (credlyFileId) userContent.push({ type: 'input_file', file_id: credlyFileId });
   const schema = {
     type: 'object',
@@ -336,7 +333,6 @@ export async function requestCoverLetter(
   {
     cvFileId,
     jobDescFileId,
-    linkedInFileId,
     credlyFileId,
   },
   { signal } = {}
@@ -348,8 +344,7 @@ export async function requestCoverLetter(
     { type: 'input_file', file_id: cvFileId },
     { type: 'input_file', file_id: jobDescFileId },
   ];
-  if (linkedInFileId)
-    userContent.push({ type: 'input_file', file_id: linkedInFileId });
+  
   if (credlyFileId)
     userContent.push({ type: 'input_file', file_id: credlyFileId });
   let lastError;

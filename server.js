@@ -216,156 +216,6 @@ function selectTemplates({
 const isBlocked = (content) =>
   !content || !content.trim() || BLOCKED_PATTERNS.some((re) => re.test(content));
 
-async function fetchLinkedInProfile(url, signal) {
-  const valid = await validateUrl(url);
-  if (!valid) throw new Error('Invalid LinkedIn URL');
-  if (signal?.aborted) throw new Error('Aborted');
-  let html = '';
-  let status;
-  try {
-    const { data } = await axios.get(valid, {
-      timeout: REQUEST_TIMEOUT_MS,
-      signal,
-    });
-    html = data;
-  } catch (err) {
-    status = err?.response?.status;
-    if (status && status !== 999) {
-      const msg =
-        `LinkedIn profile fetch failed: ${err.message}` +
-        (status ? ` (status ${status})` : '');
-      const error = new Error(msg);
-      if (status) error.status = status;
-      console.error(msg);
-      throw error;
-    }
-  }
-  if (isBlocked(html)) {
-    const browser = await puppeteer.launch({
-      headless: PUPPETEER_HEADLESS,
-      args: PUPPETEER_ARGS,
-    });
-    if (signal?.aborted) {
-      await browser.close();
-      throw new Error('Aborted');
-    }
-    let page;
-    try {
-      page = await browser.newPage();
-      await page.goto(valid, {
-        timeout: REQUEST_TIMEOUT_MS,
-        waitUntil: 'networkidle2',
-      });
-      if (signal?.aborted) throw new Error('Aborted');
-      html = await page.content();
-    } finally {
-      try {
-        await page?.close();
-      } catch {
-        /* ignore */
-      }
-      await browser.close();
-    }
-  }
-  if (isBlocked(html)) {
-    if (status === 999) {
-      return {
-        headline: '',
-        experience: [],
-        education: [],
-        skills: [],
-        certifications: [],
-        languages: [],
-      };
-    }
-    const msg = 'LinkedIn profile fetch failed: Blocked content';
-    console.error(msg);
-    throw new Error('Blocked content');
-  }
-  const strip = (s) => s.replace(/<[^>]+>/g, '').trim();
-  const headlineMatch =
-    html.match(/<title>([^<]*)<\/title>/i) ||
-    html.match(/"headline":"(.*?)"/i);
-  const headline = headlineMatch ? strip(headlineMatch[1]) : '';
-  const extractList = (id) => {
-    const sectionRegex = new RegExp(
-      `<section[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)<\/section>`,
-      'i'
-    );
-    const sectionMatch = html.match(sectionRegex);
-    if (!sectionMatch) return [];
-    const itemRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-    const items = [];
-    let m;
-    while ((m = itemRegex.exec(sectionMatch[1])) !== null) {
-      const itemHtml = m[1];
-      const text = strip(itemHtml);
-      if (!text) continue;
-      if (id === 'experience') {
-        const titleMatch =
-          itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
-          itemHtml.match(/"title"\s*:\s*"(.*?)"/i);
-        const companyMatch =
-          itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
-          itemHtml.match(/"companyName"\s*:\s*"(.*?)"/i);
-        const dateMatch =
-          itemHtml.match(/<span[^>]*>([^<]*\d{4}[^<]*)<\/span>/i) ||
-          itemHtml.match(/"dateRange"\s*:\s*"(.*?)"/i);
-        let startDate = '';
-        let endDate = '';
-        if (dateMatch) {
-          const parts = strip(dateMatch[1]).split(/[-–to]+/);
-          startDate = parts[0]?.trim() || '';
-          endDate = parts[1]?.trim() || '';
-        }
-        items.push({
-          company: companyMatch ? strip(companyMatch[1]) : '',
-          title: titleMatch ? strip(titleMatch[1]) : '',
-          startDate,
-          endDate,
-        });
-      } else if (id === 'licenses_and_certifications') {
-        const nameMatch =
-          itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
-          itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
-        const providerMatch =
-          itemHtml.match(/<h4[^>]*>(.*?)<\/h4>/i) ||
-          itemHtml.match(/"issuer"\s*:\s*"(.*?)"/i);
-        const urlMatch =
-          itemHtml.match(/href=["']([^"']+)["']/i) ||
-          itemHtml.match(/"url"\s*:\s*"(.*?)"/i);
-        items.push({
-          name: nameMatch ? strip(nameMatch[1]) : '',
-          provider: providerMatch ? strip(providerMatch[1]) : '',
-          url: urlMatch ? strip(urlMatch[1]) : '',
-        });
-      } else if (id === 'languages') {
-        const nameMatch =
-          itemHtml.match(/<h3[^>]*>(.*?)<\/h3>/i) ||
-          itemHtml.match(/"name"\s*:\s*"(.*?)"/i);
-        const profMatch =
-          itemHtml.match(/<span[^>]*>([^<]*proficienc[^<]*)<\/span>/i) ||
-          itemHtml.match(/"proficiency"\s*:\s*"(.*?)"/i);
-        items.push({
-          language: nameMatch ? strip(nameMatch[1]) : strip(text),
-          proficiency: profMatch ? strip(profMatch[1]) : '',
-        });
-      } else {
-        items.push(text);
-      }
-    }
-    return items;
-  };
-  return {
-    headline,
-    experience: extractList('experience'),
-    education: extractList('education'),
-    skills: extractList('skills'),
-    certifications: extractList('licenses_and_certifications'),
-    languages: extractList('languages'),
-  };
-}
-
 async function fetchCredlyProfile(url, signal) {
   const valid = await validateUrl(url);
   if (!valid) throw new Error('Invalid Credly URL');
@@ -501,7 +351,8 @@ function calculateMatchScore(jobSkills = [], resumeSkills = []) {
   return { score, table, newSkills };
 }
 
-function collectSectionText(resumeText = '', linkedinData = {}, credlyCertifications = []) {
+
+function collectSectionText(resumeText = '', credlyCertifications = []) {
   const parsed = parseContent(resumeText, { skipRequiredSections: true });
   const sectionMap = {};
   parsed.sections.forEach((sec) => {
@@ -514,7 +365,8 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
   });
 
   const fmtExp = (exp = {}) => {
-    const datePart = exp.startDate || exp.endDate ? ` (${exp.startDate || ''} – ${exp.endDate || ''})` : '';
+    const datePart =
+      exp.startDate || exp.endDate ? ` (${exp.startDate || ''} – ${exp.endDate || ''})` : '';
     const base = [exp.title, exp.company].filter(Boolean).join(' at ');
     return `${base}${datePart}`.trim();
   };
@@ -523,59 +375,16 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     url: c.url || ''
   });
 
-  const summary = [sectionMap.summary || '', linkedinData.headline || '']
-    .filter(Boolean)
-    .join('\n');
-  const experience = [
-    extractExperience(resumeText).map(fmtExp).join('\n'),
-    extractExperience(linkedinData.experience || []).map(fmtExp).join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n');
-  const education = [
-    extractEducation(resumeText)
-      .map((e) => e.entry)
-      .join('\n'),
-    extractEducation(linkedinData.education || [])
-      .map((e) => e.entry)
-      .join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n');
-  const certObjs = [
-    ...extractCertifications(resumeText),
-    ...extractCertifications(linkedinData.certifications || []),
-    ...(credlyCertifications || [])
-  ].map(fmtCert);
+  const summary = sectionMap.summary || '';
+  const experience = extractExperience(resumeText).map(fmtExp).join('\n');
+  const education = extractEducation(resumeText).map((e) => e.entry).join('\n');
+  const certObjs = [...extractCertifications(resumeText), ...(credlyCertifications || [])].map(fmtCert);
   const certifications = certObjs.map((c) => c.text).join('\n');
   const certificationUrls = certObjs.map((c) => c.url);
-  const skills = [
-    extractResumeSkills(resumeText).join(', '),
-    (linkedinData.skills || []).join(', '),
-  ]
-    .filter(Boolean)
-    .join(', ');
-  const projects = [
-    sectionMap.projects || '',
-    (linkedinData.projects || []).join('\n')
-  ]
-    .filter(Boolean)
-    .join('\n');
-  const languages = [
-    ...extractLanguages(resumeText),
-    ...extractLanguages(linkedinData.languages || [])
-  ];
+  const skills = extractResumeSkills(resumeText).join(', ');
+  const languages = [...extractLanguages(resumeText)];
 
-  return {
-    summary,
-    experience,
-    education,
-    certifications,
-    certificationUrls,
-    skills,
-    projects,
-    languages
-  };
+  return { summary, experience, education, certifications, certificationUrls, skills, languages };
 }
 
 async function rewriteSectionsWithGemini(
@@ -740,28 +549,6 @@ async function generateProjectSummary(
 
   summary = summary.replace(/[(){}]/g, '');
   return `${summary}.`;
-}
-
-function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
-  const parts = [resumeText];
-  if (profile && typeof profile === 'object') {
-    if (profile.headline) parts.push(`LinkedIn Headline: ${profile.headline}`);
-    if (profile.experience?.length) {
-      const formatted = profile.experience.map((exp, idx) => {
-        const e = { ...exp };
-        if (idx === 0 && jobTitle) e.title = jobTitle;
-        const datePart = e.startDate || e.endDate ? ` (${e.startDate || ''} – ${e.endDate || ''})` : '';
-        const base = [e.title, e.company].filter(Boolean).join(' at ');
-        return `${base}${datePart}`.trim();
-      });
-      parts.push('LinkedIn Experience: ' + formatted.join('; '));
-    }
-    if (profile.education?.length)
-      parts.push('LinkedIn Education: ' + profile.education.join('; '));
-    if (profile.skills?.length)
-      parts.push('LinkedIn Skills: ' + profile.skills.join(', '));
-  }
-  return parts.join('\n');
 }
 
 let generatePdf = (text, templateId, options, gm = generativeModel) =>
@@ -1001,7 +788,6 @@ registerProcessCv(app, {
   CL_TEMPLATES,
   selectTemplates,
   analyzeJobDescription,
-  fetchLinkedInProfile,
   fetchCredlyProfile,
   collectSectionText,
   extractResumeSkills,
@@ -1047,9 +833,7 @@ export {
   extractCertifications,
   extractLanguages,
   splitSkills,
-  fetchLinkedInProfile,
   fetchCredlyProfile,
-  mergeResumeWithLinkedIn,
   collectSectionText,
   rewriteSectionsWithGemini,
   analyzeJobDescription,

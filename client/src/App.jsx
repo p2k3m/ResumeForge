@@ -12,7 +12,7 @@ const metricTips = {
   crispness: 'Keep sentences concise.',
   keywordDensity: 'Repeat relevant keywords naturally.',
   sectionHeadingClarity: 'Use clear section headings like Experience.',
-  contactInfoCompleteness: 'Include email, phone, and LinkedIn.',
+  contactInfoCompleteness: 'Include email and phone.',
   grammar: 'Proofread for correct grammar and punctuation.'
 }
 
@@ -53,7 +53,6 @@ function App() {
   const [cvFile, setCvFile] = useState(null)
   const [result, setResult] = useState(null)
   const [skills, setSkills] = useState([])
-  const [linkedinUrl, setLinkedinUrl] = useState('')
   const [credlyUrl, setCredlyUrl] = useState('')
   const [error, setError] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
@@ -87,7 +86,6 @@ function App() {
   const [gapSuggestion, setGapSuggestion] = useState('')
   const [showGapModal, setShowGapModal] = useState(false)
   const [jobUrlError, setJobUrlError] = useState('')
-  const [linkedinUrlError, setLinkedinUrlError] = useState('')
   const [credlyUrlError, setCredlyUrlError] = useState('')
   const fileInputRef = useRef(null)
   const API_BASE_URL = (typeof process !== 'undefined' && process.env.VITE_API_BASE_URL) || ''
@@ -124,14 +122,6 @@ function App() {
       setJobUrlError('Please enter a valid URL.')
     } else {
       setJobUrlError('')
-    }
-  }
-
-  const handleLinkedinBlur = () => {
-    if (linkedinUrl && !isValidUrl(linkedinUrl)) {
-      setLinkedinUrlError('Please enter a valid URL.')
-    } else {
-      setLinkedinUrlError('')
     }
   }
 
@@ -373,7 +363,6 @@ function App() {
       improveForm.append('jobDescriptionUrl', jobUrl)
       if (jobDescriptionText.trim())
         improveForm.append('jobDescriptionText', jobDescriptionText)
-      improveForm.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) improveForm.append('credlyProfileUrl', credlyUrl.trim())
       if (manualName) improveForm.append('applicantName', manualName)
       improveForm.append('addedSkills', JSON.stringify(skills))
@@ -405,7 +394,6 @@ function App() {
       compileForm.append('jobDescriptionUrl', jobUrl)
       if (jobDescriptionText.trim())
         compileForm.append('jobDescriptionText', jobDescriptionText)
-      compileForm.append('linkedinProfileUrl', linkedinUrl)
       if (credlyUrl.trim()) compileForm.append('credlyProfileUrl', credlyUrl.trim())
       if (manualName) compileForm.append('applicantName', manualName)
       compileForm.append('existingCvKey', existingKey)
@@ -525,26 +513,6 @@ function App() {
       )}
       {jobUrl && jobUrlError && (
         <p className="text-red-600 text-sm mb-4">{jobUrlError}</p>
-      )}
-
-      <input
-        type="url"
-        placeholder="LinkedIn Profile URL"
-        value={linkedinUrl}
-        onChange={(e) => setLinkedinUrl(e.target.value)}
-        onBlur={handleLinkedinBlur}
-        className={`w-full max-w-md p-2 border rounded ${
-          (disabled && !linkedinUrl) || linkedinUrlError
-            ? 'border-red-500'
-            : 'border-purple-300'
-        } mb-1`}
-      />
-
-      {disabled && !linkedinUrl && (
-        <p className="text-red-600 text-sm mb-4">LinkedIn profile URL is required.</p>
-      )}
-      {linkedinUrl && linkedinUrlError && (
-        <p className="text-red-600 text-sm mb-4">{linkedinUrlError}</p>
       )}
 
       <input
@@ -835,7 +803,7 @@ function App() {
           )}
           {expOptions.length > 0 && (
             <div className="text-purple-800 mb-2">
-              <p className="mb-2">LinkedIn experience not in resume:</p>
+              <p className="mb-2">Additional experience not in resume:</p>
               {expOptions.map((opt, idx) => (
                 <label key={idx} className="block">
                   <input
@@ -851,7 +819,7 @@ function App() {
           )}
           {eduOptions.length > 0 && (
             <div className="text-purple-800 mb-2">
-              <p className="mb-2">LinkedIn education not in resume:</p>
+              <p className="mb-2">Additional education not in resume:</p>
               {eduOptions.map((opt, idx) => (
                 <label key={idx} className="block">
                   <input
@@ -883,7 +851,7 @@ function App() {
           )}
           {langOptions.length > 0 && (
             <div className="text-purple-800 mb-2">
-              <p className="mb-2">LinkedIn languages not in resume:</p>
+              <p className="mb-2">Additional languages not in resume:</p>
               {langOptions.map((opt, idx) => (
                 <label key={idx} className="block">
                   <input

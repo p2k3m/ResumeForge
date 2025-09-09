@@ -38,7 +38,6 @@ registerProcessCv(app, {
   CL_TEMPLATES: [],
   selectTemplates: jest.fn(),
   analyzeJobDescription: jest.fn(),
-  fetchLinkedInProfile: jest.fn(),
   fetchCredlyProfile: jest.fn(),
   collectSectionText: jest.fn(),
   extractResumeSkills: jest.fn(),
