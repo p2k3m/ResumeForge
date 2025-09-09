@@ -66,8 +66,8 @@ function App() {
   const [cvTextKey, setCvTextKey] = useState('')
   const [finalScore, setFinalScore] = useState(null)
   const [improvement, setImprovement] = useState(null)
-  const [chanceOfSelection, setChanceOfSelection] = useState(null)
-  const [chanceBand, setChanceBand] = useState('')
+  const [selectionProbability, setSelectionProbability] = useState(null)
+  const [selectionBand, setSelectionBand] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [cvUrl, setCvUrl] = useState('')
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
@@ -144,18 +144,18 @@ function App() {
   }, [jobUrl])
 
   useEffect(() => {
-    if (chanceOfSelection === null) {
-      setChanceBand('')
+    if (selectionProbability === null) {
+      setSelectionBand('')
     } else {
-      setChanceBand(
-        chanceOfSelection >= 80
+      setSelectionBand(
+        selectionProbability >= 67
           ? 'High'
-          : chanceOfSelection >= 50
+          : selectionProbability >= 34
           ? 'Medium'
           : 'Low'
       )
     }
-  }, [chanceOfSelection])
+  }, [selectionProbability])
 
   const handleSubmit = async (nameOverride) => {
     setIsProcessing(true)
@@ -231,7 +231,7 @@ function App() {
         (data.issues?.languages || []).map((t) => ({ text: t, checked: false }))
       )
       if (data.selectionProbability != null)
-        setChanceOfSelection(data.selectionProbability)
+        setSelectionProbability(data.selectionProbability)
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -351,7 +351,7 @@ function App() {
     setError('')
     setCvUrl('')
     setCoverLetterUrl('')
-    setChanceOfSelection(null)
+    setSelectionProbability(null)
     setMacroWarning(false)
     try {
       // Gather user selections once
@@ -425,7 +425,7 @@ function App() {
       if (data.macroWarning) setMacroWarning(true)
       setFinalScore(data.atsScore)
       setImprovement(data.improvement)
-      setChanceOfSelection(data.chanceOfSelection)
+      setSelectionProbability(data.selectionProbability)
       setAddedSkills([...(data.addedSkills || []), ...(data.addedLanguages || [])])
       setStudyTips(data.studyTips || [])
       const cvDownload = await getDownloadUrl(data.jobId, 'cv.pdf')
@@ -891,9 +891,9 @@ function App() {
               Final ATS Score: {finalScore}% (Improvement: {improvement}% )
             </p>
           )}
-          {chanceOfSelection !== null && (
+          {selectionProbability !== null && (
             <p className="text-purple-800 mt-2">
-              Chance of Selection: {chanceOfSelection}% ({chanceBand})
+              Selection Probability: {selectionProbability}% ({selectionBand})
             </p>
           )}
           {cvUrl && (
