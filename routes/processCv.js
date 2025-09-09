@@ -627,11 +627,11 @@ export default function registerProcessCv(
             status: 'error',
             error: 'unknown_doc_type',
           }, { signal: req.signal });
-          const docType = await describeDocument(resumeText);
+          const inferredDocType = await describeDocument(resumeText);
           return res
             .status(400)
             .json({
-              error: `This document looks like a ${docType}. Please upload a CV.`,
+              error: `This document looks like a ${inferredDocType}. Please upload a CV.`,
             });
         }
         let applicantName =
