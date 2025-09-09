@@ -602,7 +602,10 @@ export default function registerProcessCv(
             jobDescriptionUrl: jobUrl,
             credlyProfileUrl: credlyUrl,
             cvKey,
+            s3Prefix: '',
             docType,
+            status: 'error',
+            error: 'invalid_doc_type',
           }, { signal: req.signal });
           return res.status(400).json({
             error: `You have uploaded a ${docType}. Please upload a CV only.`,
@@ -619,7 +622,10 @@ export default function registerProcessCv(
             jobDescriptionUrl: jobUrl,
             credlyProfileUrl: credlyUrl,
             cvKey,
+            s3Prefix: '',
             docType,
+            status: 'error',
+            error: 'unknown_doc_type',
           }, { signal: req.signal });
           const docType = await describeDocument(resumeText);
           return res
@@ -744,6 +750,15 @@ export default function registerProcessCv(
           cvKey,
           s3Prefix,
           docType: 'resume',
+          scores: {
+            ats: atsScore,
+            keywordMatch,
+            metrics: atsMetrics,
+            cardScores,
+            overallScore,
+          },
+          selectionProbability,
+          status: 'success',
         }, { signal: req.signal });
 
         res.json({
@@ -761,6 +776,24 @@ export default function registerProcessCv(
         });
       } catch (err) {
         console.error('evaluation failed', err);
+        try {
+          await logEvaluation({
+            jobId,
+            ipAddress,
+            userAgent,
+            browser,
+            os,
+            device,
+            jobDescriptionUrl: jobUrl,
+            credlyProfileUrl: credlyUrl,
+            cvKey,
+            s3Prefix,
+            status: 'error',
+            error: err.message,
+          }, { signal: req.signal });
+        } catch (e) {
+          console.error('failed to log evaluation', e);
+        }
         next(createError(500, 'evaluation failed'));
       }
       }, PROCESS_TIMEOUT_MS)
@@ -1684,6 +1717,14 @@ export default function registerProcessCv(
       return res.status(404).json({ error: 'job not found' });
     }
 
+    const ipAddress =
+      (req.headers['x-forwarded-for'] || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)[0] || req.ip;
+    const { userAgent, browser, os, device } = req;
+    const s3Prefix = ['resumes', `${sanitizedName}_${date}`, sessionId].join('/');
+
     const s3 = new S3Client({ region: REGION });
     let bucket;
     try {
@@ -1817,10 +1858,50 @@ export default function registerProcessCv(
           { expiresIn: 3600 }
         );
       }
+      try {
+        await logSession({
+          jobId,
+          ipAddress,
+          userAgent,
+          browser,
+          os,
+          device,
+          jobDescriptionUrl,
+          cvKey,
+          sanitizedName,
+          date,
+          sessionId,
+          s3Prefix,
+          scores: insights,
+          status: 'success',
+        }, { signal: req.signal });
+      } catch (err) {
+        console.error('failed to log session', err);
+      }
 
       res.json({ jobId, urls, insights });
     } catch (err) {
       console.error('improve failed', err);
+      try {
+        await logSession({
+          jobId,
+          ipAddress,
+          userAgent,
+          browser,
+          os,
+          device,
+          jobDescriptionUrl,
+          cvKey,
+          sanitizedName,
+          date,
+          sessionId,
+          s3Prefix,
+          status: 'error',
+          error: err.message,
+        }, { signal: req.signal });
+      } catch (e) {
+        console.error('failed to log session', e);
+      }
       next(createError(500, 'failed to improve CV'));
     }
   });

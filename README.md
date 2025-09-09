@@ -115,7 +115,8 @@ Each item includes:
 - `userAgent` – raw user agent string.
 - `browser`, `os`, `device` – parsed client details.
 - Optional URLs like `jobDescriptionUrl`, `linkedinProfileUrl`, and `credlyProfileUrl`.
-- Fields such as `docType`, `atsScore`, `improvement`, `cvKey`, and `coverLetterKey` when relevant.
+- Fields such as `docType`, `atsScore`, `improvement`, `cvKey`, `coverLetterKey`, and `s3Prefix` when relevant.
+- Additional evaluation details like `scores`, `selectionProbability`, `status`, and `error` may also be logged when available.
 
 ## Scheduled Cleanup
 Old log records are pruned daily to keep the DynamoDB table manageable. Run the provided script which removes items older than a

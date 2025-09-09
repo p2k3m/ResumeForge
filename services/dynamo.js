@@ -69,6 +69,10 @@ export async function logEvaluation(
     cvKey = '',
     s3Prefix = '',
     docType = '',
+    scores = null,
+    selectionProbability = null,
+    status = '',
+    error = '',
   },
   { signal } = {}
 ) {
@@ -95,6 +99,22 @@ export async function logEvaluation(
     }
   };
 
+  const addNumber = (key, value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      item[key] = { N: String(value) };
+    }
+  };
+
+  const addObject = (key, value) => {
+    if (value && typeof value === 'object') {
+      try {
+        item[key] = { S: JSON.stringify(value) };
+      } catch {
+        /* ignore JSON errors */
+      }
+    }
+  };
+
   const location = await resolveLocation(ipAddress);
   addString('ipAddress', ipAddress);
   addString('location', location);
@@ -108,6 +128,10 @@ export async function logEvaluation(
   addString('cvKey', cvKey);
   addString('s3Prefix', s3Prefix);
   addString('docType', docType);
+  addObject('scores', scores);
+  addNumber('selectionProbability', selectionProbability);
+  addString('status', status);
+  addString('error', error);
 
   await client.send(
     new PutItemCommand({ TableName: tableName, Item: item }),
@@ -134,6 +158,10 @@ export async function logSession(
     date = '',
     sessionId = '',
     s3Prefix = '',
+    scores = null,
+    selectionProbability = null,
+    status = '',
+    error = '',
   },
   { signal } = {}
 ) {
@@ -161,6 +189,21 @@ export async function logSession(
       item[key] = { S: value };
     }
   };
+  const addNumber = (key, value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      item[key] = { N: String(value) };
+    }
+  };
+
+  const addObject = (key, value) => {
+    if (value && typeof value === 'object') {
+      try {
+        item[key] = { S: JSON.stringify(value) };
+      } catch {
+        /* ignore JSON errors */
+      }
+    }
+  };
 
   const location = await resolveLocation(ipAddress);
   addString('ipAddress', ipAddress);
@@ -178,6 +221,10 @@ export async function logSession(
   addString('date', date);
   addString('sessionId', sessionId);
   addString('s3Prefix', s3Prefix);
+  addObject('scores', scores);
+  addNumber('selectionProbability', selectionProbability);
+  addString('status', status);
+  addString('error', error);
 
   await client.send(
     new PutItemCommand({ TableName: tableName, Item: item }),
