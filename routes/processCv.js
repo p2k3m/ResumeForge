@@ -533,11 +533,16 @@ export default function registerProcessCv(
           .map((s) => s.trim())
           .filter(Boolean)[0] || req.ip;
       const { userAgent, browser, os, device } = req;
+      let jobUrl;
+      let credlyUrl;
+      let cvKey;
+      let s3Prefix;
       try {
         if (!req.file) return next(createError(400, 'resume file required'));
-        let cvKey =
+        cvKey =
           req.file.key || req.file.filename || req.file.originalname || '';
-        let { jobUrl, jdText = '', credlyUrl } = req.body;
+        let jdText;
+        ({ jobUrl, jdText = '', credlyUrl } = req.body);
         if (!jobUrl && !jdText)
           return next(
             createError(400, 'jobUrl or jdText required')
@@ -601,8 +606,8 @@ export default function registerProcessCv(
             device,
             jobDescriptionUrl: jobUrl,
             credlyProfileUrl: credlyUrl,
-            cvKey,
-            s3Prefix: '',
+            cvKey: cvKey || '',
+            s3Prefix: s3Prefix || '',
             docType,
             status: 'error',
             error: 'invalid_doc_type',
@@ -621,8 +626,8 @@ export default function registerProcessCv(
             device,
             jobDescriptionUrl: jobUrl,
             credlyProfileUrl: credlyUrl,
-            cvKey,
-            s3Prefix: '',
+            cvKey: cvKey || '',
+            s3Prefix: s3Prefix || '',
             docType,
             status: 'error',
             error: 'unknown_doc_type',
@@ -663,7 +668,7 @@ export default function registerProcessCv(
         const ext = path.extname(req.file.originalname).toLowerCase();
         const date = new Date().toISOString().split('T')[0];
         const basePath = ['resumes', `${sanitized}_${date}`, sessionId];
-        const s3Prefix = basePath.join('/');
+        s3Prefix = basePath.join('/');
         const filename = `${Date.now()}-${sanitized}${ext}`;
         cvKey = buildS3Key([...basePath, 'original'], filename);
         req.logKey = buildS3Key([...basePath, 'logs'], 'processing.jsonl');
@@ -764,8 +769,8 @@ export default function registerProcessCv(
             device,
             jobDescriptionUrl: jobUrl,
             credlyProfileUrl: credlyUrl,
-            cvKey,
-            s3Prefix,
+            cvKey: cvKey || '',
+            s3Prefix: s3Prefix || '',
             docType: 'resume',
             seniority,
             scores: {
@@ -807,8 +812,8 @@ export default function registerProcessCv(
             device,
             jobDescriptionUrl: jobUrl,
             credlyProfileUrl: credlyUrl,
-            cvKey,
-            s3Prefix,
+            cvKey: cvKey || '',
+            s3Prefix: s3Prefix || '',
             status: 'error',
             error: err.message,
           }, { signal: req.signal });
