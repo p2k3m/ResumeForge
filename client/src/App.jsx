@@ -197,6 +197,24 @@ function App() {
         }
         return
       }
+      if (response.status === 403) {
+        let data
+        let text
+        try {
+          data = await response.json()
+        } catch {
+          text = await response.text()
+        }
+        if (data?.code === 'LINKEDIN_AUTH_REQUIRED') {
+          setShowJdBanner(true)
+          setShowJobDescription(true)
+          setJobUrl('')
+          return
+        }
+        const errText = data?.error || text || 'Request failed'
+        setError(errText)
+        return
+      }
       if (!response.ok) {
         const text = await response.text()
         throw new Error(text || 'Request failed')
