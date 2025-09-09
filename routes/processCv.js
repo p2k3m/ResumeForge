@@ -111,6 +111,21 @@ function computeJdMismatches(resumeText = '', jobHtml = '', jobSkills = []) {
   });
 }
 
+function validateLatestJobTitle(cvText = '', jobTitle = '') {
+  const lines = cvText.split('\n');
+  const expIdx = lines.findIndex((l) => /experience/i.test(l));
+  if (expIdx === -1) return false;
+  for (let i = expIdx + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    const cleaned = line.replace(/^[\-\*\u2022]\s*/, '');
+    const atIdx = cleaned.toLowerCase().indexOf(' at ');
+    const title = (atIdx !== -1 ? cleaned.slice(0, atIdx) : cleaned).trim();
+    return title.toLowerCase() === jobTitle.toLowerCase();
+  }
+  return false;
+}
+
 export async function improveSections(sections, jobDescription, signal) {
   const improvedSections = {};
   for (const key of [
@@ -2618,6 +2633,8 @@ export default function registerProcessCv(
         const uuid = crypto.randomUUID();
         const basePath = [sanitizedName, date, uuid, 'generated'];
 
+        const { title: jobTitle } = await analyzeJobDescription(jobDescription);
+
         const cvPdf = await convertToPdf(cvText);
         const jdPdf = await convertToPdf(jobDescription);
         const cvFile = await openaiUploadFile(cvPdf, 'resume.pdf', 'assistants', {
@@ -2656,8 +2673,7 @@ export default function registerProcessCv(
           );
         }
 
-        const instructions =
-          'You are an expert resume writer. Improve the resume to match the job description. Provide two distinct improved CV versions and a cover letter.';
+        const instructions = `You are an expert resume writer. Improve the resume to match the job description. Provide two distinct improved CV versions and a cover letter. Requirements:\n- Last job title must match the job description title ("${jobTitle}").\n- Responsibilities should mirror the job description bullet points.\n- Insert job description keywords verbatim.\n- No fabricated employers, employment dates, or degrees.`;
         const raw1 = await requestEnhancedCV(
           {
             cvFileId: cvFile.id,
@@ -2688,6 +2704,12 @@ export default function registerProcessCv(
           resp2.cv_version1,
           resp2.cv_version2,
         ];
+        if (!cvVariants.every((t) => validateLatestJobTitle(t, jobTitle))) {
+          throw createError(
+            400,
+            'AI response validation failed: last job title mismatch'
+          );
+        }
         const coverLetterText =
           resp1.cover_letter1 || resp1.cover_letter2 || resp2.cover_letter1 || '';
 
