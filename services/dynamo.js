@@ -67,6 +67,7 @@ export async function logEvaluation(
     linkedinProfileUrl = '',
     credlyProfileUrl = '',
     cvKey = '',
+    s3Prefix = '',
     docType = '',
   },
   { signal } = {}
@@ -105,6 +106,7 @@ export async function logEvaluation(
   addString('linkedinProfileUrl', linkedinProfileUrl);
   addString('credlyProfileUrl', credlyProfileUrl);
   addString('cvKey', cvKey);
+  addString('s3Prefix', s3Prefix);
   addString('docType', docType);
 
   await client.send(
@@ -131,6 +133,7 @@ export async function logSession(
     sanitizedName = '',
     date = '',
     sessionId = '',
+    s3Prefix = '',
   },
   { signal } = {}
 ) {
@@ -174,6 +177,7 @@ export async function logSession(
   addString('sanitizedName', sanitizedName);
   addString('date', date);
   addString('sessionId', sessionId);
+  addString('s3Prefix', s3Prefix);
 
   await client.send(
     new PutItemCommand({ TableName: tableName, Item: item }),
