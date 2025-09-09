@@ -12,6 +12,28 @@ Job descriptions are fetched with an initial Axios request and fall back to a Pu
 
 If a LinkedIn posting requires authentication, the server returns a `LINKEDIN_AUTH_REQUIRED` error. For these protected URLs, copy and paste the job description text directly instead of providing the link.
 
+## Running locally
+
+1. Install **Node.js 18+**.
+2. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+3. Install Chromium for Puppeteer if the bundled binary is missing:
+
+   ```bash
+   npx puppeteer browsers install chromium
+   ```
+
+   On Debian-based systems you can instead run `apt-get install chromium`.
+4. Start the server:
+
+   ```bash
+   node server.js
+   ```
+
 ## Usage
 
 Submit a résumé and job description to generate tailored documents:
@@ -36,7 +58,22 @@ curl -X DELETE http://localhost:3000/api/session/<jobId>
 Uploaded data is retained for up to 30 days and is removed automatically afterwards. Use the delete endpoint above to purge a session immediately if needed.
 
 ## Environment Variables
-The server relies on the following environment variables:
+Provide these variables either directly or through an AWS Secrets Manager secret referenced by `SECRET_ID`:
+
+- `AWS_REGION` – AWS region for S3 and DynamoDB.
+- `PORT` – HTTP port (defaults to `3000`).
+- `GEMINI_API_KEY` – Google Gemini API key.
+- `OPENAI_API_KEY` – OpenAI API key.
+- `MODEL_NAME` – OpenAI model name (`gpt-5` by default).
+- `S3_BUCKET` – S3 bucket for uploads and generated files.
+- `DYNAMO_TABLE` – DynamoDB table for logs.
+- `REQUEST_TIMEOUT_MS` – timeout in ms for outbound HTTP requests (`5000`).
+- `PROCESS_TIMEOUT_MS` – max processing time in ms for each job (`300000`).
+- `TRUST_PROXY` – number of trusted reverse proxy hops.
+- `ENFORCE_HTTPS` – redirect HTTP requests to HTTPS when set to `true`.
+- `SECRET_ID` – (production) name of the Secrets Manager entry holding API keys and `S3_BUCKET`.
+
+Example configuration:
 
 ```json
 {
@@ -54,23 +91,17 @@ The server relies on the following environment variables:
 }
 ```
 
-`SECRET_ID` is required in production and must reference an AWS Secrets Manager secret containing the values shown below. During
-local development you may omit `SECRET_ID` and instead provide a `local-secrets.json` file at the project root with the same
-JSON structure. If both are absent, the server falls back to empty credentials so it can operate offline, though features
-requiring external services will be disabled.
+During local development you may omit `SECRET_ID` and instead provide a `local-secrets.json` file at the project root with the same JSON structure. If both are absent, the server falls back to empty credentials so it can operate offline, though features requiring external services will be disabled.
 
-`S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
-`resume-forge-data`, which is suitable for local development.
+`S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to `resume-forge-data`.
 
-`DYNAMO_TABLE` specifies the DynamoDB table used for logging. If absent from the environment or secret, it defaults to
-`ResumeForgeLogs`.
+`DYNAMO_TABLE` specifies the DynamoDB table used for logging. If absent from the environment or secret, it defaults to `ResumeForgeLogs`.
 
-`REQUEST_TIMEOUT_MS` sets the timeout in milliseconds for outbound HTTP requests when fetching external profiles and job descriptions. It defaults to `5000`.
+`REQUEST_TIMEOUT_MS` sets the timeout in milliseconds for outbound HTTP requests when fetching external profiles and job descriptions.
 
-`PROCESS_TIMEOUT_MS` defines the maximum time in milliseconds allowed for processing `/api/evaluate` and `/api/process-cv` requests. It defaults to `300000` (5 minutes).
+`PROCESS_TIMEOUT_MS` defines the maximum time in milliseconds allowed for processing `/api/evaluate` and `/api/process-cv` requests.
 
 When deploying behind a reverse proxy or load balancer, set `TRUST_PROXY` to the number of trusted hops (typically `1`) so Express honors `X-Forwarded-*` headers. Combine this with `ENFORCE_HTTPS=true` to redirect all HTTP requests to `https://`.
-
 
 `GEMINI_API_KEY` and `OPENAI_API_KEY` supply the Google Gemini and OpenAI API keys. Set them directly in your environment for development or include them in the secret.
 
@@ -106,6 +137,15 @@ Minimal permissions required by the server:
   ]
 }
 ```
+
+## EC2 Deployment
+
+1. Launch an EC2 instance running Node.js 18 or newer.
+2. Attach an IAM role with the policy above so the instance can read secrets and write to S3.
+3. Provide the environment variables or set `SECRET_ID` to reference the Secrets Manager JSON.
+4. Deploy the code and start the server (`node server.js` or via a process manager).
+5. Front the S3 bucket with a CloudFront distribution and use its default domain `https://<distribution>.cloudfront.net` to serve downloads.
+6. The application stores generated files in S3 and returns presigned URLs that point to the CloudFront domain for time‑limited access.
 
 ## DynamoDB Table
 Evaluation and session metadata are stored in a DynamoDB table (default name `ResumeForgeLogs`).
@@ -166,6 +206,34 @@ resource "aws_lambda_permission" "allow_events" {
   source_arn    = aws_cloudwatch_event_rule.daily.arn
 }
 ```
+
+## CI/CD
+
+Use GitHub Actions with OpenID Connect (OIDC) to assume an AWS role without storing long‑lived credentials:
+
+```yaml
+name: deploy
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::ACCOUNT_ID:role/ResumeForgeDeploy
+          aws-region: ap-south-1
+      - run: npm ci
+      - run: npm test
+      - run: ssh ec2-user@your-server 'git pull && pm2 restart resumeforge'
+```
+
+If OIDC is unavailable, store `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` (and optionally `AWS_REGION`) as encrypted secrets and pass them to `aws-actions/configure-aws-credentials` instead.
 
 ## Local Development
 1. Install dependencies in both the server and client directories:
