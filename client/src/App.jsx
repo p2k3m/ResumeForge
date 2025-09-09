@@ -120,6 +120,7 @@ function App() {
   }
 
   const handleJobUrlBlur = () => {
+    if (showJobDescription) return
     if (jobUrl && !isValidUrl(jobUrl)) {
       setJobUrlError('Please enter a valid URL.')
     } else {
@@ -191,6 +192,8 @@ function App() {
         if (errText.includes('Job URL not readable')) {
           setShowJdBanner(true)
           setShowJobDescription(true)
+          setJobUrl('')
+          setJobUrlError('')
           setError('')
         } else {
           setError(errText)
@@ -209,6 +212,7 @@ function App() {
           setShowJdBanner(true)
           setShowJobDescription(true)
           setJobUrl('')
+          setJobUrlError('')
           return
         }
         const errText = data?.error || text || 'Request failed'
@@ -505,18 +509,20 @@ function App() {
         <p className="text-red-600 text-sm mb-4">Resume file is required.</p>
       )}
 
-      <input
-        type="url"
-        placeholder="Job Description URL"
-        value={jobUrl}
-        onChange={(e) => setJobUrl(e.target.value)}
-        onBlur={handleJobUrlBlur}
-        className={`w-full max-w-md p-2 border rounded ${
-          (disabled && !jobUrl && !jobDescriptionText) || jobUrlError
-            ? 'border-red-500'
-            : 'border-purple-300'
-        } mb-1`}
-      />
+      {!showJobDescription && (
+        <input
+          type="url"
+          placeholder="Job Description URL"
+          value={jobUrl}
+          onChange={(e) => setJobUrl(e.target.value)}
+          onBlur={handleJobUrlBlur}
+          className={`w-full max-w-md p-2 border rounded ${
+            (disabled && !jobUrl && !jobDescriptionText) || jobUrlError
+              ? 'border-red-500'
+              : 'border-purple-300'
+          } mb-1`}
+        />
+      )}
       {showJdBanner && (
         <div className="text-red-600 text-sm mb-4">
           Job URL not readable. Please paste the job description text.
