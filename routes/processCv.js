@@ -1889,7 +1889,7 @@ export default function registerProcessCv(
         console.error('failed to log session', err);
       }
 
-      res.json({ jobId, urls, insights });
+      res.json({ jobId, urls, insights, macroWarning: !!req.file?.macroWarning });
     } catch (err) {
       console.error('improve failed', err);
       try {
