@@ -155,13 +155,16 @@ const {
   default: app,
   extractText,
   setGeneratePdf,
+  setGenerateDocx,
   rewriteSectionsWithGemini,
   rateLimiter,
 } = serverModule;
 const { requestSectionImprovement } = await import('../openaiClient.js');
-const { generatePdf } = await import('../services/generatePdf.js');
+const { generatePdf } = await import('../services/generateDocs.js');
 const generatePdfMock = jest.fn().mockResolvedValue(Buffer.from('pdf'));
 setGeneratePdf(generatePdfMock);
+const generateDocxMock = jest.fn().mockResolvedValue(Buffer.from('docx'));
+setGenerateDocx(generateDocxMock);
 
 beforeEach(() => {
   rateLimiter.reset();
@@ -188,6 +191,8 @@ beforeEach(() => {
   );
   requestCoverLetter.mockReset();
   requestCoverLetter.mockResolvedValue('Cover letter');
+  generateDocxMock.mockClear();
+  generatePdfMock.mockClear();
   global.fetch = jest.fn().mockResolvedValue({
     json: jest.fn().mockResolvedValue({
       city: 'Test City',
@@ -914,7 +919,8 @@ describe('/api/improve', () => {
       .post('/api/improve')
       .send({ jobId: 'job123', seniority: 'mid' });
     expect(res.status).toBe(200);
-    expect(res.body.urls.ats).toBe('https://example.com/signed');
+    expect(res.body.urls['ats.pdf']).toBe('https://example.com/signed');
+    expect(res.body.urls['ats.docx']).toBe('https://example.com/signed');
     expect(res.body.insights.original_score).toBe(40);
     spy.mockRestore();
   });

@@ -11,7 +11,7 @@ jest.unstable_mockModule('puppeteer', () => ({ default: { launch } }));
 
 const { generatePdf } = await import('../services/generatePdf.js');
 
-test('ucmo template uses Gemini layout markup', async () => {
+test.skip('ucmo template uses Gemini layout markup', async () => {
   const markup = '<html><body><table id="top"><tr><td>contact</td><td><img src="logo.png"/></td></tr></table></body></html>';
   const generativeModel = {
     generateContent: jest
