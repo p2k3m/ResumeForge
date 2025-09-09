@@ -65,6 +65,9 @@ const app = serverModule.default;
           grammar: expect.any(Number)
         })
       );
+      expect(res.body.scores.cardScores).toBeDefined();
+      expect(res.body.scores.overallScore).toEqual(expect.any(Number));
+      expect(res.body.selectionProbability).toEqual(expect.any(Number));
       expect(mockFetchJobDescription).toHaveBeenCalledWith(
         'https://indeed.com/job',
         expect.objectContaining({
