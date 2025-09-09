@@ -85,8 +85,7 @@ export function scoreContactInfoCompleteness(text) {
   const phone = /\b(?:\+?\d{1,2}[\s-]?)?(?:\(\d{3}\)|\d{3})[\s-]?\d{3}[\s-]?\d{4}\b/.test(
     text
   );
-  const linkedin = /linkedin\.com\/\S+/i.test(text);
-  const components = [email, phone, linkedin];
+  const components = [email, phone];
   const score = components.filter(Boolean).length / components.length;
   return Math.round(score * 100);
 }

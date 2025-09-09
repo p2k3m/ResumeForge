@@ -62,7 +62,7 @@ test('evaluates CV and displays results', async () => {
     await screen.findByText(/Crispness: 90% \(Excellent\)/)
   ).toBeInTheDocument()
   expect(
-    await screen.findByText('Include email, phone, and LinkedIn.')
+    await screen.findByText('Include email and phone.')
   ).toBeInTheDocument()
   expect(await screen.findByText('Must-have')).toBeInTheDocument()
   expect(await screen.findByText('aws')).toBeInTheDocument()
@@ -183,9 +183,6 @@ test('displays new additions section after compile', async () => {
   )
   fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
     target: { value: 'https://indeed.com/job' },
-  })
-  fireEvent.change(screen.getByPlaceholderText('LinkedIn Profile URL'), {
-    target: { value: 'https://linkedin.com/in/example' },
   })
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))

@@ -53,7 +53,7 @@ function parseLine(text) {
         } else if (match[3]) {
           let href = match[3];
           if (href.endsWith(')')) href = href.slice(0, -1);
-          const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
+          const domainMap = { 'github.com': 'GitHub' };
           let label = href;
           try {
             const hostname = new URL(href).hostname.replace(/^www\./, '');
@@ -199,14 +199,10 @@ function ensureRequiredSections(
   data,
   {
     resumeExperience = [],
-    linkedinExperience = [],
     resumeEducation = [],
-    linkedinEducation = [],
     resumeCertifications = [],
-    linkedinCertifications = [],
     credlyCertifications = [],
     credlyProfileUrl,
-    linkedinProfileUrl,
     jobTitle,
     project,
     skipRequiredSections = false
@@ -243,24 +239,6 @@ function ensureRequiredSections(
         type: 'link',
         text: 'Credly Profile',
         href: credlyProfileUrl,
-      });
-    }
-  }
-
-  if (linkedinProfileUrl) {
-    contactTokens = contactTokens || [];
-    const hasLinkedIn = contactTokens.some(
-      (t) =>
-        t.type === 'link' &&
-        /linkedin\.com/i.test(normalizeUrl(t.href || ''))
-    );
-    if (!hasLinkedIn) {
-      if (contactTokens.length)
-        contactTokens.push({ type: 'paragraph', text: ' | ' });
-      contactTokens.push({
-        type: 'link',
-        text: 'LinkedIn Profile',
-        href: linkedinProfileUrl,
       });
     }
   }
@@ -343,10 +321,7 @@ function ensureRequiredSections(
           }
           return exp;
         });
-      const combined = [
-        ...flatten(resumeExperience),
-        ...flatten(linkedinExperience),
-      ];
+      const combined = [...flatten(resumeExperience)];
       const additions = [];
       combined.forEach((exp) => {
         const key = [
@@ -432,9 +407,7 @@ function ensureRequiredSections(
       }
     } else if (!section.items || section.items.length === 0) {
       if (normalized.toLowerCase() === 'education') {
-        const bullets = resumeEducation.length
-          ? resumeEducation
-          : linkedinEducation;
+        const bullets = resumeEducation.length ? resumeEducation : [];
         if (bullets.length) {
           section.items = bullets.map((b) => parseLine(String(b)));
         } else {
@@ -487,7 +460,6 @@ function ensureRequiredSections(
     ...credlyCertifications,
     ...existingCerts,
     ...resumeCertifications,
-    ...linkedinCertifications,
   ];
 
   const deduped = [];
@@ -586,8 +558,7 @@ function containsContactInfo(str = '') {
   return (
     /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text) ||
     /\b(?:\+?\d[\d\-\s().]{7,}\d)\b/.test(text) ||
-    /\bhttps?:\/\/\S+/i.test(text) ||
-    /linkedin|github/.test(text)
+    /\bhttps?:\/\/\S+/i.test(text)
   );
 }
 

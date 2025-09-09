@@ -36,10 +36,6 @@ test('Fix buttons work in each metric category', async () => {
     screen.getByPlaceholderText('Job Description URL'),
     { target: { value: 'https://example.com/job' } }
   )
-  fireEvent.change(
-    screen.getByPlaceholderText('LinkedIn Profile URL'),
-    { target: { value: 'https://linkedin.com/in/test' } }
-  )
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
 
   expect(await screen.findByText('ATS Breakdown')).toBeInTheDocument()

@@ -159,21 +159,6 @@ async function renderTemplate(text, templateId = 'modern', options = {}, generat
     if (templateId === '2025') {
       if (data.contactTokens) {
         htmlData.contact = tokenHtml(data.contactTokens);
-        const linkedIn = data.contactTokens.find(
-          (t) => t.type === 'link' && /linkedin\.com/i.test(t.href || '')
-        );
-        if (linkedIn?.href) {
-          try {
-            const { default: QRCode } = await import('qrcode').catch(() => ({ default: null }));
-            if (QRCode) {
-              htmlData.linkedinQr = await QRCode.toDataURL(linkedIn.href, {
-                margin: 0,
-              });
-            }
-          } catch {
-            /* ignore QR generation errors */
-          }
-        }
       }
       const skillsIdx = data.sections.findIndex(
         (s) => s.heading?.toLowerCase() === 'skills'

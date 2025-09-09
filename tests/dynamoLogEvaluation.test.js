@@ -29,7 +29,6 @@ describe('logEvaluation optional fields', () => {
       ipAddress: 'ip',
       userAgent: 'ua',
       jobDescriptionUrl: 'https://example.com/job',
-      linkedinProfileUrl: 'https://linkedin.com/in/example',
       cvKey: 's3/key',
       docType: 'resume',
     });
@@ -40,15 +39,12 @@ describe('logEvaluation optional fields', () => {
     expect(putCall[0].input.Item.jobDescriptionUrl).toEqual({
       S: 'https://example.com/job',
     });
-    expect(putCall[0].input.Item.linkedinProfileUrl).toEqual({
-      S: 'https://linkedin.com/in/example',
-    });
     expect(putCall[0].input.Item.cvKey).toEqual({ S: 's3/key' });
     expect(putCall[0].input.Item.ipAddress).toEqual({ S: 'ip' });
     expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
   });
 
-  test('omits linkedinProfileUrl when not provided', async () => {
+  test('handles missing optional urls', async () => {
     const sendMock = jest
       .spyOn(DynamoDBClient.prototype, 'send')
       .mockResolvedValue({});
@@ -65,7 +61,6 @@ describe('logEvaluation optional fields', () => {
     const putCall = sendMock.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
     );
-    expect(putCall[0].input.Item.linkedinProfileUrl).toBeUndefined();
     expect(putCall[0].input.Item.ipAddress).toEqual({ S: 'ip' });
     expect(putCall[0].input.Item.location).toEqual({ S: 'City, Country' });
   });

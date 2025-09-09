@@ -64,7 +64,6 @@ export async function logEvaluation(
     os = '',
     device = '',
     jobDescriptionUrl = '',
-    linkedinProfileUrl = '',
     credlyProfileUrl = '',
     cvKey = '',
     s3Prefix = '',
@@ -124,7 +123,6 @@ export async function logEvaluation(
   addString('os', os);
   addString('device', device);
   addString('jobDescriptionUrl', jobDescriptionUrl);
-  addString('linkedinProfileUrl', linkedinProfileUrl);
   addString('credlyProfileUrl', credlyProfileUrl);
   addString('cvKey', cvKey);
   addString('s3Prefix', s3Prefix);
@@ -150,7 +148,6 @@ export async function logSession(
     os = '',
     device = '',
     jobDescriptionUrl = '',
-    linkedinProfileUrl = '',
     credlyProfileUrl = '',
     cvKey = '',
     coverLetterKey = '',
@@ -215,7 +212,6 @@ export async function logSession(
   addString('os', os);
   addString('device', device);
   addString('jobDescriptionUrl', jobDescriptionUrl);
-  addString('linkedinProfileUrl', linkedinProfileUrl);
   addString('credlyProfileUrl', credlyProfileUrl);
   addString('cvKey', cvKey);
   addString('coverLetterKey', coverLetterKey);

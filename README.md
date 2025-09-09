@@ -157,7 +157,7 @@ Each item includes:
 - `location` – city and country derived from the IP address.
 - `userAgent` – raw user agent string.
 - `browser`, `os`, `device` – parsed client details.
-- Optional URLs like `jobDescriptionUrl`, `linkedinProfileUrl`, and `credlyProfileUrl`.
+- Optional URLs like `jobDescriptionUrl` and `credlyProfileUrl`.
 - Fields such as `docType`, `atsScore`, `improvement`, `cvKey`, `coverLetterKey`, and `s3Prefix` when relevant.
 - Additional evaluation details like `scores`, `selectionProbability`, `status`, and `error` may also be logged when available.
 
