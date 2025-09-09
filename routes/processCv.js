@@ -636,10 +636,15 @@ export default function registerProcessCv(
         }
         let applicantName =
           req.body.applicantName || (await extractName(resumeText));
+        if (!applicantName) {
+          const shortHash = jobId.slice(0, 6);
+          applicantName = `Candidate_${shortHash}`;
+        }
         let sanitized = sanitizeName(applicantName);
         if (!sanitized) {
-          sanitized = 'candidate';
-          applicantName = 'Candidate';
+          const shortHash = jobId.slice(0, 6);
+          applicantName = `Candidate_${shortHash}`;
+          sanitized = `candidate_${shortHash}`;
         }
         const sessionId = crypto.randomUUID();
         req.sessionId = sessionId;
@@ -986,11 +991,16 @@ export default function registerProcessCv(
         .filter(Boolean);
       applicantName =
         req.body.applicantName || (await extractName(originalText));
+      if (!applicantName) {
+        const shortHash = jobId.slice(0, 6);
+        applicantName = `Candidate_${shortHash}`;
+      }
       originalTitle = lines[1] || '';
       sanitizedName = sanitizeName(applicantName);
       if (!sanitizedName) {
-        sanitizedName = 'candidate';
-        applicantName = 'Candidate';
+        const shortHash = jobId.slice(0, 6);
+        applicantName = `Candidate_${shortHash}`;
+        sanitizedName = `candidate_${shortHash}`;
       }
       const sessionId = crypto.randomUUID();
       req.sessionId = sessionId;
@@ -1944,9 +1954,16 @@ export default function registerProcessCv(
           });
         }
 
-        const sanitizedName = sanitizeName(
-          (await extractName(cvText)) || 'candidate'
-        );
+        let extractedName = await extractName(cvText);
+        if (!extractedName) {
+          const shortHash = jobId.slice(0, 6);
+          extractedName = `Candidate_${shortHash}`;
+        }
+        let sanitizedName = sanitizeName(extractedName);
+        if (!sanitizedName) {
+          const shortHash = jobId.slice(0, 6);
+          sanitizedName = `candidate_${shortHash}`;
+        }
         const date = new Date().toISOString().split('T')[0];
         const uuid = crypto.randomUUID();
         const basePath = ['resumes', `${sanitizedName}_${date}`, uuid, 'generated'];
