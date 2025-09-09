@@ -1,5 +1,11 @@
 import { calculateMatchScore, extractResumeSkills } from '../server.js';
 import { compareMetrics } from '../services/atsMetrics.js';
+import {
+  calculateAdditionalMetrics,
+  aggregateCardScores,
+  computeOverallScore,
+  calculateSelectionProbability,
+} from '../services/additionalMetrics.js';
 
 describe('chance of selection computation', () => {
   test('averages match and ATS scores', () => {
@@ -12,7 +18,18 @@ describe('chance of selection computation', () => {
       Object.values(improved).reduce((sum, v) => sum + v, 0) /
         Object.keys(improved).length
     );
-    const chanceOfSelection = Math.round((match.score + atsScore) / 2);
+    const extra = calculateAdditionalMetrics(text, {
+      jobTitle: 'Engineer',
+      jobSkills,
+      resumeSkills,
+    });
+    const cardScores = aggregateCardScores(extra, atsScore);
+    const overallScore = computeOverallScore(cardScores);
+    const chanceOfSelection = calculateSelectionProbability({
+      overallScore,
+      atsScore,
+      keywordMatch: match.score,
+    });
     expect(match.table).toEqual([
       { skill: 'javascript', matched: true },
       { skill: 'aws', matched: true }

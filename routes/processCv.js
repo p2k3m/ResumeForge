@@ -12,6 +12,12 @@ import {
   requestAtsAnalysis,
 } from '../openaiClient.js';
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
+import {
+  calculateAdditionalMetrics,
+  aggregateCardScores,
+  computeOverallScore,
+  calculateSelectionProbability,
+} from '../services/additionalMetrics.js';
 import { convertToPdf } from '../lib/convertToPdf.js';
 import { logEvaluation, logSession } from '../services/dynamo.js';
 
@@ -582,7 +588,7 @@ export default function registerProcessCv(
           jobHtml = jdText;
           await endJd('job_description_text');
         }
-        const { skills: jobSkills } = await analyzeJobDescription(jobHtml);
+        const { skills: jobSkills, title: jobTitle } = await analyzeJobDescription(jobHtml);
         const resumeText = await extractTextLogged(req, req.file);
         const docType = await classifyDocument(resumeText);
         if (docType && docType !== 'resume' && docType !== 'unknown') {
@@ -689,6 +695,14 @@ export default function registerProcessCv(
             Math.max(Object.keys(atsMetrics).length, 1)
         );
         atsMetrics.keywordMatch = keywordMatch;
+        const extraMetrics = calculateAdditionalMetrics(resumeText, {
+          jobTitle,
+          jobSkills,
+          resumeSkills,
+        });
+        Object.assign(atsMetrics, extraMetrics);
+        const cardScores = aggregateCardScores(extraMetrics, atsScore);
+        const overallScore = computeOverallScore(cardScores);
         const resumeCertifications = extractCertifications(resumeText);
         let missingCertifications = [];
         if (credlyUrl) {
@@ -713,7 +727,11 @@ export default function registerProcessCv(
             // ignore Credly fetch errors
           }
         }
-        const selectionProbability = Math.round((atsScore + keywordMatch) / 2);
+        const selectionProbability = calculateSelectionProbability({
+          overallScore,
+          atsScore,
+          keywordMatch,
+        });
         await logEvaluation({
           jobId,
           ipAddress,
@@ -730,7 +748,13 @@ export default function registerProcessCv(
 
         res.json({
           jobId,
-          scores: { ats: atsScore, keywordMatch, metrics: atsMetrics },
+          scores: {
+            ats: atsScore,
+            keywordMatch,
+            metrics: atsMetrics,
+            cardScores,
+            overallScore,
+          },
           keywords: missingSkills || [],
           selectionProbability,
           issues: { jdMismatches, certifications: missingCertifications },
