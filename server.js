@@ -27,7 +27,7 @@ import { getSecrets } from './config/secrets.js';
 import JSON5 from 'json5';
 import { generativeModel } from './geminiClient.js';
 import registerProcessCv from './routes/processCv.js';
-import { generatePdf as _generatePdf, generateDocx as _generateDocx } from './services/generatePdf.js';
+import { generatePdf as _generatePdf, generateDocx as _generateDocx } from './services/generateDocs.js';
 import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from './config/puppeteer.js';
 import { JOB_FETCH_USER_AGENT } from './config/http.js';
 import { uploadResume, parseUserAgent, validateUrl } from './lib/serverUtils.js';

@@ -1829,42 +1829,69 @@ export default function registerProcessCv(
       variants.push({ name: 'gov', text: resp2.cv_version2 });
 
       for (const v of variants) {
-        const pdfBuf = await generatePdf(v.text, 'modern', {}, generativeModel);
-        const key = buildS3Key(basePath, `cv_${v.name}.pdf`);
+        const docxBuf = await generateDocx(v.text, v.name);
+        const pdfBuf = await generatePdf(v.text, v.name);
+        const docxKey = buildS3Key(basePath, `${v.name}.docx`);
+        const pdfKey = buildS3Key(basePath, `${v.name}.pdf`);
         await s3.send(
           new PutObjectCommand({
             Bucket: bucket,
-            Key: key,
+            Key: docxKey,
+            Body: docxBuf,
+            ContentType:
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          })
+        );
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: pdfKey,
             Body: pdfBuf,
             ContentType: 'application/pdf',
           })
         );
-        urls[v.name] = await getSignedUrl(
+        urls[`${v.name}.docx`] = await getSignedUrl(
           s3,
-          new GetObjectCommand({ Bucket: bucket, Key: key }),
+          new GetObjectCommand({ Bucket: bucket, Key: docxKey }),
+          { expiresIn: 3600 }
+        );
+        urls[`${v.name}.pdf`] = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: bucket, Key: pdfKey }),
           { expiresIn: 3600 }
         );
       }
 
       if (coverLetterText) {
-        const clPdf = await generatePdf(
-          coverLetterText,
-          'cover_modern',
-          {},
-          generativeModel
-        );
-        const coverKey = buildS3Key(basePath, 'cover_letter.pdf');
+        const clDocx = await generateDocx(coverLetterText, 'cover_modern');
+        const clPdf = await generatePdf(coverLetterText, 'cover_modern');
+        const clDocxKey = buildS3Key(basePath, 'cover_letter.docx');
+        const clPdfKey = buildS3Key(basePath, 'cover_letter.pdf');
         await s3.send(
           new PutObjectCommand({
             Bucket: bucket,
-            Key: coverKey,
+            Key: clDocxKey,
+            Body: clDocx,
+            ContentType:
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          })
+        );
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: clPdfKey,
             Body: clPdf,
             ContentType: 'application/pdf',
           })
         );
-        urls.coverLetter = await getSignedUrl(
+        urls['cover_letter.docx'] = await getSignedUrl(
           s3,
-          new GetObjectCommand({ Bucket: bucket, Key: coverKey }),
+          new GetObjectCommand({ Bucket: bucket, Key: clDocxKey }),
+          { expiresIn: 3600 }
+        );
+        urls['cover_letter.pdf'] = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: bucket, Key: clPdfKey }),
           { expiresIn: 3600 }
         );
       }
