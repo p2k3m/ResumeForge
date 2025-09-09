@@ -44,6 +44,7 @@ The server relies on the following environment variables:
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
   "OPENAI_API_KEY": "<api-key>",
+  "MODEL_NAME": "gpt-5",
   "S3_BUCKET": "resume-forge-data",
   "DYNAMO_TABLE": "ResumeForgeLogs",
   "REQUEST_TIMEOUT_MS": "5000",
@@ -72,6 +73,8 @@ When deploying behind a reverse proxy or load balancer, set `TRUST_PROXY` to the
 
 
 `GEMINI_API_KEY` and `OPENAI_API_KEY` supply the Google Gemini and OpenAI API keys. Set them directly in your environment for development or include them in the secret.
+
+`MODEL_NAME` selects the OpenAI model used for résumé processing. It defaults to `gpt-5` and falls back to `gpt-4.1` or `gpt-4o` if the preferred model is unavailable.
 
 The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 

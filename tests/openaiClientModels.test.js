@@ -23,7 +23,7 @@ test('uses supported model without model_not_found warnings', async () => {
 
   expect(createResponse).toHaveBeenCalledTimes(1);
   const options = createResponse.mock.calls[0][0];
-  expect(options.model).toBe('gpt-4.1');
+  expect(options.model).toBe('gpt-5');
   expect(options.text.format).toMatchObject({
     type: 'json_schema',
     name: 'EnhancedCV',
