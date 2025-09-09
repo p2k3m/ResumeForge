@@ -9,7 +9,6 @@ import {
   requestSectionImprovement,
   uploadFile as openaiUploadFile,
   requestEnhancedCV,
-  requestCoverLetter,
   requestAtsAnalysis,
 } from '../openaiClient.js';
 import { compareMetrics, calculateMetrics } from '../services/atsMetrics.js';
@@ -1597,951 +1596,185 @@ export default function registerProcessCv(
     }
   );
 
-  app.post('/api/improve-metric', async (req, res, next) => {
-    const jobId = crypto.randomUUID();
+  app.post('/api/improve', async (req, res, next) => {
+    const { jobId, seniority } = req.body || {};
+    if (!jobId) return next(createError(400, 'jobId required'));
+
+    const dynamo = new DynamoDBClient({ region: REGION });
+    let tableName = process.env.DYNAMO_TABLE;
+    if (!tableName) {
+      try {
+        const secrets = await getSecrets();
+        tableName = secrets.DYNAMO_TABLE || 'ResumeForgeLogs';
+      } catch {
+        tableName = 'ResumeForgeLogs';
+      }
+    }
+
+    let item;
+    try {
+      ({ Item: item } = await dynamo.send(
+        new GetItemCommand({
+          TableName: tableName,
+          Key: { jobId: { S: jobId } },
+        })
+      ));
+    } catch (err) {
+      console.error('failed to lookup job', err);
+    }
+
+    const sanitizedName = item?.sanitizedName?.S;
+    const date = item?.date?.S;
+    const sessionId = item?.sessionId?.S;
+    const jobDescriptionUrl = item?.jobDescriptionUrl?.S;
+    const cvKey = item?.cvKey?.S;
+
+    if (!sanitizedName || !date || !sessionId || !jobDescriptionUrl || !cvKey) {
+      return res.status(404).json({ error: 'job not found' });
+    }
+
     const s3 = new S3Client({ region: REGION });
     let bucket;
-    let secrets;
     try {
-      secrets = await getSecrets();
+      const secrets = await getSecrets();
       bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
     } catch (err) {
       console.error('failed to load configuration', err);
       return next(createError(500, 'failed to load configuration'));
     }
 
-    let {
-      metric,
-      jobDescriptionUrl,
-      jobDescriptionText = '',
-      linkedinProfileUrl,
-      credlyProfileUrl,
-      existingCvKey,
-      existingCvTextKey,
-      iteration,
-    } = req.body;
-    iteration = parseInt(iteration) || 0;
-    const maxIterations = parseInt(
-      process.env.MAX_ITERATIONS || secrets.MAX_ITERATIONS || 0,
-      10
-    );
-    if (maxIterations && iteration >= maxIterations)
-      return next(createError(400, 'max improvements reached'));
-    if (!metric) return next(createError(400, 'metric required'));
-    if (!jobDescriptionUrl && !jobDescriptionText)
-      return next(
-        createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
-      );
-    if (!linkedinProfileUrl)
-      return next(createError(400, 'linkedinProfileUrl required'));
-    if (!existingCvKey && !existingCvTextKey)
-      return next(
-        createError(400, 'existingCvKey or existingCvTextKey required')
-      );
-
-    if (jobDescriptionUrl) {
-      jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-      if (!jobDescriptionUrl)
-        return next(createError(400, 'invalid jobDescriptionUrl'));
-    }
-    linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
-    if (!linkedinProfileUrl)
-      return next(createError(400, 'invalid linkedinProfileUrl'));
-    if (credlyProfileUrl) {
-      credlyProfileUrl = await validateUrl(credlyProfileUrl);
-      if (!credlyProfileUrl)
-        return next(createError(400, 'invalid credlyProfileUrl'));
-    }
-
-    let existingCvBuffer;
-    let originalText;
+    let cvText = '';
     try {
-      if (existingCvTextKey) {
-        const textObj = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
-          { abortSignal: req.signal }
-        );
-        originalText = await textObj.Body.transformToString();
-        existingCvBuffer = await convertToPdfLogged(req, originalText);
-      } else if (existingCvKey) {
-        const obj = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
-          { abortSignal: req.signal }
-        );
-        const chunks = [];
-        for await (const chunk of obj.Body) chunks.push(chunk);
-        existingCvBuffer = Buffer.concat(chunks);
-        originalText = await extractTextLogged(req, {
-          originalname: path.basename(existingCvKey),
-          buffer: existingCvBuffer,
-        });
-      }
-      let applicantName =
-        req.body.applicantName || (await extractName(originalText));
-      let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) {
-        sanitizedName = 'candidate';
-        applicantName = 'Candidate';
-      }
-
-      let jobDescription = jobDescriptionText;
-      let jobTitle = '';
-      if (jobDescriptionUrl) {
-        try {
-          ({ jobDescription, jobTitle } = await analyzeJobDescription(
-            jobDescriptionUrl,
-          ));
-        } catch (err) {
-          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
-            ({ jobDescription, jobTitle } = await analyzeJobDescription(
-              jobDescriptionText,
-            ));
-          } else if (err.code === JD_UNREADABLE) {
-            return res.status(400).json({
-              error:
-                'Job URL not readable. Please paste the job description text directly.',
-            });
-          } else {
-            return next(createError(400, 'invalid jobDescriptionUrl'));
-          }
-        }
-      } else if (jobDescriptionText) {
-        ({ jobDescription, jobTitle } = await analyzeJobDescription(
-          jobDescriptionText,
-        ));
-      }
-
-      let linkedinData = {};
-      try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
-        linkedinData.languages = selectedLanguagesArr;
-      } catch {}
-
-      let credlyCertifications = [];
-      if (credlyProfileUrl) {
-        try {
-          credlyCertifications = await fetchCredlyProfile(
-            credlyProfileUrl,
-            req.signal
-          );
-        } catch {}
-      }
-
-      const cvFile = await openaiUploadFile(
-        existingCvBuffer,
-        'cv.pdf',
-        'assistants',
-        { signal: req.signal }
+      const obj = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: cvKey }),
+        { abortSignal: req.signal }
       );
-      const jdBuffer = await convertToPdfLogged(req, jobDescription);
-      const jdFile = await openaiUploadFile(
-        jdBuffer,
-        'job.pdf',
-        'assistants',
-        { signal: req.signal }
-      );
-      let liFile;
-      if (Object.keys(linkedinData).length) {
-        const liBuffer = await convertToPdfLogged(req, linkedinData);
-        liFile = await openaiUploadFile(
-          liBuffer,
-          'linkedin.pdf',
-          'assistants',
-          { signal: req.signal }
-        );
-      }
-      let credlyFile;
-      if (credlyCertifications.length) {
-        const credlyBuffer = await convertToPdfLogged(req, credlyCertifications);
-        credlyFile = await openaiUploadFile(
-          credlyBuffer,
-          'credly.pdf',
-          'assistants',
-          { signal: req.signal }
-        );
-      }
+      const buf = Buffer.from(await obj.Body.transformToByteArray());
+      cvText = await extractText({
+        originalname: path.basename(cvKey),
+        buffer: buf,
+      });
+    } catch (err) {
+      console.error('failed to fetch cv', err);
+      return next(createError(500, 'failed to fetch cv'));
+    }
 
-      const instructions =
-        `You are an expert resume writer and career coach. Focus on improving the ${metric} metric in the resume. Modify the last job title to match '${jobTitle}' if different. Use the provided resume, job description, and optional LinkedIn or Credly data to create two improved resume versions and two tailored cover letters. Return a JSON object with keys cv_version1, cv_version2, cover_letter1, cover_letter2, original_score, enhanced_score, skills_added, languages, improvement_summary, metrics.`;
+    let jobDescription = '';
+    let jobTitle = '';
+    try {
+      const html = await fetchJobDescription(jobDescriptionUrl, {
+        signal: req.signal,
+      });
+      ({ text: jobDescription, title: jobTitle } = await analyzeJobDescription(html));
+    } catch (err) {
+      console.error('failed to fetch job description', err);
+      return next(createError(500, 'failed to fetch job description'));
+    }
 
-      const responseText = await requestEnhancedCV(
+    try {
+      const cvPdf = await convertToPdf(cvText);
+      const jdPdf = await convertToPdf(jobDescription);
+      const cvFile = await openaiUploadFile(cvPdf, 'resume.pdf', 'assistants', {
+        signal: req.signal,
+      });
+      const jdFile = await openaiUploadFile(jdPdf, 'jobdesc.pdf', 'assistants', {
+        signal: req.signal,
+      });
+
+      const basePath = [sanitizedName, date, sessionId, 'generated'];
+      const urls = {};
+      let insights = {};
+
+      const instructions1 = `You are an expert resume writer. For a ${
+        seniority || 'professional'
+      } candidate, provide two improved CV versions and a cover letter to match the job description. CV version 1 should be ATS tailored. CV version 2 should be concise. Use job description keywords verbatim. Modify the last job title to match '${jobTitle}'.`;
+      const raw1 = await requestEnhancedCV(
         {
           cvFileId: cvFile.id,
           jobDescFileId: jdFile.id,
-          linkedInFileId: liFile?.id,
-          credlyFileId: credlyFile?.id,
-          instructions,
+          instructions: instructions1,
         },
         { signal: req.signal }
       );
+      const resp1 = JSON.parse(raw1);
+      const variants = [
+        { name: 'ats', text: resp1.cv_version1 },
+        { name: 'concise', text: resp1.cv_version2 },
+      ];
+      const coverLetterText = resp1.cover_letter1 || resp1.cover_letter2 || '';
+      insights = {
+        original_score: resp1.original_score,
+        enhanced_score: resp1.enhanced_score,
+        skills_added: resp1.skills_added,
+        languages: resp1.languages,
+        improvement_summary: resp1.improvement_summary,
+        metrics: resp1.metrics,
+      };
 
-      const parsed = parseAiJson(responseText);
-      let cvVersion1 = '';
-      let cvVersion2 = '';
-      if (parsed) {
-        cvVersion1 = sanitizeGeneratedText(parsed.cv_version1, { jobTitle });
-        cvVersion2 = sanitizeGeneratedText(parsed.cv_version2, { jobTitle });
-      }
+      const instructions2 = `You are an expert resume writer. For a ${
+        seniority || 'professional'
+      } candidate, provide two improved CV versions to match the job description. CV version 1 should be project-narrative style. CV version 2 should be government/plain style. Use job description keywords verbatim. Modify the last job title to match '${jobTitle}'.`;
+      const raw2 = await requestEnhancedCV(
+        {
+          cvFileId: cvFile.id,
+          jobDescFileId: jdFile.id,
+          instructions: instructions2,
+        },
+        { signal: req.signal }
+      );
+      const resp2 = JSON.parse(raw2);
+      variants.push({ name: 'narrative', text: resp2.cv_version1 });
+      variants.push({ name: 'gov', text: resp2.cv_version2 });
 
-      const metrics1 = compareMetrics(originalText, cvVersion1);
-      const metrics2 = compareMetrics(originalText, cvVersion2);
-      const avg1 =
-        Object.values(metrics1.improved).reduce((a, b) => a + b, 0) /
-        Math.max(Object.keys(metrics1.improved).length, 1);
-      const avg2 =
-        Object.values(metrics2.improved).reduce((a, b) => a + b, 0) /
-        Math.max(Object.keys(metrics2.improved).length, 1);
-
-      const ts = Date.now();
-      const date = new Date().toISOString().split('T')[0];
-
-      let bestCv = cvVersion1;
-      let metricTable = metrics1.table;
-      if (avg2 > avg1) {
-        bestCv = cvVersion2;
-        metricTable = metrics2.table;
-      }
-      const endPdfGen = startStep(req, 'pdf_generation');
-      let pdf;
-      try {
-        pdf = await generatePdf(bestCv, '2025', {}, generativeModel);
-        await endPdfGen();
-      } catch (err) {
-        await endPdfGen(err.message);
-        throw err;
-      }
-      const key = buildS3Key(
-        [sanitizedName, 'enhanced', date],
-        `${ts}-improved.pdf`
-      );
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: pdf,
-          ContentType: 'application/pdf',
-        }),
-        { abortSignal: req.signal }
-      );
-      const textKey = buildS3Key(
-        [sanitizedName, 'enhanced', date],
-        `${ts}-improved.txt`
-      );
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: textKey,
-          Body: bestCv,
-          ContentType: 'text/plain',
-        }),
-        { abortSignal: req.signal }
-      );
-      const url = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-        { expiresIn: 3600 }
-      );
-
-      iteration += 1;
-      res.json({
-        iteration,
-        url,
-        metrics: metricTable,
-        cvKey: key,
-        textKey,
-        designation: jobTitle || '',
-      });
-    } catch (err) {
-      console.error('metric improvement failed', err);
-      if (err.code === 'AI_TIMEOUT') {
-        return next(
-          createError(504, 'The AI service took too long to respond. Please try again later.')
+      for (const v of variants) {
+        const pdfBuf = await generatePdf(v.text, 'modern', {}, generativeModel);
+        const key = buildS3Key(basePath, `cv_${v.name}.pdf`);
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: pdfBuf,
+            ContentType: 'application/pdf',
+          })
+        );
+        urls[v.name] = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: bucket, Key: key }),
+          { expiresIn: 3600 }
         );
       }
-      next(createError(500, 'failed to improve metric'));
+
+      if (coverLetterText) {
+        const clPdf = await generatePdf(
+          coverLetterText,
+          'cover_modern',
+          {},
+          generativeModel
+        );
+        const coverKey = buildS3Key(basePath, 'cover_letter.pdf');
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: coverKey,
+            Body: clPdf,
+            ContentType: 'application/pdf',
+          })
+        );
+        urls.coverLetter = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: bucket, Key: coverKey }),
+          { expiresIn: 3600 }
+        );
+      }
+
+      res.json({ jobId, urls, insights });
+    } catch (err) {
+      console.error('improve failed', err);
+      next(createError(500, 'failed to improve CV'));
     }
   });
 
-  app.post(
-    '/api/generate-cover-letter',
-    (req, res, next) => {
-      req.jobId = crypto.randomUUID();
-      const endUpload = startStep(req, 'uploads');
-      uploadResume(req, res, (err) => {
-        endUpload(err ? err.message : '');
-        if (err) return next(createError(400, err.message));
-        next();
-      });
-    },
-    async (req, res, next) => {
-      const jobId = req.jobId;
-      const s3 = new S3Client({ region: REGION });
-      req.s3 = s3;
-      let bucket;
-      let secrets;
-      let logKey;
-      try {
-        secrets = await getSecrets();
-        bucket =
-          process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
-      } catch (err) {
-        console.error('failed to load configuration', err);
-        return next(createError(500, 'failed to load configuration'));
-      }
-      req.bucket = bucket;
-      const logStep = async (event, { startTime, duration, message } = {}) => {
-        const dur = duration ?? (Date.now() - startTime);
-        const msg = `${event} completed in ${dur}ms${message ? ' - ' + message : ''}`;
-        console.log(`[${new Date().toISOString()}] ${msg}`);
-        if (bucket && logKey) {
-          try {
-            await logEvent({
-              s3,
-              bucket,
-              key: logKey,
-              jobId,
-              event,
-              message: `duration=${dur}ms${message ? '; ' + message : ''}`,
-              signal: req.signal,
-            });
-          } catch (err) {
-            console.error(`failed to log ${event}`, err);
-          }
-        }
-      };
-
-      let {
-        jobDescriptionUrl,
-        jobDescriptionText = '',
-        linkedinProfileUrl,
-        credlyProfileUrl,
-        existingCvTextKey,
-        selectedCertifications,
-        coverTemplate,
-      } = req.body;
-
-      if (!jobDescriptionUrl && !jobDescriptionText)
-        return next(
-          createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
-        );
-      if (!linkedinProfileUrl)
-        return next(createError(400, 'linkedinProfileUrl required'));
-
-      if (jobDescriptionUrl) {
-        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'invalid jobDescriptionUrl'));
-      }
-      linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
-      if (!linkedinProfileUrl)
-        return next(createError(400, 'invalid linkedinProfileUrl'));
-      if (credlyProfileUrl) {
-        credlyProfileUrl = await validateUrl(credlyProfileUrl);
-        if (!credlyProfileUrl)
-          return next(createError(400, 'invalid credlyProfileUrl'));
-      }
-
-      let selectedCertificationsArr = [];
-      try {
-        if (Array.isArray(selectedCertifications))
-          selectedCertificationsArr = selectedCertifications;
-        else if (typeof selectedCertifications === 'string') {
-          const arr = JSON.parse(selectedCertifications);
-          if (Array.isArray(arr)) selectedCertificationsArr = arr;
-        }
-      } catch {}
-
-      let coverTemplateId = coverTemplate;
-      if (!CL_TEMPLATES.includes(coverTemplateId))
-        coverTemplateId = CL_TEMPLATES[0];
-
-      let originalText = '';
-      let cvBuffer;
-      try {
-        if (existingCvTextKey) {
-          const getStart = Date.now();
-          const textObj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
-            { abortSignal: req.signal }
-          );
-          await logStep('s3_get_existing_cv_text', { startTime: getStart });
-          originalText = await textObj.Body.transformToString();
-        } else if (req.file) {
-          originalText = await extractTextLogged(req, req.file);
-        } else {
-          return next(
-            createError(400, 'resume or existingCvTextKey required')
-          );
-        }
-        cvBuffer = await convertToPdfLogged(req, originalText);
-      } catch (err) {
-        console.error('failed to process cv', err);
-        return next(createError(500, 'failed to process cv'));
-      }
-
-      let applicantName =
-        req.body.applicantName || (await extractName(originalText));
-      let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) {
-        sanitizedName = 'candidate';
-        applicantName = 'Candidate';
-      }
-      const logDate = new Date().toISOString().split('T')[0];
-      const prefix = `${sanitizedName}/cover/${logDate}/`;
-      logKey = `${prefix}logs/processing.jsonl`;
-      req.logKey = logKey;
-
-      let jobDescription = jobDescriptionText;
-      const endJd3 = startStep(req, 'job_description_fetch');
-      if (jobDescriptionUrl) {
-        try {
-          ({ jobDescription } = await analyzeJobDescription(jobDescriptionUrl));
-          await endJd3();
-        } catch (err) {
-          await endJd3(err.code || err.message);
-          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
-            ({ jobDescription } = await analyzeJobDescription(jobDescriptionText));
-          } else if (err.code === JD_UNREADABLE) {
-            return res.status(400).json({
-              error:
-                'Job URL not readable. Please paste the job description text directly.',
-            });
-          } else {
-            return next(createError(400, 'invalid jobDescriptionUrl'));
-          }
-        }
-      } else {
-        await endJd3('job_description_text');
-      }
-
-      let linkedinData = {};
-      try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
-      } catch {}
-
-      let credlyCertifications = selectedCertificationsArr;
-      if (!credlyCertifications.length && credlyProfileUrl) {
-        try {
-          credlyCertifications = await fetchCredlyProfile(
-            credlyProfileUrl,
-            req.signal
-          );
-        } catch {}
-      }
-
-      const cvFile = await openaiUploadFile(
-        cvBuffer,
-        'cv.pdf',
-        'assistants',
-        { signal: req.signal }
-      );
-      const jdBuffer = await convertToPdfLogged(req, jobDescription);
-      const jdFile = await openaiUploadFile(
-        jdBuffer,
-        'job.pdf',
-        'assistants',
-        { signal: req.signal }
-      );
-      let liFile;
-      if (Object.keys(linkedinData).length) {
-        const liBuffer = await convertToPdfLogged(req, linkedinData);
-        liFile = await openaiUploadFile(
-          liBuffer,
-          'linkedin.pdf',
-          'assistants',
-          { signal: req.signal }
-        );
-      }
-      let credlyFile;
-      if (credlyCertifications.length) {
-        const credlyBuffer = await convertToPdfLogged(req, credlyCertifications);
-        credlyFile = await openaiUploadFile(
-          credlyBuffer,
-          'credly.pdf',
-          'assistants',
-          { signal: req.signal }
-        );
-      }
-
-      let coverLetterText;
-      try {
-        coverLetterText = await requestCoverLetter(
-          {
-            cvFileId: cvFile.id,
-            jobDescFileId: jdFile.id,
-            linkedInFileId: liFile?.id,
-            credlyFileId: credlyFile?.id,
-          },
-          { signal: req.signal }
-        );
-      } catch (err) {
-        if (err.code === 'AI_TIMEOUT') {
-          console.error('cover letter generation timed out', err);
-          return next(
-            createError(504, 'The AI service took too long to respond. Please try again later.')
-          );
-        }
-        console.error('cover letter generation failed', err);
-        return next(createError(500, 'cover letter generation failed'));
-      }
-
-      const sanitizedCoverLetter = sanitizeGeneratedText(coverLetterText, {
-        skipRequiredSections: true,
-        defaultHeading: '',
-      });
-
-      const endCoverPdfGen = startStep(req, 'pdf_generation');
-      const clPdf = await generatePdf(
-        sanitizedCoverLetter,
-        coverTemplateId,
-        {
-          skipRequiredSections: true,
-          defaultHeading: '',
-        },
-        generativeModel,
-      );
-      await endCoverPdfGen();
-      const date = new Date().toISOString().split('T')[0];
-      const key = buildS3Key(
-        [sanitizedName, 'enhanced', date],
-        `${Date.now()}-cover_letter.pdf`
-      );
-      const endCoverUpload = startStep(req, 'uploads');
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: clPdf,
-          ContentType: 'application/pdf',
-        }),
-        { abortSignal: req.signal }
-      );
-      await endCoverUpload();
-      const url = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-        { expiresIn: 3600 }
-      );
-
-      res.json({
-        url,
-        expiresAt: Date.now() + 3600 * 1000,
-      });
-    }
-  );
-
-  app.post(
-    '/api/compile',
-    (req, res, next) => {
-      uploadResume(req, res, (err) => {
-        if (err) return next(createError(400, err.message));
-        next();
-      });
-    },
-    async (req, res, next) => {
-      const jobId = crypto.randomUUID();
-      const s3 = new S3Client({ region: REGION });
-      let bucket;
-      let secrets;
-      try {
-        secrets = await getSecrets();
-        bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
-      } catch (err) {
-        console.error('failed to load configuration', err);
-        return next(createError(500, 'failed to load configuration'));
-      }
-
-      let {
-        jobDescriptionUrl,
-        jobDescriptionText = '',
-        linkedinProfileUrl,
-        credlyProfileUrl,
-        existingCvKey,
-        existingCvTextKey,
-        originalScore,
-        selectedCertifications,
-        selectedExperience,
-        selectedEducation,
-        addedSkills,
-        designation,
-        selectedLanguages,
-      } = req.body;
-
-      if (!jobDescriptionUrl && !jobDescriptionText)
-        return next(
-          createError(400, 'jobDescriptionUrl or jobDescriptionText required'),
-        );
-      if (!linkedinProfileUrl)
-        return next(createError(400, 'linkedinProfileUrl required'));
-      if (!existingCvKey && !existingCvTextKey)
-        return next(
-          createError(400, 'existingCvKey or existingCvTextKey required'),
-        );
-
-      if (jobDescriptionUrl) {
-        jobDescriptionUrl = await validateUrl(jobDescriptionUrl);
-        if (!jobDescriptionUrl)
-          return next(createError(400, 'invalid jobDescriptionUrl'));
-      }
-      linkedinProfileUrl = await validateUrl(linkedinProfileUrl);
-      if (!linkedinProfileUrl)
-        return next(createError(400, 'invalid linkedinProfileUrl'));
-      if (credlyProfileUrl) {
-        credlyProfileUrl = await validateUrl(credlyProfileUrl);
-        if (!credlyProfileUrl)
-          return next(createError(400, 'invalid credlyProfileUrl'));
-      }
-
-      const parseArray = (field) => {
-        try {
-          if (Array.isArray(field)) return field;
-          if (typeof field === 'string') {
-            const arr = JSON.parse(field);
-            return Array.isArray(arr) ? arr : [];
-          }
-        } catch {}
-        return [];
-      };
-
-      const addedSkillsArr = parseArray(addedSkills);
-      const selectedExperienceArr = parseArray(selectedExperience);
-      const selectedEducationArr = parseArray(selectedEducation);
-      let selectedCertificationsArr = parseArray(selectedCertifications);
-      const selectedLanguagesArr = parseArray(selectedLanguages);
-
-      let cvBuffer;
-      let cvText;
-      try {
-        if (existingCvTextKey) {
-          const textObj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvTextKey }),
-            { abortSignal: req.signal }
-          );
-          cvText = await textObj.Body.transformToString();
-          const endPdfGen = startStep(req, 'pdf_generation');
-          try {
-            cvBuffer = await generatePdf(cvText, '2025', {}, generativeModel);
-            await endPdfGen();
-          } catch (err) {
-            await endPdfGen(err.message);
-            throw err;
-          }
-        } else if (existingCvKey) {
-          const obj = await s3.send(
-            new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
-            { abortSignal: req.signal }
-          );
-          const chunks = [];
-          for await (const chunk of obj.Body) chunks.push(chunk);
-          cvBuffer = Buffer.concat(chunks);
-          cvText = await extractTextLogged(req, {
-            originalname: path.basename(existingCvKey),
-            buffer: cvBuffer,
-          });
-        }
-      } catch (err) {
-        console.error('failed to load cv', err);
-        return next(createError(500, 'failed to load cv'));
-      }
-
-      let applicantName =
-        req.body.applicantName || (await extractName(cvText));
-      let sanitizedName = sanitizeName(applicantName);
-      if (!sanitizedName) {
-        sanitizedName = 'candidate';
-        applicantName = 'Candidate';
-      }
-      const date = new Date().toISOString().split('T')[0];
-
-      if (!existingCvKey) {
-        existingCvKey = buildS3Key(
-          [sanitizedName, 'enhanced', date],
-          `${Date.now()}-final_cv.pdf`
-        );
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: existingCvKey,
-            Body: cvBuffer,
-            ContentType: 'application/pdf',
-          }),
-          { abortSignal: req.signal }
-        );
-      }
-
-      if (!existingCvTextKey) {
-        existingCvTextKey = buildS3Key(
-          [sanitizedName, 'enhanced', date],
-          `${Date.now()}-final_cv.txt`
-        );
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: existingCvTextKey,
-            Body: cvText,
-            ContentType: 'text/plain',
-          }),
-          { abortSignal: req.signal }
-        );
-      }
-
-      const { userAgent } = req;
-      let jobDescriptionHtml = jobDescriptionText;
-      let jobDescription = jobDescriptionText;
-      let jobSkills = [];
-      const endJd2 = startStep(req, 'job_description_fetch');
-      if (jobDescriptionUrl) {
-        try {
-          jobDescriptionHtml = await fetchJobDescription(jobDescriptionUrl, {
-            timeout: REQUEST_TIMEOUT_MS,
-            userAgent,
-            signal: req.signal,
-            jobId,
-          });
-          ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
-            jobDescriptionHtml,
-          ));
-          await endJd2();
-        } catch (err) {
-          await endJd2(err.code || err.message);
-          if (err.code === LINKEDIN_AUTH_REQUIRED && jobDescriptionText) {
-            ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
-              jobDescriptionText,
-            ));
-          } else if (err.code === JD_UNREADABLE) {
-            return res.status(400).json({
-              error:
-                'Job URL not readable. Please paste the job description text directly.',
-            });
-          } else if (jobDescriptionText) {
-            ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
-              jobDescriptionText,
-            ));
-          } else {
-            return next(createError(400, 'invalid jobDescriptionUrl'));
-          }
-        }
-      } else {
-        ({ skills: jobSkills, text: jobDescription } = await analyzeJobDescription(
-          jobDescriptionText,
-        ));
-        await endJd2('job_description_text');
-      }
-
-      let linkedinData = {};
-      try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl, req.signal);
-        linkedinData.languages = selectedLanguagesArr;
-      } catch {}
-
-      let credlyCertifications = selectedCertificationsArr;
-      if (!credlyCertifications.length && credlyProfileUrl) {
-        try {
-          credlyCertifications = await fetchCredlyProfile(
-            credlyProfileUrl,
-            req.signal
-          );
-        } catch {}
-      }
-
-      const cvFile = await openaiUploadFile(
-        cvBuffer,
-        'cv.pdf',
-        'assistants',
-        { signal: req.signal }
-      );
-      const jdBuffer = await convertToPdfLogged(req, jobDescription);
-      const jdFile = await openaiUploadFile(
-        jdBuffer,
-        'job.pdf',
-        'assistants',
-        { signal: req.signal }
-      );
-      let liFile;
-      if (Object.keys(linkedinData).length) {
-        const liBuffer = await convertToPdfLogged(req, linkedinData);
-        liFile = await openaiUploadFile(
-          liBuffer,
-          'linkedin.pdf',
-          'assistants',
-          { signal: req.signal }
-        );
-      }
-      let credlyFile;
-      if (credlyCertifications.length) {
-        const credlyBuffer = await convertToPdfLogged(req, credlyCertifications);
-        credlyFile = await openaiUploadFile(
-          credlyBuffer,
-          'credly.pdf',
-          'assistants',
-          { signal: req.signal }
-        );
-      }
-
-      let coverLetterText;
-      try {
-        coverLetterText = await requestCoverLetter(
-          {
-            cvFileId: cvFile.id,
-            jobDescFileId: jdFile.id,
-            linkedInFileId: liFile?.id,
-            credlyFileId: credlyFile?.id,
-          },
-          { signal: req.signal }
-        );
-      } catch (err) {
-        if (err.code === 'AI_TIMEOUT') {
-          console.error('cover letter generation timed out', err);
-          return next(
-            createError(504, 'The AI service took too long to respond. Please try again later.')
-          );
-        }
-        console.error('cover letter generation failed', err);
-        return next(createError(500, 'cover letter generation failed'));
-      }
-
-      const sanitizedCover = sanitizeGeneratedText(coverLetterText, {
-        skipRequiredSections: true,
-        defaultHeading: '',
-      });
-      const endPdfGen = startStep(req, 'pdf_generation');
-      let coverBuffer;
-      try {
-        coverBuffer = await generatePdf(
-          sanitizedCover,
-          coverTemplate1,
-          {
-            skipRequiredSections: true,
-            defaultHeading: '',
-          },
-          generativeModel,
-        );
-        await endPdfGen();
-      } catch (err) {
-        await endPdfGen(err.message);
-        throw err;
-      }
-      const coverDate = new Date().toISOString().split('T')[0];
-      const coverTimestamp = Date.now();
-      const coverBasePath = [
-        sanitizedName,
-        'enhanced',
-        coverDate,
-      ];
-      const coverKey = buildS3Key(
-        coverBasePath,
-        `${coverTimestamp}-cover_letter.pdf`,
-      );
-      const coverTextKey = buildS3Key(
-        coverBasePath,
-        `${coverTimestamp}-cover_letter.txt`,
-      );
-      const endCoverPdf = startStep(req, 'uploads');
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: coverKey,
-          Body: coverBuffer,
-          ContentType: 'application/pdf',
-        }),
-        { abortSignal: req.signal }
-      );
-      await endCoverPdf();
-      const endCoverText = startStep(req, 'uploads');
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: coverTextKey,
-          Body: sanitizedCover,
-          ContentType: 'text/plain',
-        }),
-        { abortSignal: req.signal }
-      );
-      await endCoverText();
-
-      const cvUrl = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: existingCvKey }),
-        { expiresIn: 3600 }
-      );
-      const coverUrl = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: coverKey }),
-        { expiresIn: 3600 },
-      );
-      const coverTextUrl = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: coverTextKey }),
-        { expiresIn: 3600 },
-      );
-
-      let atsMetrics;
-      const endAts = startStep(req, 'ats_analysis');
-      try {
-        atsMetrics = await requestAtsAnalysis(cvText, { signal: req.signal });
-        await endAts();
-      } catch (err) {
-        await endAts(err.message);
-        console.warn('ATS analysis failed, using heuristic metrics', err);
-        atsMetrics = calculateMetrics(cvText);
-      }
-      const atsScore = Math.round(
-        Object.values(atsMetrics).reduce((a, b) => a + b, 0) /
-          Math.max(Object.keys(atsMetrics).length, 1)
-      );
-      const resumeSkills = extractResumeSkills(cvText);
-      const { score: skillMatch } = calculateMatchScore(jobSkills, resumeSkills);
-      const chanceOfSelection = Math.round((atsScore + skillMatch) / 2);
-      const improvement = originalScore
-        ? Math.round(((atsScore - Number(originalScore)) / Number(originalScore)) * 100)
-        : 0;
-
-      const ipAddress =
-        (req.headers['x-forwarded-for'] || '')
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean)[0] || req.ip;
-      const { browser, os, device } = req;
-
-      try {
-        await logSession(
-          {
-            jobId,
-            ipAddress,
-            userAgent,
-            browser,
-            os,
-            device,
-            jobDescriptionUrl,
-            linkedinProfileUrl,
-            credlyProfileUrl,
-            cvKey: existingCvKey,
-            coverLetterKey: coverKey,
-            atsScore,
-            improvement,
-          },
-          { signal: req.signal }
-        );
-      } catch (err) {
-        console.error('failed to log session', err);
-      }
-
-      res.json({
-        jobId,
-        cvUrl,
-        coverLetterUrl: coverUrl,
-        coverLetterTextUrl: coverTextUrl,
-        coverLetterText: sanitizedCover,
-        atsScore,
-        chanceOfSelection,
-        improvement,
-        addedSkills: addedSkillsArr,
-        addedLanguages: selectedLanguagesArr,
-        designation: designation || '',
-      });
-    });
-
-    app.post('/api/enhance', async (req, res, next) => {
+  app.post('/api/enhance', async (req, res, next) => {
       const jobId = crypto.randomUUID();
       const s3 = new S3Client({ region: REGION });
       let bucket;
