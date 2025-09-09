@@ -48,6 +48,11 @@ const prompts = {
     developer:
       `Score the resume for the following metrics and return a JSON object with numeric values from 0 to 100: ${metricNames.join(', ')}.`
   },
+  evaluate: {
+    system: "You are ResumeForge's CV evaluation assistant.",
+    developer:
+      'Compare the resume text with the job description and return JSON with the candidate\'s seniority, lists of must_have and nice_to_have keywords, and improvement tips grouped by category such as experience, education, certifications, and languages.'
+  },
   coverLetter: {
     system: 'You are ResumeForge, an expert career coach.',
     developer:
@@ -449,6 +454,76 @@ export async function requestAtsAnalysis(text, { signal } = {}) {
       if (!metricNames.every((m) => typeof parsed[m] === 'number')) {
         throw new Error('invalid metrics');
       }
+      return parsed;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+export async function requestEvaluation(cvText, jdText, { signal } = {}) {
+  if (!cvText) throw new Error('cvText is required');
+  if (!jdText) throw new Error('jdText is required');
+  const client = await getClient();
+  const schema = {
+    type: 'object',
+    properties: {
+      seniority: { type: 'string' },
+      keywords: {
+        type: 'object',
+        properties: {
+          must_have: { type: 'array', items: { type: 'string' } },
+          nice_to_have: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['must_have', 'nice_to_have'],
+        additionalProperties: false,
+      },
+      tips: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+      },
+    },
+    required: ['seniority', 'keywords', 'tips'],
+    additionalProperties: false,
+  };
+  const userInput = `${cvText}\n\nJD:\n${jdText}`;
+  let lastError;
+  for (const model of preferredModels) {
+    try {
+      const response = await withTimeout(
+        client.responses.create(
+          {
+            model,
+            input: [
+              { role: 'system', content: [{ type: 'input_text', text: prompts.evaluate.system }] },
+              { role: 'developer', content: [{ type: 'input_text', text: prompts.evaluate.developer }] },
+              { role: 'user', content: [{ type: 'input_text', text: userInput }] },
+            ],
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'Evaluation',
+                schema,
+                strict: true,
+              },
+            },
+          },
+          { signal }
+        )
+      );
+      const parsed = JSON.parse(response.output_text);
+      return parsed;
+    } catch (err) {
+      lastError = err;
+      if (err?.code === 'model_not_found') continue;
+    }
+  }
+  if (generativeModel?.generateContent) {
+    try {
+      const prompt = `${prompts.evaluate.system}\n${prompts.evaluate.developer}\n${userInput}`;
+      const result = await withTimeout(generativeModel.generateContent(prompt));
+      const parsed = extractJson(result?.response?.text?.());
       return parsed;
     } catch (err) {
       lastError = err;

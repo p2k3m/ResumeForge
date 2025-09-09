@@ -7,6 +7,9 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   requestSectionImprovement,
   uploadFile,
   requestEnhancedCV,
+  requestEvaluation: jest
+    .fn()
+    .mockResolvedValue({ seniority: 'mid', keywords: { must_have: [], nice_to_have: [] }, tips: {} }),
 }));
 
 const { improveSections } = await import('../routes/processCv.js');

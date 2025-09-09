@@ -27,6 +27,7 @@ jest.unstable_mockModule('mammoth', () => ({
 
 jest.unstable_mockModule('../services/dynamo.js', () => ({
   logEvaluation: jest.fn().mockResolvedValue(),
+  logSession: jest.fn().mockResolvedValue(),
 }));
 
 jest.unstable_mockModule('../config/secrets.js', () => ({
@@ -36,6 +37,9 @@ jest.unstable_mockModule('../config/secrets.js', () => ({
 jest.unstable_mockModule('../openaiClient.js', () => ({
   classifyDocument: jest.fn().mockResolvedValue('resume'),
   requestAtsAnalysis: jest.fn().mockRejectedValue(new Error('no ai')),
+  requestEvaluation: jest
+    .fn()
+    .mockResolvedValue({ seniority: 'mid', keywords: { must_have: [], nice_to_have: [] }, tips: {} }),
 }));
 
 const serverModule = await import('../server.js');

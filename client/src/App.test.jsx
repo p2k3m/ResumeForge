@@ -19,7 +19,9 @@ const mockResponse = {
       grammar: 70
     }
   },
+  seniority: 'mid',
   keywords: { mustHave: ['aws'], niceToHave: [] },
+  tips: {},
   selectionProbability: 70,
   issues: {}
 }

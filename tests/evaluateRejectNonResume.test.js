@@ -37,6 +37,9 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   requestEnhancedCV: jest.fn(),
   requestCoverLetter: jest.fn(),
   requestAtsAnalysis: jest.fn(),
+  requestEvaluation: jest
+    .fn()
+    .mockResolvedValue({ seniority: 'mid', keywords: { must_have: [], nice_to_have: [] }, tips: {} }),
   extractName: jest.fn(),
   classifyDocument: jest.fn(),
 }));

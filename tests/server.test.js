@@ -59,6 +59,9 @@ jest.unstable_mockModule('../openaiClient.js', () => ({
   requestEnhancedCV,
   requestSectionImprovement: jest.fn(async ({ sectionText }) => sectionText),
   requestCoverLetter,
+  requestEvaluation: jest
+    .fn()
+    .mockResolvedValue({ seniority: 'mid', keywords: { must_have: [], nice_to_have: [] }, tips: {} }),
 }));
 
 generateContentMock
