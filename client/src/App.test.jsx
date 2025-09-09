@@ -104,6 +104,30 @@ test('allows file to be dropped in drop zone', async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
 })
 
+test('shows macro warning when macroWarning flag is true', async () => {
+  fetch.mockResolvedValueOnce({
+    ok: true,
+    headers: { get: () => 'application/json' },
+    json: () => Promise.resolve({ ...mockResponse, macroWarning: true })
+  })
+  render(<App />)
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] }
+    }
+  )
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://indeed.com/job' }
+  })
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+  expect(
+    await screen.findByText('Warning: macros detected in your document.')
+  ).toBeInTheDocument()
+})
+
 test('shows category tip and fetches category fix suggestion', async () => {
   fetch
     .mockResolvedValueOnce({

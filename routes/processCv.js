@@ -779,21 +779,22 @@ export default function registerProcessCv(
             status: 'success',
           }, { signal: req.signal });
 
-          res.json({
-            jobId,
-            scores: {
-              ats: atsScore,
-              keywordMatch,
-              metrics: atsMetrics,
-              cardScores,
-              overallScore,
-            },
-            seniority,
-            keywords: { mustHave, niceToHave },
-            tips,
-            selectionProbability,
-            issues: { jdMismatches, certifications: missingCertifications },
-          });
+        res.json({
+          jobId,
+          scores: {
+            ats: atsScore,
+            keywordMatch,
+            metrics: atsMetrics,
+            cardScores,
+            overallScore,
+          },
+          seniority,
+          keywords: { mustHave, niceToHave },
+          tips,
+          selectionProbability,
+          macroWarning: !!req.file?.macroWarning,
+          issues: { jdMismatches, certifications: missingCertifications },
+        });
       } catch (err) {
         console.error('evaluation failed', err);
         try {

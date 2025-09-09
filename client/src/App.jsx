@@ -55,6 +55,7 @@ function App() {
   const [skills, setSkills] = useState([])
   const [credlyUrl, setCredlyUrl] = useState('')
   const [error, setError] = useState('')
+  const [macroWarning, setMacroWarning] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [designationOverride, setDesignationOverride] = useState('')
   const [expOptions, setExpOptions] = useState([])
@@ -93,10 +94,11 @@ function App() {
 
   const handleFileChange = (e) => {
     const file = e.target ? e.target.files[0] : e
-    if (file && !file.name.toLowerCase().match(/\.(pdf|docx)$/)) {
-      setError('Only PDF or DOCX files are supported.')
+    if (file && !file.name.toLowerCase().match(/\.(pdf|doc|docx)$/)) {
+      setError('Only PDF, DOC, or DOCX files are supported.')
       return
     }
+    setMacroWarning(false)
     setCvFile(file)
   }
 
@@ -158,6 +160,7 @@ function App() {
   const handleSubmit = async (nameOverride) => {
     setIsProcessing(true)
     setError('')
+    setMacroWarning(false)
     setDesignationOverride('')
     try {
       const formData = new FormData()
@@ -200,6 +203,7 @@ function App() {
       }
       const data = await response.json()
       setResult(data)
+      setMacroWarning(!!data.macroWarning)
       setMissingKeywords({
         mustHave: data.keywords?.mustHave || [],
         niceToHave: data.keywords?.niceToHave || []
@@ -348,6 +352,7 @@ function App() {
     setCvUrl('')
     setCoverLetterUrl('')
     setChanceOfSelection(null)
+    setMacroWarning(false)
     try {
       // Gather user selections once
       const selectedExperience = expOptions.filter((o) => o.checked).map((o) => o.text)
@@ -382,6 +387,7 @@ function App() {
       }
       const improveData = await improveResp.json()
       if (improveData.jobId) pollProgress(improveData.jobId)
+      setMacroWarning(!!improveData.macroWarning)
       const existingKey = improveData.existingCvKey || ''
       const existingTextKey = improveData.cvTextKey || ''
       setCvKey(existingKey)
@@ -416,6 +422,7 @@ function App() {
       }
       const data = await compileResp.json()
       pollProgress(data.jobId)
+      if (data.macroWarning) setMacroWarning(true)
       setFinalScore(data.atsScore)
       setImprovement(data.improvement)
       setChanceOfSelection(data.chanceOfSelection)
@@ -469,7 +476,7 @@ function App() {
           id="cv-upload"
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx"
+          accept=".pdf,.doc,.docx"
           onChange={handleFileChange}
           aria-label="Choose File"
           className="sr-only"
@@ -543,6 +550,12 @@ function App() {
       )}
 
       {error && <p className="mt-4 text-red-600">{error}</p>}
+
+      {macroWarning && (
+        <p className="mt-4 text-orange-600">
+          Warning: macros detected in your document.
+        </p>
+      )}
 
       {result && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
