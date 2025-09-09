@@ -6,6 +6,7 @@ import { PUPPETEER_HEADLESS, PUPPETEER_ARGS } from '../config/puppeteer.js';
 import { BLOCKED_PATTERNS, REQUEST_TIMEOUT_MS } from '../config/jobFetch.js';
 
 export const LINKEDIN_AUTH_REQUIRED = 'LINKEDIN_AUTH_REQUIRED';
+export const JD_UNREADABLE = 'JD_UNREADABLE';
 
 // Default timeout comes from config and can be overridden via environment
 // variables as defined in config/jobFetch.js
@@ -191,7 +192,9 @@ export async function fetchJobDescription(
       ? `Blocked content. Axios error: ${axiosErrorMessage}`
       : 'Blocked content';
     log(`job_fetch_blocked host=${host} error=${errorMessage}`);
-    throw new Error(errorMessage);
+    const err = new Error(errorMessage);
+    if (!isLinkedInHost) err.code = JD_UNREADABLE;
+    throw err;
   }
   log(`job_fetch_success host=${host}`);
   return html;
