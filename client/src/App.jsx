@@ -72,8 +72,10 @@ function App() {
   const [coverLetterUrl, setCoverLetterUrl] = useState('')
   const [coverLetterTextUrl, setCoverLetterTextUrl] = useState('')
   const [coverLetterText, setCoverLetterText] = useState('')
-  const [enhancedCvUrls, setEnhancedCvUrls] = useState([])
-  const [enhancedCoverUrls, setEnhancedCoverUrls] = useState([])
+  const [missingKeywords, setMissingKeywords] = useState({
+    mustHave: [],
+    niceToHave: []
+  })
   const [addedSkills, setAddedSkills] = useState([])
   const [addedProjects, setAddedProjects] = useState([])
   const [addedCertifications, setAddedCertifications] = useState([])
@@ -88,6 +90,7 @@ function App() {
   const [credlyUrlError, setCredlyUrlError] = useState('')
   const fileInputRef = useRef(null)
   const API_BASE_URL = (typeof process !== 'undefined' && process.env.VITE_API_BASE_URL) || ''
+  const overallScore = result?.scores?.overallScore ?? result?.scores?.ats ?? 0
 
   const handleFileChange = (e) => {
     const file = e.target ? e.target.files[0] : e
@@ -192,8 +195,15 @@ function App() {
       }
       const data = await response.json()
       setResult(data)
+      setMissingKeywords({
+        mustHave: data.keywords?.mustHave || [],
+        niceToHave: data.keywords?.niceToHave || []
+      })
       setSkills(
-        (data.keywords || []).map((s) => ({
+        [
+          ...(data.keywords?.mustHave || []),
+          ...(data.keywords?.niceToHave || [])
+        ].map((s) => ({
           name: s,
           icon: getSkillIcon(s),
           level: 70
@@ -221,23 +231,6 @@ function App() {
   }
 
   const disabled = (!jobUrl && !jobDescriptionText) || !cvFile || isProcessing
-
-  const handleSkillChange = (idx, field, value) => {
-    setSkills((prev) =>
-      prev.map((s, i) => {
-        if (i !== idx) return s
-        const updated = { ...s, [field]: value }
-        if (field === 'name') {
-          updated.icon = getSkillIcon(value)
-          if (!updated.level) updated.level = 70
-        }
-        return updated
-      })
-    )
-  }
-
-  const addSkill = () =>
-    setSkills((prev) => [...prev, { name: '', icon: '', level: 70 }])
 
   const toggleOption = (setter) => (idx) => {
     setter((prev) =>
@@ -271,6 +264,9 @@ function App() {
         ...prev,
         [metricOrCategory]: err.message || 'Failed to fetch suggestion'
       }))
+    } finally {
+      document
+        .getElementById(metricOrCategory)?.scrollIntoView({ behavior: 'smooth' })
     }
   }
 
@@ -399,7 +395,7 @@ function App() {
       if (manualName) compileForm.append('applicantName', manualName)
       compileForm.append('existingCvKey', existingKey)
       compileForm.append('existingCvTextKey', existingTextKey)
-      compileForm.append('originalScore', result?.scores?.ats || 0)
+      compileForm.append('originalScore', overallScore)
       compileForm.append('addedSkills', JSON.stringify(skills))
       compileForm.append('selectedExperience', JSON.stringify(selectedExperience))
       compileForm.append('selectedEducation', JSON.stringify(selectedEducation))
@@ -429,60 +425,6 @@ function App() {
       setCoverLetterUrl(clDownload)
       setCoverLetterTextUrl(clTextDownload)
       setCoverLetterText(data.coverLetterText || '')
-    } catch (err) {
-      setError(err.message || 'Something went wrong.')
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const handleEnhance = async () => {
-    setIsProcessing(true)
-    setError('')
-    setEnhancedCvUrls([])
-    setEnhancedCoverUrls([])
-    try {
-      const form = new FormData()
-      form.append('resume', cvFile)
-      form.append('jobDescriptionUrl', jobUrl)
-      if (jobDescriptionText.trim())
-        form.append('jobDescriptionText', jobDescriptionText)
-      form.append('linkedinProfileUrl', linkedinUrl)
-      if (credlyUrl.trim()) form.append('credlyProfileUrl', credlyUrl.trim())
-      const resp = await fetch(`${API_BASE_URL}/api/enhance`, {
-        method: 'POST',
-        body: form
-      })
-      if (!resp.ok) {
-        const text = await resp.text()
-        throw new Error(text || 'Request failed')
-      }
-      const data = await resp.json()
-      if (data.jobId) {
-        pollProgress(data.jobId)
-        const variantFiles = data.variantFiles || data.variants || []
-        const coverFiles = data.coverFiles || data.coverLetters || []
-        const variantLinks = []
-        for (let i = 0; i < variantFiles.length; i++) {
-          try {
-            const url = await getDownloadUrl(data.jobId, variantFiles[i])
-            variantLinks.push({ label: `Download CV Version ${i + 1}`, url })
-          } catch {}
-        }
-        const coverLinks = []
-        for (let i = 0; i < coverFiles.length; i++) {
-          try {
-            const url = await getDownloadUrl(data.jobId, coverFiles[i])
-            coverLinks.push({ label: `Download Cover Letter${coverFiles.length > 1 ? ` ${i + 1}` : ''}`, url })
-          } catch {}
-        }
-        setEnhancedCvUrls(variantLinks)
-        setEnhancedCoverUrls(coverLinks)
-      }
-      setAddedSkills([...(data.addedSkills || []), ...(data.addedLanguages || [])])
-      setAddedProjects(data.addedProjects || [])
-      setAddedCertifications(data.addedCertifications || [])
-      setStudyTips(data.studyTips || [])
     } catch (err) {
       setError(err.message || 'Something went wrong.')
     } finally {
@@ -621,7 +563,20 @@ function App() {
 
       {result && (
         <div className="mt-6 w-full max-w-md p-4 bg-gradient-to-r from-white to-purple-50 rounded shadow">
-          <p className="text-purple-800 mb-2">ATS Score: {result.scores?.ats}%</p>
+          <h2 className="text-center text-xl font-bold text-purple-800 mb-4">
+            TEST RESULTS ARE READY
+          </h2>
+          <div className="mb-4">
+            <div className="h-4 bg-gray-200 rounded">
+              <div
+                className="h-4 bg-purple-600 rounded"
+                style={{ width: `${overallScore}%` }}
+              ></div>
+            </div>
+            <p className="text-sm mt-1 text-purple-800">
+              Your score is {100 - overallScore} points less than top resumes.
+            </p>
+          </div>
           {result.scores?.metrics &&
             allAtsMetrics.some((m) => result.scores.metrics[m] != null) && (
               <div className="text-purple-800 mb-2">
@@ -645,39 +600,35 @@ function App() {
                         <div
                           key={category}
                           className="p-4 bg-white border rounded shadow-sm"
+                          id={primaryMetric}
                         >
                           <p className="font-medium">{category}</p>
-                          {avgScore < 80 && (
-                            <p className="text-sm text-purple-600">
-                              Target ≥80. Click to FIX
-                            </p>
-                          )}
                           <p>
                             {avgScore}% ({status})
-                            <button
+                            <a
+                              href="#"
                               onClick={() => handleFix(primaryMetric)}
                               className="ml-2 text-blue-600 underline"
                             >
-                              Fix
-                            </button>
+                              Click to FIX
+                            </a>
                           </p>
                           <ul>
                             {available.map((metricKey) => {
                               const score = result.scores.metrics[metricKey]
                               const metricStatus = getScoreStatus(score)
                               return (
-                                <li key={metricKey} className="mb-1">
+                                <li key={metricKey} className="mb-1" id={metricKey}>
                                   <span>
-                                    {formatMetricName(metricKey)}: {score}%
-                                    {' '}
-                                    ({metricStatus})
+                                    {formatMetricName(metricKey)}: {score}% ({metricStatus})
                                   </span>
-                                  <button
+                                  <a
+                                    href="#"
                                     onClick={() => handleFix(metricKey)}
                                     className="ml-2 text-blue-600 underline"
                                   >
-                                    Fix
-                                  </button>
+                                    Click to FIX
+                                  </a>
                                   {metricTips[metricKey] && (
                                     <span
                                       className={`block text-sm ${
@@ -737,55 +688,50 @@ function App() {
                       className="p-4 bg-white border rounded shadow-sm mb-2"
                     >
                       <p className="font-medium">{category}</p>
-                      {avgScore < 80 && (
-                        <p className="text-sm text-purple-600">
-                          Target ≥80. Click to FIX
-                        </p>
-                      )}
                       <p>
                         {avgScore}% ({status})
-                        <button
+                        <a
+                          href="#"
                           onClick={() => handleFix(primaryMetric)}
                           className="ml-2 text-blue-600 underline"
                         >
-                          Fix
-                        </button>
+                          Click to FIX
+                        </a>
                       </p>
                       <ul>
                         {available.map((metric) => {
                           const score = result.scores.metrics[metric]
                           const metricStatus = getScoreStatus(score)
                           return (
-                            <li key={metric} className="mb-1">
+                            <li key={metric} className="mb-1" id={metric}>
                               <span>
                                 {formatMetricName(metric)}: {score}% ({metricStatus})
                               </span>
-                              <>
-                                <button
-                                  onClick={() => handleFix(metric)}
-                                  className="ml-2 text-blue-600 underline"
+                              <a
+                                href="#"
+                                onClick={() => handleFix(metric)}
+                                className="ml-2 text-blue-600 underline"
+                              >
+                                Click to FIX
+                              </a>
+                              {metricTips[metric] && (
+                                <span
+                                  className={`block text-sm ${
+                                    score >= 70
+                                      ? 'text-green-600'
+                                      : 'text-purple-600'
+                                  }`}
                                 >
-                                  Fix
-                                </button>
-                                {metricTips[metric] && (
-                                  <span
-                                    className={`block text-sm ${
-                                      score >= 70
-                                        ? 'text-green-600'
-                                        : 'text-purple-600'
-                                    }`}
-                                  >
-                                    {score >= 70
-                                      ? `Great job: ${metricTips[metric]}`
-                                      : metricTips[metric]}
-                                  </span>
-                                )}
-                                {score < 70 && metricSuggestions[metric] && (
-                                  <div className="mt-1 text-sm text-purple-700">
-                                    {metricSuggestions[metric]}
-                                  </div>
-                                )}
-                              </>
+                                  {score >= 70
+                                    ? `Great job: ${metricTips[metric]}`
+                                    : metricTips[metric]}
+                                </span>
+                              )}
+                              {score < 70 && metricSuggestions[metric] && (
+                                <div className="mt-1 text-sm text-purple-700">
+                                  {metricSuggestions[metric]}
+                                </div>
+                              )}
                             </li>
                           )
                         })}
@@ -802,53 +748,29 @@ function App() {
           >
             Get Targeted Suggestions
           </button>
-          {skills.length > 0 && (
+          {(missingKeywords.mustHave.length > 0 || missingKeywords.niceToHave.length > 0) && (
             <div className="text-purple-800 mb-2">
-              <p className="mb-2">Missing skills:</p>
-              {skills.map((skill, idx) => (
-                <div key={idx} className="mb-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    {skill.icon && <i className={`${skill.icon} text-xl`}></i>}
-                    <span className="capitalize">{skill.name}</span>
-                    {skill.level && (
-                      <div className="flex-1 h-2 bg-purple-200 rounded">
-                        <div
-                          className="h-2 bg-purple-600 rounded"
-                          style={{ width: `${skill.level}%` }}
-                        ></div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col md:flex-row gap-2">
-                    <input
-                      value={skill.name}
-                      placeholder="Skill"
-                      onChange={(e) => handleSkillChange(idx, 'name', e.target.value)}
-                      className="flex-1 p-2 border border-purple-300 rounded"
-                    />
-                    <input
-                      value={skill.icon || ''}
-                      placeholder="Icon (optional)"
-                      onChange={(e) => handleSkillChange(idx, 'icon', e.target.value)}
-                      className="flex-1 p-2 border border-purple-300 rounded"
-                    />
-                    <input
-                      value={skill.level || ''}
-                      type="number"
-                      placeholder="Level"
-                      onChange={(e) => handleSkillChange(idx, 'level', e.target.value)}
-                      className="w-24 p-2 border border-purple-300 rounded"
-                    />
-                  </div>
+              <p className="mb-2">Missing keywords:</p>
+              {missingKeywords.mustHave.length > 0 && (
+                <div className="mb-2">
+                  <p className="font-semibold">Must-have</p>
+                  <ul className="list-disc list-inside">
+                    {missingKeywords.mustHave.map((k, idx) => (
+                      <li key={`must-${idx}`}>{k}</li>
+                    ))}
+                  </ul>
                 </div>
-              ))}
-              <button
-                type="button"
-                onClick={addSkill}
-                className="px-2 py-1 bg-purple-500 text-white rounded"
-              >
-                Add Skill
-              </button>
+              )}
+              {missingKeywords.niceToHave.length > 0 && (
+                <div className="mb-2">
+                  <p className="font-semibold">Nice-to-have</p>
+                  <ul className="list-disc list-inside">
+                    {missingKeywords.niceToHave.map((k, idx) => (
+                      <li key={`nice-${idx}`}>{k}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           {result.issues?.jdMismatches?.length > 0 && (
@@ -939,13 +861,7 @@ function App() {
               onClick={handleCompile}
               className="px-4 py-2 bg-purple-600 text-white rounded"
             >
-              Improve CV and Generate Cover Letter
-            </button>
-            <button
-              onClick={handleEnhance}
-              className="px-4 py-2 bg-green-600 text-white rounded"
-            >
-              Enhance CV
+              Improve Score (Generate Tailored CV + Cover Letter)
             </button>
           </div>
           {finalScore !== null && (
@@ -988,32 +904,6 @@ function App() {
                   Download Cover Letter Text
                 </a>
               )}
-            </div>
-          )}
-          {enhancedCvUrls.length > 0 && (
-            <div className="flex flex-col gap-2 mt-2">
-              {enhancedCvUrls.map((link, idx) => (
-                <a
-                  key={idx}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-green-600 text-white rounded"
-                >
-                  {link.label}
-                </a>
-              ))}
-              {enhancedCoverUrls.map((link, idx) => (
-                <a
-                  key={`cover-${idx}`}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-green-600 text-white rounded"
-                >
-                  {link.label}
-                </a>
-              ))}
             </div>
           )}
           {coverLetterText && (

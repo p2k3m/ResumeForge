@@ -7,6 +7,7 @@ const mockResponse = {
   jobId: '1',
   scores: {
     ats: 70,
+    overallScore: 70,
     metrics: {
       layoutSearchability: 50,
       atsReadability: 60,
@@ -18,7 +19,7 @@ const mockResponse = {
       grammar: 70
     }
   },
-  keywords: ['aws'],
+  keywords: { mustHave: ['aws'], niceToHave: [] },
   selectionProbability: 70,
   issues: {}
 }
@@ -48,20 +49,21 @@ test('evaluates CV and displays results', async () => {
   })
   fireEvent.click(screen.getByText('Evaluate me against the JD'))
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
-  expect(await screen.findByText(/ATS Score: 70%/)).toBeInTheDocument()
+  expect(await screen.findByText('TEST RESULTS ARE READY')).toBeInTheDocument()
   expect(
-    await screen.findByText(/Layout Searchability: 50% \(Needs Improvement\)/)
+    await screen.findByText('Your score is 30 points less than top resumes.')
   ).toBeInTheDocument()
   expect(
-    await screen.findByText(/Crispness: 90% \(Good\)/)
+    await screen.findByText(/Layout Searchability: 50% \(Average\)/)
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByText(/Crispness: 90% \(Excellent\)/)
   ).toBeInTheDocument()
   expect(
     await screen.findByText('Include email, phone, and LinkedIn.')
   ).toBeInTheDocument()
-  expect(await screen.findByDisplayValue('aws')).toBeInTheDocument()
-  fireEvent.click(await screen.findByText('Add Skill'))
-  const skillInputs = await screen.findAllByPlaceholderText('Skill')
-  expect(skillInputs.length).toBe(2)
+  expect(await screen.findByText('Must-have')).toBeInTheDocument()
+  expect(await screen.findByText('aws')).toBeInTheDocument()
 })
 
 test('updates file label on selection', () => {
@@ -130,12 +132,8 @@ test('shows category tip and fetches category fix suggestion', async () => {
 
   const layoutCategory = await screen.findByText('Layout')
   const categoryContainer = layoutCategory.closest('div')
-  expect(
-    within(categoryContainer).getByText('Target ≥80. Click to FIX')
-  ).toBeInTheDocument()
-
-  const fixButtons = within(categoryContainer).getAllByText('Fix')
-  fireEvent.click(fixButtons[0])
+  const fixLink = within(categoryContainer).getByText('Click to FIX')
+  fireEvent.click(fixLink)
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
   expect(await screen.findByText('Improve layout')).toBeInTheDocument()
 })
@@ -191,7 +189,7 @@ test('displays new additions section after compile', async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
 
   fireEvent.click(
-    await screen.findByText('Improve CV and Generate Cover Letter')
+    await screen.findByText('Improve Score (Generate Tailored CV + Cover Letter)')
   )
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
   expect(
@@ -262,7 +260,7 @@ test('shows curated resource link for known skill', async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
 
   fireEvent.click(
-    await screen.findByText('Improve CV and Generate Cover Letter')
+    await screen.findByText('Improve Score (Generate Tailored CV + Cover Letter)')
   )
   await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
 
