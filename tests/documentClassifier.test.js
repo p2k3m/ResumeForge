@@ -1,4 +1,7 @@
 import { jest } from '@jest/globals';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 
 describe('documentClassifier', () => {
   beforeEach(() => {
@@ -95,6 +98,35 @@ describe('documentClassifier', () => {
     const { value: text } = await mammoth.extractRawText({ buffer });
     const result = await describeDocument(text);
     expect(result).toBe('resume');
+  });
+
+  test('classifies based on content, not filename', async () => {
+    jest.unstable_mockModule('../geminiClient.js', () => ({ generativeModel: null }));
+    jest.unstable_mockModule('../openaiClient.js', () => ({
+      classifyDocument: jest.fn().mockRejectedValue(new Error('openai down'))
+    }));
+    const { describeDocument } = await import('../services/documentClassifier.js');
+
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'doc-classifier-'));
+
+    const resumeOriginal = path.join(dir, 'resume.pdf');
+    await fs.writeFile(resumeOriginal, 'Work Experience\nEducation\nSkills');
+    const misnamedResume = path.join(dir, 'coverletter.pdf');
+    await fs.rename(resumeOriginal, misnamedResume);
+    const resumeText = await fs.readFile(misnamedResume, 'utf8');
+    const resumeResult = await describeDocument(resumeText);
+    expect(resumeResult).toBe('resume');
+
+    const letterOriginal = path.join(dir, 'letter.txt');
+    await fs.writeFile(
+      letterOriginal,
+      'Dear Hiring Manager,\nI am excited to apply.\nSincerely, Jane'
+    );
+    const misnamedLetter = path.join(dir, 'resume.pdf');
+    await fs.rename(letterOriginal, misnamedLetter);
+    const letterText = await fs.readFile(misnamedLetter, 'utf8');
+    const letterResult = await describeDocument(letterText);
+    expect(letterResult).toBe('cover letter');
   });
 
   test('defaults to resume when no classifier succeeds', async () => {
