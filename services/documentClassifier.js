@@ -13,6 +13,11 @@ function keywordHeuristic(text = '') {
     return 'resume';
   if (lower.includes('cover letter')) return 'cover letter';
   if (lower.includes('essay')) return 'essay';
+
+  const sections = ['experience', 'education', 'skills', 'work history'];
+  const matches = sections.filter((section) => lower.includes(section));
+  if (matches.length >= 2) return 'resume';
+
   return null;
 }
 
