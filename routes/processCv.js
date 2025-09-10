@@ -633,10 +633,18 @@ export default function registerProcessCv(
             error: 'unknown_doc_type',
           }, { signal: req.signal });
           const inferredDocType = await describeDocument(resumeText);
+          if (!inferredDocType || inferredDocType === 'unknown') {
+            return res
+              .status(400)
+              .json({
+                error: 'This document type is unknown; please upload a CV.',
+              });
+          }
+          const article = /^[aeiou]/i.test(inferredDocType) ? 'an' : 'a';
           return res
             .status(400)
             .json({
-              error: `This document looks like a ${inferredDocType}. Please upload a CV.`,
+              error: `This document looks like ${article} ${inferredDocType}. Please upload a CV.`,
             });
         }
         let applicantName =
