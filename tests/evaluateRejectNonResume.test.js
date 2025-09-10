@@ -83,7 +83,7 @@ describe('/api/evaluate non-resume', () => {
       .attach('file', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
     expect(res.text).toBe(
-      'This document looks like a essay. Please upload a CV.'
+      'This document looks like an essay. Please upload a CV.'
     );
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
