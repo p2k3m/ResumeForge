@@ -61,7 +61,7 @@ describe('/api/evaluate non-resume', () => {
       .field('jobUrl', 'https://example.com/job')
       .attach('file', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
-    expect(res.text).toBe(
+    expect(res.body.error).toBe(
       `You have uploaded a ${docType}. Please upload a CV only.`
     );
     const { logEvaluation } = await import('../services/dynamo.js');
@@ -82,13 +82,11 @@ describe('/api/evaluate non-resume', () => {
       .field('jobUrl', 'https://example.com/job')
       .attach('file', pdfBuffer, 'file.pdf');
     expect(res.status).toBe(400);
-    expect(res.text).toBe(
-      'This document looks like an essay. Please upload a CV.'
-    );
+    expect(res.body.error).toBe('This document looks like an essay.');
     const { logEvaluation } = await import('../services/dynamo.js');
     expect(logEvaluation).toHaveBeenCalledWith(
       expect.objectContaining({
-        docType,
+        docType: 'essay',
         cvKey: expect.any(String),
       })
     );

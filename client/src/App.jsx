@@ -194,10 +194,8 @@ function App() {
           setShowJobDescription(true)
           setJobUrl('')
           setJobUrlError('')
-          setError('')
-        } else {
-          setError(errText)
         }
+        setError(errText)
         return
       }
       if (response.status === 403) {

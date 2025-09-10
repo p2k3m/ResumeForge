@@ -616,36 +616,52 @@ export default function registerProcessCv(
             error: `You have uploaded a ${docType}. Please upload a CV only.`,
           });
         }
+
+        let inferredDocType = docType;
         if (!docType || docType === 'unknown') {
-          await logEvaluation({
-            jobId,
-            ipAddress,
-            userAgent,
-            browser,
-            os,
-            device,
-            jobDescriptionUrl: jobUrl,
-            credlyProfileUrl: credlyUrl,
-            cvKey: cvKey || '',
-            s3Prefix: s3Prefix || '',
-            docType,
-            status: 'error',
-            error: 'unknown_doc_type',
-          }, { signal: req.signal });
-          const inferredDocType = await describeDocument(resumeText);
-          if (!inferredDocType || inferredDocType === 'unknown') {
-            return res
-              .status(400)
-              .json({
-                error: 'This document type is unknown; please upload a CV.',
-              });
-          }
-          const article = /^[aeiou]/i.test(inferredDocType) ? 'an' : 'a';
-          return res
-            .status(400)
-            .json({
-              error: `This document looks like ${article} ${inferredDocType}. Please upload a CV.`,
+          inferredDocType = await describeDocument(resumeText);
+          console.log('Inferred document type:', inferredDocType);
+          if (!inferredDocType) {
+            await logEvaluation({
+              jobId,
+              ipAddress,
+              userAgent,
+              browser,
+              os,
+              device,
+              jobDescriptionUrl: jobUrl,
+              credlyProfileUrl: credlyUrl,
+              cvKey: cvKey || '',
+              s3Prefix: s3Prefix || '',
+              docType: 'unknown',
+              status: 'error',
+              error: 'unknown_doc_type',
+            }, { signal: req.signal });
+            return res.status(400).json({
+              error: 'This document type is unknown; please upload a CV.',
             });
+          }
+          if (inferredDocType !== 'resume') {
+            await logEvaluation({
+              jobId,
+              ipAddress,
+              userAgent,
+              browser,
+              os,
+              device,
+              jobDescriptionUrl: jobUrl,
+              credlyProfileUrl: credlyUrl,
+              cvKey: cvKey || '',
+              s3Prefix: s3Prefix || '',
+              docType: inferredDocType,
+              status: 'error',
+              error: 'invalid_doc_type',
+            }, { signal: req.signal });
+            const article = /^[aeiou]/i.test(inferredDocType) ? 'an' : 'a';
+            return res.status(400).json({
+              error: `This document looks like ${article} ${inferredDocType}.`,
+            });
+          }
         }
         let applicantName =
           req.body.applicantName || (await extractName(resumeText));
