@@ -259,6 +259,33 @@ test('displays new additions section after compile', async () => {
   expect(await screen.findByText('AWS Cert - Amazon')).toBeInTheDocument()
 })
 
+test('shows error when LinkedIn authentication is required', async () => {
+  fetch.mockResolvedValueOnce({
+    status: 403,
+    ok: false,
+    headers: { get: () => 'application/json' },
+    json: () => Promise.resolve({ code: 'LINKEDIN_AUTH_REQUIRED' }),
+  })
+  render(<App />)
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    {
+      target: { files: [file] },
+    }
+  )
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://linkedin.com/job' },
+  })
+  fireEvent.click(screen.getByText('Evaluate me against the JD'))
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+  expect(
+    await screen.findByText(
+      'Job URL requires authentication. Please paste the job description text.'
+    )
+  ).toBeInTheDocument()
+})
+
 test('highlights drop zone on drag over', () => {
   render(<App />)
   const dropZone = screen.getByTestId('dropzone')
