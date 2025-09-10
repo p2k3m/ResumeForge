@@ -71,35 +71,54 @@ function localClassifier(text = '') {
   return bestScore > 0 ? bestLabel : null;
 }
 
-function classifyLocally(text = '') {
-  const heuristic = keywordHeuristic(text);
-  if (heuristic) return heuristic;
+function mlModelClassifier(text = '') {
+  // Placeholder for a local ML model classifier; currently leverages the
+  // simple keyword-based local classifier.
   return localClassifier(text);
 }
 
 export async function describeDocument(text) {
-  if (!generativeModel?.generateContent) {
-    console.warn('Gemini model not initialized; using OpenAI fallback');
-    try {
-      const { classifyDocument } = await import('../openaiClient.js');
-      const classification = await classifyDocument(text);
-      console.info('Document classification used OpenAI fallback');
-      return classification || classifyLocally(text) || 'unknown';
-    } catch (err) {
-      console.warn('OpenAI fallback failed, using local classifiers', err);
-      return classifyLocally(text) || 'unknown';
-    }
+  const classifiers = [
+    // Gemini classifier
+    async () => {
+      if (!generativeModel?.generateContent) {
+        console.warn('Gemini model not initialized');
+        return null;
+      }
+      try {
+        const result = await generativeModel.generateContent(
+          `${prompt}\n\n${text.slice(0, 4000)}`
+        );
+        return result?.response?.text?.().trim().toLowerCase() || null;
+      } catch (err) {
+        console.warn('Gemini classification failed', err);
+        return null;
+      }
+    },
+    // OpenAI classifier
+    async () => {
+      try {
+        const { classifyDocument } = await import('../openaiClient.js');
+        return await classifyDocument(text);
+      } catch (err) {
+        console.warn('OpenAI classification failed', err);
+        return null;
+      }
+    },
+    // Heuristic keyword classifier
+    async () => keywordHeuristic(text),
+    // Local ML model classifier
+    async () => mlModelClassifier(text),
+  ];
+
+  let fallback = 'resume';
+  for (const classify of classifiers) {
+    const label = await classify();
+    if (!label) continue;
+    if (label !== 'resume') return label;
+    fallback = label;
   }
-  try {
-    const result = await generativeModel.generateContent(
-      `${prompt}\n\n${text.slice(0, 4000)}`
-    );
-    const classification = result?.response?.text?.().trim().toLowerCase();
-    return classification || classifyLocally(text) || 'unknown';
-  } catch (err) {
-    console.error('describeDocument error', err);
-    return classifyLocally(text) || 'unknown';
-  }
+  return fallback;
 }
 
 export default { describeDocument };

@@ -97,14 +97,14 @@ describe('documentClassifier', () => {
     expect(result).toBe('resume');
   });
 
-  test('returns unknown when no fallback succeeds', async () => {
+  test('defaults to resume when no classifier succeeds', async () => {
     jest.unstable_mockModule('../geminiClient.js', () => ({ generativeModel: null }));
     jest.unstable_mockModule('../openaiClient.js', () => ({
       classifyDocument: jest.fn().mockRejectedValue(new Error('openai down'))
     }));
     const { describeDocument } = await import('../services/documentClassifier.js');
     const result = await describeDocument('unclassifiable text');
-    expect(result).toBe('unknown');
+    expect(result).toBe('resume');
   });
 });
 
