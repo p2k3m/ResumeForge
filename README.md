@@ -58,7 +58,7 @@ curl -X DELETE http://localhost:3000/api/session/<jobId>
 Uploaded data is retained for up to 30 days and is removed automatically afterwards. Use the delete endpoint above to purge a session immediately if needed.
 
 ## Environment Variables
-Provide these variables either directly or through an AWS Secrets Manager secret referenced by `SECRET_ID`:
+Provide these variables either directly or through an AWS Secrets Manager secret referenced by `SECRET_ID` (which must be set in production and point to a secret containing `OPENAI_API_KEY` and `GEMINI_API_KEY`):
 
 - `AWS_REGION` – AWS region for S3 and DynamoDB.
 - `PORT` – HTTP port (defaults to `3000`).
@@ -71,7 +71,7 @@ Provide these variables either directly or through an AWS Secrets Manager secret
 - `PROCESS_TIMEOUT_MS` – max processing time in ms for each job (`300000`).
 - `TRUST_PROXY` – number of trusted reverse proxy hops.
 - `ENFORCE_HTTPS` – redirect HTTP requests to HTTPS when set to `true`.
-- `SECRET_ID` – (production) name of the Secrets Manager entry holding API keys and `S3_BUCKET`.
+- `SECRET_ID` – required in production; name of the Secrets Manager secret holding `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `S3_BUCKET`.
 
 Example configuration:
 
@@ -107,7 +107,7 @@ When deploying behind a reverse proxy or load balancer, set `TRUST_PROXY` to the
 
 `MODEL_NAME` selects the OpenAI model used for résumé processing. It defaults to `gpt-5` and falls back to `gpt-4.1` or `gpt-4o` if the preferred model is unavailable.
 
-The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
+The AWS Secrets Manager secret referenced by `SECRET_ID` must contain at least the API keys:
 
 ```json
 {
@@ -142,7 +142,7 @@ Minimal permissions required by the server:
 
 1. Launch an EC2 instance running Node.js 18 or newer.
 2. Attach an IAM role with the policy above so the instance can read secrets and write to S3.
-3. Provide the environment variables or set `SECRET_ID` to reference the Secrets Manager JSON.
+3. Set the `SECRET_ID` environment variable to reference the Secrets Manager JSON. The secret must include `OPENAI_API_KEY` and `GEMINI_API_KEY`.
 4. Deploy the code and start the server (`node server.js` or via a process manager).
 5. Front the S3 bucket with a CloudFront distribution and use its default domain `https://<distribution>.cloudfront.net` to serve downloads.
 6. The application stores generated files in S3 and returns presigned URLs that point to the CloudFront domain for time‑limited access.
