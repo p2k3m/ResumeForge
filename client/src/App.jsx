@@ -48,7 +48,6 @@ const otherQualityMetricCategories = {
 function App() {
   const [jobUrl, setJobUrl] = useState('')
   const [jobDescriptionText, setJobDescriptionText] = useState('')
-  const [showJdBanner, setShowJdBanner] = useState(false)
   const [cvFile, setCvFile] = useState(null)
   const [result, setResult] = useState(null)
   const [skills, setSkills] = useState([])
@@ -134,11 +133,6 @@ function App() {
     }
   }
 
-  useEffect(() => {
-    if (jobUrl && isValidUrl(jobUrl)) {
-      setShowJdBanner(false)
-    }
-  }, [jobUrl])
 
   useEffect(() => {
     if (selectionProbability === null) {
@@ -186,9 +180,8 @@ function App() {
         }
         const errText = data?.error || text || 'Request failed'
         if (errText.includes('Job URL not readable')) {
-          setShowJdBanner(true)
+          setJobUrlError('Job URL not readable. Please paste the job description text.')
           setJobUrl('')
-          setJobUrlError('')
         }
         setError(errText)
         return
@@ -202,9 +195,8 @@ function App() {
           text = await response.text()
         }
         if (data?.code === 'LINKEDIN_AUTH_REQUIRED') {
-          setShowJdBanner(true)
+          setJobUrlError('Job URL requires authentication. Please paste the job description text.')
           setJobUrl('')
-          setJobUrlError('')
           return
         }
         const errText = data?.error || text || 'Request failed'
@@ -513,11 +505,6 @@ function App() {
             : 'border-purple-300'
         } mb-1`}
       />
-      {showJdBanner && (
-        <div className="text-red-600 text-sm mb-4">
-          Job URL not readable. Please paste the job description text.
-        </div>
-      )}
       <textarea
         placeholder="Job Description Text"
         value={jobDescriptionText}
@@ -530,7 +517,7 @@ function App() {
           Job description URL or text is required.
         </p>
       )}
-      {jobUrl && jobUrlError && (
+      {jobUrlError && (
         <p className="text-red-600 text-sm mb-4">{jobUrlError}</p>
       )}
 
