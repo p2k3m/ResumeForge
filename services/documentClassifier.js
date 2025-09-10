@@ -111,12 +111,15 @@ export async function describeDocument(text) {
     async () => mlModelClassifier(text),
   ];
 
-  let fallback = 'resume';
+  let fallback = 'unknown';
   for (const classify of classifiers) {
     const label = await classify();
     if (!label) continue;
-    if (label !== 'resume') return label;
-    fallback = label;
+    if (label === 'resume') {
+      fallback = 'resume';
+      continue;
+    }
+    return label;
   }
   return fallback;
 }
