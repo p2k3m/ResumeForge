@@ -36,6 +36,67 @@ describe('documentClassifier', () => {
     expect(result).toBe('resume');
   });
 
+  test('uses local classifier when heuristic sections are absent', async () => {
+    jest.unstable_mockModule('../geminiClient.js', () => ({ generativeModel: null }));
+    jest.unstable_mockModule('../openaiClient.js', () => ({
+      classifyDocument: jest.fn().mockRejectedValue(new Error('openai down'))
+    }));
+    const { describeDocument } = await import('../services/documentClassifier.js');
+    const text = `Dear Hiring Manager,\nI am excited to apply for the role.\nSincerely,\nJane Doe`;
+    const result = await describeDocument(text);
+    expect(result).toBe('cover letter');
+  });
+
+  test('classifies PDF resumes without explicit keywords', async () => {
+    jest.unstable_mockModule('../geminiClient.js', () => ({ generativeModel: null }));
+    jest.unstable_mockModule('../openaiClient.js', () => ({
+      classifyDocument: jest.fn().mockRejectedValue(new Error('openai down'))
+    }));
+    const { describeDocument } = await import('../services/documentClassifier.js');
+    const { default: PDFDocument } = await import('pdfkit');
+    const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
+    const pdfBuffer = await new Promise((resolve) => {
+      const doc = new PDFDocument();
+      const chunks = [];
+      doc.on('data', (d) => chunks.push(d));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.text('Work Experience');
+      doc.text('Professional Summary');
+      doc.text('Education');
+      doc.text('Skills');
+      doc.end();
+    });
+    const { text } = await pdfParse(pdfBuffer);
+    const result = await describeDocument(text);
+    expect(result).toBe('resume');
+  });
+
+  test('classifies DOCX resumes without explicit keywords', async () => {
+    jest.unstable_mockModule('../geminiClient.js', () => ({ generativeModel: null }));
+    jest.unstable_mockModule('../openaiClient.js', () => ({
+      classifyDocument: jest.fn().mockRejectedValue(new Error('openai down'))
+    }));
+    const { describeDocument } = await import('../services/documentClassifier.js');
+    const { Document, Packer, Paragraph } = await import('docx');
+    const mammoth = (await import('mammoth')).default;
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph('Professional Summary'),
+            new Paragraph('Work Experience'),
+            new Paragraph('Education'),
+            new Paragraph('Skills'),
+          ],
+        },
+      ],
+    });
+    const buffer = await Packer.toBuffer(doc);
+    const { value: text } = await mammoth.extractRawText({ buffer });
+    const result = await describeDocument(text);
+    expect(result).toBe('resume');
+  });
+
   test('returns unknown when no fallback succeeds', async () => {
     jest.unstable_mockModule('../geminiClient.js', () => ({ generativeModel: null }));
     jest.unstable_mockModule('../openaiClient.js', () => ({
