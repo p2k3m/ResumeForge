@@ -4,6 +4,23 @@ import path from 'path';
 import { getSecrets } from './config/secrets.js';
 import { generativeModel } from './geminiClient.js';
 
+// Verify OpenAI credentials at startup outside of tests to surface misconfiguration.
+if (process.env.NODE_ENV !== 'test') {
+  (async () => {
+    try {
+      const secrets = await getSecrets();
+      if (!process.env.OPENAI_API_KEY && !secrets.OPENAI_API_KEY) {
+        console.error(
+          'OPENAI_API_KEY is required. Set OPENAI_API_KEY in the environment or secrets JSON.'
+        );
+        process.exit(1);
+      }
+    } catch (err) {
+      console.error('Failed to check OpenAI configuration', err);
+    }
+  })();
+}
+
 const MODEL_NAME = process.env.MODEL_NAME || 'gpt-5';
 
 // Ordered list of supported models. Unavailable or experimental models should
