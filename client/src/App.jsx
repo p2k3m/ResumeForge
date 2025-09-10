@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
-import skillResources from './skillResources'
-import certResources from './certResources'
-import languageResources from './languageResources'
-import { getScoreStatus } from './scoreStatus'
+import skillResources from './skillResources.js'
+import certResources from './certResources.js'
+import languageResources from './languageResources.js'
+import { getScoreStatus } from './scoreStatus.js'
 import { getSkillIcon } from '../../skillIcons.js'
 
 const metricTips = {
@@ -48,7 +48,6 @@ const otherQualityMetricCategories = {
 function App() {
   const [jobUrl, setJobUrl] = useState('')
   const [jobDescriptionText, setJobDescriptionText] = useState('')
-  const [showJobDescription, setShowJobDescription] = useState(false)
   const [showJdBanner, setShowJdBanner] = useState(false)
   const [cvFile, setCvFile] = useState(null)
   const [result, setResult] = useState(null)
@@ -120,7 +119,6 @@ function App() {
   }
 
   const handleJobUrlBlur = () => {
-    if (showJobDescription) return
     if (jobUrl && !isValidUrl(jobUrl)) {
       setJobUrlError('Please enter a valid URL.')
     } else {
@@ -138,9 +136,7 @@ function App() {
 
   useEffect(() => {
     if (jobUrl && isValidUrl(jobUrl)) {
-      setShowJobDescription(false)
       setShowJdBanner(false)
-      setJobDescriptionText('')
     }
   }, [jobUrl])
 
@@ -191,7 +187,6 @@ function App() {
         const errText = data?.error || text || 'Request failed'
         if (errText.includes('Job URL not readable')) {
           setShowJdBanner(true)
-          setShowJobDescription(true)
           setJobUrl('')
           setJobUrlError('')
         }
@@ -208,7 +203,6 @@ function App() {
         }
         if (data?.code === 'LINKEDIN_AUTH_REQUIRED') {
           setShowJdBanner(true)
-          setShowJobDescription(true)
           setJobUrl('')
           setJobUrlError('')
           return
@@ -507,33 +501,29 @@ function App() {
         <p className="text-red-600 text-sm mb-4">Resume file is required.</p>
       )}
 
-      {!showJobDescription && (
-        <input
-          type="url"
-          placeholder="Job Description URL"
-          value={jobUrl}
-          onChange={(e) => setJobUrl(e.target.value)}
-          onBlur={handleJobUrlBlur}
-          className={`w-full max-w-md p-2 border rounded ${
-            (disabled && !jobUrl && !jobDescriptionText) || jobUrlError
-              ? 'border-red-500'
-              : 'border-purple-300'
-          } mb-1`}
-        />
-      )}
+      <input
+        type="url"
+        placeholder="Job Description URL"
+        value={jobUrl}
+        onChange={(e) => setJobUrl(e.target.value)}
+        onBlur={handleJobUrlBlur}
+        className={`w-full max-w-md p-2 border rounded ${
+          (disabled && !jobUrl && !jobDescriptionText) || jobUrlError
+            ? 'border-red-500'
+            : 'border-purple-300'
+        } mb-1`}
+      />
       {showJdBanner && (
         <div className="text-red-600 text-sm mb-4">
           Job URL not readable. Please paste the job description text.
         </div>
       )}
-      {showJobDescription && (
-        <textarea
-          placeholder="Job Description Text"
-          value={jobDescriptionText}
-          onChange={(e) => setJobDescriptionText(e.target.value)}
-          className="w-full max-w-md p-2 border rounded border-purple-300 mb-1"
-        />
-      )}
+      <textarea
+        placeholder="Job Description Text"
+        value={jobDescriptionText}
+        onChange={(e) => setJobDescriptionText(e.target.value)}
+        className="w-full max-w-md p-2 border rounded border-purple-300 mb-1"
+      />
 
       {disabled && !jobUrl && !jobDescriptionText && (
         <p className="text-red-600 text-sm mb-4">

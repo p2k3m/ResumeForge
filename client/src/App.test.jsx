@@ -32,6 +32,40 @@ beforeEach(() => {
   fetch.mockReset()
 })
 
+test('renders job URL and description inputs; one is required', () => {
+  render(<App />)
+  // both inputs present
+  expect(screen.getByPlaceholderText('Job Description URL')).toBeInTheDocument()
+  expect(screen.getByPlaceholderText('Job Description Text')).toBeInTheDocument()
+
+  const submit = screen.getByText('Evaluate me against the JD')
+  // add CV file to enable validation on job fields
+  const file = new File(['dummy'], 'resume.pdf', { type: 'application/pdf' })
+  fireEvent.change(
+    screen.getByLabelText('Choose File', { selector: 'input', hidden: true }),
+    { target: { files: [file] } }
+  )
+
+  // Initially disabled since no JD fields filled
+  expect(submit).toBeDisabled()
+
+  // Filling job description text enables submission
+  fireEvent.change(screen.getByPlaceholderText('Job Description Text'), {
+    target: { value: 'Some description' },
+  })
+  expect(submit).not.toBeDisabled()
+
+  // Clearing text and entering URL also enables submission
+  fireEvent.change(screen.getByPlaceholderText('Job Description Text'), {
+    target: { value: '' },
+  })
+  expect(submit).toBeDisabled()
+  fireEvent.change(screen.getByPlaceholderText('Job Description URL'), {
+    target: { value: 'https://example.com/job' },
+  })
+  expect(submit).not.toBeDisabled()
+})
+
 test('evaluates CV and displays results', async () => {
   fetch.mockResolvedValueOnce({
     ok: true,
