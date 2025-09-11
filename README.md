@@ -34,6 +34,23 @@ If a LinkedIn posting requires authentication, the server returns a `LINKEDIN_AU
    node server.js
    ```
 
+## Secrets configuration
+
+Set the environment variables used to locate your AWS Secrets Manager entry:
+
+```bash
+export SECRET_ID=<your_secret_name>
+export AWS_REGION=<secret_region>
+```
+
+The referenced secret must supply values for `GEMINI_API_KEY` and `OPENAI_API_KEY`.
+
+Start the server with the variables in place:
+
+```bash
+SECRET_ID=ResumeForge AWS_REGION=us-west-2 npm run dev
+```
+
 ## Usage
 
 Submit a résumé and job description to generate tailored documents:
