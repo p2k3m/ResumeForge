@@ -58,7 +58,7 @@ curl -X DELETE http://localhost:3000/api/session/<jobId>
 Uploaded data is retained for up to 30 days and is removed automatically afterwards. Use the delete endpoint above to purge a session immediately if needed.
 
 ## Environment Variables
-Provide these variables either directly or through an AWS Secrets Manager secret referenced by `SECRET_ID` (which must be set in production and point to a secret containing `OPENAI_API_KEY` and `GEMINI_API_KEY`):
+Provide these variables either directly or through an AWS Secrets Manager secret. When using Secrets Manager, the `SECRET_ID` environment variable must be set to the name of the secret containing `OPENAI_API_KEY` and `GEMINI_API_KEY`. If `SECRET_ID` is absent, the server logs a warning and skips the AWS lookup:
 
 - `AWS_REGION` – AWS region for S3 and DynamoDB.
 - `PORT` – HTTP port (defaults to `3000`).
@@ -71,7 +71,7 @@ Provide these variables either directly or through an AWS Secrets Manager secret
 - `PROCESS_TIMEOUT_MS` – max processing time in ms for each job (`300000`).
 - `TRUST_PROXY` – number of trusted reverse proxy hops.
 - `ENFORCE_HTTPS` – redirect HTTP requests to HTTPS when set to `true`.
-- `SECRET_ID` – required in production; name of the Secrets Manager secret holding `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `S3_BUCKET`.
+- `SECRET_ID` – required when using AWS Secrets Manager; name of the secret holding `OPENAI_API_KEY`, `GEMINI_API_KEY`, and `S3_BUCKET`.
 
 Example configuration:
 

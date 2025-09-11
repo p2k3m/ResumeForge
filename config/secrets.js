@@ -21,6 +21,8 @@ export async function getSecrets() {
     } catch (err) {
       console.warn(`Failed to load AWS secrets for ${secretId}: ${err.message}`);
     }
+  } else {
+    console.warn('SECRET_ID not set; skipping AWS Secrets Manager lookup.');
   }
 
   return loadLocalSecrets();
