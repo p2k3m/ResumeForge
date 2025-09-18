@@ -82,6 +82,7 @@ PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise 
 1. Install the AWS SAM CLI and authenticate with the target AWS account.
 2. Create the Secrets Manager secret described above (default name `ResumeForge`). Populate it with the required JSON values.
 3. Ensure the chosen S3 bucket name is globally unique.
+4. Provision an IAM user or role for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, access Secrets Manager, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
 
 ### Deploy
 
@@ -158,6 +159,49 @@ Any missing or invalid ID falls back to `modern`.
 
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
+
+## Continuous Deployment (GitHub Actions)
+
+Automated testing and deployment run through the `CI and Deploy` workflow. It executes on pull requests targeting `main` (tests only), on pushes to `main` (tests followed by deployment), and via the "Run workflow" button in the Actions tab.
+
+### What the workflow does
+
+1. Checks out the repository and installs Node.js 18.
+2. Installs dependencies and runs the Jest test suite for the Express server.
+3. Installs client dependencies and builds the Vite bundle to verify the frontend compiles cleanly.
+4. On pushes to `main`, validates that all required AWS credentials are present as GitHub repository secrets. Missing values cause the workflow to fail immediately with a descriptive error message.
+5. Configures the AWS CLI using the provided access key and secret key, builds the AWS SAM package, and deploys the CloudFormation stack using `sam deploy --resolve-s3`.
+
+### Required GitHub repository secrets
+
+Add the following secrets under **Settings → Secrets and variables → Actions** in your GitHub repository:
+
+| Secret | Description |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID` | Access key for the IAM user or role with deployment permissions. |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding secret access key. |
+| `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
+| `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
+| `RESUMEFORGE_DATA_BUCKET` | Globally unique S3 bucket name passed to the `DataBucketName` parameter. |
+| `RESUMEFORGE_SECRET_NAME` | Secrets Manager secret that stores the Gemini API credentials JSON payload. |
+
+Optional secrets:
+
+- `RESUMEFORGE_STAGE_NAME` – API Gateway stage name (defaults to `prod`).
+- `RESUMEFORGE_TABLE_NAME` – DynamoDB table name (defaults to `ResumeForge`).
+
+GitHub stores these encrypted at rest. The workflow reads them at runtime to configure AWS and to populate the SAM template parameters.
+
+### Granting deployment permissions
+
+Assign the IAM user or role attached to the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` secrets the ability to perform the following operations:
+
+- `cloudformation:*` on the target stack.
+- `s3:*` on the deployment bucket created by `--resolve-s3` and on the bucket referenced by `RESUMEFORGE_DATA_BUCKET`.
+- `secretsmanager:GetSecretValue` on the secret referenced by `RESUMEFORGE_SECRET_NAME`.
+- `lambda:*`, `apigateway:*`, and `dynamodb:*` actions required by the SAM template.
+
+Limiting the policy to the specific stack resources is recommended for production environments.
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
 
 ## API Response
