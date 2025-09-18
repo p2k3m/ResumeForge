@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -2648,7 +2649,14 @@ app.post('/api/process-cv', (req, res, next) => {
 });
 
 const port = process.env.PORT || 3000;
-if (process.env.NODE_ENV !== 'test') {
+const isLambda = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
+const isTestEnv = process.env.NODE_ENV === 'test';
+const currentFilePath = fileURLToPath(import.meta.url);
+const isDirectRun =
+  typeof process.argv[1] === 'string' &&
+  path.resolve(process.argv[1]) === currentFilePath;
+
+if (!isLambda && !isTestEnv && isDirectRun) {
   app.listen(port, () => {
     console.log(`Server running on port ${port}`);
   });
