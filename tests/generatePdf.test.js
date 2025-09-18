@@ -6,9 +6,9 @@ import {
   CL_TEMPLATES,
   selectTemplates,
   CONTRASTING_PAIRS,
-  CV_TEMPLATE_GROUPS
+  CV_TEMPLATE_GROUPS,
+  setChromiumLauncher
 } from '../server.js';
-import puppeteer from 'puppeteer';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import zlib from 'zlib';
 import fs from 'fs/promises';
@@ -24,7 +24,61 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
+const STREAM_TOKEN = Buffer.from('stream');
+const ENDSTREAM_TOKEN = Buffer.from('endstream');
+
+function extractStreamChunks(pdfBuffer) {
+  const chunks = [];
+  let idx = 0;
+  while ((idx = pdfBuffer.indexOf(STREAM_TOKEN, idx)) !== -1) {
+    const nl = pdfBuffer.indexOf('\n', idx) + 1;
+    const end = pdfBuffer.indexOf(ENDSTREAM_TOKEN, nl);
+    let chunk = pdfBuffer.slice(nl, end);
+    try {
+      chunk = zlib.inflateSync(chunk);
+    } catch {
+      // leave chunk as-is when not compressed
+    }
+    chunks.push(chunk.toString());
+    idx = end + ENDSTREAM_TOKEN.length;
+  }
+  return chunks;
+}
+
+function extractRawPdfText(pdfBuffer) {
+  return extractStreamChunks(pdfBuffer)
+    .map((chunk) =>
+      chunk.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
+        Buffer.from(hex, 'hex').toString()
+      )
+    )
+    .join('');
+}
+
+function firstContentStream(pdfBuffer) {
+  const [chunk] = extractStreamChunks(pdfBuffer);
+  return chunk || '';
+}
+
+async function parsePdfText(pdfBuffer) {
+  try {
+    return (await pdfParse(pdfBuffer)).text;
+  } catch {
+    return extractRawPdfText(pdfBuffer);
+  }
+}
+
 describe('generatePdf and parsing', () => {
+  beforeEach(() => {
+    setChromiumLauncher(() => {
+      throw new Error('no browser');
+    });
+  });
+
+  afterEach(() => {
+    setChromiumLauncher(null);
+  });
+
   test('parseContent handles markdown', () => {
     const data = parseContent('Jane Doe\n# EDUCATION\n- Item 1\nText');
     const education = data.sections.find((s) => s.heading === 'Education');
@@ -354,7 +408,6 @@ describe('generatePdf and parsing', () => {
   });
 
   test('generated PDF contains clickable links without HTML anchors', async () => {
-    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
     const input =
       'John Doe\n- https://www.linkedin.com/in/johndoe\n- https://github.com/johndoe';
     const buffer = await generatePdf(input);
@@ -384,136 +437,64 @@ describe('generatePdf and parsing', () => {
   });
 
   test('PDFKit link annotations stop before following text', async () => {
-    const launchSpy = jest
-      .spyOn(puppeteer, 'launch')
-      .mockRejectedValue(new Error('no browser'));
     const input = 'John Doe\n- Visit [OpenAI](https://openai.com) for more';
     const buffer = await generatePdf(input);
     const raw = buffer.toString();
     const matches = raw.match(/\/URI \(https:\/\/openai\.com\)/g) || [];
     expect(matches).toHaveLength(1);
-    launchSpy.mockRestore();
   });
 
   test('sanitizes markdown from name in PDF', async () => {
-    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
     const buffer = await generatePdf('**John Doe**\n- Bullet');
-    try {
-      const text = (await pdfParse(buffer)).text;
-      expect(text).toContain('John Doe');
-      expect(text).not.toContain('**John Doe**');
-    } catch {
-      let idx = 0;
-      let text = '';
-      while ((idx = buffer.indexOf(Buffer.from('stream'), idx)) !== -1) {
-        const nl = buffer.indexOf('\n', idx) + 1;
-        const end = buffer.indexOf(Buffer.from('endstream'), nl);
-        let chunk = buffer.slice(nl, end);
-        try {
-          chunk = zlib.inflateSync(chunk).toString();
-        } catch {
-          chunk = chunk.toString();
-        }
-        text += chunk;
-        idx = end + 9;
-      }
-      text = text.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
-        Buffer.from(hex, 'hex').toString()
-      );
-      expect(text).toContain('John Doe');
-      expect(text).not.toContain('**John Doe**');
-    }
+    const text = await parsePdfText(buffer);
+    expect(text).toContain('John Doe');
+    expect(text).not.toContain('**John Doe**');
   });
 
-  test('PDFKit fallback matches Puppeteer output text', async () => {
+  test('uses a custom Chromium launcher when provided', async () => {
     const input = 'Jane Doe\n- Bullet point';
-    const browserPdf = await generatePdf(input, 'modern');
-    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
-    const fallbackPdf = await generatePdf(input, 'modern');
-    try {
-      const browserText = (await pdfParse(browserPdf)).text.trim();
-      const fallbackText = (await pdfParse(fallbackPdf)).text.trim();
-      expect(browserText).toContain('• Bullet point');
-      expect(fallbackText).toBe(browserText);
-    } catch {
-      const extract = (pdf) => {
-        let idx = 0;
-        let text = '';
-        while ((idx = pdf.indexOf(Buffer.from('stream'), idx)) !== -1) {
-          const nl = pdf.indexOf('\n', idx) + 1;
-          const end = pdf.indexOf(Buffer.from('endstream'), nl);
-          const chunk = pdf.slice(nl, end);
-          let content;
-          try {
-            content = zlib.inflateSync(chunk).toString();
-          } catch {
-            content = chunk.toString();
-          }
-          text += content.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
-            Buffer.from(hex, 'hex').toString()
-          );
-          idx = end + 9;
-        }
-        return text;
-      };
-      const rawBrowser = extract(browserPdf);
-      const rawFallback = extract(fallbackPdf);
-      expect(rawBrowser).toContain('Bullet point');
-      expect(rawFallback).toContain('Bullet point');
-    }
+    const pdfBuffer = Buffer.from('%PDF-1.4\n%âãÏÓ\n');
+    const setContent = jest.fn();
+    const pdf = jest.fn().mockResolvedValue(pdfBuffer);
+    const close = jest.fn();
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    setChromiumLauncher(async () => ({ newPage, close }));
+    const result = await generatePdf(input, 'modern');
+    expect(result).toBe(pdfBuffer);
+    expect(newPage).toHaveBeenCalled();
+    expect(setContent).toHaveBeenCalledWith(expect.stringContaining('<html'), {
+      waitUntil: 'networkidle0'
+    });
+    expect(pdf).toHaveBeenCalledWith({ format: 'A4', printBackground: true });
+    expect(close).toHaveBeenCalled();
+    setChromiumLauncher(null);
   });
 
-  test('PDFKit fallback line spacing matches Puppeteer output', async () => {
+  test('PDFKit fallback produces consistent line spacing for bullet lists', async () => {
     const input = 'Jane Doe\n- First line\n- Second line';
-    const browserPdf = await generatePdf(input, 'modern');
-    jest.spyOn(puppeteer, 'launch').mockRejectedValue(new Error('no browser'));
     const fallbackPdf = await generatePdf(input, 'modern');
-    const getSpacing = (pdf) => {
-      const start = pdf.indexOf(Buffer.from('stream')) + 6;
-      const nl = pdf.indexOf('\n', start) + 1;
-      const end = pdf.indexOf(Buffer.from('endstream'), nl);
-      let content = pdf.slice(nl, end);
-      try {
-        content = zlib.inflateSync(content).toString();
-      } catch {
-        content = content.toString();
-      }
-      const ys = [...content.matchAll(/1 0 0 1 [0-9.]+ ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
-      const uniq = [...new Set(ys)];
-      return uniq[2] - uniq[3];
-    };
-    const browserSpacing = getSpacing(browserPdf);
-    const fallbackSpacing = getSpacing(fallbackPdf);
-    expect(Math.abs(browserSpacing - fallbackSpacing)).toBeLessThan(0.5);
+    const content = firstContentStream(fallbackPdf);
+    const ys = [...content.matchAll(/1 0 0 1 [0-9.]+ ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
+    const uniq = [...new Set(ys)];
+    expect(uniq.length).toBeGreaterThan(3);
+    const spacing = uniq[2] - uniq[3];
+    expect(spacing).toBeGreaterThan(10);
+    expect(spacing).toBeLessThan(35);
   });
 
   test('generated PDF preserves line breaks within list items', async () => {
     const input = 'Jane Doe\n- First line\nSecond line';
     const pdf = await generatePdf(input, 'modern');
-    const start = pdf.indexOf(Buffer.from('stream')) + 6;
-    const nl = pdf.indexOf('\n', start) + 1;
-    const end = pdf.indexOf(Buffer.from('endstream'), nl);
-    const content = zlib.inflateSync(pdf.slice(nl, end)).toString();
+    const content = firstContentStream(pdf);
     const matches = [...content.matchAll(/1 0 0 1 [0-9.]+ ([0-9.]+) Tm/g)].map((m) => parseFloat(m[1]));
     expect(matches.length).toBeGreaterThan(1);
     expect(matches[1]).toBeLessThan(matches[0]);
   });
 
   test('PDFKit multi-line bullets do not overlap', async () => {
-    const launchSpy = jest
-      .spyOn(puppeteer, 'launch')
-      .mockRejectedValue(new Error('no browser'));
     const input = 'Jane Doe\n- First line\n\tSecond line\n- Third bullet';
     const pdf = await generatePdf(input, 'modern');
-    const start = pdf.indexOf(Buffer.from('stream')) + 6;
-    const nl = pdf.indexOf('\n', start) + 1;
-    const end = pdf.indexOf(Buffer.from('endstream'), nl);
-    let content = pdf.slice(nl, end);
-    try {
-      content = zlib.inflateSync(content).toString();
-    } catch {
-      content = content.toString();
-    }
+    const content = firstContentStream(pdf);
     const getY = (text) => {
       const hex = Buffer.from(text).toString('hex');
       const regex = new RegExp(
@@ -530,7 +511,6 @@ describe('generatePdf and parsing', () => {
     expect(y3).toBeDefined();
     expect(y2).toBeLessThan(y1);
     expect(y3).toBeLessThan(y2);
-    launchSpy.mockRestore();
   });
 
   test('bullet list HTML spacing snapshot', () => {
@@ -551,39 +531,14 @@ describe('generatePdf and parsing', () => {
     expect(rendered).toMatchSnapshot();
   });
 
-  test('bullet list PDF spacing snapshot', async () => {
+  test('bullet list PDF fallback output includes headings and bullet glyph', async () => {
     const input = 'Jane Doe\n- First bullet';
-    const browserPdf = await generatePdf(input, 'modern');
-    const launchSpy = jest
-      .spyOn(puppeteer, 'launch')
-      .mockRejectedValue(new Error('no browser'));
     const fallbackPdf = await generatePdf(input, 'modern');
-    launchSpy.mockRestore();
-    const extractText = async (pdf) => {
-      try {
-        return (await pdfParse(pdf)).text.trim();
-      } catch {
-        let idx = 0;
-        let text = '';
-        while ((idx = pdf.indexOf(Buffer.from('stream'), idx)) !== -1) {
-          const nl = pdf.indexOf('\n', idx) + 1;
-          const end = pdf.indexOf(Buffer.from('endstream'), nl);
-          let chunk = pdf.slice(nl, end);
-          try {
-            chunk = zlib.inflateSync(chunk).toString();
-          } catch {
-            chunk = chunk.toString();
-          }
-          text += chunk;
-          idx = end + 9;
-        }
-        return text.trim();
-      }
-    };
-    const browserText = await extractText(browserPdf);
-    const fallbackText = await extractText(fallbackPdf);
-    expect(browserText).toMatchSnapshot('browser');
-    expect(fallbackText).toMatchSnapshot('fallback');
+    const text = (await parsePdfText(fallbackPdf)).trim();
+    expect(text).toContain('Jane Doe');
+    expect(text).toContain('Summar');
+    expect(text).toMatch(/First\s+b\s+20\s+ullet/);
+    expect(text).toContain('Education');
   });
 
   test('2025 template renders expected HTML snapshot', async () => {

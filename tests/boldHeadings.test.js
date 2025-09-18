@@ -1,6 +1,5 @@
 import { jest } from '@jest/globals';
-import { generatePdf, parseContent } from '../server.js';
-import puppeteer from 'puppeteer';
+import { generatePdf, parseContent, setChromiumLauncher } from '../server.js';
 import fs from 'fs/promises';
 import path from 'path';
 import Handlebars from '../lib/handlebars.js';
@@ -41,11 +40,11 @@ test('all headings including Skills are bold in HTML and PDF outputs', async () 
   expect(html).toMatchSnapshot('html');
 
   // Force PDFKit fallback by failing to launch Puppeteer
-  const launchSpy = jest
-    .spyOn(puppeteer, 'launch')
-    .mockRejectedValue(new Error('no browser'));
+  setChromiumLauncher(() => {
+    throw new Error('no browser');
+  });
   const pdfBuffer = await generatePdf(input, 'modern');
-  launchSpy.mockRestore();
+  setChromiumLauncher(null);
 
   // Map PDF font identifiers to BaseFont names
   const pdfStr = pdfBuffer.toString('latin1');
