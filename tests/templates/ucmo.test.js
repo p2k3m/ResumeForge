@@ -1,8 +1,7 @@
-import { parseContent } from '../../server.js';
+import { parseContent, generatePdf, setChromiumLauncher } from '../../server.js';
 import Handlebars from '../../lib/handlebars.js';
 import fs from 'fs/promises';
 import path from 'path';
-import puppeteer from 'puppeteer';
 import zlib from 'zlib';
 
 function tokensToHtml(tokens) {
@@ -42,17 +41,11 @@ test('ucmo template renders with contact bar and logo', async () => {
   };
   const html = Handlebars.compile(tplSrc)(htmlData);
   expect(html).toMatchSnapshot('html');
-  let browser;
-  try {
-    browser = await puppeteer.launch({ args: ['--no-sandbox'] });
-  } catch (err) {
-    console.warn('Puppeteer launch failed, skipping PDF snapshot:', err.message);
-    return;
-  }
-  const page = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-  const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
-  await browser.close();
+  setChromiumLauncher(() => {
+    throw new Error('no browser');
+  });
+  const pdfBuffer = await generatePdf(input, 'ucmo');
+  setChromiumLauncher(null);
 
   const pdfStr = pdfBuffer.toString('latin1');
   const objects = Object.fromEntries(

@@ -80,3 +80,86 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
 </html>
 "
 `;
+
+exports[`ucmo template renders with contact bar and logo: pdf 1`] = `
+{
+  "content": "1 0 0 -1 0 792 cm
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 728.34 Tm
+/F2 20 Tf
+[<4a> 15 <616e6520446f65> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2 0.2 0.2 scn
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 693.378 Tm
+/F2 14 Tf
+[<57> 75 <6f726b20457870657269656e6365> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2901960784313726 0.3333333333333333 0.40784313725490196 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 662.602 Tm
+/F3 12 Tf
+[<9520> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2 0.2 0.2 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 64.4 662.602 Tm
+/F3 12 Tf
+[<4275696c74207468696e6773> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.12156862745098039 0.23529411764705882 0.36470588235294116 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 618.452 Tm
+/F2 14 Tf
+[<456475636174696f6e> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2901960784313726 0.3333333333333333 0.40784313725490196 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 50 587.676 Tm
+/F3 12 Tf
+[<9520> 0] TJ
+ET
+Q
+/DeviceRGB cs
+0.2 0.2 0.2 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 64.4 587.676 Tm
+/F3 12 Tf
+[<4253632053747566> 25 <66> 0] TJ
+ET
+Q
+",
+  "fontMap": {
+    "F2": "Times-Bold",
+    "F3": "Times-Roman",
+  },
+}
+`;

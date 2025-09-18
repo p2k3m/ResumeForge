@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless deployment for ResumeForge on AWS Lambda and API Gateway.
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    Description: Stage name for the API Gateway deployment.
+  DataBucketName:
+    Type: String
+    Default: resume-forge-data
+    Description: Globally unique name for the S3 bucket that stores uploads and generated artifacts.
+  ResumeTableName:
+    Type: String
+    Default: ResumeForge
+    Description: Name of the DynamoDB table that tracks processed resumes.
+  SecretName:
+    Type: String
+    Default: ResumeForge
+    Description: Name of the AWS Secrets Manager secret containing third-party API keys.
+
+Resources:
+  ResumeForgeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref StageName
+      EndpointConfiguration: REGIONAL
+      BinaryMediaTypes:
+        - multipart/form-data
+        - application/pdf
+        - application/octet-stream
+      Cors:
+        AllowMethods: "'OPTIONS,POST'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigins: "'*'"
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref DataBucketName
+    DeletionPolicy: Retain
+
+  ResumeForgeTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ResumeTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: linkedinProfileUrl
+          AttributeType: S
+      KeySchema:
+        - AttributeName: linkedinProfileUrl
+          KeyType: HASH
+
+  ResumeForgeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeHandler
+      Handler: lambda.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      Events:
+        ApiProxy:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /
+            Method: ANY
+      Environment:
+        Variables:
+          AWS_REGION: !Ref AWS::Region
+          SECRET_ID: !Ref SecretName
+          S3_BUCKET: !Ref DataBucketName
+          RESUME_TABLE_NAME: !Ref ResumeTableName
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Sid: AllowSecretRead
+              Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
+        - Statement:
+            - Sid: AllowBucketAccess
+              Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub arn:aws:s3:::${DataBucketName}/*
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ResumeForgeTable
+      Layers: []
+
+Outputs:
+  ApiBaseUrl:
+    Description: Invoke URL for the API Gateway stage.
+    Value: !Sub https://${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}
+  DataBucket:
+    Description: Bucket used for uploads and generated files.
+    Value: !Ref DataBucket
+  ResumeTable:
+    Description: DynamoDB table that stores resume processing metadata.
+    Value: !Ref ResumeForgeTable

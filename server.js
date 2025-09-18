@@ -18,8 +18,49 @@ import { logEvent } from './logger.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
-import puppeteer from 'puppeteer';
 import JSON5 from 'json5';
+
+let chromium;
+let puppeteerCore;
+let chromiumLaunchAttempted = false;
+let customChromiumLauncher;
+
+async function getChromiumBrowser() {
+  if (customChromiumLauncher) {
+    return customChromiumLauncher();
+  }
+  if (chromiumLaunchAttempted && !chromium) return null;
+  try {
+    if (!chromium || !puppeteerCore) {
+      const chromiumImport = await import('@sparticuz/chromium');
+      chromium = chromiumImport.default ?? chromiumImport;
+      const puppeteerImport = await import('puppeteer-core');
+      puppeteerCore = puppeteerImport.default ?? puppeteerImport;
+    }
+    chromiumLaunchAttempted = true;
+    const executablePath = await chromium.executablePath();
+    return await puppeteerCore.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true
+    });
+  } catch (err) {
+    chromiumLaunchAttempted = true;
+    console.error('Chromium launch failed, falling back to PDFKit', err);
+    return null;
+  }
+}
+
+function setChromiumLauncher(fn) {
+  customChromiumLauncher = typeof fn === 'function' ? fn : null;
+  if (!customChromiumLauncher) {
+    chromium = undefined;
+    puppeteerCore = undefined;
+    chromiumLaunchAttempted = false;
+  }
+}
 
 async function parseUserAgent(ua) {
   const fallback = { browser: ua || '', os: ua || '', device: ua || '' };
@@ -1543,190 +1584,199 @@ let generatePdf = async function (
     }
   }
   try {
-    const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
-    await browser.close();
-    return pdfBuffer;
-  } catch (err) {
-    // Fallback for environments without Chromium dependencies
-    const { default: PDFDocument } = await import('pdfkit');
-    const styleMap = {
-      modern: {
-        font: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italic: 'Helvetica-Oblique',
-        headingColor: '#1f3c5d',
-        bullet: '•',
-        eduBullet: '•',
-        bulletColor: '#4a5568',
-        textColor: '#333',
-        lineGap: 6,
-        paragraphGap: 10
-      },
-      professional: {
-        font: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italic: 'Helvetica-Oblique',
-        headingColor: '#1f3c5d',
-        bullet: '•',
-        eduBullet: '•',
-        bulletColor: '#4a5568',
-        textColor: '#333',
-        lineGap: 6,
-        paragraphGap: 10
-      },
-      ucmo: {
-        font: 'Times-Roman',
-        bold: 'Times-Bold',
-        italic: 'Times-Italic',
-        headingColor: '#1f3c5d',
-        bullet: '•',
-        eduBullet: '•',
-        bulletColor: '#4a5568',
-        textColor: '#333',
-        lineGap: 6,
-        paragraphGap: 10
-      },
-      vibrant: {
-        font: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italic: 'Helvetica-Oblique',
-        headingColor: '#1f3c5d',
-        bullet: '•',
-        eduBullet: '•',
-        bulletColor: '#4a5568',
-        textColor: '#333',
-        lineGap: 6,
-        paragraphGap: 10
-      },
-      '2025': {
-        font: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italic: 'Helvetica-Oblique',
-        headingColor: '#1f3c5d',
-        bullet: '•',
-        eduBullet: '•',
-        bulletColor: '#4a5568',
-        textColor: '#333',
-        lineGap: 6,
-        paragraphGap: 8
-      }
-    };
-    return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ margin: 50 });
-      const buffers = [];
-      doc.on('data', (d) => buffers.push(d));
-      doc.on('end', () => resolve(Buffer.concat(buffers)));
-      doc.on('error', reject);
-      // Optional font embedding for Roboto/Helvetica families if available
-      let robotoAvailable = false;
+    const browser = await getChromiumBrowser();
+    if (browser) {
       try {
-        const fontsDir = path.resolve('fonts');
-        const reg = path.join(fontsDir, 'Roboto-Regular.ttf');
-        const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
-        const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
-        if (fsSync.existsSync(reg)) {
-          doc.registerFont('Roboto', reg);
-          robotoAvailable = true;
-        }
-        if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
-        if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
-        const hReg = path.join(fontsDir, 'Helvetica.ttf');
-        const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
-        const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
-        if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
-        if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
-        if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
-      } catch {}
-      if (robotoAvailable) {
-        ['modern', 'vibrant'].forEach((tpl) => {
-          styleMap[tpl].font = 'Roboto';
-          styleMap[tpl].bold = 'Roboto-Bold';
-          styleMap[tpl].italic = 'Roboto-Italic';
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: 'networkidle0' });
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true
         });
+        return pdfBuffer;
+      } finally {
+        await browser.close();
       }
-      const style = styleMap[templateId] || styleMap.modern;
+    }
+  } catch (err) {
+    console.error('Chromium PDF generation failed, using PDFKit fallback', err);
+  }
 
-      doc.font(style.bold)
+  const { default: PDFDocument } = await import('pdfkit');
+  const styleMap = {
+    modern: {
+      font: 'Helvetica',
+      bold: 'Helvetica-Bold',
+      italic: 'Helvetica-Oblique',
+      headingColor: '#1f3c5d',
+      bullet: '•',
+      eduBullet: '•',
+      bulletColor: '#4a5568',
+      textColor: '#333',
+      lineGap: 6,
+      paragraphGap: 10
+    },
+    professional: {
+      font: 'Helvetica',
+      bold: 'Helvetica-Bold',
+      italic: 'Helvetica-Oblique',
+      headingColor: '#1f3c5d',
+      bullet: '•',
+      eduBullet: '•',
+      bulletColor: '#4a5568',
+      textColor: '#333',
+      lineGap: 6,
+      paragraphGap: 10
+    },
+    ucmo: {
+      font: 'Times-Roman',
+      bold: 'Times-Bold',
+      italic: 'Times-Italic',
+      headingColor: '#1f3c5d',
+      bullet: '•',
+      eduBullet: '•',
+      bulletColor: '#4a5568',
+      textColor: '#333',
+      lineGap: 6,
+      paragraphGap: 10
+    },
+    vibrant: {
+      font: 'Helvetica',
+      bold: 'Helvetica-Bold',
+      italic: 'Helvetica-Oblique',
+      headingColor: '#1f3c5d',
+      bullet: '•',
+      eduBullet: '•',
+      bulletColor: '#4a5568',
+      textColor: '#333',
+      lineGap: 6,
+      paragraphGap: 10
+    },
+    '2025': {
+      font: 'Helvetica',
+      bold: 'Helvetica-Bold',
+      italic: 'Helvetica-Oblique',
+      headingColor: '#1f3c5d',
+      bullet: '•',
+      eduBullet: '•',
+      bulletColor: '#4a5568',
+      textColor: '#333',
+      lineGap: 6,
+      paragraphGap: 8
+    }
+  };
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const buffers = [];
+    doc.on('data', (d) => buffers.push(d));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', reject);
+    // Optional font embedding for Roboto/Helvetica families if available
+    let robotoAvailable = false;
+    try {
+      const fontsDir = path.resolve('fonts');
+      const reg = path.join(fontsDir, 'Roboto-Regular.ttf');
+      const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
+      const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
+      if (fsSync.existsSync(reg)) {
+        doc.registerFont('Roboto', reg);
+        robotoAvailable = true;
+      }
+      if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
+      if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
+      const hReg = path.join(fontsDir, 'Helvetica.ttf');
+      const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
+      const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
+      if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
+      if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
+      if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
+    } catch {}
+    if (robotoAvailable) {
+      ['modern', 'vibrant'].forEach((tpl) => {
+        styleMap[tpl].font = 'Roboto';
+        styleMap[tpl].bold = 'Roboto-Bold';
+        styleMap[tpl].italic = 'Roboto-Italic';
+      });
+    }
+    const style = styleMap[templateId] || styleMap.modern;
+
+    doc.font(style.bold)
+      .fillColor(style.headingColor)
+      .fontSize(20)
+      .text(data.name, { paragraphGap: style.paragraphGap, align: 'left', lineGap: style.lineGap })
+      .fillColor(style.textColor);
+
+    data.sections.forEach((sec) => {
+      doc
+        .font(style.bold)
         .fillColor(style.headingColor)
-        .fontSize(20)
-        .text(data.name, { paragraphGap: style.paragraphGap, align: 'left', lineGap: style.lineGap })
-        .fillColor(style.textColor);
-
-      data.sections.forEach((sec) => {
-        doc
-          .font(style.bold)
-          .fillColor(style.headingColor)
-          .fontSize(14)
-          .text(sec.heading, { paragraphGap: style.paragraphGap, lineGap: style.lineGap });
-        (sec.items || []).forEach((tokens) => {
-          const startY = doc.y;
-          doc.font(style.font).fontSize(12);
-          tokens.forEach((t, idx) => {
-            if (t.type === 'bullet') {
-              const glyph =
-                sec.heading?.toLowerCase() === 'education'
-                  ? style.eduBullet || style.bullet
-                  : style.bullet;
-              doc
-                .fillColor(style.bulletColor)
-                .text(`${glyph} `, { continued: true, lineGap: style.lineGap })
-                .text('', { continued: true })
-                .fillColor(style.textColor);
-              return;
-            }
-            if (t.type === 'jobsep') {
-              return;
-            }
-            if (t.type === 'newline') {
-              const before = doc.y;
-              doc.text('', { continued: false, lineGap: style.lineGap });
-              if (doc.y === before) doc.moveDown();
-              doc.text('   ', { continued: true, lineGap: style.lineGap });
-              return;
-            }
-            const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap };
-            if (t.type === 'tab') {
-              doc.text('    ', opts);
-              return;
-            }
-            if (t.type === 'link') {
-              doc.fillColor('blue');
-              doc.text(t.text, {
-                lineGap: style.lineGap,
-                link: t.href,
-                underline: true,
-                continued: false
-              });
-              if (idx < tokens.length - 1)
-                doc.text('', { continued: true, lineGap: style.lineGap });
-              doc.fillColor(style.textColor);
-              return;
-            }
-            if (t.type === 'heading') {
-              // Render heading tokens using the bold font
-              doc.font(style.bold);
-              doc.text(t.text, opts);
-              doc.font(style.font);
-              return;
-            }
-            if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
-            else if (t.style === 'italic') doc.font(style.italic);
-            else doc.font(style.font);
+        .fontSize(14)
+        .text(sec.heading, { paragraphGap: style.paragraphGap, lineGap: style.lineGap });
+      (sec.items || []).forEach((tokens) => {
+        const startY = doc.y;
+        doc.font(style.font).fontSize(12);
+        tokens.forEach((t, idx) => {
+          if (t.type === 'bullet') {
+            const glyph =
+              sec.heading?.toLowerCase() === 'education'
+                ? style.eduBullet || style.bullet
+                : style.bullet;
+            doc
+              .fillColor(style.bulletColor)
+              .text(`${glyph} `, { continued: true, lineGap: style.lineGap })
+              .text('', { continued: true })
+              .fillColor(style.textColor);
+            return;
+          }
+          if (t.type === 'jobsep') {
+            return;
+          }
+          if (t.type === 'newline') {
+            const before = doc.y;
+            doc.text('', { continued: false, lineGap: style.lineGap });
+            if (doc.y === before) doc.moveDown();
+            doc.text('   ', { continued: true, lineGap: style.lineGap });
+            return;
+          }
+          const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap };
+          if (t.type === 'tab') {
+            doc.text('    ', opts);
+            return;
+          }
+          if (t.type === 'link') {
+            doc.fillColor('blue');
+            doc.text(t.text, {
+              lineGap: style.lineGap,
+              link: t.href,
+              underline: true,
+              continued: false
+            });
+            if (idx < tokens.length - 1)
+              doc.text('', { continued: true, lineGap: style.lineGap });
+            doc.fillColor(style.textColor);
+            return;
+          }
+          if (t.type === 'heading') {
+            // Render heading tokens using the bold font
+            doc.font(style.bold);
             doc.text(t.text, opts);
             doc.font(style.font);
-          });
-          if (doc.y === startY) doc.moveDown();
-          const extra = style.paragraphGap / doc.currentLineHeight(true);
-          if (extra) doc.moveDown(extra);
+            return;
+          }
+          if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
+          else if (t.style === 'italic') doc.font(style.italic);
+          else doc.font(style.font);
+          doc.text(t.text, opts);
+          doc.font(style.font);
         });
-        doc.moveDown();
+        if (doc.y === startY) doc.moveDown();
+        const extra = style.paragraphGap / doc.currentLineHeight(true);
+        if (extra) doc.moveDown(extra);
       });
-      doc.end();
+      doc.moveDown();
     });
-  }
+    doc.end();
+  });
 };
 
 function setGeneratePdf(fn) {
@@ -2492,7 +2542,7 @@ app.post('/api/process-cv', (req, res, next) => {
     }
 
     const dynamo = new DynamoDBClient({ region });
-    const tableName = 'ResumeForge';
+    const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
     async function ensureTableExists() {
       try {
         await dynamo.send(new DescribeTableCommand({ TableName: tableName }));
@@ -2609,6 +2659,7 @@ export {
   extractText,
   generatePdf,
   setGeneratePdf,
+  setChromiumLauncher,
   parseContent,
   parseLine,
   ensureRequiredSections,

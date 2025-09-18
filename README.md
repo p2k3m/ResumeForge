@@ -12,7 +12,8 @@ The server relies on the following environment variables:
   "SECRET_ID": "your-secret-id",
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
-  "S3_BUCKET": "resume-forge-data"
+  "S3_BUCKET": "resume-forge-data",
+  "RESUME_TABLE_NAME": "ResumeForge"
 }
 ```
 
@@ -35,6 +36,21 @@ The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 }
 ```
 
+### Required secrets and parameters for AWS deployment
+
+Before deploying to AWS you must provision an AWS Secrets Manager secret (default name: `ResumeForge`) with the exact JSON stru
+cture shown above. The fields are:
+
+- `GEMINI_API_KEY` – Google Gemini API key used to generate resume content.
+- `S3_BUCKET` – Optional override for the S3 bucket that stores uploads and generated PDFs. When omitted the application uses t
+  he value passed as the `DataBucketName` parameter in the SAM template.
+
+The Lambda function also relies on the following configuration parameters provided during deployment:
+
+- `DataBucketName` – S3 bucket that stores original uploads, logs, and generated documents.
+- `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
+- `SecretName` – Name of the Secrets Manager secret containing the JSON above (defaults to `ResumeForge`).
+
 ## IAM Policy
 Minimal permissions required by the server:
 
@@ -54,6 +70,50 @@ Minimal permissions required by the server:
     }
   ]
 }
+```
+
+## Serverless deployment on AWS
+
+The project now ships with an AWS SAM template (`template.yaml`) that deploys the Express API as an AWS Lambda function behind A
+PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise cost for low traffic workloads.
+
+### Prerequisites
+
+1. Install the AWS SAM CLI and authenticate with the target AWS account.
+2. Create the Secrets Manager secret described above (default name `ResumeForge`). Populate it with the required JSON values.
+3. Ensure the chosen S3 bucket name is globally unique.
+
+### Deploy
+
+```bash
+sam build --use-container
+sam deploy --guided
+```
+
+During the guided deploy provide values for:
+
+- `Stack Name` – e.g. `ResumeForge`
+- `AWS Region` – e.g. `ap-south-1`
+- `DataBucketName` – globally unique bucket name for uploads and generated files
+- `ResumeTableName` – DynamoDB table name (defaults to `ResumeForge`)
+- `SecretName` – Secrets Manager secret that stores the Gemini API key JSON payload
+
+The deployment creates:
+
+- `ResumeForgeHandler` Lambda function (Node.js 18) using `lambda.js`
+- Regional REST API Gateway with binary support for `multipart/form-data`
+- S3 bucket for uploads/logs and DynamoDB table with on-demand billing
+
+After `sam deploy` completes it prints the `ApiBaseUrl` output. The production endpoint for the application is:
+
+```
+https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
+```
+
+Using the default stage (`prod`), the `/api/process-cv` endpoint is reachable at:
+
+```
+https://<api-id>.execute-api.<region>.amazonaws.com/prod/api/process-cv
 ```
 
 ## Local Development
