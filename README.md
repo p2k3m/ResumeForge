@@ -1,7 +1,7 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The service uses Google's Gemini generative AI for text generation and stores session artifacts in Amazon S3.
+ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
 
 ## Environment Variables
 The server relies on the following environment variables:
@@ -19,7 +19,8 @@ The server relies on the following environment variables:
 
 `SECRET_ID` is required in production and must reference an AWS Secrets Manager secret containing the values shown below. During
 local development you may omit `SECRET_ID` and instead provide a `local-secrets.json` file at the project root with the same
-JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the server will fail to start.
+JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the server will fail to start. Within AWS Lambda the
+handler defined in `lambda.js` automatically reads the secret identified by `SECRET_ID`.
 
 `S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
 `resume-forge-data`, which is suitable for local development.
@@ -27,7 +28,16 @@ JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the 
 `GEMINI_API_KEY` supplies the Google Gemini API key. Set it directly in your environment for development or include it in the
 secret.
 
-The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
+### Secrets quick reference
+
+Create a single AWS Secrets Manager secret (default name: `ResumeForge`) that contains the keys below. These entries are the minimum prerequisites for a successful serverless deployment.
+
+| Key | Required | Description |
+| --- | -------- | ----------- |
+| `GEMINI_API_KEY` | ✅ | Google Gemini API key used to generate résumé improvements and cover letters. |
+| `S3_BUCKET` | ➕ Optional | Override for the bucket that stores uploads and generated PDFs. If omitted the Lambda function uses the value provided for the `DataBucketName` parameter during deployment. |
+
+Example JSON payload stored inside the secret:
 
 ```json
 {
@@ -36,20 +46,15 @@ The AWS Secrets Manager secret referenced by `SECRET_ID` must contain:
 }
 ```
 
-### Required secrets and parameters for AWS deployment
+If you prefer local development without Secrets Manager, place the same JSON structure in `./local-secrets.json`. The Express app automatically detects that file when `SECRET_ID` is not defined.
 
-Before deploying to AWS you must provision an AWS Secrets Manager secret (default name: `ResumeForge`) with the exact JSON stru
-cture shown above. The fields are:
+### Required parameters for AWS deployment
 
-- `GEMINI_API_KEY` – Google Gemini API key used to generate resume content.
-- `S3_BUCKET` – Optional override for the S3 bucket that stores uploads and generated PDFs. When omitted the application uses t
-  he value passed as the `DataBucketName` parameter in the SAM template.
-
-The Lambda function also relies on the following configuration parameters provided during deployment:
+In addition to the secret values above, the Lambda function relies on three CloudFormation/SAM parameters provided during deployment:
 
 - `DataBucketName` – S3 bucket that stores original uploads, logs, and generated documents.
 - `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
-- `SecretName` – Name of the Secrets Manager secret containing the JSON above (defaults to `ResumeForge`).
+- `SecretName` – Name of the Secrets Manager secret containing the JSON payload described above (defaults to `ResumeForge`).
 
 ## IAM Policy
 Minimal permissions required by the server:
@@ -116,6 +121,18 @@ Using the default stage (`prod`), the `/api/process-cv` endpoint is reachable at
 ```
 https://<api-id>.execute-api.<region>.amazonaws.com/prod/api/process-cv
 ```
+
+### Post-deployment verification
+
+1. Confirm that the CloudFormation outputs include `ApiBaseUrl`. This is the canonical URL for the deployed serverless API.
+2. Issue a quick health check once the stack finishes deploying:
+
+   ```bash
+   curl "$(aws cloudformation describe-stacks --stack-name ResumeForge --query 'Stacks[0].Outputs[?OutputKey==\`ApiBaseUrl\`].OutputValue' --output text)/healthz"
+   ```
+
+   A successful deployment returns `{ "status": "ok" }`.
+3. Upload traffic, DynamoDB activity, and Lambda invocations are all billed on demand. With minimal user traffic the monthly AWS cost typically remains within the free tier.
 
 ## Local Development
 1. Install dependencies in both the server and client directories:
