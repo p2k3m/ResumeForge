@@ -15,10 +15,6 @@ Parameters:
     Type: String
     Default: ResumeForge
     Description: Name of the DynamoDB table that tracks processed resumes.
-  SecretName:
-    Type: String
-    Default: ResumeForge
-    Description: Name of the AWS Secrets Manager secret containing third-party API keys.
 
 Resources:
   ResumeForgeApi:
@@ -77,17 +73,10 @@ Resources:
       Environment:
         Variables:
           AWS_REGION: !Ref AWS::Region
-          SECRET_ID: !Ref SecretName
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
       Policies:
         - AWSLambdaBasicExecutionRole
-        - Statement:
-            - Sid: AllowSecretRead
-              Effect: Allow
-              Action:
-                - secretsmanager:GetSecretValue
-              Resource: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
         - Statement:
             - Sid: AllowBucketAccess
               Effect: Allow

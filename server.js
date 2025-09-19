@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import {
   DynamoDBClient,
   CreateTableCommand,
@@ -100,8 +99,14 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
-const DEFAULT_SECRET_ID = 'ResumeForge';
 const DEFAULT_AWS_REGION = 'ap-south-1';
+
+const INLINE_SECRETS = {
+  S3_BUCKET: 'resume-forge-data',
+  GEMINI_API_KEY: 'dummy-gemini-api-key'
+};
+
+const REQUIRED_SECRET_KEYS = ['S3_BUCKET', 'GEMINI_API_KEY'];
 
 const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
@@ -233,29 +238,50 @@ function selectTemplates({
   return { template1, template2, coverTemplate1, coverTemplate2 };
 }
 
-process.env.SECRET_ID = process.env.SECRET_ID || DEFAULT_SECRET_ID;
 process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
 
 const region = process.env.AWS_REGION || 'ap-south-1';
-const secretsClient = new SecretsManagerClient({ region });
+const s3Client = new S3Client({ region });
 
 let secretCache;
-async function getSecrets() {
-  if (secretCache) return secretCache;
-  const secretId = process.env.SECRET_ID;
-  if (!secretId) {
-    try {
-      const data = await fs.readFile(path.resolve('local-secrets.json'), 'utf-8');
-      secretCache = JSON.parse(data);
-      return secretCache;
-    } catch (err) {
-      throw new Error('SECRET_ID environment variable is required');
+function mergeInlineSecrets() {
+  const overrides = { ...INLINE_SECRETS };
+  if (process.env.S3_BUCKET) overrides.S3_BUCKET = process.env.S3_BUCKET;
+  if (process.env.GEMINI_API_KEY) overrides.GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  return overrides;
+}
+
+function normalizeSecrets(candidate) {
+  if (!candidate || typeof candidate !== 'object') return null;
+  const normalized = {};
+  for (const [key, value] of Object.entries(candidate)) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) normalized[key] = trimmed;
+    } else if (value !== undefined && value !== null) {
+      normalized[key] = value;
     }
   }
-  const { SecretString } = await secretsClient.send(
-    new GetSecretValueCommand({ SecretId: secretId })
-  );
-  secretCache = JSON.parse(SecretString ?? '{}');
+  const missing = REQUIRED_SECRET_KEYS.filter((key) => !normalized[key]);
+  if (missing.length) {
+    console.warn(
+      `Secrets configuration is missing values for: ${missing.join(', ')}. ` +
+        'Update INLINE_SECRETS in server.js or provide S3_BUCKET and GEMINI_API_KEY environment variables.'
+    );
+    return null;
+  }
+  return normalized;
+}
+
+async function getSecrets() {
+  if (secretCache) return secretCache;
+  const inlineSecrets = normalizeSecrets(mergeInlineSecrets());
+  if (!inlineSecrets) {
+    throw new Error(
+      'No valid inline secrets configuration found. Update INLINE_SECRETS in server.js or set environment overrides.'
+    );
+  }
+  secretCache = Object.freeze(inlineSecrets);
   return secretCache;
 }
 
@@ -2130,7 +2156,7 @@ app.post('/api/process-cv', (req, res, next) => {
 }, async (req, res) => {
   const jobId = Date.now().toString();
   const date = new Date().toISOString().slice(0, 10);
-  const s3 = new S3Client({ region });
+  const s3 = s3Client;
   let bucket;
   let secrets;
   try {
@@ -2190,7 +2216,7 @@ app.post('/api/process-cv', (req, res, next) => {
   const logKey = `${prefix}logs/processing.jsonl`;
 
   // Store raw file to configured bucket
-  const initialS3 = new S3Client({ region });
+  const initialS3 = s3Client;
   try {
     await initialS3.send(
       new PutObjectCommand({

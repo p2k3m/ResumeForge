@@ -3,13 +3,14 @@
 ## Overview
 ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
 
-## Environment Variables
-The server relies on the following environment variables:
+## Environment configuration
+ResumeForge now keeps its required configuration alongside the code. The `INLINE_SECRETS` constant in `server.js` defines defaults for the values that previously lived in AWS Secrets Manager. Update those entries (or override them through environment variables) before running locally or deploying to AWS.
+
+The runtime looks for the following keys:
 
 ```json
 {
   "AWS_REGION": "ap-south-1",
-  "SECRET_ID": "your-secret-id",
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
@@ -17,44 +18,18 @@ The server relies on the following environment variables:
 }
 ```
 
-`SECRET_ID` is required in production and must reference an AWS Secrets Manager secret containing the values shown below. During
-local development you may omit `SECRET_ID` and instead provide a `local-secrets.json` file at the project root with the same
-JSON structure. If neither `SECRET_ID` nor `local-secrets.json` is present, the server will fail to start. Within AWS Lambda the
-handler defined in `lambda.js` automatically reads the secret identified by `SECRET_ID`.
+- `GEMINI_API_KEY` – Google Gemini API key. A placeholder is shipped in `INLINE_SECRETS`; replace it with a valid key or set the `GEMINI_API_KEY` environment variable. The server validates that a non-empty value is present at startup.
+- `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Edit `INLINE_SECRETS.S3_BUCKET` or set the `S3_BUCKET` environment variable to match your deployment.
+- `AWS_REGION`, `PORT`, and `RESUME_TABLE_NAME` can continue to come from the environment. Reasonable defaults are provided for local development.
 
-`S3_BUCKET` defines where uploads and logs are stored. If it is not set in the environment or secret, the server falls back to
-`resume-forge-data`, which is suitable for local development.
-
-`GEMINI_API_KEY` supplies the Google Gemini API key. Set it directly in your environment for development or include it in the
-secret.
-
-### Secrets quick reference
-
-Create a single AWS Secrets Manager secret (default name: `ResumeForge`) that contains the keys below. These entries are the minimum prerequisites for a successful serverless deployment.
-
-| Key | Required | Description |
-| --- | -------- | ----------- |
-| `GEMINI_API_KEY` | ✅ | Google Gemini API key used to generate résumé improvements and cover letters. |
-| `S3_BUCKET` | ➕ Optional | Override for the bucket that stores uploads and generated PDFs. If omitted the Lambda function uses the value provided for the `DataBucketName` parameter during deployment. |
-
-Example JSON payload stored inside the secret:
-
-```json
-{
-  "GEMINI_API_KEY": "<api-key>",
-  "S3_BUCKET": "resume-forge-data"
-}
-```
-
-If you prefer local development without Secrets Manager, place the same JSON structure in `./local-secrets.json`. The Express app automatically detects that file when `SECRET_ID` is not defined.
+Because the configuration is loaded and cached once, the service reuses the same credentials across requests instead of recreating clients every time.
 
 ### Required parameters for AWS deployment
 
-In addition to the secret values above, the Lambda function relies on three CloudFormation/SAM parameters provided during deployment:
+Deployments still expect the following AWS SAM parameters:
 
 - `DataBucketName` – S3 bucket that stores original uploads, logs, and generated documents.
 - `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
-- `SecretName` – Name of the Secrets Manager secret containing the JSON payload described above (defaults to `ResumeForge`).
 
 ## IAM Policy
 Minimal permissions required by the server:
@@ -65,13 +40,13 @@ Minimal permissions required by the server:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["secretsmanager:GetSecretValue"],
-      "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:SECRET_ID"
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::S3_BUCKET/*"
     },
     {
       "Effect": "Allow",
-      "Action": ["s3:PutObject"],
-      "Resource": "arn:aws:s3:::S3_BUCKET/*"
+      "Action": ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Resource": "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/RESUME_TABLE_NAME"
     }
   ]
 }
@@ -85,9 +60,9 @@ PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise 
 ### Prerequisites
 
 1. Install the AWS SAM CLI and authenticate with the target AWS account.
-2. Create the Secrets Manager secret described above (default name `ResumeForge`). Populate it with the required JSON values.
+2. Update `INLINE_SECRETS` (or set the corresponding environment variables) with production-ready values for `GEMINI_API_KEY` and `S3_BUCKET` before building the deployment artifact.
 3. Ensure the chosen S3 bucket name is globally unique.
-4. Provision an IAM user or role for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, access Secrets Manager, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
+4. Provision an IAM user or role for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
 
 ### Deploy
 
@@ -102,7 +77,6 @@ During the guided deploy provide values for:
 - `AWS Region` – e.g. `ap-south-1`
 - `DataBucketName` – globally unique bucket name for uploads and generated files
 - `ResumeTableName` – DynamoDB table name (defaults to `ResumeForge`)
-- `SecretName` – Secrets Manager secret that stores the Gemini API key JSON payload
 
 The deployment creates:
 
@@ -140,7 +114,7 @@ https://<api-id>.execute-api.<region>.amazonaws.com/prod/api/process-cv
    npm install
    cd client && npm install
    ```
-2. Provide the environment variables and AWS secret as shown above.
+2. Ensure `INLINE_SECRETS` (or the corresponding environment variables) contains valid values for `GEMINI_API_KEY` and `S3_BUCKET`.
 3. Start the server:
    ```bash
    npm run dev
@@ -200,7 +174,7 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 | `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
 | `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
 | `RESUMEFORGE_DATA_BUCKET` | Globally unique S3 bucket name passed to the `DataBucketName` parameter. |
-| `RESUMEFORGE_SECRET_NAME` | Secrets Manager secret that stores the Gemini API credentials JSON payload. |
+| `GEMINI_API_KEY` | Gemini API key provided to the runtime via environment variable overrides. |
 
 Optional secrets:
 
@@ -215,7 +189,6 @@ Assign the IAM user or role attached to the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCE
 
 - `cloudformation:*` on the target stack.
 - `s3:*` on the deployment bucket created by `--resolve-s3` and on the bucket referenced by `RESUMEFORGE_DATA_BUCKET`.
-- `secretsmanager:GetSecretValue` on the secret referenced by `RESUMEFORGE_SECRET_NAME`.
 - `lambda:*`, `apigateway:*`, and `dynamodb:*` actions required by the SAM template.
 
 Limiting the policy to the specific stack resources is recommended for production environments.
