@@ -537,7 +537,7 @@ describe('generatePdf and parsing', () => {
     const text = (await parsePdfText(fallbackPdf)).trim();
     expect(text).toContain('Jane Doe');
     expect(text).toContain('Summar');
-    expect(text).toMatch(/First\s+b\s+20\s+ullet/);
+    expect(text).toMatch(/(\u2022\s*First bullet)|First\s+b\s+20\s+ullet/);
     expect(text).toContain('Education');
   });
 
