@@ -29,7 +29,7 @@ Resources:
       Cors:
         AllowMethods: "'OPTIONS,POST'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigins: "'*'"
+        AllowOrigin: "'*'"
 
   DataBucket:
     Type: AWS::S3::Bucket
