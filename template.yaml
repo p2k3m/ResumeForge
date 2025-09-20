@@ -112,6 +112,46 @@ Resources:
             TableName: !Ref ResumeTableName
       Layers: []
 
+  ResumeForgeDistribution:
+    Type: AWS::CloudFront::Distribution
+    DependsOn:
+      - ResumeForgeApi
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: API Gateway distribution for ResumeForge
+        Origins:
+          - Id: ResumeForgeApiOrigin
+            DomainName: !Sub "${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com"
+            OriginPath: !Sub "/${StageName}"
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+        DefaultCacheBehavior:
+          TargetOriginId: ResumeForgeApiOrigin
+          ViewerProtocolPolicy: https-only
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - PATCH
+            - POST
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          ForwardedValues:
+            QueryString: true
+            Headers:
+              - '*'
+            Cookies:
+              Forward: all
+          MinTTL: 0
+          DefaultTTL: 0
+          MaxTTL: 0
+
 Outputs:
   ApiBaseUrl:
     Description: Invoke URL for the API Gateway stage.
@@ -122,3 +162,6 @@ Outputs:
   ResumeTable:
     Description: DynamoDB table that stores resume processing metadata.
     Value: !If [CreateResumeTableCondition, !Ref ResumeForgeTable, !Ref ResumeTableName]
+  CloudFrontUrl:
+    Description: CloudFront distribution domain for accessing the API.
+    Value: !Sub https://${ResumeForgeDistribution.DomainName}

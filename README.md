@@ -88,16 +88,17 @@ The deployment creates:
 - Regional REST API Gateway with binary support for `multipart/form-data`
 - S3 bucket for uploads/logs and DynamoDB table with on-demand billing
 
-After `sam deploy` completes it prints the `ApiBaseUrl` output. The production endpoint for the application is:
+After `sam deploy` completes it prints the `ApiBaseUrl` and `CloudFrontUrl` outputs. The production endpoint for the application is:
 
 ```
 https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 ```
 
-Using the default stage (`prod`), the `/api/process-cv` endpoint is reachable at:
+Using the default stage (`prod`), the `/api/process-cv` endpoint is reachable either directly through API Gateway or via the CloudFront distribution:
 
 ```
 https://<api-id>.execute-api.<region>.amazonaws.com/prod/api/process-cv
+https://<cloudfront-id>.cloudfront.net/api/process-cv
 ```
 
 ### Post-deployment verification
