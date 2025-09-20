@@ -134,6 +134,42 @@ jobs:
             fi
           fi
 
+          : >"$tmp_err"
+
+          create_data_bucket='true'
+          if aws s3api head-bucket --bucket "$DATA_BUCKET" 1>/dev/null 2>"$tmp_err"; then
+            echo "S3 bucket '$DATA_BUCKET' already exists. Reusing without creation."
+            create_data_bucket='false'
+          else
+            bucket_err=$(cat "$tmp_err")
+            if echo "$bucket_err" | grep -Eqi 'Not Found|NoSuchBucket|404'; then
+              echo "S3 bucket '$DATA_BUCKET' not found. It will be created by the stack."
+              create_data_bucket='true'
+            else
+              echo "$bucket_err" >&2
+              exit 1
+            fi
+          fi
+
+          : >"$tmp_err"
+
+          create_resume_table='true'
+          if aws dynamodb describe-table --table-name "$TABLE_NAME" 1>/dev/null 2>"$tmp_err"; then
+            echo "DynamoDB table '$TABLE_NAME' already exists. Reusing without creation."
+            create_resume_table='false'
+          else
+            table_err=$(cat "$tmp_err")
+            if echo "$table_err" | grep -qi 'ResourceNotFoundException'; then
+              echo "DynamoDB table '$TABLE_NAME' not found. It will be created by the stack."
+              create_resume_table='true'
+            else
+              echo "$table_err" >&2
+              exit 1
+            fi
+          fi
+
+          : >"$tmp_err"
+
           sam deploy \
             --stack-name "$STACK_NAME" \
             --resolve-s3 \
@@ -144,4 +180,6 @@ jobs:
               StageName="$STAGE_NAME" \
               DataBucketName="$DATA_BUCKET" \
               ResumeTableName="$TABLE_NAME" \
-              SecretName="$SECRET_NAME"
+              SecretName="$SECRET_NAME" \
+              CreateDataBucket="$create_data_bucket" \
+              CreateResumeTable="$create_resume_table"

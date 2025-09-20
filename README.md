@@ -30,6 +30,8 @@ Deployments still expect the following AWS SAM parameters:
 
 - `DataBucketName` – S3 bucket that stores original uploads, logs, and generated documents.
 - `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
+- `CreateDataBucket` – set to `false` when pointing at an existing bucket so the stack does not try to create it again (defaults to `true`).
+- `CreateResumeTable` – set to `false` when reusing a DynamoDB table created outside the stack (defaults to `true`).
 
 ## IAM Policy
 Minimal permissions required by the server:
@@ -77,6 +79,8 @@ During the guided deploy provide values for:
 - `AWS Region` – e.g. `ap-south-1`
 - `DataBucketName` – globally unique bucket name for uploads and generated files
 - `ResumeTableName` – DynamoDB table name (defaults to `ResumeForge`)
+- `CreateDataBucket` – answer `false` if the bucket already exists and should be reused
+- `CreateResumeTable` – answer `false` if the DynamoDB table already exists and should be reused
 
 The deployment creates:
 
@@ -162,6 +166,7 @@ Automated testing and deployment run through the `CI and Deploy` workflow. It ex
 3. Installs client dependencies and builds the Vite bundle to verify the frontend compiles cleanly.
 4. On pushes to `main`, validates that all required AWS credentials are present as GitHub repository secrets. Missing values cause the workflow to fail immediately with a descriptive error message.
 5. Configures the AWS CLI using the provided access key and secret key, builds the AWS SAM package, and deploys the CloudFormation stack using `sam deploy --resolve-s3`.
+6. Before deployment, checks whether the configured S3 bucket and DynamoDB table already exist. If they do, the workflow automatically passes `CreateDataBucket=false` and/or `CreateResumeTable=false` so CloudFormation reuses the resources instead of failing with `AlreadyExists` errors.
 
 ### Required GitHub repository secrets
 

@@ -11,6 +11,15 @@ Parameters:
     Type: String
     Default: resume-forge-data
     Description: Globally unique name for the S3 bucket that stores uploads and generated artifacts.
+  CreateDataBucket:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: >-
+      Set to 'false' to use an existing S3 bucket specified in DataBucketName
+      instead of creating a new one.
   ResumeTableName:
     Type: String
     Default: ResumeForge
@@ -27,6 +36,7 @@ Parameters:
 
 Conditions:
   CreateResumeTableCondition: !Equals [!Ref CreateResumeTable, 'true']
+  CreateDataBucketCondition: !Equals [!Ref CreateDataBucket, 'true']
 
 Resources:
   ResumeForgeApi:
@@ -45,9 +55,11 @@ Resources:
 
   DataBucket:
     Type: AWS::S3::Bucket
+    Condition: CreateDataBucketCondition
     Properties:
       BucketName: !Ref DataBucketName
     DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
 
   ResumeForgeTable:
     Type: AWS::DynamoDB::Table
@@ -107,7 +119,7 @@ Outputs:
     Value: !Sub https://${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}
   DataBucket:
     Description: Bucket used for uploads and generated files.
-    Value: !Ref DataBucket
+    Value: !If [CreateDataBucketCondition, !Ref DataBucket, !Ref DataBucketName]
   ResumeTable:
     Description: DynamoDB table that stores resume processing metadata.
     Value: !If [CreateResumeTableCondition, !Ref ResumeForgeTable, !Ref ResumeTableName]
