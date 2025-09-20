@@ -97,7 +97,6 @@ Resources:
             Method: ANY
       Environment:
         Variables:
-          AWS_REGION: !Ref AWS::Region
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
       Policies:
