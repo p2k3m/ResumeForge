@@ -15,6 +15,18 @@ Parameters:
     Type: String
     Default: ResumeForge
     Description: Name of the DynamoDB table that tracks processed resumes.
+  CreateResumeTable:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: >-
+      Set to 'false' to use an existing DynamoDB table specified in ResumeTableName
+      instead of creating a new one.
+
+Conditions:
+  CreateResumeTableCondition: !Equals [!Ref CreateResumeTable, 'true']
 
 Resources:
   ResumeForgeApi:
@@ -39,6 +51,7 @@ Resources:
 
   ResumeForgeTable:
     Type: AWS::DynamoDB::Table
+    Condition: CreateResumeTableCondition
     Properties:
       TableName: !Ref ResumeTableName
       BillingMode: PAY_PER_REQUEST
@@ -85,7 +98,7 @@ Resources:
                 - s3:PutObject
               Resource: !Sub arn:aws:s3:::${DataBucketName}/*
         - DynamoDBCrudPolicy:
-            TableName: !Ref ResumeForgeTable
+            TableName: !Ref ResumeTableName
       Layers: []
 
 Outputs:
@@ -97,4 +110,4 @@ Outputs:
     Value: !Ref DataBucket
   ResumeTable:
     Description: DynamoDB table that stores resume processing metadata.
-    Value: !Ref ResumeForgeTable
+    Value: !If [CreateResumeTableCondition, !Ref ResumeForgeTable, !Ref ResumeTableName]
