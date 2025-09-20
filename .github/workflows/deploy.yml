@@ -106,7 +106,34 @@ jobs:
         run: sam build
 
       - name: Deploy stack
+        shell: bash
         run: |
+          set -euo pipefail
+
+          tmp_err=$(mktemp)
+          trap 'rm -f "$tmp_err"' EXIT
+
+          if stack_status=$(aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --query "Stacks[0].StackStatus" \
+              --output text 2>"$tmp_err"); then
+            echo "Found existing stack '$STACK_NAME' with status: $stack_status"
+            if [ "$stack_status" = "ROLLBACK_COMPLETE" ]; then
+              echo "Stack in ROLLBACK_COMPLETE state. Deleting before redeploy."
+              aws cloudformation delete-stack --stack-name "$STACK_NAME"
+              aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
+              echo "Stack deletion complete. Proceeding with deployment."
+            fi
+          else
+            describe_err=$(cat "$tmp_err")
+            if echo "$describe_err" | grep -qi "does not exist"; then
+              echo "Stack '$STACK_NAME' does not exist. Proceeding with deployment."
+            else
+              echo "$describe_err" >&2
+              exit 1
+            fi
+          fi
+
           sam deploy \
             --stack-name "$STACK_NAME" \
             --resolve-s3 \
