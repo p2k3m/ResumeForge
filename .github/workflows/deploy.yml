@@ -80,12 +80,12 @@ jobs:
           if [ "${#missing[@]}" -ne 0 ]; then
             printf '::error::Missing required secrets: %s\n' "${missing[*]}"
             cat <<'EOM'
-To resolve this failure, open your repository in GitHub and navigate to:
-  Settings → Secrets and variables → Actions → New repository secret
-Add each missing secret listed above with the correct value. The AWS access key ID and
-secret access key can be copied from the AWS IAM console under the associated user or
-deployment role. After saving the secrets, re-run this workflow.
-EOM
+            To resolve this failure, open your repository in GitHub and navigate to:
+              Settings → Secrets and variables → Actions → New repository secret
+            Add each missing secret listed above with the correct value. The AWS access key ID and
+            secret access key can be copied from the AWS IAM console under the associated user or
+            deployment role. After saving the secrets, re-run this workflow.
+            EOM
             exit 1
           fi
 
