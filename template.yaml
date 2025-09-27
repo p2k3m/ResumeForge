@@ -140,15 +140,7 @@ Resources:
         CookiesConfig:
           CookieBehavior: all
         HeadersConfig:
-          HeaderBehavior: whitelist
-          Headers:
-            - CloudFront-Forwarded-Proto
-            - Origin
-            - Authorization
-            - Content-Type
-            - X-Amz-Date
-            - X-Api-Key
-            - X-Amz-Security-Token
+          HeaderBehavior: allViewer
         QueryStringsConfig:
           QueryStringBehavior: all
 
