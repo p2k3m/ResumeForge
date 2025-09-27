@@ -655,7 +655,7 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Only .pdf, .doc, .docx files are allowed');
+    expect(res.body.error).toBe('Unsupported resume format. Please upload a PDF file.');
   });
 
   test('missing job description URL', async () => {
@@ -683,14 +683,18 @@ describe('extractText', () => {
     await expect(extractText(file)).resolves.toBe('Education\nExperience\nSkills');
   });
 
-  test('extracts text from docx', async () => {
+  test('rejects docx files', async () => {
     const file = { originalname: 'file.docx', buffer: Buffer.from('') };
-    await expect(extractText(file)).resolves.toBe('Docx text');
+    await expect(extractText(file)).rejects.toThrow(
+      'Unsupported resume format encountered. Only PDF files are processed.'
+    );
   });
 
-  test('extracts text from txt', async () => {
+  test('rejects plain text files', async () => {
     const file = { originalname: 'file.txt', buffer: Buffer.from('plain') };
-    await expect(extractText(file)).resolves.toBe('plain');
+    await expect(extractText(file)).rejects.toThrow(
+      'Unsupported resume format encountered. Only PDF files are processed.'
+    );
   });
 });
 

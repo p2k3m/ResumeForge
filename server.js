@@ -18,8 +18,81 @@ import fsSync from 'fs';
 import { logEvent } from './logger.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-import mammoth from 'mammoth';
 import JSON5 from 'json5';
+
+function ensureAxiosResponseInterceptor(client) {
+  if (!client) return null;
+  if (!client.interceptors) {
+    client.interceptors = {};
+  }
+  if (!client.interceptors.response) {
+    client.interceptors.response = {
+      handlers: [],
+      use(onFulfilled, onRejected) {
+        this.handlers.push({ onFulfilled, onRejected });
+        return this.handlers.length - 1;
+      }
+    };
+  } else if (typeof client.interceptors.response.use !== 'function') {
+    client.interceptors.response.handlers =
+      client.interceptors.response.handlers || [];
+    client.interceptors.response.use = function (onFulfilled, onRejected) {
+      this.handlers.push({ onFulfilled, onRejected });
+      return this.handlers.length - 1;
+    };
+  }
+  return client.interceptors.response;
+}
+
+const axiosResponseInterceptor = ensureAxiosResponseInterceptor(axios);
+
+axiosResponseInterceptor?.use(
+  (response) => response,
+  (error) => {
+    if (!error || typeof error !== 'object') {
+      return Promise.reject(error);
+    }
+
+    const { config, response, request } = error;
+    const method = (config?.method || 'GET').toUpperCase();
+    const url = config?.url || 'unknown URL';
+
+    if (response) {
+      const status = response.status;
+      const statusText = response.statusText || 'HTTP error';
+      const detail = (() => {
+        const data = response.data;
+        if (!data) return '';
+        if (typeof data === 'string') return data.slice(0, 200);
+        if (typeof data === 'object') {
+          const msg = data.error || data.message;
+          if (typeof msg === 'string') return msg;
+          try {
+            return JSON.stringify(data).slice(0, 200);
+          } catch {
+            return '';
+          }
+        }
+        return '';
+      })();
+      const message =
+        `HTTP ${status} ${statusText} when requesting ${method} ${url}` +
+        (detail ? `: ${detail}` : '');
+      const enhancedError = new Error(message);
+      enhancedError.cause = error;
+      return Promise.reject(enhancedError);
+    }
+
+    if (request) {
+      const message = `No response received from ${method} ${url}`;
+      const enhancedError = new Error(message);
+      enhancedError.cause = error;
+      return Promise.reject(enhancedError);
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 let chromium;
 let puppeteerCore;
@@ -228,12 +301,23 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = ['.pdf', '.doc', '.docx'];
-    if (!allowed.includes(ext)) {
-      return cb(new Error('Only .pdf, .doc, .docx files are allowed'));
-    }
+    const mimetype = file.mimetype;
     if (ext === '.doc') {
-      return cb(new Error('Legacy .doc files are not supported. Please upload a .pdf or .docx file.'));
+      return cb(
+        new Error(
+          'Legacy .doc resumes are no longer supported. Please convert your file to PDF before uploading.'
+        )
+      );
+    }
+    if (ext !== '.pdf') {
+      const message =
+        ext === '.docx'
+          ? 'DOCX resumes are not accepted. Please upload your resume as a PDF file.'
+          : 'Unsupported resume format. Please upload a PDF file.';
+      return cb(new Error(message));
+    }
+    if (mimetype && mimetype !== 'application/pdf') {
+      return cb(new Error('The uploaded file is not a valid PDF document.'));
     }
     cb(null, true);
   }
@@ -484,6 +568,62 @@ async function fetchCredlyProfile(url) {
   } catch {
     return [];
   }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function scrapeJobDescription(url, options = {}) {
+  if (!url) throw new Error('Job description URL is required');
+
+  const { maxAttempts = 3, timeout = 30000, waitUntil = 'networkidle2' } = options;
+  let lastError;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const browser = await getChromiumBrowser();
+      if (browser) {
+        const page = await browser.newPage();
+        try {
+          await page.goto(url, { waitUntil, timeout });
+          await page.waitForTimeout(1000);
+          const html = await page.content();
+          await page.close();
+          if (!html || !html.trim()) {
+            throw new Error('Job description page returned empty content');
+          }
+          return html;
+        } catch (err) {
+          try {
+            await page.close();
+          } catch {
+            /* ignore */
+          }
+          throw err;
+        }
+      }
+
+      const { data } = await axios.get(url, { timeout });
+      const html =
+        typeof data === 'string'
+          ? data
+          : typeof data?.toString === 'function'
+          ? data.toString()
+          : '';
+      if (!html.trim()) {
+        throw new Error('Job description response was empty');
+      }
+      return html;
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxAttempts) {
+        const delay = 500 * 2 ** (attempt - 1);
+        await sleep(delay);
+        continue;
+      }
+    }
+  }
+
+  throw lastError || new Error('Failed to fetch job description');
 }
 
 function analyzeJobDescription(html) {
@@ -1907,15 +2047,11 @@ function setGeneratePdf(fn) {
 
 async function extractText(file) {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (ext === '.pdf') {
-    const data = await pdfParse(file.buffer);
-    return data.text;
+  if (ext !== '.pdf') {
+    throw new Error('Unsupported resume format encountered. Only PDF files are processed.');
   }
-  if (ext === '.docx') {
-    const { value } = await mammoth.extractRawText({ buffer: file.buffer });
-    return value;
-  }
-  return file.buffer.toString();
+  const data = await pdfParse(file.buffer);
+  return data.text;
 }
 
 function isResume(text) {
@@ -2312,7 +2448,25 @@ app.post('/api/process-cv', (req, res, next) => {
     return res.status(400).json({ error: 'linkedinProfileUrl required' });
   }
 
-  let text = await extractText(req.file);
+  let text;
+  try {
+    text = await extractText(req.file);
+  } catch (err) {
+    try {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'resume_text_extraction_failed',
+        level: 'error',
+        message: err.message
+      });
+    } catch (logErr) {
+      console.error('failed to log text extraction error', logErr);
+    }
+    return res.status(400).json({ error: err.message });
+  }
   if (!isResume(text)) {
     return res
       .status(400)
@@ -2374,8 +2528,30 @@ app.post('/api/process-cv', (req, res, next) => {
       message: `template1=${template1}; template2=${template2}`
     });
 
-    const { data: jobDescriptionHtml } = await axios.get(jobDescriptionUrl);
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'fetched_job_description' });
+    let jobDescriptionHtml;
+    try {
+      jobDescriptionHtml = await scrapeJobDescription(jobDescriptionUrl);
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'fetched_job_description'
+      });
+    } catch (err) {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'job_description_fetch_failed',
+        level: 'error',
+        message: err.message
+      });
+      return res.status(502).json({
+        error: 'Failed to retrieve the job description. Please verify the URL and try again.'
+      });
+    }
     const {
       title: jobTitle,
       skills: jobSkills,
@@ -2815,6 +2991,7 @@ export {
   mergeResumeWithLinkedIn,
   collectSectionText,
   rewriteSectionsWithGemini,
+  scrapeJobDescription,
   analyzeJobDescription,
   extractResumeSkills,
   generateProjectSummary,
