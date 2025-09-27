@@ -7,7 +7,8 @@
     "start": "node server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dev": "node server.js",
-    "build": "echo 'No build step'"
+    "build": "echo 'No build step'",
+    "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.432.0",
@@ -26,7 +27,8 @@
     "pdfkit": "^0.13.0",
     "puppeteer-core": "^22.9.0",
     "json5": "^2.2.3",
-    "ua-parser-js": "^1.0.35"
+    "ua-parser-js": "^1.0.35",
+    "@aws-sdk/client-cloudformation": "^3.432.0"
   },
   "devDependencies": {
     "jest": "^29.7.0",
