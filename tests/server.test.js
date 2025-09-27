@@ -2,6 +2,11 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
 
+process.env.S3_BUCKET = 'test-bucket';
+process.env.GEMINI_API_KEY = 'test-key';
+process.env.AWS_REGION = 'us-east-1';
+process.env.CLOUDFRONT_ORIGINS = 'https://test.cloudfront.net';
+
 const mockS3Send = jest.fn().mockResolvedValue({});
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: mockS3Send })),

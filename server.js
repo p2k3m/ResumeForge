@@ -93,8 +93,93 @@ async function getPortalHtml() {
   return html;
 }
 
+const DEFAULT_AWS_REGION = 'ap-south-1';
+const DEFAULT_ALLOWED_ORIGINS = [];
+
+function readEnvValue(name) {
+  const raw = process.env[name];
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function parseAllowedOrigins(value) {
+  if (!value) return DEFAULT_ALLOWED_ORIGINS;
+  return value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+function buildRuntimeConfig() {
+  const region = readEnvValue('AWS_REGION') || DEFAULT_AWS_REGION;
+  const s3Bucket = readEnvValue('S3_BUCKET');
+  const geminiApiKey = readEnvValue('GEMINI_API_KEY');
+  const allowedOrigins = parseAllowedOrigins(
+    readEnvValue('CLOUDFRONT_ORIGINS') || readEnvValue('ALLOWED_ORIGINS')
+  );
+
+  const missing = [];
+  if (!s3Bucket) missing.push('S3_BUCKET');
+  if (!geminiApiKey) missing.push('GEMINI_API_KEY');
+
+  if (missing.length) {
+    throw new Error(
+      `Missing required environment variables: ${missing.join(', ')}`
+    );
+  }
+
+  process.env.AWS_REGION = region;
+  process.env.S3_BUCKET = s3Bucket;
+  process.env.GEMINI_API_KEY = geminiApiKey;
+
+  return Object.freeze({
+    AWS_REGION: region,
+    S3_BUCKET: s3Bucket,
+    GEMINI_API_KEY: geminiApiKey,
+    CLOUDFRONT_ORIGINS: allowedOrigins
+  });
+}
+
+let runtimeConfigCache;
+function getRuntimeConfig() {
+  if (!runtimeConfigCache) {
+    runtimeConfigCache = buildRuntimeConfig();
+  }
+  return runtimeConfigCache;
+}
+
+const runtimeConfig = getRuntimeConfig();
+
 const app = express();
-app.use(cors());
+
+const allowedOrigins = runtimeConfig.CLOUDFRONT_ORIGINS;
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (!allowedOrigins.length || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+
+    const isAllowed = allowedOrigins.some((allowedOrigin) => {
+      if (allowedOrigin === origin) return true;
+      if (allowedOrigin.endsWith('*')) {
+        const prefix = allowedOrigin.slice(0, -1);
+        return origin.startsWith(prefix);
+      }
+      return false;
+    });
+
+    return callback(
+      isAllowed ? null : new Error('Origin not allowed by CORS policy')
+    );
+  },
+  credentials: true
+};
+app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
   const socket = req.socket;
@@ -155,15 +240,6 @@ const upload = multer({
 });
 
 const uploadResume = upload.single('resume');
-
-const DEFAULT_AWS_REGION = 'ap-south-1';
-
-const INLINE_SECRETS = {
-  S3_BUCKET: 'resume-forge-data',
-  GEMINI_API_KEY: 'dummy-gemini-api-key'
-};
-
-const REQUIRED_SECRET_KEYS = ['S3_BUCKET', 'GEMINI_API_KEY'];
 
 const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
@@ -295,51 +371,13 @@ function selectTemplates({
   return { template1, template2, coverTemplate1, coverTemplate2 };
 }
 
-process.env.AWS_REGION = process.env.AWS_REGION || DEFAULT_AWS_REGION;
+process.env.AWS_REGION = runtimeConfig.AWS_REGION;
 
-const region = process.env.AWS_REGION || 'ap-south-1';
+const region = runtimeConfig.AWS_REGION;
 const s3Client = new S3Client({ region });
 
-let secretCache;
-function mergeInlineSecrets() {
-  const overrides = { ...INLINE_SECRETS };
-  if (process.env.S3_BUCKET) overrides.S3_BUCKET = process.env.S3_BUCKET;
-  if (process.env.GEMINI_API_KEY) overrides.GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-  return overrides;
-}
-
-function normalizeSecrets(candidate) {
-  if (!candidate || typeof candidate !== 'object') return null;
-  const normalized = {};
-  for (const [key, value] of Object.entries(candidate)) {
-    if (typeof value === 'string') {
-      const trimmed = value.trim();
-      if (trimmed) normalized[key] = trimmed;
-    } else if (value !== undefined && value !== null) {
-      normalized[key] = value;
-    }
-  }
-  const missing = REQUIRED_SECRET_KEYS.filter((key) => !normalized[key]);
-  if (missing.length) {
-    console.warn(
-      `Secrets configuration is missing values for: ${missing.join(', ')}. ` +
-        'Update INLINE_SECRETS in server.js or provide S3_BUCKET and GEMINI_API_KEY environment variables.'
-    );
-    return null;
-  }
-  return normalized;
-}
-
-async function getSecrets() {
-  if (secretCache) return secretCache;
-  const inlineSecrets = normalizeSecrets(mergeInlineSecrets());
-  if (!inlineSecrets) {
-    throw new Error(
-      'No valid inline secrets configuration found. Update INLINE_SECRETS in server.js or set environment overrides.'
-    );
-  }
-  secretCache = Object.freeze(inlineSecrets);
-  return secretCache;
+function getSecrets() {
+  return getRuntimeConfig();
 }
 
 async function fetchLinkedInProfile(url) {
@@ -2231,8 +2269,8 @@ app.post('/api/process-cv', (req, res, next) => {
   let bucket;
   let secrets;
   try {
-    secrets = await getSecrets();
-    bucket = process.env.S3_BUCKET || secrets.S3_BUCKET || 'resume-forge-data';
+    secrets = getSecrets();
+    bucket = secrets.S3_BUCKET;
   } catch (err) {
     console.error('failed to load configuration', err);
     return res.status(500).json({ error: 'failed to load configuration' });
@@ -2404,8 +2442,8 @@ app.post('/api/process-cv', (req, res, next) => {
     const originalTitle =
       resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
 
-    // Use GEMINI_API_KEY from environment or secrets
-    const geminiApiKey = process.env.GEMINI_API_KEY || secrets.GEMINI_API_KEY;
+      // Use GEMINI_API_KEY from validated runtime configuration
+    const geminiApiKey = secrets.GEMINI_API_KEY;
     const genAI = new GoogleGenerativeAI(geminiApiKey);
     const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 

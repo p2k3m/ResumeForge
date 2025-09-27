@@ -108,6 +108,13 @@ Resources:
                 - s3:GetObject
                 - s3:PutObject
               Resource: !Sub arn:aws:s3:::${DataBucketName}/*
+            - Sid: AllowWafIntegration
+              Effect: Allow
+              Action:
+                - wafv2:AssociateWebACL
+                - wafv2:DisassociateWebACL
+                - wafv2:GetWebACL
+              Resource: '*'
         - DynamoDBCrudPolicy:
             TableName: !Ref ResumeTableName
       Layers: []

@@ -4,7 +4,7 @@
 ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
 
 ## Environment configuration
-ResumeForge now keeps its required configuration alongside the code. The `INLINE_SECRETS` constant in `server.js` defines defaults for the values that previously lived in AWS Secrets Manager. Update those entries (or override them through environment variables) before running locally or deploying to AWS.
+ResumeForge now relies exclusively on environment variables for sensitive and deployment-specific configuration. The Express server validates the presence of required values at startup and fails fast if any are missing, ensuring secrets are not shipped inline with the source code.
 
 The runtime looks for the following keys:
 
@@ -14,12 +14,14 @@ The runtime looks for the following keys:
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
-  "RESUME_TABLE_NAME": "ResumeForge"
+  "RESUME_TABLE_NAME": "ResumeForge",
+  "CLOUDFRONT_ORIGINS": "https://d123example.cloudfront.net"
 }
 ```
 
-- `GEMINI_API_KEY` – Google Gemini API key. A placeholder is shipped in `INLINE_SECRETS`; replace it with a valid key or set the `GEMINI_API_KEY` environment variable. The server validates that a non-empty value is present at startup.
-- `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Edit `INLINE_SECRETS.S3_BUCKET` or set the `S3_BUCKET` environment variable to match your deployment.
+- `GEMINI_API_KEY` – Google Gemini API key. This value must be supplied via the environment; the server verifies a non-empty value is present and never logs the secret.
+- `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Provide the bucket name through the `S3_BUCKET` environment variable so artifacts are stored in the correct account and region.
+- `CLOUDFRONT_ORIGINS` – Optional, comma-separated list of CloudFront origins that are permitted through the server's CORS middleware. Include your distribution domain to restrict browser calls to trusted hosts.
 - `AWS_REGION`, `PORT`, and `RESUME_TABLE_NAME` can continue to come from the environment. Reasonable defaults are provided for local development.
 
 Because the configuration is loaded and cached once, the service reuses the same credentials across requests instead of recreating clients every time.
@@ -49,6 +51,11 @@ Minimal permissions required by the server:
       "Effect": "Allow",
       "Action": ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
       "Resource": "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/RESUME_TABLE_NAME"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["wafv2:AssociateWebACL", "wafv2:DisassociateWebACL", "wafv2:GetWebACL"],
+      "Resource": "*"
     }
   ]
 }
@@ -62,7 +69,7 @@ PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise 
 ### Prerequisites
 
 1. Install the AWS SAM CLI and authenticate with the target AWS account.
-2. Update `INLINE_SECRETS` (or set the corresponding environment variables) with production-ready values for `GEMINI_API_KEY` and `S3_BUCKET` before building the deployment artifact.
+2. Set `GEMINI_API_KEY`, `S3_BUCKET`, and (optionally) `CLOUDFRONT_ORIGINS` environment variables with production-ready values before building the deployment artifact.
 3. Ensure the chosen S3 bucket name is globally unique.
 4. Provision an IAM user or role for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
 
@@ -148,7 +155,7 @@ https://<cloudfront-id>.cloudfront.net/api/process-cv
    npm install
    cd client && npm install
    ```
-2. Ensure `INLINE_SECRETS` (or the corresponding environment variables) contains valid values for `GEMINI_API_KEY` and `S3_BUCKET`.
+2. Export `GEMINI_API_KEY` and `S3_BUCKET` (and optionally `CLOUDFRONT_ORIGINS`) in your shell before starting the server so runtime validation passes.
 3. Start the server:
    ```bash
    npm run dev

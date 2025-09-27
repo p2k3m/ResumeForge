@@ -36,6 +36,7 @@
   },
   "jest": {
     "testEnvironment": "node",
+    "setupFiles": ["<rootDir>/tests/setupEnv.js"],
     "transform": {},
     "moduleNameMapper": {
       "^@google/generative-ai$": "<rootDir>/tests/mocks/google-generative-ai.js",
