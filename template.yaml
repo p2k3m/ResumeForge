@@ -157,6 +157,9 @@ Outputs:
   ApiBaseUrl:
     Description: Invoke URL for the API Gateway stage.
     Value: !Sub https://${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}
+  AppBaseUrl:
+    Description: Primary CloudFront URL for the ResumeForge front page and API access.
+    Value: !Sub https://${ResumeForgeDistribution.DomainName}
   DataBucket:
     Description: Bucket used for uploads and generated files.
     Value: !If [CreateDataBucketCondition, !Ref DataBucket, !Ref DataBucketName]
