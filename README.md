@@ -137,6 +137,21 @@ https://<api-id>.execute-api.<region>.amazonaws.com/prod/api/process-cv
 https://<cloudfront-id>.cloudfront.net/api/process-cv
 ```
 
+The React portal now hydrates server-rendered markup and registers a service worker that queues uploads while offline. Users can
+submit their CV without connectivity; the request is retried automatically as soon as the browser reconnects and the UI is
+updated with the generated documents.
+
+### Building artifacts
+
+Run the aggregate build to produce both the static client bundle and an optimized Lambda artifact:
+
+```bash
+npm run build
+```
+
+This command invokes Vite to emit the production client into `client/dist` and bundles the Lambda entry point with `esbuild`
+inside `dist/lambda`. Individual steps remain available through `npm run build:client` and `npm run build:lambda`.
+
 ### Post-deployment verification
 
 1. Confirm that the CloudFormation outputs include `ApiBaseUrl`. This is the canonical URL for the deployed serverless API.
