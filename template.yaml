@@ -116,20 +116,33 @@ Resources:
     Type: AWS::CloudFront::CachePolicy
     Properties:
       CachePolicyConfig:
-        Comment: Disable caching while forwarding all viewer context to the API origin.
+        Comment: Disable caching; viewer context is forwarded via a dedicated origin request policy.
         DefaultTTL: 0
         MaxTTL: 0
         MinTTL: 0
         Name: !Sub ResumeForgeCachePolicy-${AWS::StackName}
         ParametersInCacheKeyAndForwardedToOrigin:
           CookiesConfig:
-            CookieBehavior: all
+            CookieBehavior: none
           EnableAcceptEncodingBrotli: true
           EnableAcceptEncodingGzip: true
           HeadersConfig:
             HeaderBehavior: none
           QueryStringsConfig:
-            QueryStringBehavior: all
+            QueryStringBehavior: none
+
+  ResumeForgeOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Comment: Forward all viewer headers, cookies, and query strings to the API origin.
+        Name: !Sub ResumeForgeOriginRequestPolicy-${AWS::StackName}
+        CookiesConfig:
+          CookieBehavior: all
+        HeadersConfig:
+          HeaderBehavior: allViewer
+        QueryStringsConfig:
+          QueryStringBehavior: all
 
   ResumeForgeDistribution:
     Type: AWS::CloudFront::Distribution
@@ -163,6 +176,7 @@ Resources:
             - OPTIONS
           Compress: true
           CachePolicyId: !GetAtt ResumeForgeCachePolicy.Id
+          OriginRequestPolicyId: !GetAtt ResumeForgeOriginRequestPolicy.Id
 
 Outputs:
   ApiBaseUrl:
