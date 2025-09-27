@@ -19,6 +19,11 @@ import { logEvent } from './logger.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import JSON5 from 'json5';
+import { renderTemplatePdf } from './lib/pdf/index.js';
+import {
+  parseTemplateParams as parseTemplateParamsConfig,
+  resolveTemplateParams as resolveTemplateParamsConfig
+} from './lib/pdf/utils.js';
 
 function ensureAxiosResponseInterceptor(client) {
   if (!client) return null;
@@ -585,7 +590,11 @@ async function scrapeJobDescription(url, options = {}) {
         const page = await browser.newPage();
         try {
           await page.goto(url, { waitUntil, timeout });
-          await page.waitForTimeout(1000);
+          if (typeof page.waitForTimeout === 'function') {
+            await page.waitForTimeout(1000);
+          } else {
+            await sleep(1000);
+          }
           const html = await page.content();
           await page.close();
           if (!html || !html.trim()) {
@@ -1774,12 +1783,35 @@ let generatePdf = async function (
   options = {},
   generativeModel
 ) {
-  if (!ALL_TEMPLATES.includes(templateId)) templateId = 'modern';
+  const requestedTemplateId = templateId;
+  let canonicalTemplateId = templateId;
+  if (!ALL_TEMPLATES.includes(templateId)) {
+    const baseCandidate = (templateId || '').split(/[-_]/)[0];
+    if (ALL_TEMPLATES.includes(baseCandidate)) {
+      canonicalTemplateId = baseCandidate;
+    } else {
+      canonicalTemplateId = 'modern';
+    }
+  }
+  templateId = canonicalTemplateId;
   const data = parseContent(text, options);
   data.sections.forEach((sec) => {
     sec.heading = normalizeHeading(sec.heading);
   });
   data.sections = mergeDuplicateSections(data.sections);
+  const templateParams =
+    options && typeof options.templateParams === 'object'
+      ? { ...options.templateParams }
+      : {};
+  if (templateId === '2025') {
+    return renderTemplatePdf(requestedTemplateId, {
+      data,
+      rawText: text,
+      options: { ...options },
+      templateParams,
+      templateId
+    });
+  }
   let html;
   if (templateId === 'ucmo' && generativeModel?.generateContent) {
     try {
@@ -2434,6 +2466,12 @@ app.post('/api/process-cv', (req, res, next) => {
     cvTemplates: req.body.templates || req.query.templates,
     clTemplates: req.body.coverTemplates || req.query.coverTemplates
   });
+  const templateParamConfig = parseTemplateParamsConfig(
+    req.body.templateParams ||
+      req.query.templateParams ||
+      req.body.templateParam ||
+      req.query.templateParam
+  );
   let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
   console.log(
     `Selected templates: template1=${template1}, template2=${template2}, coverTemplate1=${coverTemplate1}, coverTemplate2=${coverTemplate2}`
@@ -2804,6 +2842,11 @@ app.post('/api/process-cv', (req, res, next) => {
           : name === 'cover_letter1'
           ? coverTemplate1
           : coverTemplate2;
+      const resolvedTemplateParams = resolveTemplateParamsConfig(
+        templateParamConfig,
+        tpl,
+        name
+      );
       const options =
         name === 'version1' || name === 'version2'
           ? {
@@ -2817,11 +2860,17 @@ app.post('/api/process-cv', (req, res, next) => {
               credlyProfileUrl,
               jobTitle,
               jobSkills,
-              project: projectText
+              project: projectText,
+              templateParams: resolvedTemplateParams,
+              linkedinProfileUrl,
+              applicantName
             }
           : name === 'cover_letter1' || name === 'cover_letter2'
           ? { skipRequiredSections: true, defaultHeading: '' }
           : {};
+      if (options && typeof options === 'object' && !options.templateParams) {
+        options.templateParams = resolvedTemplateParams;
+      }
       const inputText =
         name === 'cover_letter1' || name === 'cover_letter2'
           ? relocateProfileLinks(sanitizeGeneratedText(text, options))
