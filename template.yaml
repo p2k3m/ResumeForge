@@ -159,7 +159,6 @@ Resources:
       DistributionConfig:
         Enabled: true
         Comment: API Gateway distribution for ResumeForge
-        DefaultRootObject: healthz
         Origins:
           - Id: ResumeForgeApiOrigin
             DomainName: !Sub "${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com"
