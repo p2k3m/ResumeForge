@@ -7,7 +7,9 @@
     "start": "node server.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dev": "node server.js",
-    "build": "echo 'No build step'",
+    "build": "npm run build:client && npm run build:lambda",
+    "build:client": "npm run build --prefix client",
+    "build:lambda": "node scripts/build-lambda.mjs",
     "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs",
     "test:sam": "sam local invoke ResumeForgeFunction --event tests/sam/healthz-event.json"
   },
@@ -35,6 +37,7 @@
     "ua-parser-js": "^1.0.35"
   },
   "devDependencies": {
+    "esbuild": "^0.20.2",
     "jest": "^29.7.0",
     "supertest": "^6.3.4"
   },

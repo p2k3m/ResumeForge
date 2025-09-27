@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { formatMatchMessage } from './formatMatchMessage.js'
+import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
 
 function App() {
   const [profileUrl, setProfileUrl] = useState('')
@@ -11,7 +12,46 @@ function App() {
   const [match, setMatch] = useState(null)
   const [error, setError] = useState('')
   const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
-  const API_BASE_URL = rawBaseUrl.replace(/\/+$/u, '')
+  const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
+  const [queuedMessage, setQueuedMessage] = useState('')
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+      return undefined
+    }
+
+    const handleMessage = (event) => {
+      const data = event.data
+      if (!data || typeof data !== 'object') return
+
+      if (data.type === 'OFFLINE_UPLOAD_COMPLETE') {
+        const payload = data.payload || {}
+        setQueuedMessage(
+          payload.message || data.message || 'Upload processed after reconnection.'
+        )
+        setIsProcessing(false)
+        setError('')
+        setOutputFiles(Array.isArray(payload.urls) ? payload.urls : [])
+        setMatch(payload.match || null)
+      } else if (data.type === 'OFFLINE_UPLOAD_FAILED') {
+        setQueuedMessage('')
+        setIsProcessing(false)
+        setError(data.message || 'Failed to process queued upload. Please try again.')
+      }
+    }
+
+    navigator.serviceWorker.addEventListener('message', handleMessage)
+
+    navigator.serviceWorker.ready
+      .then((registration) => {
+        registration.active?.postMessage({ type: 'RETRY_UPLOADS' })
+      })
+      .catch(() => {})
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage)
+    }
+  }, [])
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -36,6 +76,8 @@ function App() {
     setIsProcessing(true)
     setError('')
     setMatch(null)
+    setQueuedMessage('')
+    setOutputFiles([])
 
     try {
       const formData = new FormData()
@@ -44,9 +86,7 @@ function App() {
       formData.append('jobDescriptionUrl', jobUrl)
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
 
-      const requestUrl = API_BASE_URL
-        ? `${API_BASE_URL}/api/process-cv`
-        : '/api/process-cv'
+      const requestUrl = buildApiUrl(API_BASE_URL, '/api/process-cv')
 
       const response = await fetch(requestUrl, {
         method: 'POST',
@@ -72,6 +112,13 @@ function App() {
       }
 
       const data = await response.json()
+
+      if (response.status === 202 && data?.queued) {
+        setQueuedMessage(
+          data.message || 'You are offline. The upload will resume automatically once you reconnect.'
+        )
+        return
+      }
 
       setOutputFiles(data.urls || [])
       setMatch({
@@ -152,6 +199,8 @@ function App() {
       >
         Enhance CV Now
       </button>
+
+      {queuedMessage && <p className="mt-4 text-blue-700 text-center">{queuedMessage}</p>}
 
       {isProcessing && (
         <div className="mt-4 animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full"></div>

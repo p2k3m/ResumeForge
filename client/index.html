@@ -3,10 +3,52 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="resumeforge-api-base" content="" />
     <title>ResumeForge</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="min-h-screen bg-gradient-to-r from-blue-200 to-purple-300 flex flex-col items-center p-4">
+        <h1 class="text-3xl font-bold mb-4 text-center text-purple-800">Enhance Your CV</h1>
+        <p class="mb-6 text-center max-w-xl text-indigo-800">
+          Provide your LinkedIn profile and job description URLs, and upload your CV to receive enhanced versions tailored to
+          your job.
+        </p>
+
+        <div
+          class="w-full max-w-md p-6 border-2 border-dashed border-blue-300 rounded-md mb-4 text-center bg-gradient-to-r from-white to-purple-50"
+        >
+          <p class="text-purple-700">Drag and drop your CV here, or click to select (PDF or DOCX, max 5MB)</p>
+          <input type="file" accept=".pdf,.docx" class="hidden" id="cv-input" />
+          <label for="cv-input" class="block mt-2 text-purple-700 cursor-pointer">Choose File</label>
+        </div>
+
+        <input
+          type="url"
+          placeholder="LinkedIn Profile URL"
+          value=""
+          class="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+        />
+
+        <input
+          type="url"
+          placeholder="Job Description URL"
+          value=""
+          class="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+        />
+
+        <input
+          type="url"
+          placeholder="Credly Profile URL (optional)"
+          value=""
+          class="w-full max-w-md p-2 border border-purple-300 rounded mb-4"
+        />
+
+        <button disabled class="px-4 py-2 rounded text-white bg-purple-300">Enhance CV Now</button>
+
+        <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-md"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
