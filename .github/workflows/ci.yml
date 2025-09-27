@@ -19,7 +19,6 @@ permissions:
 
 env:
   NODE_VERSION: '18'
-  DEFAULT_STAGE: prod
   BUNDLE_SIZE_LIMIT_MB: '45'
 
 jobs:
@@ -63,7 +62,7 @@ jobs:
       PRIMARY_REGION: ${{ secrets.RESUMEFORGE_PRIMARY_REGION || 'us-east-1' }}
       SECONDARY_REGION: ${{ secrets.RESUMEFORGE_SECONDARY_REGION || 'us-west-2' }}
       PROVISIONED_CONCURRENCY: ${{ secrets.RESUMEFORGE_PROVISIONED_CONCURRENCY || '0' }}
-      STAGE_NAME: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.stage) || secrets.RESUMEFORGE_STAGE_NAME || env.DEFAULT_STAGE }}
+      STAGE_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.stage || secrets.RESUMEFORGE_STAGE_NAME || 'prod' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
