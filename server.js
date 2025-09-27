@@ -7,7 +7,13 @@ import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   DynamoDBClient,
@@ -317,7 +323,8 @@ function buildRuntimeConfig() {
     AWS_REGION: region,
     S3_BUCKET: s3Bucket,
     GEMINI_API_KEY: geminiApiKey,
-    CLOUDFRONT_ORIGINS: allowedOrigins
+    CLOUDFRONT_ORIGINS: allowedOrigins,
+    PII_HASH_SECRET: process.env.PII_HASH_SECRET || '',
   });
 }
 
@@ -603,6 +610,115 @@ process.env.AWS_REGION = runtimeConfig.AWS_REGION;
 
 const region = runtimeConfig.AWS_REGION;
 const s3Client = new S3Client({ region });
+
+const parsedRetention = Number.parseInt(
+  process.env.SESSION_RETENTION_DAYS || '',
+  10
+);
+const SESSION_RETENTION_DAYS =
+  Number.isFinite(parsedRetention) && parsedRetention > 0
+    ? parsedRetention
+    : 30;
+const SESSION_PREFIX = 'first/';
+
+function anonymizePersonalData(value) {
+  if (!value) return '';
+  const hash = crypto.createHash('sha256');
+  hash.update(String(value));
+  if (runtimeConfig.PII_HASH_SECRET) {
+    hash.update(runtimeConfig.PII_HASH_SECRET);
+  }
+  // GDPR: store irreversible hashes so DynamoDB never contains raw identifiers.
+  return hash.digest('hex');
+}
+
+async function purgeExpiredSessions({
+  bucket: overrideBucket,
+  retentionDays = SESSION_RETENTION_DAYS,
+  now = new Date(),
+} = {}) {
+  const { S3_BUCKET } = getSecrets();
+  const bucket = overrideBucket || S3_BUCKET;
+  if (!bucket) {
+    throw new Error('S3 bucket not configured');
+  }
+  const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
+  const cutoff = now.getTime() - retentionMs;
+  let continuationToken;
+  let scanned = 0;
+  const keysToDelete = [];
+
+  do {
+    const response = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: SESSION_PREFIX,
+        ContinuationToken: continuationToken,
+      })
+    );
+    const contents = response.Contents || [];
+    for (const object of contents) {
+      const key = object.Key;
+      if (!key) continue;
+      scanned += 1;
+      const match = key.match(/^first\/(\d{4}-\d{2}-\d{2})\//);
+      if (!match) continue;
+      const sessionDate = new Date(match[1]);
+      if (Number.isNaN(sessionDate.getTime())) continue;
+      if (sessionDate.getTime() <= cutoff) {
+        keysToDelete.push(key);
+      }
+    }
+    continuationToken = response.IsTruncated
+      ? response.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
+
+  let deleted = 0;
+  for (let i = 0; i < keysToDelete.length; i += 1000) {
+    const chunk = keysToDelete.slice(i, i + 1000).map((Key) => ({ Key }));
+    if (!chunk.length) continue;
+    const result = await s3Client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: chunk, Quiet: true },
+      })
+    );
+    deleted += result?.Deleted?.length ?? chunk.length;
+  }
+
+  // GDPR: scheduled retention removes artefacts that exceed policy windows.
+  return { bucket, scanned, deleted, retentionDays };
+}
+
+async function handleDataRetentionEvent(event = {}) {
+  const detailRetention = Number.parseInt(event?.detail?.retentionDays, 10);
+  const retentionDays =
+    Number.isFinite(detailRetention) && detailRetention > 0
+      ? detailRetention
+      : SESSION_RETENTION_DAYS;
+  const now = event?.time ? new Date(event.time) : new Date();
+  try {
+    const result = await purgeExpiredSessions({
+      retentionDays,
+      now,
+    });
+    logStructured('info', 's3_session_retention_completed', {
+      ...result,
+      source: event?.source,
+    });
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ success: true, ...result }),
+    };
+  } catch (err) {
+    logStructured('error', 's3_session_retention_failed', {
+      error: serializeError(err),
+      source: event?.source,
+    });
+    throw err;
+  }
+}
 
 function getSecrets() {
   return getRuntimeConfig();
@@ -3191,19 +3307,24 @@ app.post(
     }
     await ensureTableExists();
     const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
+    const anonymizedApplicantName = anonymizePersonalData(applicantName);
+    const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
+    const anonymizedIp = anonymizePersonalData(ipAddress);
+    const anonymizedUserAgent = anonymizePersonalData(userAgent);
+
     await dynamo.send(
       new PutItemCommand({
         TableName: tableName,
         Item: {
-          linkedinProfileUrl: { S: linkedinProfileUrl },
-          candidateName: { S: applicantName },
+          linkedinProfileUrl: { S: anonymizedLinkedIn },
+          candidateName: { S: anonymizedApplicantName },
           timestamp: { S: new Date().toISOString() },
           cv1Url: { S: urlMap.version1 || '' },
           cv2Url: { S: urlMap.version2 || '' },
           coverLetter1Url: { S: urlMap.cover_letter1 || '' },
           coverLetter2Url: { S: urlMap.cover_letter2 || '' },
-          ipAddress: { S: ipAddress },
-          userAgent: { S: userAgent },
+          ipAddress: { S: anonymizedIp },
+          userAgent: { S: anonymizedUserAgent },
           os: { S: os },
           browser: { S: browser },
           device: { S: device }
@@ -3331,5 +3452,7 @@ export {
   removeGuidanceLines,
   sanitizeGeneratedText,
   relocateProfileLinks,
-  verifyResume
+  verifyResume,
+  purgeExpiredSessions,
+  handleDataRetentionEvent,
 };

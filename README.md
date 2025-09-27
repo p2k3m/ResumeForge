@@ -15,16 +15,42 @@ The runtime looks for the following keys:
   "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
   "RESUME_TABLE_NAME": "ResumeForge",
-  "CLOUDFRONT_ORIGINS": "https://d123example.cloudfront.net"
+  "CLOUDFRONT_ORIGINS": "https://d123example.cloudfront.net",
+  "PII_HASH_SECRET": "<random-string>",
+  "SESSION_RETENTION_DAYS": "30"
 }
 ```
 
 - `GEMINI_API_KEY` – Google Gemini API key. This value must be supplied via the environment; the server verifies a non-empty value is present and never logs the secret.
 - `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Provide the bucket name through the `S3_BUCKET` environment variable so artifacts are stored in the correct account and region.
 - `CLOUDFRONT_ORIGINS` – Optional, comma-separated list of CloudFront origins that are permitted through the server's CORS middleware. Include your distribution domain to restrict browser calls to trusted hosts.
+- `PII_HASH_SECRET` – Optional salt used when hashing personal data before writing DynamoDB records. Configure a deployment-specific value to make hashes non-reversible if the table leaks.
+- `SESSION_RETENTION_DAYS` – Optional override for the automated S3 clean-up job. Defaults to 30 days when unset.
 - `AWS_REGION`, `PORT`, and `RESUME_TABLE_NAME` can continue to come from the environment. Reasonable defaults are provided for local development.
 
 Because the configuration is loaded and cached once, the service reuses the same credentials across requests instead of recreating clients every time.
+
+### Privacy, GDPR, and data retention
+
+- DynamoDB inserts now hash candidate names, LinkedIn URLs, IP addresses, and user agents with SHA-256 (plus the optional `PII_HASH_SECRET` salt) before persisting them. The table retains browser, OS, and device metadata for aggregate analytics without storing raw personally identifiable information.
+- An EventBridge rule can invoke the Lambda on a schedule to remove generated sessions from S3 that are older than `SESSION_RETENTION_DAYS` (30 days by default). The scheduled handler deletes entire `first/<ISO-date>/...` prefixes so no PDFs or logs linger past the retention window.
+
+Implementation snippet:
+
+```ts
+// cron expression example: run daily at 01:00 UTC
+const rule = new events.Rule(this, 'SessionRetentionRule', {
+  schedule: events.Schedule.cron({ minute: '0', hour: '1' }),
+});
+rule.addTarget(new targets.LambdaFunction(resumeForgeLambda, {
+  event: events.RuleTargetInput.fromObject({
+    source: 'resume-forge.gdpr',
+    detail: { retentionDays: 30 },
+  }),
+}));
+```
+
+The Lambda automatically calls the retention routine when invoked by EventBridge (checks for `aws.events` and `Scheduled Event` sources), so attaching the rule is enough to enforce rolling deletion.
 
 ### Required parameters for AWS deployment
 
