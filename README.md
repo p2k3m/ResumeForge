@@ -88,7 +88,7 @@ The deployment creates:
 - Regional REST API Gateway with binary support for `multipart/form-data`
 - S3 bucket for uploads/logs and DynamoDB table with on-demand billing
 
-After `sam deploy` completes it prints the `ApiBaseUrl` and `CloudFrontUrl` outputs. The production endpoint for the application is:
+After `sam deploy` completes it prints the `AppBaseUrl`, `ApiBaseUrl`, and `CloudFrontUrl` outputs. `AppBaseUrl` is the primary CloudFront front page and the canonical entry point for the hosted application. The production endpoint for the application is:
 
 ```
 https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
