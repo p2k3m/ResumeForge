@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
+import { EventEmitter } from 'events';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import {
@@ -80,6 +81,48 @@ async function parseUserAgent(ua) {
 
 const app = express();
 app.use(cors());
+
+app.use((req, res, next) => {
+  const socket = req.socket;
+  if (!socket || typeof socket.on !== 'function') {
+    const emitter = new EventEmitter();
+    const noop = () => {};
+    const proxy = {
+      destroyed: false,
+      readable: true,
+      writable: false,
+      setKeepAlive: noop,
+      setNoDelay: noop,
+      setTimeout: noop,
+      address: () => ({ port: 443 }),
+      end: noop,
+      destroy: () => {
+        proxy.destroyed = true;
+      }
+    };
+    Object.setPrototypeOf(proxy, emitter);
+    proxy.on = emitter.on.bind(emitter);
+    proxy.once = emitter.once.bind(emitter);
+    proxy.addListener = emitter.addListener.bind(emitter);
+    proxy.removeListener = emitter.removeListener.bind(emitter);
+    proxy.removeAllListeners = emitter.removeAllListeners.bind(emitter);
+    proxy.emit = emitter.emit.bind(emitter);
+    Object.defineProperty(req, 'socket', {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: proxy
+    });
+    Object.defineProperty(req, 'connection', {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: proxy
+    });
+  }
+  next();
+});
+
 app.use(express.json());
 
 const upload = multer({
@@ -2143,6 +2186,10 @@ function relocateProfileLinks(text) {
   }
   return `${remaining}\n\n${paragraph}`;
 }
+
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'ResumeForge API is running.' });
+});
 
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
