@@ -204,49 +204,49 @@ jobs:
           aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json > describe.json
 
           python <<'PY'
-import json
-import os
-from pathlib import Path
+          import json
+          import os
+          from pathlib import Path
 
-with Path('describe.json').open() as fh:
-    data = json.load(fh)
+          with Path('describe.json').open() as fh:
+              data = json.load(fh)
 
-stacks = data.get('Stacks', [])
-if not stacks:
-    raise SystemExit('Unable to find stack description for deployment outputs.')
+          stacks = data.get('Stacks', [])
+          if not stacks:
+              raise SystemExit('Unable to find stack description for deployment outputs.')
 
-outputs = {item['OutputKey']: item['OutputValue'] for item in stacks[0].get('Outputs', [])}
-app_url = outputs.get('AppBaseUrl') or outputs.get('CloudFrontUrl', '')
-api_url = outputs.get('ApiBaseUrl', '')
+          outputs = {item['OutputKey']: item['OutputValue'] for item in stacks[0].get('Outputs', [])}
+          app_url = outputs.get('AppBaseUrl') or outputs.get('CloudFrontUrl', '')
+          api_url = outputs.get('ApiBaseUrl', '')
 
-summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
-summary_lines = ['\n## Deployment URLs\n']
-if app_url:
-    summary_lines.append(f"- **App URL:** {app_url}\n")
-if api_url:
-    summary_lines.append(f"- **API base URL:** {api_url}\n")
-if len(summary_lines) == 1:
-    summary_lines.append('- No deployment URLs were returned by the stack outputs.\n')
+          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
+          summary_lines = ['\n## Deployment URLs\n']
+          if app_url:
+              summary_lines.append(f"- **App URL:** {app_url}\n")
+          if api_url:
+              summary_lines.append(f"- **API base URL:** {api_url}\n")
+          if len(summary_lines) == 1:
+              summary_lines.append('- No deployment URLs were returned by the stack outputs.\n')
 
-with summary_path.open('a', encoding='utf-8') as fh:
-    fh.write(''.join(summary_lines))
+          with summary_path.open('a', encoding='utf-8') as fh:
+              fh.write(''.join(summary_lines))
 
-output_path = Path(os.environ['GITHUB_OUTPUT'])
-with output_path.open('a', encoding='utf-8') as fh:
-    fh.write(f"app_url={app_url}\n")
-    fh.write(f"api_url={api_url}\n")
+          output_path = Path(os.environ['GITHUB_OUTPUT'])
+          with output_path.open('a', encoding='utf-8') as fh:
+              fh.write(f"app_url={app_url}\n")
+              fh.write(f"api_url={api_url}\n")
 
-notice_parts = []
-if app_url:
-    notice_parts.append(f"App URL: {app_url}")
-if api_url:
-    notice_parts.append(f"API URL: {api_url}")
+          notice_parts = []
+          if app_url:
+              notice_parts.append(f"App URL: {app_url}")
+          if api_url:
+              notice_parts.append(f"API URL: {api_url}")
 
-if notice_parts:
-    print(f"::notice title=Deployment URLs::{ ' | '.join(notice_parts) }")
-else:
-    print('::warning::Deployment succeeded but no URLs were returned in the stack outputs.')
-PY
+          if notice_parts:
+              print(f"::notice title=Deployment URLs::{ ' | '.join(notice_parts) }")
+          else:
+              print('::warning::Deployment succeeded but no URLs were returned in the stack outputs.')
+          PY
 
           rm -f describe.json
 
