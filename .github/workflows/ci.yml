@@ -1,0 +1,342 @@
+name: CI pipeline
+
+on:
+  push:
+    branches:
+      - v2
+  pull_request:
+    branches:
+      - v2
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "Stage/alias name to deploy"
+        required: false
+        default: prod
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '18'
+  DEFAULT_STAGE: prod
+  BUNDLE_SIZE_LIMIT_MB: '45'
+
+jobs:
+  test:
+    name: Install and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install server dependencies
+        run: npm ci
+
+      - name: Run server tests
+        run: npm test -- --runInBand
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Build client bundle
+        run: npm run build
+        working-directory: client
+
+  deploy:
+    name: Deploy to AWS
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    env:
+      STACK_NAME: ${{ secrets.RESUMEFORGE_STACK_NAME }}
+      DATA_BUCKET: ${{ secrets.RESUMEFORGE_DATA_BUCKET }}
+      SECRET_NAME: ${{ secrets.RESUMEFORGE_SECRET_NAME || 'ResumeForge' }}
+      TABLE_NAME: ${{ secrets.RESUMEFORGE_TABLE_NAME || 'ResumeForge' }}
+      PRIMARY_REGION: ${{ secrets.RESUMEFORGE_PRIMARY_REGION || 'us-east-1' }}
+      SECONDARY_REGION: ${{ secrets.RESUMEFORGE_SECONDARY_REGION || 'us-west-2' }}
+      PROVISIONED_CONCURRENCY: ${{ secrets.RESUMEFORGE_PROVISIONED_CONCURRENCY || '0' }}
+      STAGE_NAME: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.stage) || secrets.RESUMEFORGE_STAGE_NAME || env.DEFAULT_STAGE }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required deployment secrets
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          STACK_NAME: ${{ secrets.RESUMEFORGE_STACK_NAME }}
+          DATA_BUCKET: ${{ secrets.RESUMEFORGE_DATA_BUCKET }}
+        run: |
+          set -euo pipefail
+
+          declare -a missing=()
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION STACK_NAME DATA_BUCKET; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf '::error::Missing required secrets: %s\n' "${missing[*]}"
+            printf '%s\n' \
+              "To resolve this failure, open your repository in GitHub and navigate to:" \
+              "  Settings → Secrets and variables → Actions → New repository secret" \
+              "Add each missing secret listed above with the correct value. The AWS access key ID and" \
+              "secret access key can be copied from the AWS IAM console under the associated user or" \
+              "deployment role. After saving the secrets, re-run this workflow."
+            exit 1
+          fi
+
+      - name: Validate optional deployment secrets
+        shell: bash
+        env:
+          RESUMEFORGE_STAGE_NAME: ${{ secrets.RESUMEFORGE_STAGE_NAME }}
+          RESUMEFORGE_TABLE_NAME: ${{ secrets.RESUMEFORGE_TABLE_NAME }}
+          RESUMEFORGE_SECRET_NAME: ${{ secrets.RESUMEFORGE_SECRET_NAME }}
+          RESUMEFORGE_PRIMARY_REGION: ${{ secrets.RESUMEFORGE_PRIMARY_REGION }}
+          RESUMEFORGE_SECONDARY_REGION: ${{ secrets.RESUMEFORGE_SECONDARY_REGION }}
+          RESUMEFORGE_PROVISIONED_CONCURRENCY: ${{ secrets.RESUMEFORGE_PROVISIONED_CONCURRENCY }}
+        run: |
+          set -euo pipefail
+
+          declare -A patterns=(
+            [RESUMEFORGE_STAGE_NAME]='^[a-zA-Z0-9_-]+$'
+            [RESUMEFORGE_TABLE_NAME]='^[A-Za-z0-9_.-]{3,255}$'
+            [RESUMEFORGE_SECRET_NAME]='^[A-Za-z0-9/_+=.@-]{1,512}$'
+            [RESUMEFORGE_PRIMARY_REGION]='^[a-z]{2}-[a-z]+-\d$'
+            [RESUMEFORGE_SECONDARY_REGION]='^[a-z]{2}-[a-z]+-\d$'
+            [RESUMEFORGE_PROVISIONED_CONCURRENCY]='^\d+$'
+          )
+
+          for key in "${!patterns[@]}"; do
+            value="${!key:-}"
+            if [ -n "$value" ] && ! [[ "$value" =~ ${patterns[$key]} ]]; then
+              echo "::error::Secret $key failed validation with value '$value'."
+              exit 1
+            fi
+          done
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install server dependencies
+        run: npm ci
+
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Build serverless application
+        run: sam build
+
+      - name: Check Lambda bundle size
+        shell: bash
+        env:
+          LIMIT_MB: ${{ env.BUNDLE_SIZE_LIMIT_MB }}
+        run: |
+          set -euo pipefail
+
+          artifact=".aws-sam/build/ResumeForgeFunction"
+          if [ ! -d "$artifact" ]; then
+            echo "::error::SAM build output not found at $artifact"
+            exit 1
+          fi
+
+          size_kb=$(du -sk "$artifact" | cut -f1)
+          limit_kb=$((LIMIT_MB * 1024))
+          size_mb=$(awk -v size="$size_kb" 'BEGIN { printf "%.2f", size/1024 }')
+          echo "Lambda bundle size: ${size_mb} MiB (limit ${LIMIT_MB} MiB)"
+          if [ "$size_kb" -gt "$limit_kb" ]; then
+            echo "::error::Lambda bundle exceeds the ${LIMIT_MB} MiB limit"
+            exit 1
+          fi
+
+      - name: Build deployment context
+        id: deploy_context
+        shell: bash
+        env:
+          STACK_NAME: ${{ env.STACK_NAME }}
+          DATA_BUCKET: ${{ env.DATA_BUCKET }}
+          TABLE_NAME: ${{ env.TABLE_NAME }}
+          SECRET_NAME: ${{ env.SECRET_NAME }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${STACK_NAME:-}" ]; then
+            echo "::error::RESUMEFORGE_STACK_NAME must be provided as a secret"
+            exit 1
+          fi
+
+          cat <<OUT >>"$GITHUB_OUTPUT"
+stack_name=$STACK_NAME
+bucket_name=$DATA_BUCKET
+resume_table=$TABLE_NAME
+secret_name=$SECRET_NAME
+OUT
+
+      - name: Deploy stack
+        shell: bash
+        env:
+          STACK_NAME: ${{ steps.deploy_context.outputs.stack_name }}
+          DATA_BUCKET: ${{ steps.deploy_context.outputs.bucket_name }}
+          TABLE_NAME: ${{ steps.deploy_context.outputs.resume_table }}
+          SECRET_NAME: ${{ steps.deploy_context.outputs.secret_name }}
+          STAGE_NAME: ${{ env.STAGE_NAME }}
+          PRIMARY_REGION: ${{ env.PRIMARY_REGION }}
+          SECONDARY_REGION: ${{ env.SECONDARY_REGION }}
+          PROVISIONED_CONCURRENCY: ${{ env.PROVISIONED_CONCURRENCY }}
+        run: |
+          set -euo pipefail
+
+          tmp_err=$(mktemp)
+          trap 'rm -f "$tmp_err"' EXIT
+
+          if stack_status=$(aws cloudformation describe-stacks \
+              --stack-name "$STACK_NAME" \
+              --query "Stacks[0].StackStatus" \
+              --output text 2>"$tmp_err"); then
+            echo "Found existing stack '$STACK_NAME' with status: $stack_status"
+            if [ "$stack_status" = "ROLLBACK_COMPLETE" ]; then
+              echo "Stack in ROLLBACK_COMPLETE state. Deleting before redeploy."
+              aws cloudformation delete-stack --stack-name "$STACK_NAME"
+              aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
+              echo "Stack deletion complete. Proceeding with deployment."
+            fi
+          else
+            describe_err=$(cat "$tmp_err")
+            if echo "$describe_err" | grep -qi "does not exist"; then
+              echo "Stack '$STACK_NAME' does not exist. Proceeding with deployment."
+            else
+              echo "$describe_err" >&2
+              exit 1
+            fi
+          fi
+
+          : >"$tmp_err"
+
+          create_data_bucket='true'
+          if aws s3api head-bucket --bucket "$DATA_BUCKET" 1>/dev/null 2>"$tmp_err"; then
+            echo "S3 bucket '$DATA_BUCKET' already exists. Reusing without creation."
+            create_data_bucket='false'
+          else
+            bucket_err=$(cat "$tmp_err")
+            if echo "$bucket_err" | grep -Eqi 'Not Found|NoSuchBucket|404'; then
+              echo "S3 bucket '$DATA_BUCKET' not found. It will be created by the stack."
+              create_data_bucket='true'
+            else
+              echo "$bucket_err" >&2
+              exit 1
+            fi
+          fi
+
+          : >"$tmp_err"
+
+          create_resume_table='true'
+          if aws dynamodb describe-table --table-name "$TABLE_NAME" 1>/dev/null 2>"$tmp_err"; then
+            echo "DynamoDB table '$TABLE_NAME' already exists. Reusing without creation."
+            create_resume_table='false'
+          else
+            table_err=$(cat "$tmp_err")
+            if echo "$table_err" | grep -qi 'ResourceNotFoundException'; then
+              echo "DynamoDB table '$TABLE_NAME' not found. It will be created by the stack."
+              create_resume_table='true'
+            else
+              echo "$table_err" >&2
+              exit 1
+            fi
+          fi
+
+          : >"$tmp_err"
+
+          if ! sam deploy \
+              --stack-name "$STACK_NAME" \
+              --resolve-s3 \
+              --capabilities CAPABILITY_IAM \
+              --no-confirm-changeset \
+              --no-fail-on-empty-changeset \
+              --parameter-overrides \
+                StageName="$STAGE_NAME" \
+                PrimaryRegion="$PRIMARY_REGION" \
+                SecondaryRegion="$SECONDARY_REGION" \
+                ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
+                DataBucketName="$DATA_BUCKET" \
+                ResumeTableName="$TABLE_NAME" \
+                SecretName="$SECRET_NAME" \
+                CreateDataBucket="$create_data_bucket" \
+                CreateResumeTable="$create_resume_table"; then
+            echo "::error::Deployment failed. Attempting rollback." >&2
+            stack_status=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].StackStatus" --output text 2>/dev/null || true)
+            case "$stack_status" in
+              UPDATE_IN_PROGRESS|UPDATE_COMPLETE_CLEANUP_IN_PROGRESS)
+                aws cloudformation cancel-update-stack --stack-name "$STACK_NAME"
+                aws cloudformation wait stack-rollback-complete --stack-name "$STACK_NAME" || true
+                ;;
+              UPDATE_ROLLBACK_IN_PROGRESS|ROLLBACK_IN_PROGRESS)
+                aws cloudformation wait stack-rollback-complete --stack-name "$STACK_NAME" || true
+                ;;
+              UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED)
+                echo "Stack rollback previously failed. Manual intervention may be required." >&2
+                ;;
+              "")
+                echo "Stack status unavailable; rollback may not have been initiated." >&2
+                ;;
+              *)
+                echo "Stack status after failure: $stack_status" >&2
+                ;;
+            esac
+            exit 1
+          fi
+
+      - name: Publish deployment summary
+        shell: bash
+        env:
+          STACK_NAME: ${{ env.STACK_NAME }}
+        run: |
+          set -euo pipefail
+
+          aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json > describe.json
+
+          python <<'PY'
+import json
+import os
+from pathlib import Path
+
+data = json.load(open('describe.json'))
+stacks = data.get('Stacks', [])
+if not stacks:
+    raise SystemExit('Unable to find stack description for deployment outputs.')
+
+outputs = {item['OutputKey']: item['OutputValue'] for item in stacks[0].get('Outputs', [])}
+summary_lines = ['\n## Deployment Summary\n']
+for key in sorted(outputs):
+    summary_lines.append(f"- **{key}:** {outputs[key]}\n")
+
+with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as fh:
+    fh.write(''.join(summary_lines))
+PY
+
+          rm -f describe.json
+
