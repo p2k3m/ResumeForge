@@ -2343,10 +2343,227 @@ async function extractText(file) {
   return data.text;
 }
 
+const DOCUMENT_CLASSIFIERS = [
+  {
+    description: 'a job description document',
+    keywords: ['responsibilities', 'qualifications', 'job description', 'what you will do'],
+    threshold: 2,
+  },
+  {
+    description: 'a cover letter',
+    keywords: ['dear', 'sincerely', 'cover letter'],
+    threshold: 2,
+  },
+  {
+    description: 'an invoice document',
+    keywords: ['invoice', 'bill to', 'payment terms', 'invoice number'],
+    threshold: 2,
+  },
+  {
+    description: 'meeting notes',
+    keywords: ['meeting notes', 'action items', 'attendees'],
+    threshold: 2,
+  },
+  {
+    description: 'an academic paper',
+    keywords: ['abstract', 'introduction', 'references'],
+    threshold: 2,
+  },
+  {
+    description: 'a policy or compliance document',
+    keywords: ['policy', 'scope', 'compliance', 'procedures'],
+    threshold: 2,
+  },
+  {
+    description: 'a marketing brochure',
+    keywords: ['call to action', 'our services', 'clients', 'testimonials'],
+    threshold: 2,
+  },
+  {
+    description: 'a slide deck outline',
+    keywords: ['slide', 'agenda', 'speaker notes'],
+    threshold: 2,
+  },
+  {
+    description: 'a certificate or award notice',
+    keywords: ['certificate of', 'awarded to', 'this certifies'],
+    threshold: 1,
+  },
+];
+
+function classifyDocument(text = '') {
+  const normalized = text.toLowerCase();
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const uniqueWords = new Set(words);
+  const resumeSignals = [
+    ['experience', 'education'],
+    ['skills', 'summary'],
+    ['projects', 'experience'],
+    ['professional summary'],
+  ];
+
+  let resumeScore = 0;
+  for (const signal of resumeSignals) {
+    if (signal.every((term) => normalized.includes(term))) {
+      resumeScore += 1;
+    }
+  }
+
+  const sectionHits = ['experience', 'education', 'skills', 'projects', 'certifications', 'languages', 'summary'].filter((term) =>
+    normalized.includes(term)
+  );
+  if (sectionHits.length >= 4) {
+    resumeScore += 2;
+  } else if (sectionHits.length >= 3) {
+    resumeScore += 1.5;
+  } else if (sectionHits.length >= 2) {
+    resumeScore += 1;
+  }
+
+  if (uniqueWords.has('resume') || uniqueWords.has('curriculum') || uniqueWords.has('vitae')) {
+    resumeScore += 1;
+  }
+
+  const headingMatches = (text.match(/\n[A-Z][A-Z\s]{3,}\n/g) || []).length;
+  if (headingMatches >= 2) {
+    resumeScore += 1;
+  }
+
+  if (resumeScore >= 3) {
+    return { isResume: true, description: 'a professional resume' };
+  }
+
+  for (const classifier of DOCUMENT_CLASSIFIERS) {
+    const count = classifier.keywords.reduce(
+      (acc, keyword) => (normalized.includes(keyword) ? acc + 1 : acc),
+      0
+    );
+    if (count >= classifier.threshold) {
+      return { isResume: false, description: classifier.description };
+    }
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return { isResume: false, description: 'an empty document' };
+  }
+
+  const snippet = lines[0].slice(0, 60).trim();
+  return {
+    isResume: false,
+    description: snippet ? `a document starting with "${snippet}${lines[0].length > 60 ? '…' : ''}"` : 'a non-resume document',
+  };
+}
+
 function isResume(text) {
-  const indicators = ['education', 'experience', 'skills'];
-  const lower = text.toLowerCase();
-  return indicators.some((i) => lower.includes(i));
+  return classifyDocument(text).isResume;
+}
+
+function scoreStatus(score) {
+  if (score >= 85) return 'Excellent';
+  if (score >= 70) return 'Strong';
+  if (score >= 55) return 'Average';
+  return 'Needs work';
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function buildScoreBreakdown(text = '', { jobSkills = [], resumeSkills = [] } = {}) {
+  if (!text) {
+    return [];
+  }
+
+  const normalized = text.toLowerCase();
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const bulletLines = lines.filter((line) => /^[-•\u2022\u2023\u25e6\*]/.test(line));
+  const headingLines = lines.filter((line) => {
+    if (line.length > 42) return false;
+    const upper = line.replace(/[^A-Za-z]/g, '').toUpperCase();
+    return upper.length >= 4 && line === line.toUpperCase();
+  });
+
+  const layoutScore = clamp(
+    40 + Math.min(4, headingLines.length) * 10 + Math.min(0.6, bulletLines.length / Math.max(1, lines.length)) * 50,
+    35,
+    95
+  );
+
+  const atsPenalties = [
+    normalized.includes('table of contents'),
+    /\btable\b/.test(normalized) && /\|/.test(text),
+    /\bpage \d+ of \d+/i.test(text),
+  ].filter(Boolean).length;
+  const atsScore = clamp(88 - atsPenalties * 18, 45, 92);
+
+  const achievementLines = bulletLines.filter((line) =>
+    /\b(increased|reduced|improved|accelerated|boosted|optimized|delivered|achieved|drove|grew|cut)\b/i.test(line) ||
+    /[+\d%$]/.test(line)
+  );
+  const impactScore = clamp(50 + Math.min(achievementLines.length * 12, 45), 45, 95);
+
+  const bulletWordCounts = bulletLines.map((line) => line.split(/\s+/).filter(Boolean).length);
+  const avgBulletWords = bulletWordCounts.length
+    ? bulletWordCounts.reduce((sum, val) => sum + val, 0) / bulletWordCounts.length
+    : 0;
+  let crispnessScore = 68;
+  if (avgBulletWords >= 8 && avgBulletWords <= 26) {
+    crispnessScore = 90;
+  } else if (avgBulletWords >= 5 && avgBulletWords <= 32) {
+    crispnessScore = 78;
+  } else if (avgBulletWords) {
+    crispnessScore = 58;
+  }
+
+  const normalizedJobSkills = new Set((jobSkills || []).map((skill) => skill.toLowerCase()));
+  const normalizedResumeSkills = new Set((resumeSkills || []).map((skill) => skill.toLowerCase()));
+  let matchedSkills = 0;
+  normalizedJobSkills.forEach((skill) => {
+    if (normalizedResumeSkills.has(skill)) matchedSkills += 1;
+  });
+  const matchRatio = normalizedJobSkills.size ? matchedSkills / normalizedJobSkills.size : 0;
+  const otherScore = clamp(55 + matchRatio * 45 + Math.min(headingLines.length, 6) * 3, 50, 94);
+
+  const templates = [
+    {
+      category: 'Layout & Searchability',
+      score: Math.round(layoutScore),
+      tip: 'Keep section headers consistent and rely on clear bullet formatting for ATS parsing.',
+    },
+    {
+      category: 'ATS Readability',
+      score: Math.round(atsScore),
+      tip: 'Avoid tables, graphics, or multi-column text that traditional parsers cannot interpret.',
+    },
+    {
+      category: 'Impact',
+      score: Math.round(impactScore),
+      tip: 'Quantify achievements with numbers, percentages, and outcome-focused verbs.',
+    },
+    {
+      category: 'Crispness',
+      score: Math.round(clamp(crispnessScore, 50, 95)),
+      tip: 'Keep bullet points to one or two lines and favor concise, high-energy phrases.',
+    },
+    {
+      category: 'Other Quality Metrics',
+      score: Math.round(otherScore),
+      tip: 'Mirror the job description keywords, certifications, and tools to improve alignment.',
+    },
+  ];
+
+  return templates.map((entry) => ({
+    ...entry,
+    status: scoreStatus(entry.score),
+  }));
 }
 
 function extractName(text) {
@@ -2833,16 +3050,19 @@ app.post(
       { stage: 'extract_text' }
     );
   }
-  if (!isResume(text)) {
+  const classification = classifyDocument(text);
+  if (!classification.isResume) {
     logStructured('warn', 'resume_validation_failed', {
       ...logContext,
       reason: 'not_identified_as_resume',
+      description: classification.description,
     });
     return sendError(
       res,
       400,
       'INVALID_RESUME_CONTENT',
-      'It does not look like your CV, please upload a CV'
+      `You have uploaded ${classification.description}. Please upload a CV only.`,
+      { description: classification.description }
     );
   }
   const applicantName = extractName(text);
@@ -2950,6 +3170,7 @@ app.post(
       text: jobDescription
     } = analyzeJobDescription(jobDescriptionHtml);
     const resumeSkills = extractResumeSkills(text);
+    const scoreBreakdown = buildScoreBreakdown(text, { jobSkills, resumeSkills });
     const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
 
     let linkedinData = {};
@@ -3386,6 +3607,7 @@ app.post(
       missingSkills,
       originalTitle,
       modifiedTitle: modifiedTitle || originalTitle,
+      scoreBreakdown,
     });
   } catch (err) {
     logStructured('error', 'process_cv_failed', {
@@ -3455,4 +3677,6 @@ export {
   verifyResume,
   purgeExpiredSessions,
   handleDataRetentionEvent,
+  classifyDocument,
+  buildScoreBreakdown,
 };

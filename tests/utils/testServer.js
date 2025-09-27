@@ -25,7 +25,7 @@ export async function setupTestServer({
   s3Impl,
   dynamoImpl,
   axiosImpl,
-  pdfText = 'John Doe\nSummary\nExperience\nSkills',
+  pdfText = 'John Doe\nProfessional Summary\nExperience\nEducation\nSkills\nProjects',
 } = {}) {
   jest.resetModules();
   process.env.S3_BUCKET = 'integration-bucket';
@@ -58,6 +58,8 @@ export async function setupTestServer({
     S3Client: jest.fn(() => ({ send: mockS3Send })),
     PutObjectCommand: jest.fn((input) => ({ input, __type: 'PutObjectCommand' })),
     GetObjectCommand: jest.fn((input) => ({ input, __type: 'GetObjectCommand' })),
+    ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
+    DeleteObjectsCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectsCommand' })),
   }));
 
   jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({

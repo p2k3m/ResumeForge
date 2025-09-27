@@ -60,6 +60,7 @@ Deployments still expect the following AWS SAM parameters:
 - `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
 - `CreateDataBucket` – set to `false` when pointing at an existing bucket so the stack does not try to create it again (defaults to `true`).
 - `CreateResumeTable` – set to `false` when reusing a DynamoDB table created outside the stack (defaults to `true`).
+- `WebAclArn` – optional ARN of an AWS WAFv2 web ACL to associate with the CloudFront distribution for upload abuse protection. Leave blank to skip WAF attachment.
 
 ## IAM Policy
 Minimal permissions required by the server:
@@ -136,6 +137,8 @@ https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 ### Accessing the ResumeForge portal
 
 The SAM template deploys the API and a CloudFront distribution that forwards requests straight to API Gateway. Visiting the raw CloudFront domain now renders a lightweight HTML portal served directly by the API’s root route, so candidates can upload their CV, provide the job description, and receive enhanced documents without any additional hosting. CloudFront no longer rewrites `/` to `/healthz`; instead it forwards the viewer path verbatim so the portal is the default experience while the `/healthz` endpoint remains available for JSON health checks. CloudFront is configured to let AWS supply the `Host` header expected by API Gateway; forwarding the viewer’s `Host` would cause API Gateway to reject the request with a 403 because the CloudFront hostname is not mapped to the stage. If you omit the stage segment (for example, visiting `https://<api-id>.execute-api.<region>.amazonaws.com/`), API Gateway responds with `{"message":"Forbidden"}` because no resource matches that path.
+
+The portal now enforces PDF uploads exclusively and immediately validates the document type. When Gemini or heuristic analysis determines that the uploaded PDF is not a CV, the API responds with a descriptive message such as “You have uploaded an invoice document. Please upload a CV only.” so users know exactly what went wrong before trying again. Successful evaluations render a 2025-inspired dashboard that highlights ATS scoring across Layout & Searchability, ATS Readability, Impact, Crispness, and Other Quality Metrics, alongside enhanced résumé and cover-letter download links.
 
 If you prefer the full React application you can continue to host it separately:
 

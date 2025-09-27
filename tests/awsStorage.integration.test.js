@@ -1,6 +1,9 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
+import crypto from 'crypto';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
+
+const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
 describe('AWS integrations for /api/process-cv', () => {
   test('writes uploads and metadata to S3 and DynamoDB', async () => {
@@ -37,7 +40,7 @@ describe('AWS integrations for /api/process-cv', () => {
     );
     expect(dynamoPut).toBeTruthy();
     expect(dynamoPut[0].input.Item.linkedinProfileUrl.S).toBe(
-      'https://linkedin.com/in/example'
+      hash('https://linkedin.com/in/example')
     );
 
     expect(mocks.logEventMock).toHaveBeenCalledWith(

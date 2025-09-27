@@ -15,6 +15,10 @@ Parameters:
     Type: String
     Default: us-west-2
     Description: Secondary AWS region used for disaster recovery or failover.
+  WebAclArn:
+    Type: String
+    Default: ''
+    Description: Optional ARN of an AWS WAFv2 web ACL to associate with the CloudFront distribution.
   DataBucketName:
     Type: String
     Default: resume-forge-data
@@ -53,6 +57,7 @@ Conditions:
   CreateResumeTableCondition: !Equals [!Ref CreateResumeTable, 'true']
   CreateDataBucketCondition: !Equals [!Ref CreateDataBucket, 'true']
   EnableProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
+  AttachWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
 
 Resources:
   ResumeForgeApi:
@@ -190,6 +195,7 @@ Resources:
       DistributionConfig:
         Enabled: true
         Comment: API Gateway distribution for ResumeForge
+        WebACLId: !If [AttachWebAcl, !Ref WebAclArn, !Ref AWS::NoValue]
         Origins:
           - Id: ResumeForgeApiOrigin
             DomainName: !Sub "${ResumeForgeApi}.execute-api.${PrimaryRegion}.amazonaws.com"

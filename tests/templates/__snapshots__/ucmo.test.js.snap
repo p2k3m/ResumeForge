@@ -47,35 +47,28 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
 <body>
   <div class="top-bar">
     <div class="contact">
-      <span>{{phone}}</span>
-      <span>{{email}}</span>
-      <span>{{cityState}}</span>
-      <span>{{linkedin}}</span>
+      <span>555-555-5555</span>
+      <span>jane@example.com</span>
+      <span>Warrensburg, MO</span>
+      <span>linkedin.com/in/jane</span>
     </div>
     <img src="https://resumeforge.s3.amazonaws.com/ucmo-logo.png" alt="UCMO logo" class="logo" />
   </div>
   <header>
     <h1>Jane Doe</h1>
   </header>
-  
   <section>
     <h2>Work Experience</h2>
-    {{#if items}}
       <ul>
-        {{#each items}}
-          <li>{{{this}}}</li>
-        
+          <li><span class="bullet">•</span> Built things</li>
+      </ul>
+  </section>
   <section>
     <h2>Education</h2>
-    {{#if items}}
       <ul>
-        {{#each items}}
-          <li>{{{this}}}</li>
-        
+          <li><span class="bullet">•</span> BSc Stuff</li>
       </ul>
-    {{/if}}
   </section>
-  {{/each}}
 </body>
 </html>
 "
