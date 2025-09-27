@@ -140,7 +140,14 @@ Resources:
         CookiesConfig:
           CookieBehavior: all
         HeadersConfig:
-          HeaderBehavior: allViewer
+          HeaderBehavior: whitelist
+          Headers:
+            - Authorization
+            - Content-Type
+            - Origin
+            - Access-Control-Request-Method
+            - Access-Control-Request-Headers
+            - Accept
         QueryStringsConfig:
           QueryStringBehavior: all
 
