@@ -1,0 +1,21 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /healthz",
+  "rawPath": "/healthz",
+  "rawQueryString": "",
+  "cookies": [],
+  "headers": {
+    "host": "localhost"
+  },
+  "queryStringParameters": null,
+  "requestContext": {
+    "http": {
+      "method": "GET",
+      "path": "/healthz",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "sam"
+    }
+  },
+  "isBase64Encoded": false
+}

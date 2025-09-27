@@ -8,7 +8,8 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "dev": "node server.js",
     "build": "echo 'No build step'",
-    "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs"
+    "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs",
+    "test:sam": "sam local invoke ResumeForgeFunction --event tests/sam/healthz-event.json"
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.432.0",
@@ -48,6 +49,17 @@
       "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js",
       "^@vendia/serverless-express$": "<rootDir>/tests/mocks/serverless-express.js",
       "^puppeteer$": "<rootDir>/tests/mocks/puppeteer.js"
-    }
+    },
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "server.js",
+      "logger.js",
+      "lib/**/*.js"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": [
+      "text",
+      "lcov"
+    ]
   }
 }
