@@ -319,23 +319,23 @@ jobs:
 
           aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json > describe.json
 
-          python <<'PY'
-import json
-import os
-from pathlib import Path
+            python <<'PY'
+            import json
+            import os
+            from pathlib import Path
 
-data = json.load(open('describe.json'))
-stacks = data.get('Stacks', [])
-if not stacks:
-    raise SystemExit('Unable to find stack description for deployment outputs.')
+            data = json.load(open('describe.json'))
+            stacks = data.get('Stacks', [])
+            if not stacks:
+                raise SystemExit('Unable to find stack description for deployment outputs.')
 
-outputs = {item['OutputKey']: item['OutputValue'] for item in stacks[0].get('Outputs', [])}
-summary_lines = ['\n## Deployment Summary\n']
-for key in sorted(outputs):
-    summary_lines.append(f"- **{key}:** {outputs[key]}\n")
+            outputs = {item['OutputKey']: item['OutputValue'] for item in stacks[0].get('Outputs', [])}
+            summary_lines = ['\n## Deployment Summary\n']
+            for key in sorted(outputs):
+                summary_lines.append(f"- **{key}:** {outputs[key]}\n")
 
-with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as fh:
-    fh.write(''.join(summary_lines))
+            with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as fh:
+                fh.write(''.join(summary_lines))
 PY
 
           rm -f describe.json
