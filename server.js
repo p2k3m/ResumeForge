@@ -184,6 +184,22 @@ async function getPortalHtml() {
 const DEFAULT_AWS_REGION = 'ap-south-1';
 const DEFAULT_ALLOWED_ORIGINS = [];
 const URL_EXPIRATION_SECONDS = 60 * 60; // 1 hour
+const isTestEnvironment = process.env.NODE_ENV === 'test';
+
+const parsePositiveInt = (value) => {
+  if (value === undefined || value === null) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
+const JOB_DESCRIPTION_WAIT_MS =
+  parsePositiveInt(process.env.JOB_DESCRIPTION_WAIT_MS) ?? (isTestEnvironment ? 0 : 1000);
+
+const DYNAMO_TABLE_POLL_INTERVAL_MS =
+  parsePositiveInt(process.env.DYNAMO_TABLE_POLL_INTERVAL_MS) ?? (isTestEnvironment ? 25 : 1000);
+
+const DYNAMO_TABLE_MAX_WAIT_MS =
+  parsePositiveInt(process.env.DYNAMO_TABLE_MAX_WAIT_MS) ?? (isTestEnvironment ? 2000 : 60000);
 
 function createIdentifier() {
   if (typeof crypto.randomUUID === 'function') {
@@ -845,10 +861,13 @@ async function scrapeJobDescription(url, options = {}) {
         const page = await browser.newPage();
         try {
           await page.goto(url, { waitUntil, timeout });
-          if (typeof page.waitForTimeout === 'function') {
-            await page.waitForTimeout(1000);
-          } else {
-            await sleep(1000);
+          const waitMs = JOB_DESCRIPTION_WAIT_MS;
+          if (waitMs > 0) {
+            if (typeof page.waitForTimeout === 'function') {
+              await page.waitForTimeout(waitMs);
+            } else {
+              await sleep(waitMs);
+            }
           }
           const html = await page.content();
           await page.close();
@@ -3496,35 +3515,65 @@ app.post(
 
     const dynamo = new DynamoDBClient({ region });
     const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
-    async function ensureTableExists() {
-      try {
-        await dynamo.send(new DescribeTableCommand({ TableName: tableName }));
-      } catch (err) {
-        if (err.name !== 'ResourceNotFoundException') throw err;
+    const tablePollInterval = Math.max(
+      1,
+      Math.min(DYNAMO_TABLE_POLL_INTERVAL_MS, DYNAMO_TABLE_MAX_WAIT_MS)
+    );
+    const waitForTableActive = async (ignoreNotFound = false) => {
+      const startedAt = Date.now();
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
         try {
-          await dynamo.send(
-            new CreateTableCommand({
-              TableName: tableName,
-              AttributeDefinitions: [
-                { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
-              ],
-              KeySchema: [
-                { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
-              ],
-              BillingMode: 'PAY_PER_REQUEST'
-            })
-          );
-        } catch (createErr) {
-          if (createErr.name !== 'ResourceInUseException') throw createErr;
-        }
-        while (true) {
           const desc = await dynamo.send(
             new DescribeTableCommand({ TableName: tableName })
           );
-          if (desc.Table && desc.Table.TableStatus === 'ACTIVE') break;
-          await new Promise((r) => setTimeout(r, 1000));
+          if (desc.Table && desc.Table.TableStatus === 'ACTIVE') {
+            return;
+          }
+        } catch (err) {
+          if (!ignoreNotFound || err.name !== 'ResourceNotFoundException') {
+            throw err;
+          }
+        }
+
+        if (Date.now() - startedAt >= DYNAMO_TABLE_MAX_WAIT_MS) {
+          throw new Error(
+            `DynamoDB table ${tableName} did not become ACTIVE within ${DYNAMO_TABLE_MAX_WAIT_MS} ms`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, tablePollInterval));
+      }
+    };
+
+    async function ensureTableExists() {
+      try {
+        await waitForTableActive(false);
+        return;
+      } catch (err) {
+        if (err.name !== 'ResourceNotFoundException') {
+          throw err;
         }
       }
+
+      try {
+        await dynamo.send(
+          new CreateTableCommand({
+            TableName: tableName,
+            AttributeDefinitions: [
+              { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
+            ],
+            KeySchema: [
+              { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
+            ],
+            BillingMode: 'PAY_PER_REQUEST'
+          })
+        );
+      } catch (createErr) {
+        if (createErr.name !== 'ResourceInUseException') throw createErr;
+      }
+
+      await waitForTableActive(true);
     }
     await ensureTableExists();
     const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
@@ -3630,13 +3679,12 @@ app.post(
 
 const port = process.env.PORT || 3000;
 const isLambda = Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME);
-const isTestEnv = process.env.NODE_ENV === 'test';
 const currentFilePath = fileURLToPath(import.meta.url);
 const isDirectRun =
   typeof process.argv[1] === 'string' &&
   path.resolve(process.argv[1]) === currentFilePath;
 
-if (!isLambda && !isTestEnv && isDirectRun) {
+if (!isLambda && !isTestEnvironment && isDirectRun) {
   app.listen(port, () => {
     logStructured('info', 'server_started', { port });
   });
