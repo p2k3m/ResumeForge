@@ -95,6 +95,14 @@ describe('health check', () => {
   });
 });
 
+describe('static asset fallbacks', () => {
+  test('GET /favicon.ico returns 204', async () => {
+    const res = await request(app).get('/favicon.ico');
+    expect(res.status).toBe(204);
+    expect(res.text).toBe('');
+  });
+});
+
 describe('/api/process-cv', () => {
   test('handles DynamoDB table lifecycle', async () => {
     mockDynamoSend
