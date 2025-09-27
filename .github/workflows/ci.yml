@@ -190,12 +190,12 @@ jobs:
             exit 1
           fi
 
-          cat <<OUT >>"$GITHUB_OUTPUT"
-stack_name=$STACK_NAME
-bucket_name=$DATA_BUCKET
-resume_table=$TABLE_NAME
-secret_name=$SECRET_NAME
-OUT
+          {
+            printf 'stack_name=%s\n' "$STACK_NAME"
+            printf 'bucket_name=%s\n' "$DATA_BUCKET"
+            printf 'resume_table=%s\n' "$TABLE_NAME"
+            printf 'secret_name=%s\n' "$SECRET_NAME"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Deploy stack
         shell: bash
