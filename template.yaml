@@ -143,15 +143,9 @@ Resources:
             - HEAD
             - OPTIONS
           Compress: true
-          ForwardedValues:
-            QueryString: true
-            Headers:
-              - '*'
-            Cookies:
-              Forward: all
-          MinTTL: 0
-          DefaultTTL: 0
-          MaxTTL: 0
+          CachePolicyId: 4135ea2d-9dd4-4f85-a0cd-4144f5d9c003 # Managed-CachingDisabled
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3 # Managed-AllViewerExceptHostHeader
+          ResponseHeadersPolicyId: 60669652-455b-4ae9-85a4-c4c02393f86c # Managed-CORS-with-preflight-and-SecurityHeadersPolicy
 
 Outputs:
   ApiBaseUrl:
