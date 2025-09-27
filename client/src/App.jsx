@@ -10,7 +10,8 @@ function App() {
   const [outputFiles, setOutputFiles] = useState([])
   const [match, setMatch] = useState(null)
   const [error, setError] = useState('')
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+  const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
+  const API_BASE_URL = rawBaseUrl.replace(/\/+$/u, '')
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -43,7 +44,11 @@ function App() {
       formData.append('jobDescriptionUrl', jobUrl)
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
 
-      const response = await fetch(`${API_BASE_URL}/api/process-cv`, {
+      const requestUrl = API_BASE_URL
+        ? `${API_BASE_URL}/api/process-cv`
+        : '/api/process-cv'
+
+      const response = await fetch(requestUrl, {
         method: 'POST',
         body: formData,
       })
