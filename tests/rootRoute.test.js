@@ -3,13 +3,12 @@ import app from '../server.js';
 import { handler } from '../lambda.js';
 
 describe('serverless bootstrap', () => {
-  it('responds to GET / with status json', async () => {
+  it('responds to GET / with the hosted portal', async () => {
     const response = await request(app).get('/');
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      status: 'ok',
-      message: 'ResumeForge API is running.'
-    });
+    expect(response.type).toMatch(/html/);
+    expect(response.text).toContain('<title>ResumeForge Portal</title>');
+    expect(response.text).toContain('id="portal-form"');
   });
 
   it('handles API Gateway proxy events without socket errors', async () => {
@@ -39,6 +38,6 @@ describe('serverless bootstrap', () => {
     const context = {};
     const result = await handler(event, context);
     expect(result.statusCode).toBe(200);
-    expect(result.body).toContain('ResumeForge API is running.');
+    expect(result.body).toContain('<title>ResumeForge Portal</title>');
   });
 });

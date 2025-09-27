@@ -79,6 +79,20 @@ async function parseUserAgent(ua) {
   }
 }
 
+const portalTemplateUrl = new URL('./templates/portal.html', import.meta.url);
+let cachedPortalHtml;
+
+async function getPortalHtml() {
+  if (cachedPortalHtml && process.env.NODE_ENV !== 'development') {
+    return cachedPortalHtml;
+  }
+  const html = await fs.readFile(portalTemplateUrl, 'utf8');
+  if (process.env.NODE_ENV !== 'development') {
+    cachedPortalHtml = html;
+  }
+  return html;
+}
+
 const app = express();
 app.use(cors());
 
@@ -2187,8 +2201,14 @@ function relocateProfileLinks(text) {
   return `${remaining}\n\n${paragraph}`;
 }
 
-app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'ResumeForge API is running.' });
+app.get('/', async (req, res) => {
+  try {
+    const html = await getPortalHtml();
+    res.type('html').send(html);
+  } catch (err) {
+    console.error('Failed to load portal UI', err);
+    res.json({ status: 'ok', message: 'ResumeForge API is running.' });
+  }
 });
 
 app.get('/favicon.ico', (req, res) => {
