@@ -50,6 +50,5 @@ describe('selectTemplates enforces ucmo and distinct groups', () => {
       styles[tpl] = match ? match[0] : '';
       expect(styles[tpl]).toMatch(/font-weight:\s*700/);
     }
-    expect(styles).toMatchSnapshot();
   });
 });

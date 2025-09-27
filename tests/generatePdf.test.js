@@ -587,8 +587,8 @@ describe('generatePdf and parsing', () => {
     );
     expect(rendered).not.toMatch(/[-–]/);
     const css = await fs.readFile(path.resolve('templates', '2025.css'), 'utf8');
-    expect(css).toMatch(/li\s*{[^}]*white-space:\s*pre-wrap/);
-    expect(css).toMatch(/li\s*{[^}]*line-height:\s*[0-9.]+/);
+    expect(css).toMatch(/\.section-item\s*{[^}]*white-space:\s*pre-wrap/);
+    expect(css).toMatch(/\.section-item\s*{[^}]*line-height:\s*[0-9.]+/);
   });
 
 });

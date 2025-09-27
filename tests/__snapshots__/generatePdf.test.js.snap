@@ -3,101 +3,152 @@
 exports[`generatePdf and parsing 2025 template renders expected HTML snapshot 1`] = `
 "<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resume</title>
-  <!-- 2025 template ensures whitespace and tab rendering -->
-<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume</title>
+  <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 :root {
-  --accent: #1f3c5d;
-  --bullet: #4a5568;
+  --accent: #2c3e7a;
+  --accent-soft: #f0f4ff;
+  --border: #dde3f0;
+  --text: #1f2937;
+  --muted: #64748b;
+  --pill: #6366f1;
 }
 
 body {
   font-family: 'Inter', sans-serif;
-  margin: 2.5rem;
-  color: #333;
-  line-height: 1.6;
-  max-width: 900px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-header {
-  text-align: center;
-  margin-bottom: 2rem;
-  display: flex;
-  justify-content: center;
-}
-
-  h1 {
-    font-size: 2.8rem;
-    font-weight: 700;
-    margin: 0;
-    color: var(--accent);
-  }
-
-  h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    margin-top: 2.5rem;
-    margin-bottom: 0.75rem;
-    color: var(--accent);
-    border-bottom: 2px solid var(--accent);
-    padding-bottom: 0.25rem;
-  }
-
-main {
-  display: grid;
-  gap: 2rem;
-}
-
-section {
-  padding: 1.25rem;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: #fafafa;
-}
-
-@media (min-width: 700px) {
-  main {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-ul {
-  list-style: none;
   margin: 0;
+  padding: 32px;
+  color: var(--text);
+  background: #f8fafc;
+}
+
+.page {
+  max-width: 1024px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.08);
+  padding: 48px clamp(32px, 6vw, 60px);
+  display: grid;
+  gap: 36px;
+}
+
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 24px;
+}
+
+.identity h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 4vw, 3.2rem);
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+.identity .tagline {
+  margin: 6px 0 0;
+  font-size: 1.05rem;
+  color: var(--muted);
+}
+
+.meta-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--pill);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.resume-grid {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 900px) {
+  .resume-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .resume-section:first-of-type {
+    grid-column: 1 / -1;
+  }
+}
+
+.resume-section {
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px 26px;
+  display: grid;
+  gap: 16px;
+  box-shadow: inset 0 1px 0 rgba(99, 102, 241, 0.08);
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.section-accent {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.4), rgba(129, 140, 248, 0));
+}
+
+.section-list {
+  list-style: none;
   padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
 }
 
-li {
-  /* preserve formatting for multi-line bullets */
-  margin-bottom: 0.5rem;
-  margin-left: 1.2em;
+
+.section-item {
+  position: relative;
+  padding-left: 0;
+  color: var(--text);
+  line-height: 1.6;
   white-space: pre-wrap;
-  line-height: 1.5;
-  font-weight: 400;
 }
 
-.bullet {
+.section-item .bullet {
   display: inline-block;
-  width: 1em;
-  margin-left: -1em;
-  margin-right: 0.5em;
-  color: var(--bullet);
+  width: 1.25em;
+  margin-right: 6px;
   font-weight: 700;
+  color: var(--pill);
 }
 
-.edu-bullet {
-  display: inline-block;
-  width: 1em;
-  margin-left: -1em;
-  margin-right: 0.5em;
-  color: var(--bullet);
-  font-weight: 700;
+.section-item strong {
+  color: var(--accent);
 }
 
 .tab {
@@ -105,48 +156,51 @@ li {
   width: 1.5em;
 }
 
-.tab + p {
-  margin-top: 0;
-}
-
-strong {
-  font-weight: 700;
-}
-
 </style></head>
-<body>
-  <header class="header">
-    <h1>Jane Doe</h1>
-  </header>
-  <main class="content">
-    
-    <section class="section">
-      <h2>Skills</h2>
-      {{#if items}}
-        <ul>
-          {{#each items}}
-            <li>{{{this}}}</li>
-          
-    <section class="section">
-      <h2>Work Experience</h2>
-      {{#if items}}
-        <ul>
-          {{#each items}}
-            <li>{{{this}}}</li>
-          
-    <section class="section">
-      <h2>Education</h2>
-      {{#if items}}
-        <ul>
-          {{#each items}}
-            <li>{{{this}}}</li>
-          
-        </ul>
-      {{/if}}
-    </section>
-    {{/each}}
-  </main>
-</body>
+  <body>
+    <div class="page">
+      <header class="masthead">
+        <div class="identity">
+          <h1>Jane Doe</h1>
+          <p class="tagline">Future-ready professional profile &mdash; tailored for 2025 hiring</p>
+        </div>
+        <div class="meta-pills">
+          <span class="pill">ATS Optimised</span>
+          <span class="pill">Two-column Layout</span>
+          <span class="pill">Keyword Aligned</span>
+        </div>
+      </header>
+      <main class="resume-grid">
+        <section class="resume-section">
+          <div class="section-header">
+            <h2>Skills</h2>
+            <span class="section-accent"></span>
+          </div>
+          <ul class="section-list">
+            <li class="section-item"><span class="bullet">•</span>Testing</li>
+          </ul>
+        </section>
+        <section class="resume-section">
+          <div class="section-header">
+            <h2>Work Experience</h2>
+            <span class="section-accent"></span>
+          </div>
+          <ul class="section-list">
+            <li class="section-item">Information not provided</li>
+          </ul>
+        </section>
+        <section class="resume-section">
+          <div class="section-header">
+            <h2>Education</h2>
+            <span class="section-accent"></span>
+          </div>
+          <ul class="section-list">
+            <li class="section-item">Information not provided</li>
+          </ul>
+        </section>
+      </main>
+    </div>
+  </body>
 </html>
 "
 `;

@@ -12,7 +12,7 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: linear-gradient(135deg, #101828, #1d2939);
+        background: radial-gradient(circle at top left, #6d28d9, #312e81 55%, #1e1b4b);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -29,7 +29,7 @@
       }
       h1 {
         margin: 0 0 12px;
-        font-size: clamp(2rem, 3.5vw, 2.6rem);
+        font-size: clamp(2rem, 3.5vw, 2.7rem);
         font-weight: 700;
         letter-spacing: -0.02em;
       }
@@ -79,14 +79,14 @@
         padding: 14px 28px;
         font-size: 1rem;
         font-weight: 600;
-        background: linear-gradient(135deg, #38bdf8, #14b8a6);
+        background: linear-gradient(135deg, #a855f7, #6366f1);
         color: #0f172a;
         cursor: pointer;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
       button[type="submit"]:hover {
         transform: translateY(-1px);
-        box-shadow: 0 12px 40px rgba(20, 184, 166, 0.35);
+        box-shadow: 0 12px 40px rgba(99, 102, 241, 0.35);
       }
       .hint {
         font-size: 0.85rem;
@@ -100,7 +100,7 @@
       }
       .results.active {
         display: grid;
-        gap: 18px;
+        gap: 24px;
       }
       .links {
         display: grid;
@@ -122,8 +122,44 @@
       }
       .metrics {
         display: grid;
-        gap: 8px;
-        font-size: 0.95rem;
+        gap: 12px;
+      }
+      .score-grid {
+        display: grid;
+        gap: 16px;
+      }
+      @media (min-width: 640px) {
+        .score-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (min-width: 960px) {
+        .score-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .score-card {
+        padding: 18px;
+        border-radius: 14px;
+        background: rgba(30, 41, 89, 0.75);
+        border: 1px solid rgba(147, 197, 253, 0.22);
+        display: grid;
+        gap: 6px;
+      }
+      .score-card strong {
+        font-size: 1.05rem;
+        color: #e0e7ff;
+      }
+      .score-value {
+        font-size: 2.1rem;
+        font-weight: 700;
+        color: #c4b5fd;
+      }
+      .score-status {
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(196, 181, 253, 0.85);
       }
       .error {
         border-radius: 12px;
@@ -145,16 +181,15 @@
   </head>
   <body>
     <main class="card">
-      <h1>ResumeForge</h1>
+      <h1>Evaluate Your CV</h1>
       <p class="lead">
-        Upload your CV, provide the job posting and LinkedIn profile, and we will craft
-        AI-enhanced resumes and tailored cover letters for you.
+        Upload your CV and provide the job description URL to evaluate how well it matches.
       </p>
       <form id="portal-form">
         <label>
-          Resume (PDF or DOCX)
-          <input type="file" name="resume" accept=".pdf,.doc,.docx" required />
-          <span class="hint">Maximum size: 5 MB.</span>
+          Upload your CV (PDF only)
+          <input type="file" name="resume" accept="application/pdf,.pdf" required />
+          <span class="hint">Drag &amp; drop supported. Maximum size: 5&nbsp;MB.</span>
         </label>
         <label>
           Job description URL
@@ -201,11 +236,14 @@
             <option value="cover_classic">Classic</option>
           </select>
         </label>
-        <button type="submit">Generate my enhanced CV</button>
+        <button type="submit">Evaluate me against the JD</button>
       </form>
       <div id="error" class="error"></div>
       <section id="results" class="results" aria-live="polite">
-        <div class="metrics" id="metrics"></div>
+        <div class="metrics">
+          <div id="score-grid" class="score-grid" aria-live="polite"></div>
+          <div id="metrics"></div>
+        </div>
         <div class="links" id="links"></div>
       </section>
     </main>
@@ -215,6 +253,7 @@
       const results = document.getElementById('results');
       const links = document.getElementById('links');
       const metrics = document.getElementById('metrics');
+      const scoreGrid = document.getElementById('score-grid');
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -223,12 +262,13 @@
         results.classList.remove('active');
         links.innerHTML = '';
         metrics.innerHTML = '';
+        scoreGrid.innerHTML = '';
 
         const formData = new FormData(form);
         const submitButton = form.querySelector('button[type="submit"]');
         const originalText = submitButton.textContent;
         submitButton.disabled = true;
-        submitButton.textContent = 'Generating...';
+        submitButton.textContent = 'Evaluating...';
 
         try {
           const response = await fetch('/api/process-cv', {
@@ -237,7 +277,21 @@
           });
           const data = await response.json();
           if (!response.ok) {
-            throw new Error(data.error || 'Processing failed');
+            throw new Error((data.error && data.error.message) || 'Processing failed');
+          }
+
+          if (Array.isArray(data.scoreBreakdown) && data.scoreBreakdown.length) {
+            data.scoreBreakdown.forEach((entry) => {
+              const card = document.createElement('div');
+              card.className = 'score-card';
+              card.innerHTML = `
+                <strong>${entry.category}</strong>
+                <div class="score-value">${entry.score}</div>
+                <div class="score-status">${entry.status}</div>
+                <p class="hint">${entry.tip}</p>
+              `;
+              scoreGrid.appendChild(card);
+            });
           }
 
           if (Array.isArray(data.urls) && data.urls.length) {
@@ -265,7 +319,7 @@
             metrics.innerHTML = scoreParts.map((text) => `<div>${text}</div>`).join('');
           }
 
-          if (!links.childElementCount && !metrics.childElementCount) {
+          if (!links.childElementCount && !metrics.childElementCount && !scoreGrid.childElementCount) {
             metrics.innerHTML = '<div>Your enhanced documents are ready.</div>';
           }
 

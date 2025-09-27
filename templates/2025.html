@@ -1,28 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resume</title>
-  <!-- 2025 template ensures whitespace and tab rendering -->
-</head>
-<body>
-  <header class="header">
-    <h1>{{name}}</h1>
-  </header>
-  <main class="content">
-    {{#each sections}}
-    <section class="section">
-      {{#if heading}}<h2>{{heading}}</h2>{{/if}}
-      {{#if items}}
-        <ul>
-          {{#each items}}
-            <li>{{{this}}}</li>
-          {{/each}}
-        </ul>
-      {{/if}}
-    </section>
-    {{/each}}
-  </main>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume</title>
+  </head>
+  <body>
+    <div class="page">
+      <header class="masthead">
+        <div class="identity">
+          <h1>{{name}}</h1>
+          <p class="tagline">Future-ready professional profile &mdash; tailored for 2025 hiring</p>
+        </div>
+        <div class="meta-pills">
+          <span class="pill">ATS Optimised</span>
+          <span class="pill">Two-column Layout</span>
+          <span class="pill">Keyword Aligned</span>
+        </div>
+      </header>
+      <main class="resume-grid">
+        {{#each sections}}
+        <section class="resume-section">
+          {{#if heading}}
+          <div class="section-header">
+            <h2>{{heading}}</h2>
+            <span class="section-accent"></span>
+          </div>
+          {{/if}}
+          {{#if items}}
+          <ul class="section-list">
+            {{#each items}}
+            <li class="section-item">{{{this}}}</li>
+            {{/each}}
+          </ul>
+          {{/if}}
+        </section>
+        {{/each}}
+      </main>
+    </div>
+  </body>
 </html>

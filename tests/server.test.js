@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
+import crypto from 'crypto';
 
 process.env.S3_BUCKET = 'test-bucket';
 process.env.GEMINI_API_KEY = 'test-key';
@@ -11,8 +12,10 @@ const mockS3Send = jest.fn().mockResolvedValue({});
 const getObjectCommandMock = jest.fn((input) => ({ input }));
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: mockS3Send })),
-  PutObjectCommand: jest.fn((input) => ({ input })),
-  GetObjectCommand: getObjectCommandMock
+  PutObjectCommand: jest.fn((input) => ({ input, __type: 'PutObjectCommand' })),
+  GetObjectCommand: getObjectCommandMock,
+  ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
+  DeleteObjectsCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectsCommand' })),
 }));
 
 const getSignedUrlMock = jest
@@ -85,7 +88,11 @@ jest.unstable_mockModule('axios', () => ({
 }));
 
 jest.unstable_mockModule('pdf-parse/lib/pdf-parse.js', () => ({
-  default: jest.fn().mockResolvedValue({ text: 'Education\nExperience\nSkills' })
+  default: jest
+    .fn()
+    .mockResolvedValue({
+      text: 'Professional Summary\nExperience\nEducation\nSkills\nProjects',
+    })
 }));
 
 jest.unstable_mockModule('mammoth', () => ({
@@ -95,8 +102,11 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 const serverModule = await import('../server.js');
-const { default: app, extractText, setGeneratePdf, parseContent } = serverModule;
+const { default: app, extractText, setGeneratePdf, parseContent, classifyDocument } = serverModule;
+const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+
+const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
 beforeEach(() => {
   setupDefaultDynamoMock();
@@ -239,11 +249,15 @@ describe('/api/process-cv', () => {
     expect(putCall).toBeTruthy();
     expect(putCall[0].input.TableName).toBe('ResumeForge');
     expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
-      'http://linkedin.com/in/example'
+      hash('http://linkedin.com/in/example')
     );
-    expect(putCall[0].input.Item.candidateName.S).toBe(res2.body.applicantName);
-    expect(putCall[0].input.Item.ipAddress.S).toBe('203.0.113.42');
-    expect(putCall[0].input.Item.userAgent.S).toContain('iPhone');
+    expect(putCall[0].input.Item.candidateName.S).toBe(hash(res2.body.applicantName));
+    expect(putCall[0].input.Item.ipAddress.S).toBe(hash('203.0.113.42'));
+    expect(putCall[0].input.Item.userAgent.S).toBe(
+      hash(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
+      )
+    );
     expect(putCall[0].input.Item.os.S).toBe('iOS');
     expect(putCall[0].input.Item.device.S).toBe('iPhone');
     expect(putCall[0].input.Item.browser.S).toBe('Mobile Safari');
@@ -665,6 +679,8 @@ describe('/api/process-cv', () => {
     expect(resumeText).toContain('Skill B');
     expect(res.body.addedSkills).toContain('Skill B');
     expect(res.body.modifiedTitle).toBe('Revised Title');
+    expect(Array.isArray(res.body.scoreBreakdown)).toBe(true);
+    expect(res.body.scoreBreakdown).toHaveLength(5);
     process.env.NODE_ENV = 'test';
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
@@ -706,6 +722,30 @@ describe('/api/process-cv', () => {
     });
   });
 
+  test('rejects non-resume content with descriptive feedback', async () => {
+    pdfParseMock.mockResolvedValueOnce({
+      text: 'Invoice Number: 12345\nBill To: Example Corp\nPayment Terms: Net 30 days',
+    });
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'INVALID_RESUME_CONTENT',
+        message: 'You have uploaded an invoice document. Please upload a CV only.',
+        requestId: expect.any(String),
+        jobId: expect.any(String),
+        details: { description: 'an invoice document' },
+      },
+    });
+  });
+
   test('missing job description URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
@@ -741,10 +781,25 @@ describe('/api/process-cv', () => {
   });
 });
 
+describe('classifyDocument', () => {
+  test('identifies resumes by section structure', () => {
+    const result = classifyDocument('PROFESSIONAL SUMMARY\nExperience\nEducation\nSkills');
+    expect(result).toEqual({ isResume: true, description: 'a professional resume' });
+  });
+
+  test('detects cover letters', () => {
+    const result = classifyDocument('Dear Hiring Manager,\nI am excited...\nSincerely, Candidate');
+    expect(result.isResume).toBe(false);
+    expect(result.description).toBe('a cover letter');
+  });
+});
+
 describe('extractText', () => {
   test('extracts text from pdf', async () => {
     const file = { originalname: 'file.pdf', buffer: Buffer.from('') };
-    await expect(extractText(file)).resolves.toBe('Education\nExperience\nSkills');
+    await expect(extractText(file)).resolves.toBe(
+      'Professional Summary\nExperience\nEducation\nSkills\nProjects'
+    );
   });
 
   test('rejects docx files', async () => {
