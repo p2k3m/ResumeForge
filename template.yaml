@@ -143,14 +143,12 @@ Resources:
           HeaderBehavior: whitelist
           Headers:
             - Accept
-            - Accept-Language
             - Access-Control-Request-Headers
             - Access-Control-Request-Method
             - Authorization
             - Content-Type
             - Origin
             - Referer
-            - User-Agent
             - X-Amz-Date
             - X-Amz-Security-Token
             - X-Requested-With
