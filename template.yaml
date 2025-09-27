@@ -135,23 +135,12 @@ Resources:
     Type: AWS::CloudFront::OriginRequestPolicy
     Properties:
       OriginRequestPolicyConfig:
-        Comment: Forward viewer context required by the API while letting CloudFront supply the Host header.
+        Comment: Forward the full viewer header context along with CloudFront-managed headers required for API Gateway.
         Name: !Sub ResumeForgeOriginRequestPolicy-${AWS::StackName}
         CookiesConfig:
           CookieBehavior: all
         HeadersConfig:
-          HeaderBehavior: whitelist
-          Headers:
-            - Accept
-            - Access-Control-Request-Headers
-            - Access-Control-Request-Method
-            - Authorization
-            - Content-Type
-            - Origin
-            - Referer
-            - X-Amz-Date
-            - X-Amz-Security-Token
-            - X-Requested-With
+          HeaderBehavior: allViewerAndWhitelistCloudFront
         QueryStringsConfig:
           QueryStringBehavior: all
 
