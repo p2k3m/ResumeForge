@@ -68,14 +68,24 @@ jobs:
           DATA_BUCKET: ${{ secrets.RESUMEFORGE_DATA_BUCKET }}
           SECRET_NAME: ${{ secrets.RESUMEFORGE_SECRET_NAME }}
         run: |
-          missing=()
+          set -euo pipefail
+
+          declare -a missing=()
           for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION STACK_NAME DATA_BUCKET SECRET_NAME; do
-            if [ -z "${!name}" ]; then
+            if [ -z "${!name:-}" ]; then
               missing+=("$name")
             fi
           done
+
           if [ "${#missing[@]}" -ne 0 ]; then
             printf '::error::Missing required secrets: %s\n' "${missing[*]}"
+            cat <<'EOM'
+To resolve this failure, open your repository in GitHub and navigate to:
+  Settings → Secrets and variables → Actions → New repository secret
+Add each missing secret listed above with the correct value. The AWS access key ID and
+secret access key can be copied from the AWS IAM console under the associated user or
+deployment role. After saving the secrets, re-run this workflow.
+EOM
             exit 1
           fi
 
