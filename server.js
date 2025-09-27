@@ -2191,6 +2191,10 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'ResumeForge API is running.' });
 });
 
+app.get('/favicon.ico', (req, res) => {
+  res.status(204).end();
+});
+
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
