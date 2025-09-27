@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ResumeForge Portal</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(135deg, #101828, #1d2939);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        color: #f8fafc;
+      }
+      .card {
+        width: min(960px, 100%);
+        background: rgba(15, 23, 42, 0.88);
+        border-radius: 20px;
+        box-shadow: 0 24px 80px rgba(15, 23, 42, 0.45);
+        padding: 40px clamp(24px, 5vw, 48px);
+        backdrop-filter: blur(12px);
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: clamp(2rem, 3.5vw, 2.6rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      p.lead {
+        margin: 0 0 32px;
+        font-size: clamp(1.05rem, 2.5vw, 1.2rem);
+        color: rgba(226, 232, 240, 0.85);
+      }
+      form {
+        display: grid;
+        gap: 20px;
+      }
+      label {
+        font-size: 0.95rem;
+        font-weight: 600;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      input[type="text"],
+      input[type="url"],
+      input[type="file"],
+      select,
+      textarea {
+        font: inherit;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(15, 23, 42, 0.75);
+        color: inherit;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      input[type="file"] {
+        padding: 10px 14px;
+        background: rgba(15, 23, 42, 0.6);
+      }
+      input:focus,
+      textarea:focus,
+      select:focus {
+        outline: none;
+        border-color: #38bdf8;
+        box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.25);
+      }
+      button[type="submit"] {
+        border: none;
+        border-radius: 999px;
+        padding: 14px 28px;
+        font-size: 1rem;
+        font-weight: 600;
+        background: linear-gradient(135deg, #38bdf8, #14b8a6);
+        color: #0f172a;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      button[type="submit"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 40px rgba(20, 184, 166, 0.35);
+      }
+      .hint {
+        font-size: 0.85rem;
+        color: rgba(226, 232, 240, 0.7);
+      }
+      .results {
+        margin-top: 32px;
+        padding-top: 32px;
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+        display: none;
+      }
+      .results.active {
+        display: grid;
+        gap: 18px;
+      }
+      .links {
+        display: grid;
+        gap: 12px;
+      }
+      .link-card {
+        background: rgba(30, 41, 59, 0.9);
+        border-radius: 14px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      .link-card a {
+        color: #38bdf8;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .metrics {
+        display: grid;
+        gap: 8px;
+        font-size: 0.95rem;
+      }
+      .error {
+        border-radius: 12px;
+        padding: 14px 16px;
+        background: rgba(248, 113, 113, 0.16);
+        border: 1px solid rgba(248, 113, 113, 0.5);
+        color: #fecaca;
+        display: none;
+      }
+      .error.active {
+        display: block;
+      }
+      @media (max-width: 640px) {
+        .card {
+          padding: 32px 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <h1>ResumeForge</h1>
+      <p class="lead">
+        Upload your CV, provide the job posting and LinkedIn profile, and we will craft
+        AI-enhanced resumes and tailored cover letters for you.
+      </p>
+      <form id="portal-form">
+        <label>
+          Resume (PDF or DOCX)
+          <input type="file" name="resume" accept=".pdf,.doc,.docx" required />
+          <span class="hint">Maximum size: 5 MB.</span>
+        </label>
+        <label>
+          Job description URL
+          <input
+            type="url"
+            name="jobDescriptionUrl"
+            placeholder="https://company.com/careers/role"
+            required
+          />
+        </label>
+        <label>
+          LinkedIn profile URL
+          <input
+            type="url"
+            name="linkedinProfileUrl"
+            placeholder="https://www.linkedin.com/in/your-profile"
+            required
+          />
+        </label>
+        <label>
+          Credly profile URL (optional)
+          <input
+            type="url"
+            name="credlyProfileUrl"
+            placeholder="https://www.credly.com/users/your-profile"
+          />
+        </label>
+        <label>
+          Preferred CV template (optional)
+          <select name="template">
+            <option value="">Let ResumeForge decide</option>
+            <option value="modern">Modern</option>
+            <option value="ucmo">Classic</option>
+            <option value="professional">Professional</option>
+            <option value="vibrant">Vibrant</option>
+            <option value="2025">Futuristic</option>
+          </select>
+        </label>
+        <label>
+          Preferred cover letter template (optional)
+          <select name="coverTemplate">
+            <option value="">Let ResumeForge decide</option>
+            <option value="cover_modern">Modern</option>
+            <option value="cover_classic">Classic</option>
+          </select>
+        </label>
+        <button type="submit">Generate my enhanced CV</button>
+      </form>
+      <div id="error" class="error"></div>
+      <section id="results" class="results" aria-live="polite">
+        <div class="metrics" id="metrics"></div>
+        <div class="links" id="links"></div>
+      </section>
+    </main>
+    <script>
+      const form = document.getElementById('portal-form');
+      const errorBox = document.getElementById('error');
+      const results = document.getElementById('results');
+      const links = document.getElementById('links');
+      const metrics = document.getElementById('metrics');
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        errorBox.classList.remove('active');
+        errorBox.textContent = '';
+        results.classList.remove('active');
+        links.innerHTML = '';
+        metrics.innerHTML = '';
+
+        const formData = new FormData(form);
+        const submitButton = form.querySelector('button[type="submit"]');
+        const originalText = submitButton.textContent;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Generating...';
+
+        try {
+          const response = await fetch('/api/process-cv', {
+            method: 'POST',
+            body: formData
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || 'Processing failed');
+          }
+
+          if (Array.isArray(data.urls) && data.urls.length) {
+            data.urls.forEach((item) => {
+              if (!item || !item.url) return;
+              const div = document.createElement('div');
+              div.className = 'link-card';
+              const label = item.type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+              div.innerHTML = `<span>${label}</span><a href="${item.url}" target="_blank" rel="noopener">Download</a>`;
+              links.appendChild(div);
+            });
+          }
+
+          const scoreParts = [];
+          if (typeof data.originalScore === 'number') {
+            scoreParts.push(`Original match score: ${Math.round(data.originalScore * 100)}%`);
+          }
+          if (typeof data.enhancedScore === 'number') {
+            scoreParts.push(`Enhanced match score: ${Math.round(data.enhancedScore * 100)}%`);
+          }
+          if (data.addedSkills && data.addedSkills.length) {
+            scoreParts.push(`Newly highlighted skills: ${data.addedSkills.join(', ')}`);
+          }
+          if (scoreParts.length) {
+            metrics.innerHTML = scoreParts.map((text) => `<div>${text}</div>`).join('');
+          }
+
+          if (!links.childElementCount && !metrics.childElementCount) {
+            metrics.innerHTML = '<div>Your enhanced documents are ready.</div>';
+          }
+
+          results.classList.add('active');
+        } catch (err) {
+          errorBox.textContent = err.message;
+          errorBox.classList.add('active');
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = originalText;
+        }
+      });
+    </script>
+  </body>
+</html>
