@@ -336,7 +336,7 @@ jobs:
 
           with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as fh:
               fh.write(''.join(summary_lines))
-PY
+          PY
 
           rm -f describe.json
 
