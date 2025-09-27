@@ -112,6 +112,27 @@ Resources:
             TableName: !Ref ResumeTableName
       Layers: []
 
+  ResumeForgeCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Comment: Disable caching while forwarding all viewer context to the API origin.
+        DefaultTTL: 0
+        MaxTTL: 0
+        MinTTL: 0
+        Name: !Sub ResumeForgeCachePolicy-${AWS::StackName}
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: all
+          EnableAcceptEncodingBrotli: true
+          EnableAcceptEncodingGzip: true
+          HeadersConfig:
+            HeaderBehavior: allExcept
+            Headers:
+              - host
+          QueryStringsConfig:
+            QueryStringBehavior: all
+
   ResumeForgeDistribution:
     Type: AWS::CloudFront::Distribution
     DependsOn:
@@ -143,9 +164,7 @@ Resources:
             - HEAD
             - OPTIONS
           Compress: true
-          CachePolicyId: 4135ea2d-9dd4-4f85-a0cd-4144f5d9c003 # Managed-CachingDisabled
-          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492eafa07d3 # Managed-AllViewerExceptHostHeader
-          ResponseHeadersPolicyId: 60669652-455b-4ae9-85a4-c4c02393f86c # Managed-CORS-with-preflight-and-SecurityHeadersPolicy
+          CachePolicyId: !GetAtt ResumeForgeCachePolicy.Id
 
 Outputs:
   ApiBaseUrl:
