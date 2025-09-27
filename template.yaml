@@ -127,9 +127,7 @@ Resources:
           EnableAcceptEncodingBrotli: true
           EnableAcceptEncodingGzip: true
           HeadersConfig:
-            HeaderBehavior: allExcept
-            Headers:
-              - host
+            HeaderBehavior: none
           QueryStringsConfig:
             QueryStringBehavior: all
 
