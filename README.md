@@ -100,6 +100,30 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 ```
 
+### Accessing the ResumeForge portal
+
+The SAM template deploys the API and a CloudFront distribution that forwards requests straight to API Gateway. The distribution’s default root object is `/healthz`, so opening the raw CloudFront domain or the API Gateway invoke URL in a browser returns a JSON health payload. If you omit the stage segment (for example, visiting `https://<api-id>.execute-api.<region>.amazonaws.com/`), API Gateway responds with `{"message":"Forbidden"}` because no resource matches that path. The React “portal” UI is not published automatically.
+
+To use the portal you have two options:
+
+1. **Run it locally**
+   ```bash
+   npm install --prefix client
+   VITE_API_BASE_URL="https://<api-id>.execute-api.<region>.amazonaws.com/<stage>" \
+     npm run dev --prefix client
+   ```
+   This starts the Vite dev server on <http://localhost:5173>. The client proxies `/api` requests to `VITE_API_BASE_URL`, so set that variable to the deployed API (or leave it unset to target a locally running Express server).
+
+2. **Host the built assets yourself**
+   ```bash
+   npm install --prefix client
+   VITE_API_BASE_URL="https://<api-id>.execute-api.<region>.amazonaws.com/<stage>" \
+     npm run build --prefix client
+   ```
+   Upload the generated `client/dist` directory to an S3 static website bucket or another hosting service, and (optionally) front it with CloudFront. If the portal runs on a different origin than the API, ensure the API’s CORS configuration allows that origin.
+
+Until the static assets are hosted, the CloudFront URL printed by the deployment will only expose the health check and JSON API responses—not the ResumeForge portal.
+
 Using the default stage (`prod`), the `/api/process-cv` endpoint is reachable either directly through API Gateway or via the CloudFront distribution:
 
 ```
