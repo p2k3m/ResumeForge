@@ -8,10 +8,20 @@ process.env.AWS_REGION = 'us-east-1';
 process.env.CLOUDFRONT_ORIGINS = 'https://test.cloudfront.net';
 
 const mockS3Send = jest.fn().mockResolvedValue({});
+const getObjectCommandMock = jest.fn((input) => ({ input }));
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: mockS3Send })),
   PutObjectCommand: jest.fn((input) => ({ input })),
-  GetObjectCommand: jest.fn()
+  GetObjectCommand: getObjectCommandMock
+}));
+
+const getSignedUrlMock = jest
+  .fn()
+  .mockImplementation((client, command, { expiresIn }) =>
+    Promise.resolve(`https://example.com/${command.input.Key}?expires=${expiresIn}`)
+  );
+jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: getSignedUrlMock
 }));
 
 jest.unstable_mockModule('@aws-sdk/client-secrets-manager', () => ({
@@ -90,6 +100,8 @@ setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 beforeEach(() => {
   setupDefaultDynamoMock();
+  getSignedUrlMock.mockClear();
+  getObjectCommandMock.mockClear();
 });
 
 describe('health check', () => {
@@ -129,6 +141,9 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res1.status).toBe(200);
+    expect(res1.body.success).toBe(true);
+    expect(typeof res1.body.requestId).toBe('string');
+    expect(typeof res1.body.jobId).toBe('string');
     let types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual([
       'DescribeTableCommand',
@@ -174,6 +189,10 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res2.status).toBe(200);
+    expect(res2.body.success).toBe(true);
+    expect(typeof res2.body.requestId).toBe('string');
+    expect(typeof res2.body.jobId).toBe('string');
+    expect(res2.body.urlExpiresInSeconds).toBe(3600);
     expect(res2.body.urls).toHaveLength(4);
     expect(res2.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
@@ -192,9 +211,12 @@ describe('/api/process-cv', () => {
       .join('_')
       .toLowerCase();
 
-    res2.body.urls.forEach(({ type, url }) => {
+    res2.body.urls.forEach(({ type, url, expiresAt }) => {
       expect(url).toContain('/first/');
       expect(url).toContain(`/${sanitized}/`);
+      expect(url).toContain('expires=3600');
+      expect(() => new Date(expiresAt)).not.toThrow();
+      expect(new Date(expiresAt).toString()).not.toBe('Invalid Date');
       if (type.startsWith('cover_letter')) {
         expect(url).toContain('/generated/cover_letter/');
       } else {
@@ -239,7 +261,15 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('AI response invalid');
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'AI_RESPONSE_INVALID',
+        message: 'AI response invalid',
+        requestId: expect.any(String),
+        jobId: expect.any(String),
+      },
+    });
   });
 
   test('handles code-fenced JSON with extra text', async () => {
@@ -645,7 +675,16 @@ describe('/api/process-cv', () => {
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('resume file required');
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'RESUME_FILE_REQUIRED',
+        message: 'resume file required',
+        requestId: expect.any(String),
+        jobId: expect.any(String),
+        details: { field: 'resume' },
+      },
+    });
   });
 
   test('unsupported file type', async () => {
@@ -655,7 +694,16 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Unsupported resume format. Please upload a PDF file.');
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'UPLOAD_VALIDATION_FAILED',
+        message: 'Unsupported resume format. Please upload a PDF file.',
+        requestId: expect.any(String),
+        jobId: expect.any(String),
+        details: { field: 'resume' },
+      },
+    });
   });
 
   test('missing job description URL', async () => {
@@ -664,7 +712,15 @@ describe('/api/process-cv', () => {
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('jobDescriptionUrl required');
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'JOB_DESCRIPTION_URL_REQUIRED',
+        message: 'jobDescriptionUrl required',
+        requestId: expect.any(String),
+        jobId: expect.any(String),
+      },
+    });
   });
 
   test('missing linkedin profile URL', async () => {
@@ -673,7 +729,15 @@ describe('/api/process-cv', () => {
       .field('jobDescriptionUrl', 'http://example.com')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('linkedinProfileUrl required');
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'LINKEDIN_PROFILE_URL_REQUIRED',
+        message: 'linkedinProfileUrl required',
+        requestId: expect.any(String),
+        jobId: expect.any(String),
+      },
+    });
   });
 });
 

@@ -237,13 +237,26 @@ Limiting the policy to the specific stack resources is recommended for productio
 - **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content.
 
 ## API Response
-The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics:
+The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics. All presigned d
+ownload URLs expire after one hour:
 
 ```json
 {
+  "success": true,
+  "requestId": "a7f18d2e-91c9-4d10-8f44-e8f4ed6c2a5a",
+  "jobId": "1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793",
+  "urlExpiresInSeconds": 3600,
   "urls": [
-    { "type": "cover_letter1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cover_letter/cover_letter1.pdf" },
-    { "type": "version1", "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cv/Jane_Doe.pdf" }
+    {
+      "type": "cover_letter1",
+      "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cover_letter/cover_letter1.pdf?X-Amz-Expires=3600&...",
+      "expiresAt": "2024-05-01T12:00:00.000Z"
+    },
+    {
+      "type": "version1",
+      "url": "https://<bucket>.s3.<region>.amazonaws.com/sessions/<id>/generated/cv/Jane_Doe.pdf?X-Amz-Expires=3600&...",
+      "expiresAt": "2024-05-01T12:00:00.000Z"
+    }
   ],
   "applicantName": "Jane Doe",
   "originalScore": 50,
@@ -260,7 +273,7 @@ The `/api/process-cv` endpoint returns JSON containing an array of generated fil
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `sessions/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type.
+S3 keys follow the pattern `sessions/<id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type. The API now returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
 sessions/<id>/generated/
@@ -273,3 +286,5 @@ sessions/<id>/generated/
 ```
 
 Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters or CVs are produced, the server responds with HTTP 500 and an error message.
+
+On failure, the endpoint responds with `success: false` and an `error` object containing a stable `code`, a human-readable `message`, the originating `requestId`, and (when available) the associated `jobId`. Additional context may be returned via `error.details`.

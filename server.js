@@ -2,11 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   DynamoDBClient,
   CreateTableCommand,
@@ -127,7 +129,9 @@ async function getChromiumBrowser() {
     });
   } catch (err) {
     chromiumLaunchAttempted = true;
-    console.error('Chromium launch failed, falling back to PDFKit', err);
+    logStructured('error', 'chromium_launch_failed', {
+      error: serializeError(err),
+    });
     return null;
   }
 }
@@ -173,6 +177,104 @@ async function getPortalHtml() {
 
 const DEFAULT_AWS_REGION = 'ap-south-1';
 const DEFAULT_ALLOWED_ORIGINS = [];
+const URL_EXPIRATION_SECONDS = 60 * 60; // 1 hour
+
+function createIdentifier() {
+  if (typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function serializeError(err) {
+  if (!err) {
+    return undefined;
+  }
+  if (err instanceof Error) {
+    const base = {
+      name: err.name || 'Error',
+      message: err.message || '',
+    };
+    if (err.code) base.code = err.code;
+    if (err.stack) base.stack = err.stack;
+    return base;
+  }
+  if (typeof err === 'object') {
+    try {
+      return JSON.parse(JSON.stringify(err));
+    } catch {
+      return { message: String(err) };
+    }
+  }
+  return { message: String(err) };
+}
+
+function toLoggable(value) {
+  if (value instanceof Error) {
+    return serializeError(value);
+  }
+  return value;
+}
+
+function logStructured(level, message, context = {}) {
+  const payload = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    ...context,
+  };
+  const logFn =
+    level === 'error'
+      ? console.error
+      : level === 'warn'
+      ? console.warn
+      : console.log;
+  try {
+    logFn(JSON.stringify(payload, (_, value) => toLoggable(value)));
+  } catch (err) {
+    const fallback = {
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      message: 'Failed to serialize log payload',
+      originalMessage: message,
+      error: serializeError(err),
+    };
+    console.error(JSON.stringify(fallback));
+  }
+}
+
+function sendError(res, status, code, message, details) {
+  const error = {
+    code,
+    message,
+  };
+  if (details !== undefined) {
+    error.details = details;
+  }
+  if (res.locals.requestId) {
+    error.requestId = res.locals.requestId;
+  }
+  if (res.locals.jobId) {
+    error.jobId = res.locals.jobId;
+  }
+  const payload = { success: false, error };
+  logStructured(status >= 500 ? 'error' : 'warn', 'api_error_response', {
+    requestId: res.locals.requestId,
+    jobId: res.locals.jobId,
+    status,
+    error,
+  });
+  return res.status(status).json(payload);
+}
+
+function getUrlHost(value) {
+  if (!value) return undefined;
+  try {
+    return new URL(value).host;
+  } catch {
+    return undefined;
+  }
+}
 
 function readEnvValue(name) {
   const raw = process.env[name];
@@ -230,6 +332,43 @@ function getRuntimeConfig() {
 const runtimeConfig = getRuntimeConfig();
 
 const app = express();
+
+app.use((req, res, next) => {
+  if (!req.requestId) {
+    req.requestId = createIdentifier();
+  }
+  res.locals.requestId = req.requestId;
+  next();
+});
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  const pathLabel = req.originalUrl || req.url;
+  logStructured('info', 'http_request_received', {
+    requestId: req.requestId,
+    method: req.method,
+    path: pathLabel,
+  });
+  res.on('finish', () => {
+    logStructured('info', 'http_request_completed', {
+      requestId: req.requestId,
+      method: req.method,
+      path: pathLabel,
+      statusCode: res.statusCode,
+      durationMs: Date.now() - start,
+      contentLength: res.get('Content-Length'),
+    });
+  });
+  res.on('error', (err) => {
+    logStructured('error', 'http_response_error', {
+      requestId: req.requestId,
+      method: req.method,
+      path: pathLabel,
+      error: serializeError(err),
+    });
+  });
+  next();
+});
 
 const allowedOrigins = runtimeConfig.CLOUDFRONT_ORIGINS;
 const corsOptions = {
@@ -1893,7 +2032,9 @@ let generatePdf = async function (
       }
     }
   } catch (err) {
-    console.error('Chromium PDF generation failed, using PDFKit fallback', err);
+    logStructured('error', 'chromium_pdf_generation_failed', {
+      error: serializeError(err),
+    });
   }
 
   const { default: PDFDocument } = await import('pdfkit');
@@ -2287,13 +2428,18 @@ function extractJsonBlock(text) {
 function parseAiJson(text) {
   const block = extractJsonBlock(text);
   if (!block) {
-    console.error('No JSON object found in AI response:', text);
+    logStructured('error', 'ai_response_missing_json', {
+      sample: typeof text === 'string' ? text.slice(0, 200) : undefined,
+    });
     return null;
   }
   try {
     return JSON5.parse(block);
   } catch (e) {
-    console.error('Failed to parse AI JSON:', text);
+    logStructured('error', 'ai_json_parse_failed', {
+      sample: typeof text === 'string' ? text.slice(0, 200) : undefined,
+      error: serializeError(e),
+    });
     return null;
   }
 }
@@ -2407,12 +2553,21 @@ function relocateProfileLinks(text) {
   return `${remaining}\n\n${paragraph}`;
 }
 
+function assignJobContext(req, res, next) {
+  const jobId = createIdentifier();
+  req.jobId = jobId;
+  res.locals.jobId = jobId;
+  next();
+}
+
 app.get('/', async (req, res) => {
   try {
     const html = await getPortalHtml();
     res.type('html').send(html);
   } catch (err) {
-    console.error('Failed to load portal UI', err);
+    logStructured('error', 'portal_ui_load_failed', {
+      error: serializeError(err),
+    });
     res.json({ status: 'ok', message: 'ResumeForge API is running.' });
   }
 });
@@ -2425,13 +2580,36 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/process-cv', (req, res, next) => {
-  uploadResume(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message });
-    next();
-  });
-}, async (req, res) => {
-  const jobId = Date.now().toString();
+app.post(
+  '/api/process-cv',
+  assignJobContext,
+  (req, res, next) => {
+    uploadResume(req, res, (err) => {
+      if (err) {
+        logStructured('warn', 'resume_upload_failed', {
+          requestId: res.locals.requestId,
+          jobId: res.locals.jobId,
+          error: serializeError(err),
+        });
+        return sendError(
+          res,
+          400,
+          'UPLOAD_VALIDATION_FAILED',
+          err.message || 'Upload validation failed.',
+          {
+            field: 'resume',
+            originalName: req.file?.originalname,
+          }
+        );
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+  const jobId = req.jobId || createIdentifier();
+  res.locals.jobId = jobId;
+  const requestId = res.locals.requestId;
+  const logContext = { requestId, jobId };
   const date = new Date().toISOString().slice(0, 10);
   const s3 = s3Client;
   let bucket;
@@ -2440,11 +2618,25 @@ app.post('/api/process-cv', (req, res, next) => {
     secrets = getSecrets();
     bucket = secrets.S3_BUCKET;
   } catch (err) {
-    console.error('failed to load configuration', err);
-    return res.status(500).json({ error: 'failed to load configuration' });
+    logStructured('error', 'configuration_load_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'CONFIGURATION_ERROR',
+      'failed to load configuration'
+    );
   }
 
   const { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
+  logStructured('info', 'process_cv_started', {
+    ...logContext,
+    jobDescriptionHost: getUrlHost(jobDescriptionUrl),
+    linkedinHost: getUrlHost(linkedinProfileUrl),
+    credlyHost: getUrlHost(credlyProfileUrl),
+  });
   const ipAddress =
     (req.headers['x-forwarded-for'] || '')
       .split(',')
@@ -2473,42 +2665,69 @@ app.post('/api/process-cv', (req, res, next) => {
       req.query.templateParam
   );
   let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
-  console.log(
-    `Selected templates: template1=${template1}, template2=${template2}, coverTemplate1=${coverTemplate1}, coverTemplate2=${coverTemplate2}`
-  );
+  logStructured('info', 'template_selection', {
+    ...logContext,
+    template1,
+    template2,
+    coverTemplate1,
+    coverTemplate2,
+  });
   if (!req.file) {
-    return res.status(400).json({ error: 'resume file required' });
+    logStructured('warn', 'resume_missing', logContext);
+    return sendError(
+      res,
+      400,
+      'RESUME_FILE_REQUIRED',
+      'resume file required',
+      { field: 'resume' }
+    );
   }
   if (!jobDescriptionUrl) {
-    return res.status(400).json({ error: 'jobDescriptionUrl required' });
+    logStructured('warn', 'job_description_missing', logContext);
+    return sendError(
+      res,
+      400,
+      'JOB_DESCRIPTION_URL_REQUIRED',
+      'jobDescriptionUrl required'
+    );
   }
   if (!linkedinProfileUrl) {
-    return res.status(400).json({ error: 'linkedinProfileUrl required' });
+    logStructured('warn', 'linkedin_profile_missing', logContext);
+    return sendError(
+      res,
+      400,
+      'LINKEDIN_PROFILE_URL_REQUIRED',
+      'linkedinProfileUrl required'
+    );
   }
 
   let text;
   try {
     text = await extractText(req.file);
   } catch (err) {
-    try {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'resume_text_extraction_failed',
-        level: 'error',
-        message: err.message
-      });
-    } catch (logErr) {
-      console.error('failed to log text extraction error', logErr);
-    }
-    return res.status(400).json({ error: err.message });
+    logStructured('error', 'resume_text_extraction_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      400,
+      'TEXT_EXTRACTION_FAILED',
+      err.message,
+      { stage: 'extract_text' }
+    );
   }
   if (!isResume(text)) {
-    return res
-      .status(400)
-      .json({ error: 'It does not look like your CV, please upload a CV' });
+    logStructured('warn', 'resume_validation_failed', {
+      ...logContext,
+      reason: 'not_identified_as_resume',
+    });
+    return sendError(
+      res,
+      400,
+      'INVALID_RESUME_CONTENT',
+      'It does not look like your CV, please upload a CV'
+    );
   }
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName);
@@ -2528,7 +2747,11 @@ app.post('/api/process-cv', (req, res, next) => {
       })
     );
   } catch (e) {
-    console.error(`initial upload to bucket ${bucket} failed`, e);
+    logStructured('error', 'initial_upload_failed', {
+      ...logContext,
+      bucket,
+      error: serializeError(e),
+    });
     const message = e.message || 'initial S3 upload failed';
     try {
       await logEvent({
@@ -2541,11 +2764,18 @@ app.post('/api/process-cv', (req, res, next) => {
         message: `Failed to upload to bucket ${bucket}: ${message}`
       });
     } catch (logErr) {
-      console.error('failed to log initial upload error', logErr);
+      logStructured('error', 's3_log_failure', {
+        ...logContext,
+        error: serializeError(logErr),
+      });
     }
-    return res
-      .status(500)
-      .json({ error: `Initial S3 upload to bucket ${bucket} failed: ${message}` });
+    return sendError(
+      res,
+      500,
+      'INITIAL_UPLOAD_FAILED',
+      `Initial S3 upload to bucket ${bucket} failed: ${message}`,
+      { bucket }
+    );
   }
 
   try {
@@ -2586,9 +2816,17 @@ app.post('/api/process-cv', (req, res, next) => {
         level: 'error',
         message: err.message
       });
-      return res.status(502).json({
-        error: 'Failed to retrieve the job description. Please verify the URL and try again.'
+      logStructured('error', 'job_description_fetch_failed', {
+        ...logContext,
+        error: serializeError(err),
       });
+      return sendError(
+        res,
+        502,
+        'JOB_DESCRIPTION_FETCH_FAILED',
+        'Failed to retrieve the job description. Please verify the URL and try again.',
+        { url: jobDescriptionUrl }
+      );
     }
     const {
       title: jobTitle,
@@ -2692,7 +2930,10 @@ app.post('/api/process-cv', (req, res, next) => {
         modifiedTitle = enhanced.modifiedTitle || '';
         geminiAddedSkills = enhanced.addedSkills || [];
       } catch (e) {
-        console.error('section rewrite failed', e);
+        logStructured('error', 'section_rewrite_failed', {
+          ...logContext,
+          error: serializeError(e),
+        });
       }
     }
 
@@ -2775,12 +3016,15 @@ app.post('/api/process-cv', (req, res, next) => {
         );
       }
     } catch (e) {
-      console.error('Failed to generate resume versions:', e);
+      logStructured('error', 'resume_versions_generation_failed', {
+        ...logContext,
+        error: serializeError(e),
+      });
     }
 
     if (!versionData.version1 || !versionData.version2) {
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'invalid_ai_response', level: 'error', message: 'AI response invalid' });
-      return res.status(500).json({ error: 'AI response invalid' });
+      return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
     }
 
     const version1Skills = extractResumeSkills(versionData.version1);
@@ -2804,7 +3048,10 @@ app.post('/api/process-cv', (req, res, next) => {
       const parsed = parseAiJson(coverText);
       if (parsed) coverData = parsed;
     } catch (e) {
-      console.error('Failed to generate cover letters:', e);
+      logStructured('error', 'cover_letter_generation_failed', {
+        ...logContext,
+        error: serializeError(e),
+      });
     }
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'generated_outputs' });
@@ -2885,8 +3132,15 @@ app.post('/api/process-cv', (req, res, next) => {
         })
       );
       await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
-      const url = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-      urls.push({ type: name, url });
+      const signedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: URL_EXPIRATION_SECONDS }
+      );
+      const expiresAt = new Date(
+        Date.now() + URL_EXPIRATION_SECONDS * 1000
+      ).toISOString();
+      urls.push({ type: name, url: signedUrl, expiresAt });
     }
 
     if (urls.length === 0) {
@@ -2899,7 +3153,8 @@ app.post('/api/process-cv', (req, res, next) => {
         level: 'error',
         message: 'AI response invalid'
       });
-      return res.status(500).json({ error: 'AI response invalid' });
+      logStructured('error', 'no_outputs_generated', logContext);
+      return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
     }
 
     const dynamo = new DynamoDBClient({ region });
@@ -2984,7 +3239,23 @@ app.post('/api/process-cv', (req, res, next) => {
           .concat(geminiAddedSkills)
       )
     );
-    res.json({
+    logStructured('info', 'match_scores_calculated', {
+      ...logContext,
+      originalScore,
+      enhancedScore,
+      missingSkills: missingSkills.length,
+      addedSkills: addedSkills.length,
+    });
+    logStructured('info', 'process_cv_completed', {
+      ...logContext,
+      applicantName,
+      outputsGenerated: urls.length,
+    });
+    return res.json({
+      success: true,
+      requestId,
+      jobId,
+      urlExpiresInSeconds: URL_EXPIRATION_SECONDS,
       urls,
       applicantName,
       originalScore,
@@ -2996,15 +3267,21 @@ app.post('/api/process-cv', (req, res, next) => {
       modifiedTitle: modifiedTitle || originalTitle,
     });
   } catch (err) {
-    console.error('processing failed', err);
+    logStructured('error', 'process_cv_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
     if (bucket) {
       try {
         await logEvent({ s3, bucket, key: logKey, jobId, event: 'error', level: 'error', message: err.message });
       } catch (e) {
-        console.error('failed to log error', e);
+        logStructured('error', 's3_log_failure', {
+          ...logContext,
+          error: serializeError(e),
+        });
       }
     }
-    res.status(500).json({ error: 'processing failed' });
+    return sendError(res, 500, 'PROCESSING_FAILED', 'processing failed');
   }
 });
 
@@ -3018,7 +3295,7 @@ const isDirectRun =
 
 if (!isLambda && !isTestEnv && isDirectRun) {
   app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+    logStructured('info', 'server_started', { port });
   });
 }
 
