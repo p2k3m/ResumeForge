@@ -331,13 +331,13 @@ jobs:
               echo "Curl reported:\n$err_output"
             fi
             cat <<'EOF'
-The deployed API endpoint is not returning a successful response for /healthz.
+          The deployed API endpoint is not returning a successful response for /healthz.
 
-Next steps to diagnose the issue:
-- Open the AWS CloudWatch Logs for the deployed Lambda function to review recent invocation errors.
-- Confirm that the stack outputs include the expected ApiBaseUrl and that the stage name in API Gateway matches the deployed stage.
-- Verify in the API Gateway console that the /healthz route is deployed and returning HTTP 200. Re-run this workflow after addressing the issue.
-EOF
+          Next steps to diagnose the issue:
+          - Open the AWS CloudWatch Logs for the deployed Lambda function to review recent invocation errors.
+          - Confirm that the stack outputs include the expected ApiBaseUrl and that the stage name in API Gateway matches the deployed stage.
+          - Verify in the API Gateway console that the /healthz route is deployed and returning HTTP 200. Re-run this workflow after addressing the issue.
+          EOF
             exit 1
           fi
 
