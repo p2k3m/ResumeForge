@@ -79,7 +79,7 @@ Conditions:
   AttachWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
   UseSecretName: !Not [!Equals [!Ref SecretName, '']]
   SecretIsArn: !And
-    - UseSecretName
+    - !Condition UseSecretName
     - !Equals [!Select [0, !Split [":", !Ref SecretName]], 'arn']
 
 Rules:
