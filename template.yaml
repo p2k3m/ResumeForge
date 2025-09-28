@@ -99,6 +99,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: ResumeForgeHandler
+      CodeUri: .
       Handler: lambda.handler
       Runtime: nodejs18.x
       MemorySize: 2048
@@ -147,6 +148,8 @@ Resources:
         - DynamoDBCrudPolicy:
             TableName: !Ref ResumeTableName
       Layers: []
+    Metadata:
+      BuildMethod: makefile
 
   ResumeForgeCachePolicy:
     Type: AWS::CloudFront::CachePolicy

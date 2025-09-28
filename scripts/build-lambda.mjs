@@ -7,7 +7,46 @@ import { mkdir, rm, cp } from 'fs/promises'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
-const outDir = path.join(projectRoot, 'dist', 'lambda')
+function resolveOutDir() {
+  const defaultOutDir = path.join(projectRoot, 'dist', 'lambda')
+  const args = process.argv.slice(2)
+
+  if (args.length === 0) {
+    return defaultOutDir
+  }
+
+  let outDirFromArgs
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index]
+    if (token === '--outdir' || token === '-o') {
+      outDirFromArgs = args[index + 1]
+      index += 1
+      continue
+    }
+
+    throw new Error(`Unknown argument: ${token}. Supported option: --outdir <path>`)
+  }
+
+  if (!outDirFromArgs) {
+    return defaultOutDir
+  }
+
+  if (outDirFromArgs === undefined) {
+    throw new Error('The --outdir option requires a path argument')
+  }
+
+  if (!outDirFromArgs.trim()) {
+    throw new Error('The --outdir option requires a non-empty value')
+  }
+
+  const resolved = path.isAbsolute(outDirFromArgs)
+    ? outDirFromArgs
+    : path.join(projectRoot, outDirFromArgs)
+
+  return resolved
+}
+
+const outDir = resolveOutDir()
 
 async function ensureCleanOutput() {
   await rm(outDir, { recursive: true, force: true })
@@ -17,6 +56,7 @@ async function ensureCleanOutput() {
 async function runEsbuild() {
   const entry = path.join(projectRoot, 'lambda.js')
   const outfile = path.join(outDir, 'lambda.mjs')
+  const shouldGenerateSourceMap = process.env.GENERATE_SOURCEMAP === 'true'
 
   await build({
     entryPoints: [entry],
@@ -25,7 +65,7 @@ async function runEsbuild() {
     target: 'node18',
     format: 'esm',
     outfile,
-    sourcemap: true,
+    sourcemap: shouldGenerateSourceMap,
     minify: true,
     logLevel: 'info',
     external: ['aws-sdk'],
