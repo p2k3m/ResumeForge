@@ -33,8 +33,12 @@ export function resolveApiBase(rawBaseUrl) {
     const matchesHost = url.hostname === window.location.hostname
     const looksLikeCloudFront = CLOUD_FRONT_HOST.test(url.hostname)
 
-    if (atRoot && (looksLikeCloudFront || matchesHost)) {
+    if (atRoot && matchesHost && !normalizedPath) {
       return url.origin
+    }
+
+    if (looksLikeCloudFront && normalizedPath) {
+      return `${url.origin}/${normalizedPath}`
     }
 
     return `${url.origin}${normalizedPath ? `/${normalizedPath}` : ''}`
