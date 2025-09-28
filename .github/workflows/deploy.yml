@@ -120,7 +120,8 @@ jobs:
           set -euo pipefail
 
           tmp_err=$(mktemp)
-          trap 'rm -f "$tmp_err"' EXIT
+          tmp_deploy_err=$(mktemp)
+          trap 'rm -f "$tmp_err" "$tmp_deploy_err"' EXIT
 
           wait_for_terminal_stack_status() {
             local status="$1"
@@ -234,19 +235,63 @@ jobs:
 
           : >"$tmp_err"
 
-          sam deploy \
-            --stack-name "$STACK_NAME" \
-            --resolve-s3 \
-            --capabilities CAPABILITY_IAM \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --parameter-overrides \
-              StageName="$STAGE_NAME" \
-              DataBucketName="$DATA_BUCKET" \
-              ResumeTableName="$TABLE_NAME" \
-              SecretName="$SECRET_NAME" \
-              CreateDataBucket="$create_data_bucket" \
-              CreateResumeTable="$create_resume_table"
+          max_deploy_attempts=5
+          deploy_attempt=1
+          while [ "$deploy_attempt" -le "$max_deploy_attempts" ]; do
+            echo "Starting sam deploy attempt $deploy_attempt of $max_deploy_attempts"
+            : >"$tmp_deploy_err"
+
+            if sam deploy \
+                --stack-name "$STACK_NAME" \
+                --resolve-s3 \
+                --capabilities CAPABILITY_IAM \
+                --no-confirm-changeset \
+                --no-fail-on-empty-changeset \
+                --parameter-overrides \
+                  StageName="$STAGE_NAME" \
+                  DataBucketName="$DATA_BUCKET" \
+                  ResumeTableName="$TABLE_NAME" \
+                  SecretName="$SECRET_NAME" \
+                  CreateDataBucket="$create_data_bucket" \
+                  CreateResumeTable="$create_resume_table" \
+                2> >(tee "$tmp_deploy_err" >&2); then
+              echo "sam deploy completed successfully on attempt $deploy_attempt"
+              break
+            fi
+
+            deploy_err=$(cat "$tmp_deploy_err")
+            if echo "$deploy_err" | grep -qi "is in UPDATE_IN_PROGRESS state and can not be updated"; then
+              if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
+                echo "Stack remained in UPDATE_IN_PROGRESS after $max_deploy_attempts attempts. Aborting deployment." >&2
+                exit 1
+              fi
+
+              echo "Stack update currently in progress. Waiting for CloudFormation to finish before retrying..."
+              : >"$tmp_err"
+              if stack_status=$(aws cloudformation describe-stacks \
+                  --stack-name "$STACK_NAME" \
+                  --query "Stacks[0].StackStatus" \
+                  --output text 2>"$tmp_err"); then
+                stack_status=$(wait_for_terminal_stack_status "$stack_status")
+                echo "Stack reached terminal status: $stack_status"
+              else
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' was deleted while waiting. Proceeding with fresh deployment."
+                else
+                  echo "$describe_err" >&2
+                  exit 1
+                fi
+              fi
+
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
+            echo "$deploy_err" >&2
+            exit 1
+          done
 
       - name: Publish deployment URLs
         id: deployment_urls
