@@ -374,14 +374,40 @@ function buildRuntimeConfig() {
 }
 
 let runtimeConfigCache;
-function getRuntimeConfig() {
-  if (!runtimeConfigCache) {
-    runtimeConfigCache = buildRuntimeConfig();
+let runtimeConfigError;
+let runtimeConfigLogged = false;
+
+function loadRuntimeConfig({ logOnError = false } = {}) {
+  if (runtimeConfigCache) {
+    return runtimeConfigCache;
   }
-  return runtimeConfigCache;
+  try {
+    runtimeConfigCache = buildRuntimeConfig();
+    runtimeConfigError = undefined;
+    runtimeConfigLogged = false;
+    return runtimeConfigCache;
+  } catch (err) {
+    runtimeConfigCache = undefined;
+    runtimeConfigError = err;
+    if (logOnError && !runtimeConfigLogged) {
+      logStructured('error', 'runtime_config_load_failed', {
+        error: serializeError(err),
+      });
+      runtimeConfigLogged = true;
+    }
+    return undefined;
+  }
 }
 
-const runtimeConfig = getRuntimeConfig();
+function getRuntimeConfig() {
+  const config = loadRuntimeConfig();
+  if (config) {
+    return config;
+  }
+  throw runtimeConfigError || new Error('Runtime configuration unavailable');
+}
+
+const runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
 
 const app = express();
 
@@ -422,7 +448,8 @@ app.use((req, res, next) => {
   next();
 });
 
-const allowedOrigins = runtimeConfig.CLOUDFRONT_ORIGINS;
+const allowedOrigins =
+  runtimeConfigSnapshot?.CLOUDFRONT_ORIGINS ?? DEFAULT_ALLOWED_ORIGINS;
 const corsOptions = {
   origin(origin, callback) {
     if (!origin) {
@@ -651,10 +678,14 @@ function selectTemplates({
   return { template1, template2, coverTemplate1, coverTemplate2 };
 }
 
-process.env.AWS_REGION = runtimeConfig.AWS_REGION;
+const configuredRegion =
+  runtimeConfigSnapshot?.AWS_REGION || readEnvValue('AWS_REGION') || DEFAULT_AWS_REGION;
+process.env.AWS_REGION = configuredRegion;
 
-const region = runtimeConfig.AWS_REGION;
+const region = configuredRegion;
 const s3Client = new S3Client({ region });
+const piiHashSecret =
+  runtimeConfigSnapshot?.PII_HASH_SECRET || process.env.PII_HASH_SECRET || '';
 
 const parsedRetention = Number.parseInt(
   process.env.SESSION_RETENTION_DAYS || '',
@@ -670,8 +701,8 @@ function anonymizePersonalData(value) {
   if (!value) return '';
   const hash = crypto.createHash('sha256');
   hash.update(String(value));
-  if (runtimeConfig.PII_HASH_SECRET) {
-    hash.update(runtimeConfig.PII_HASH_SECRET);
+  if (piiHashSecret) {
+    hash.update(piiHashSecret);
   }
   // GDPR: store irreversible hashes so DynamoDB never contains raw identifiers.
   return hash.digest('hex');
