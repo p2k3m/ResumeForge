@@ -78,6 +78,9 @@ Conditions:
   EnableProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
   AttachWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
   UseSecretName: !Not [!Equals [!Ref SecretName, '']]
+  SecretIsArn: !And
+    - UseSecretName
+    - !Equals [!Select [0, !Split [":", !Ref SecretName]], 'arn']
 
 Rules:
   RequireGeminiConfiguration:
@@ -182,6 +185,18 @@ Resources:
               Resource: '*'
         - DynamoDBCrudPolicy:
             TableName: !Ref ResumeTableName
+        - !If
+          - UseSecretName
+          - Statement:
+              - Sid: AllowSecretAccess
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !If
+                  - SecretIsArn
+                  - !Ref SecretName
+                  - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
+          - !Ref AWS::NoValue
       Layers: []
     Metadata:
       BuildMethod: makefile
