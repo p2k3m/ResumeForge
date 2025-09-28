@@ -124,6 +124,26 @@ jobs:
 
           wait_for_terminal_stack_status() {
             local status="$1"
+
+            if [ "$status" = "DELETE_IN_PROGRESS" ]; then
+              echo "Stack '$STACK_NAME' is deleting. Waiting for CloudFormation to finish..."
+              : >"$tmp_err"
+              if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                echo "CloudFormation reports the stack deletion is complete."
+                status="DELETE_COMPLETE"
+              else
+                local wait_err
+                wait_err=$(cat "$tmp_err")
+                if echo "$wait_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' finished deleting while waiting."
+                  status="DELETE_COMPLETE"
+                else
+                  echo "$wait_err" >&2
+                  exit 1
+                fi
+              fi
+            fi
+
             while [[ "$status" == *_IN_PROGRESS ]]; do
               echo "Stack '$STACK_NAME' currently in progress ($status). Waiting for completion..."
               sleep 15
