@@ -294,6 +294,74 @@ function logStructured(level, message, context = {}) {
   }
 }
 
+let runtimeConfigFileCache;
+let runtimeConfigFileError;
+let runtimeConfigFileLoaded = false;
+
+function loadRuntimeConfigFile() {
+  if (runtimeConfigFileLoaded) {
+    if (runtimeConfigFileError) {
+      throw runtimeConfigFileError;
+    }
+    return runtimeConfigFileCache;
+  }
+
+  runtimeConfigFileLoaded = true;
+  const explicitPath = readEnvValue('RUNTIME_CONFIG_PATH');
+  const resolveCandidate = (value) => {
+    if (!value) return undefined;
+    if (path.isAbsolute(value)) return value;
+    return path.resolve(process.cwd(), value);
+  };
+
+  const candidates = [];
+  const addCandidate = (candidate) => {
+    if (!candidate) return;
+    if (candidates.includes(candidate)) return;
+    candidates.push(candidate);
+  };
+
+  addCandidate(resolveCandidate(explicitPath));
+
+  const baseDirs = [process.cwd(), path.dirname(fileURLToPath(import.meta.url))];
+  const filenames = ['runtime-config.json', 'runtime-config.json5'];
+  for (const baseDir of baseDirs) {
+    for (const name of filenames) {
+      addCandidate(path.join(baseDir, name));
+      addCandidate(path.join(baseDir, 'config', name));
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !fsSync.existsSync(candidate)) {
+        continue;
+      }
+      const raw = fsSync.readFileSync(candidate, 'utf8');
+      if (!raw.trim()) {
+        continue;
+      }
+      const parsed = JSON5.parse(raw);
+      runtimeConfigFileCache = parsed;
+      logStructured('info', 'runtime_config_file_loaded', {
+        path: candidate,
+        keys: Object.keys(parsed || {}),
+      });
+      return runtimeConfigFileCache;
+    } catch (err) {
+      runtimeConfigFileError = err;
+      logStructured('error', 'runtime_config_file_invalid', {
+        path: candidate,
+        error: serializeError(err),
+      });
+      throw err;
+    }
+  }
+
+  runtimeConfigFileCache = null;
+  return runtimeConfigFileCache;
+}
+
 function sendError(res, status, code, message, details) {
   const error = {
     code,
@@ -334,21 +402,49 @@ function readEnvValue(name) {
   return trimmed.length ? trimmed : undefined;
 }
 
+function normaliseOrigins(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((origin) => (origin || '').trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+  }
+  return undefined;
+}
+
 function parseAllowedOrigins(value) {
   if (!value) return DEFAULT_ALLOWED_ORIGINS;
-  return value
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const parsed = normaliseOrigins(value);
+  return parsed && parsed.length ? parsed : DEFAULT_ALLOWED_ORIGINS;
 }
 
 function buildRuntimeConfig() {
-  const region = readEnvValue('AWS_REGION') || DEFAULT_AWS_REGION;
-  const s3Bucket = readEnvValue('S3_BUCKET');
-  const geminiApiKey = readEnvValue('GEMINI_API_KEY');
+  const fileConfig = (() => {
+    try {
+      return loadRuntimeConfigFile() || {};
+    } catch (err) {
+      throw new Error(`Failed to load runtime configuration file: ${err.message}`);
+    }
+  })();
+
+  const region =
+    readEnvValue('AWS_REGION') || fileConfig.AWS_REGION || DEFAULT_AWS_REGION;
+  const s3Bucket = readEnvValue('S3_BUCKET') || fileConfig.S3_BUCKET;
+  const geminiApiKey =
+    readEnvValue('GEMINI_API_KEY') || fileConfig.GEMINI_API_KEY;
   const allowedOrigins = parseAllowedOrigins(
-    readEnvValue('CLOUDFRONT_ORIGINS') || readEnvValue('ALLOWED_ORIGINS')
+    readEnvValue('CLOUDFRONT_ORIGINS') ||
+      readEnvValue('ALLOWED_ORIGINS') ||
+      fileConfig.CLOUDFRONT_ORIGINS ||
+      fileConfig.ALLOWED_ORIGINS
   );
+  const piiHashSecret =
+    readEnvValue('PII_HASH_SECRET') ?? fileConfig.PII_HASH_SECRET ?? '';
 
   const missing = [];
   if (!s3Bucket) missing.push('S3_BUCKET');
@@ -363,13 +459,16 @@ function buildRuntimeConfig() {
   process.env.AWS_REGION = region;
   process.env.S3_BUCKET = s3Bucket;
   process.env.GEMINI_API_KEY = geminiApiKey;
+  if (piiHashSecret && !process.env.PII_HASH_SECRET) {
+    process.env.PII_HASH_SECRET = piiHashSecret;
+  }
 
   return Object.freeze({
     AWS_REGION: region,
     S3_BUCKET: s3Bucket,
     GEMINI_API_KEY: geminiApiKey,
     CLOUDFRONT_ORIGINS: allowedOrigins,
-    PII_HASH_SECRET: process.env.PII_HASH_SECRET || '',
+    PII_HASH_SECRET: piiHashSecret || '',
   });
 }
 
