@@ -57,6 +57,7 @@ The Lambda automatically calls the retention routine when invoked by EventBridge
 Deployments still expect the following AWS SAM parameters:
 
 - `DataBucketName` – S3 bucket that stores original uploads, logs, and generated documents.
+- `GeminiApiKey` – Gemini API key securely injected into the Lambda function environment.
 - `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
 - `CreateDataBucket` – set to `false` when pointing at an existing bucket so the stack does not try to create it again (defaults to `true`).
 - `CreateResumeTable` – set to `false` when reusing a DynamoDB table created outside the stack (defaults to `true`).
@@ -96,7 +97,7 @@ PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise 
 ### Prerequisites
 
 1. Install the AWS SAM CLI and authenticate with the target AWS account.
-2. Set `GEMINI_API_KEY`, `S3_BUCKET`, and (optionally) `CLOUDFRONT_ORIGINS` environment variables with production-ready values before building the deployment artifact.
+2. Set `S3_BUCKET` and (optionally) `CLOUDFRONT_ORIGINS` environment variables before building the deployment artifact. Provide the Gemini key at deployment time via the new `GeminiApiKey` parameter instead of exporting it directly.
 3. Ensure the chosen S3 bucket name is globally unique.
 4. Provision an IAM user or role for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
 
@@ -112,6 +113,7 @@ During the guided deploy provide values for:
 - `Stack Name` – e.g. `ResumeForge`
 - `AWS Region` – e.g. `ap-south-1`
 - `DataBucketName` – globally unique bucket name for uploads and generated files
+- `GeminiApiKey` – Gemini API key used by the Lambda runtime
 - `ResumeTableName` – DynamoDB table name (defaults to `ResumeForge`)
 - `CreateDataBucket` – answer `false` if the bucket already exists and should be reused
 - `CreateResumeTable` – answer `false` if the DynamoDB table already exists and should be reused

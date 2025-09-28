@@ -39,6 +39,13 @@ Parameters:
     Type: String
     Default: ResumeForge
     Description: Name of the DynamoDB table that tracks processed resumes.
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    Description: >-
+      Gemini API key used by the Lambda function to generate enhanced resume
+      content. Provide the value securely when deploying the stack.
   ProvisionedConcurrency:
     Type: Number
     Default: 0
@@ -130,6 +137,7 @@ Resources:
         Variables:
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
+          GEMINI_API_KEY: !Ref GeminiApiKey
           PRIMARY_REGION: !Ref AWS::Region
           SECONDARY_REGION: !Ref SecondaryRegion
       Policies:
