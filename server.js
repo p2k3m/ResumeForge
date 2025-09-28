@@ -112,6 +112,29 @@ let puppeteerCore;
 let chromiumLaunchAttempted = false;
 let customChromiumLauncher;
 
+function isModuleNotFoundError(err, moduleName) {
+  if (!err) return false;
+  const code = err.code || err?.cause?.code;
+  if (code === 'MODULE_NOT_FOUND' || code === 'ERR_MODULE_NOT_FOUND') {
+    return err.message?.includes(moduleName);
+  }
+  return false;
+}
+
+async function safeOptionalImport(moduleName) {
+  try {
+    return await import(moduleName);
+  } catch (err) {
+    if (isModuleNotFoundError(err, moduleName)) {
+      logStructured('info', 'optional_dependency_unavailable', {
+        module: moduleName,
+      });
+      return null;
+    }
+    throw err;
+  }
+}
+
 async function getChromiumBrowser() {
   if (customChromiumLauncher) {
     return customChromiumLauncher();
@@ -119,9 +142,15 @@ async function getChromiumBrowser() {
   if (chromiumLaunchAttempted && !chromium) return null;
   try {
     if (!chromium || !puppeteerCore) {
-      const chromiumImport = await import('@sparticuz/chromium');
+      const chromiumImport = await safeOptionalImport('@sparticuz/chromium');
+      const puppeteerImport = await safeOptionalImport('puppeteer-core');
+      if (!chromiumImport || !puppeteerImport) {
+        chromiumLaunchAttempted = true;
+        chromium = undefined;
+        puppeteerCore = undefined;
+        return null;
+      }
       chromium = chromiumImport.default ?? chromiumImport;
-      const puppeteerImport = await import('puppeteer-core');
       puppeteerCore = puppeteerImport.default ?? puppeteerImport;
     }
     chromiumLaunchAttempted = true;
