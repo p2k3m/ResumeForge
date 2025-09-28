@@ -3328,11 +3328,25 @@ app.post(
       '\n\nNote: The candidate performed duties matching the job description in their last role.';
 
     let versionData = {};
+    let parsedVersions = false;
     try {
       const result = await generativeModel.generateContent(versionsPrompt);
       const responseText = result.response.text();
       const parsed = parseAiJson(responseText);
+      if (!parsed) {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'invalid_ai_response',
+          level: 'error',
+          message: 'AI response invalid',
+        });
+        return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
+      }
       if (parsed) {
+        parsedVersions = true;
         const projectField =
           parsed.project || parsed.projects || parsed.Projects;
         projectText = Array.isArray(projectField)
@@ -3376,6 +3390,36 @@ app.post(
         ...logContext,
         error: serializeError(e),
       });
+    }
+
+    if (parsedVersions && (!versionData.version1 || !versionData.version2)) {
+      const fallbackOptions = {
+        resumeExperience,
+        linkedinExperience,
+        resumeEducation,
+        linkedinEducation,
+        resumeCertifications,
+        linkedinCertifications,
+        credlyCertifications,
+        credlyProfileUrl,
+        jobTitle,
+        project: projectText,
+      };
+      const fallbackResume = sanitizeGeneratedText(combinedProfile, fallbackOptions);
+      if (fallbackResume && fallbackResume.trim()) {
+        let usedFallback = false;
+        if (!versionData.version1) {
+          versionData.version1 = fallbackResume;
+          usedFallback = true;
+        }
+        if (!versionData.version2) {
+          versionData.version2 = fallbackResume;
+          usedFallback = true;
+        }
+        if (usedFallback) {
+          logStructured('warn', 'resume_versions_fallback_used', logContext);
+        }
+      }
     }
 
     if (!versionData.version1 || !versionData.version2) {
