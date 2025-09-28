@@ -314,5 +314,31 @@ jobs:
           base_url='${{ steps.deployment_urls.outputs.api_url }}'
           health_url="$base_url/healthz"
           echo "Checking API health endpoint at $health_url"
-          response=$(curl --retry 5 --retry-delay 10 --fail --silent --show-error "$health_url")
+
+          tmp_err=$(mktemp)
+          trap 'rm -f "$tmp_err"' EXIT
+
+          if ! response=$(curl \
+              --retry 5 \
+              --retry-delay 10 \
+              --fail \
+              --silent \
+              --show-error \
+              "$health_url" 2>"$tmp_err"); then
+            err_output=$(cat "$tmp_err")
+            echo "::error::Health check failed after multiple retries."
+            if [ -n "$err_output" ]; then
+              echo "Curl reported:\n$err_output"
+            fi
+            cat <<'EOF'
+The deployed API endpoint is not returning a successful response for /healthz.
+
+Next steps to diagnose the issue:
+- Open the AWS CloudWatch Logs for the deployed Lambda function to review recent invocation errors.
+- Confirm that the stack outputs include the expected ApiBaseUrl and that the stage name in API Gateway matches the deployed stage.
+- Verify in the API Gateway console that the /healthz route is deployed and returning HTTP 200. Re-run this workflow after addressing the issue.
+EOF
+            exit 1
+          fi
+
           echo "Health check response: $response"
