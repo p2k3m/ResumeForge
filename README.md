@@ -4,7 +4,7 @@
 ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
 
 ## Environment configuration
-ResumeForge now relies exclusively on environment variables for sensitive and deployment-specific configuration. The Express server validates the presence of required values at startup and fails fast if any are missing, ensuring secrets are not shipped inline with the source code.
+ResumeForge now relies exclusively on environment variables for sensitive and deployment-specific configuration. The Express server validates the presence of required values at startup and fails fast if any are missing, ensuring secrets are not shipped inline with the source code. For local development you can alternatively provide a `runtime-config.json`/`runtime-config.json5` file (or set `RUNTIME_CONFIG_PATH` to point at one) in the project root or inside the `config/` directory. The loader understands JSON5, so comments and trailing commas are allowed. An example file lives at `config/runtime-config.example.json5`—copy it to `config/runtime-config.json5`, fill in the secrets, and the server will load them automatically.
 
 The runtime looks for the following keys:
 

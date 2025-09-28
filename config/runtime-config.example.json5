@@ -1,0 +1,18 @@
+// Example runtime configuration for local development.
+// Copy this file to `config/runtime-config.json5` and fill in the values
+// to run ResumeForge without exporting environment variables.
+{
+  // AWS region used by the SDK clients.
+  AWS_REGION: 'us-east-1',
+  // Name of the S3 bucket that stores uploads and generated artefacts.
+  S3_BUCKET: 'resume-forge-local',
+  // Gemini API key used to generate enhanced content.
+  GEMINI_API_KEY: 'replace-me',
+  // Optional: allow requests from these origins when running locally.
+  CLOUDFRONT_ORIGINS: [
+    'http://localhost:3000',
+    'http://localhost:5173'
+  ],
+  // Optional: salt used when hashing PII before persisting to DynamoDB.
+  PII_HASH_SECRET: 'local-dev-secret'
+}
