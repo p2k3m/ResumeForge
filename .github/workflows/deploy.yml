@@ -122,16 +122,51 @@ jobs:
           tmp_err=$(mktemp)
           trap 'rm -f "$tmp_err"' EXIT
 
+          wait_for_terminal_stack_status() {
+            local status="$1"
+            while [[ "$status" == *_IN_PROGRESS ]]; do
+              echo "Stack '$STACK_NAME' currently in progress ($status). Waiting for completion..."
+              sleep 15
+              : >"$tmp_err"
+              if status=$(aws cloudformation describe-stacks \
+                  --stack-name "$STACK_NAME" \
+                  --query "Stacks[0].StackStatus" \
+                  --output text 2>"$tmp_err"); then
+                echo "Current stack status: $status"
+              else
+                local describe_err
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' no longer exists. Proceeding with fresh deployment."
+                  status="DELETE_COMPLETE"
+                  break
+                else
+                  echo "$describe_err" >&2
+                  exit 1
+                fi
+              fi
+            done
+
+            printf '%s' "$status"
+          }
+
+          : >"$tmp_err"
           if stack_status=$(aws cloudformation describe-stacks \
               --stack-name "$STACK_NAME" \
               --query "Stacks[0].StackStatus" \
               --output text 2>"$tmp_err"); then
             echo "Found existing stack '$STACK_NAME' with status: $stack_status"
-            if [ "$stack_status" = "ROLLBACK_COMPLETE" ]; then
-              echo "Stack in ROLLBACK_COMPLETE state. Deleting before redeploy."
+            stack_status=$(wait_for_terminal_stack_status "$stack_status")
+            if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
+              echo "Stack in $stack_status state. Deleting before redeploy."
               aws cloudformation delete-stack --stack-name "$STACK_NAME"
               aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
               echo "Stack deletion complete. Proceeding with deployment."
+            elif [[ "$stack_status" == *_FAILED ]]; then
+              echo "Stack '$STACK_NAME' is in failure state ($stack_status). Resolve the issue in AWS before redeploying." >&2
+              exit 1
+            elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
+              echo "Stack '$STACK_NAME' was deleted before deployment. Proceeding with fresh deployment."
             fi
           else
             describe_err=$(cat "$tmp_err")
