@@ -7,10 +7,6 @@ Parameters:
     Type: String
     Default: prod
     Description: Stage name for the API Gateway deployment.
-  PrimaryRegion:
-    Type: String
-    Default: us-east-1
-    Description: Primary AWS region where the API Gateway is hosted.
   SecondaryRegion:
     Type: String
     Default: us-west-2
@@ -134,7 +130,7 @@ Resources:
         Variables:
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
-          PRIMARY_REGION: !Ref PrimaryRegion
+          PRIMARY_REGION: !Ref AWS::Region
           SECONDARY_REGION: !Ref SecondaryRegion
       Policies:
         - AWSLambdaBasicExecutionRole
@@ -188,7 +184,7 @@ Resources:
         WebACLId: !If [AttachWebAcl, !Ref WebAclArn, !Ref AWS::NoValue]
         Origins:
           - Id: ResumeForgeApiOrigin
-            DomainName: !Sub "${ResumeForgeApi}.execute-api.${PrimaryRegion}.amazonaws.com"
+            DomainName: !Sub "${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com"
             OriginPath: !Sub "/${StageName}"
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
@@ -214,7 +210,7 @@ Resources:
 Outputs:
   ApiBaseUrl:
     Description: Invoke URL for the API Gateway stage.
-    Value: !Sub https://${ResumeForgeApi}.execute-api.${PrimaryRegion}.amazonaws.com/${StageName}
+    Value: !Sub https://${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}
   AppBaseUrl:
     Description: Primary CloudFront URL for the ResumeForge front page and API access.
     Value: !Sub https://${ResumeForgeDistribution.DomainName}
@@ -229,7 +225,7 @@ Outputs:
     Value: !Sub https://${ResumeForgeDistribution.DomainName}
   PrimaryRegion:
     Description: Primary AWS region configured for the deployment.
-    Value: !Ref PrimaryRegion
+    Value: !Ref AWS::Region
   SecondaryRegion:
     Description: Secondary AWS region configured for the deployment.
     Value: !Ref SecondaryRegion
