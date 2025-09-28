@@ -42,10 +42,19 @@ Parameters:
   GeminiApiKey:
     Type: String
     NoEcho: true
-    MinLength: 1
+    Default: ''
     Description: >-
       Gemini API key used by the Lambda function to generate enhanced resume
-      content. Provide the value securely when deploying the stack.
+      content. Provide the value securely when deploying the stack or supply a
+      Secrets Manager secret name instead.
+  SecretName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional AWS Secrets Manager secret (JSON) that contains a
+      GEMINI_API_KEY value. When provided, the Lambda environment resolves the
+      API key from the secret at runtime. Leave blank to pass GeminiApiKey
+      directly.
   ProvisionedConcurrency:
     Type: Number
     Default: 0
@@ -68,6 +77,18 @@ Conditions:
   CreateDataBucketCondition: !Equals [!Ref CreateDataBucket, 'true']
   EnableProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
   AttachWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
+  UseSecretName: !Not [!Equals [!Ref SecretName, '']]
+
+Rules:
+  RequireGeminiConfiguration:
+    Assertions:
+      - Assert: !Or
+          - !Not [!Equals [!Ref SecretName, '']]
+          - !Not [!Equals [!Ref GeminiApiKey, '']]
+        AssertDescription: >-
+          Provide either SecretName (pointing to a Secrets Manager secret with
+          GEMINI_API_KEY) or GeminiApiKey so the Lambda function can access the
+          Gemini API.
 
 Resources:
   ResumeForgeApi:
@@ -137,7 +158,10 @@ Resources:
         Variables:
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
-          GEMINI_API_KEY: !Ref GeminiApiKey
+          GEMINI_API_KEY: !If
+            - UseSecretName
+            - !Sub '{{resolve:secretsmanager:${SecretName}:SecretString:GEMINI_API_KEY}}'
+            - !Ref GeminiApiKey
           PRIMARY_REGION: !Ref AWS::Region
           SECONDARY_REGION: !Ref SecondaryRegion
       Policies:

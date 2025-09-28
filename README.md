@@ -262,7 +262,17 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 | `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
 | `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
 | `RESUMEFORGE_DATA_BUCKET` | Globally unique S3 bucket name passed to the `DataBucketName` parameter. |
-| `GEMINI_API_KEY` | Gemini API key provided to the runtime via environment variable overrides. |
+| `RESUMEFORGE_SECRET_NAME` | Name of the AWS Secrets Manager secret that stores runtime configuration. The secret must contain a `GEMINI_API_KEY` field. |
+
+The Secrets Manager entry referenced by `RESUMEFORGE_SECRET_NAME` should store a JSON object, for example:
+
+```json
+{
+  "GEMINI_API_KEY": "<api-key-value>"
+}
+```
+
+If you prefer to supply the Gemini API key directly (for local testing or bespoke deployments), pass a value to the `GeminiApiKey` parameter instead of configuring a secret. The CloudFormation template enforces that at least one of these sources is provided.
 
 Optional secrets:
 
