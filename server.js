@@ -3528,12 +3528,32 @@ function createMetric(category, score, tips = []) {
   const boundedScore = clamp(score, 0, 100);
   const roundedScore = Math.round(boundedScore);
   const rating = scoreRatingLabel(roundedScore);
+  const sanitizedTips = Array.from(
+    new Set(
+      (tips || [])
+        .map((tip) => (typeof tip === 'string' ? tip.trim() : ''))
+        .filter(Boolean)
+    )
+  );
+
+  if (!sanitizedTips.length) {
+    if (rating === 'EXCELLENT') {
+      sanitizedTips.push(
+        `Keep refining your ${category.toLowerCase()} as you add new achievements so the resume stays future-proof.`
+      );
+    } else {
+      sanitizedTips.push(
+        `Focus on improving ${category.toLowerCase()} to raise this score—tighten structure and mirror the job requirements.`
+      );
+    }
+  }
+
   return {
     category,
     score: roundedScore,
     rating,
     ratingLabel: rating,
-    tips,
+    tips: sanitizedTips,
   };
 }
 
