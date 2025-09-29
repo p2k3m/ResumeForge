@@ -308,6 +308,37 @@ jobs:
               continue
             fi
 
+            if echo "$deploy_err" | grep -qi "InvalidChangeSetStatus" && \
+               echo "$deploy_err" | grep -qi "\[OBSOLETE\]"; then
+              echo "sam deploy reported an obsolete change set. Cleaning up before retrying..."
+
+              change_set_arn=$(printf '%s\n' "$deploy_err" | \
+                sed -n 's/.*\(arn:aws:cloudformation:[^ ]*changeSet[^ ]*\).*/\1/p' | head -n1)
+
+              if [ -n "$change_set_arn" ]; then
+                if aws cloudformation delete-change-set \
+                    --stack-name "$STACK_NAME" \
+                    --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
+                  echo "Deleted obsolete change set $change_set_arn"
+                else
+                  delete_change_set_err=$(cat "$tmp_err")
+                  if echo "$delete_change_set_err" | grep -qi "does not exist"; then
+                    echo "Change set $change_set_arn no longer exists. Continuing with retry."
+                  else
+                    echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
+                    exit 1
+                  fi
+                fi
+              else
+                echo "Unable to determine change set ARN from sam deploy output. Aborting." >&2
+                exit 1
+              fi
+
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
             echo "$deploy_err" >&2
             exit 1
           done
