@@ -31,7 +31,7 @@ function ATSScoreDashboard({ metrics = [], match }) {
   const matchDelta = formatDelta(match?.originalScore, match?.enhancedScore)
 
   return (
-    <section className="space-y-6" aria-label="ATS dashboard">
+    <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-purple-900">ATS Performance Dashboard</h2>
@@ -40,7 +40,10 @@ function ATSScoreDashboard({ metrics = [], match }) {
           </p>
         </div>
         {match && (
-          <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-purple-600">
+          <div
+            className="flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-purple-600"
+            data-testid="dashboard-live-indicator"
+          >
             <span className="rounded-full bg-purple-100 px-3 py-1">Live Update</span>
             <span>Synced with latest analysis</span>
           </div>

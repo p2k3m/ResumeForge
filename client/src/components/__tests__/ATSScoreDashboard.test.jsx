@@ -28,6 +28,7 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByLabelText('match comparison')).toBeInTheDocument()
     expect(screen.getByTestId('original-score')).toHaveTextContent('48')
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76')
+    expect(screen.getByTestId('dashboard-live-indicator')).toBeInTheDocument()
   })
 
   it('updates to reflect new scores immediately when data changes', () => {
