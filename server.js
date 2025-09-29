@@ -423,6 +423,37 @@ function parseAllowedOrigins(value) {
   return parsed && parsed.length ? parsed : DEFAULT_ALLOWED_ORIGINS;
 }
 
+function extractMissingConfig(err) {
+  if (!err) return [];
+  const message = err.message || String(err);
+  const match = message.match(/Missing required environment variables: (.+)$/i);
+  if (!match) return [];
+  return match[1]
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+function describeConfigurationError(err) {
+  if (!err) return 'failed to load configuration';
+  const missing = extractMissingConfig(err);
+  if (missing.length) {
+    return (
+      'ResumeForge is missing required configuration values: ' +
+      missing.join(', ') +
+      '. Set them via environment variables or config/runtime-config.json5.'
+    );
+  }
+  const message = err.message || String(err);
+  if (/Failed to load runtime configuration file/i.test(message)) {
+    return (
+      'Runtime configuration file could not be loaded. ' +
+      'Ensure config/runtime-config.json5 exists and contains valid JSON5.'
+    );
+  }
+  return message;
+}
+
 function buildRuntimeConfig() {
   const fileConfig = (() => {
     try {
@@ -3129,15 +3160,18 @@ app.post(
     secrets = getSecrets();
     bucket = secrets.S3_BUCKET;
   } catch (err) {
+    const missing = extractMissingConfig(err);
     logStructured('error', 'configuration_load_failed', {
       ...logContext,
       error: serializeError(err),
+      missing,
     });
     return sendError(
       res,
       500,
       'CONFIGURATION_ERROR',
-      'failed to load configuration'
+      describeConfigurationError(err),
+      missing.length ? { missing } : undefined
     );
   }
 
