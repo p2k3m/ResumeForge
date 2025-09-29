@@ -690,8 +690,41 @@ describe('/api/process-cv', () => {
     expect(resumeText).toContain('Skill B');
     expect(res.body.addedSkills).toContain('Skill B');
     expect(res.body.modifiedTitle).toBe('Revised Title');
-    expect(Array.isArray(res.body.scoreBreakdown)).toBe(true);
-    expect(res.body.scoreBreakdown).toHaveLength(5);
+    expect(typeof res.body.scoreBreakdown).toBe('object');
+    expect(res.body.scoreBreakdown).toEqual(
+      expect.objectContaining({
+        layoutSearchability: expect.objectContaining({
+          category: 'Layout & Searchability',
+          score: expect.any(Number),
+          ratingLabel: expect.any(String),
+          tips: expect.any(Array),
+        }),
+        atsReadability: expect.objectContaining({
+          category: 'ATS Readability',
+          score: expect.any(Number),
+          ratingLabel: expect.any(String),
+          tips: expect.any(Array),
+        }),
+        impact: expect.objectContaining({
+          category: 'Impact',
+          score: expect.any(Number),
+          ratingLabel: expect.any(String),
+          tips: expect.any(Array),
+        }),
+        crispness: expect.objectContaining({
+          category: 'Crispness',
+          score: expect.any(Number),
+          ratingLabel: expect.any(String),
+          tips: expect.any(Array),
+        }),
+        otherQuality: expect.objectContaining({
+          category: 'Other Quality Metrics',
+          score: expect.any(Number),
+          ratingLabel: expect.any(String),
+          tips: expect.any(Array),
+        }),
+      })
+    );
     process.env.NODE_ENV = 'test';
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
