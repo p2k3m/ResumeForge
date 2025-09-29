@@ -263,7 +263,8 @@ jobs:
             fi
 
             deploy_err=$(cat "$tmp_deploy_log")
-            if echo "$deploy_err" | grep -Eqi "is in (CREATE|UPDATE|DELETE)_IN_PROGRESS state and can not be updated"; then
+            deploy_err_normalized=$(printf '%s\n' "$deploy_err" | tr '\r\n' '  ' | tr -s ' ')
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE)_IN_PROGRESS state (and )?can[[:space:]]*not be updated"; then
               if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
                 echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
                 exit 1
@@ -293,7 +294,7 @@ jobs:
             fi
 
             : >"$tmp_err"
-            if echo "$deploy_err" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
               echo "sam deploy failed because the stack entered a rollback-complete state. Deleting stack '$STACK_NAME' before retrying..."
               aws cloudformation delete-stack --stack-name "$STACK_NAME"
               if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
@@ -308,8 +309,8 @@ jobs:
               continue
             fi
 
-            if echo "$deploy_err" | grep -qi "InvalidChangeSetStatus" && \
-               echo "$deploy_err" | grep -qi "\[OBSOLETE\]"; then
+            if printf '%s\n' "$deploy_err_normalized" | grep -qi "InvalidChangeSetStatus" && \
+               printf '%s\n' "$deploy_err_normalized" | grep -qi "\[OBSOLETE\]"; then
               echo "sam deploy reported an obsolete change set. Cleaning up before retrying..."
 
               change_set_arn=$(printf '%s\n' "$deploy_err" | \
