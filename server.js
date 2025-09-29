@@ -2686,6 +2686,115 @@ function setGeneratePdf(fn) {
   generatePdf = fn;
 }
 
+function uniqueTemplates(templates = []) {
+  const seen = new Set();
+  const result = [];
+  for (const template of templates) {
+    if (!template) continue;
+    if (seen.has(template)) continue;
+    seen.add(template);
+    result.push(template);
+  }
+  return result;
+}
+
+async function generatePdfWithFallback({
+  documentType,
+  templates,
+  buildOptionsForTemplate,
+  inputText,
+  generativeModel,
+  logContext = {}
+}) {
+  const candidates = uniqueTemplates(Array.isArray(templates) ? templates : []);
+  if (!candidates.length) {
+    const error = new Error(`No PDF templates provided for ${documentType}`);
+    logStructured('error', 'pdf_generation_no_templates', {
+      ...logContext,
+      documentType,
+    });
+    throw error;
+  }
+
+  let lastError;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const templateId = candidates[index];
+    const attempt = index + 1;
+    logStructured('info', 'pdf_generation_attempt', {
+      ...logContext,
+      documentType,
+      template: templateId,
+      attempt,
+      totalAttempts: candidates.length,
+    });
+
+    try {
+      const options = (typeof buildOptionsForTemplate === 'function'
+        ? buildOptionsForTemplate(templateId)
+        : {}) || {};
+      const optionKeys =
+        options && typeof options === 'object' ? Object.keys(options) : [];
+      const templateParamKeys =
+        options && typeof options.templateParams === 'object'
+          ? Object.keys(options.templateParams)
+          : [];
+
+      logStructured('debug', 'pdf_generation_options_prepared', {
+        ...logContext,
+        documentType,
+        template: templateId,
+        optionKeys,
+        templateParamKeys,
+      });
+
+      const buffer = await generatePdf(
+        inputText,
+        templateId,
+        options,
+        generativeModel
+      );
+
+      logStructured('info', 'pdf_generation_attempt_succeeded', {
+        ...logContext,
+        documentType,
+        template: templateId,
+        attempt,
+        bytes: buffer.length,
+      });
+
+      return { buffer, template: templateId };
+    } catch (error) {
+      lastError = error;
+      logStructured('error', 'pdf_generation_attempt_failed', {
+        ...logContext,
+        documentType,
+        template: templateId,
+        attempt,
+        error: serializeError(error),
+      });
+    }
+  }
+
+  logStructured('error', 'pdf_generation_all_attempts_failed', {
+    ...logContext,
+    documentType,
+    templates: candidates,
+    error: serializeError(lastError),
+  });
+
+  const failure = new Error(
+    `PDF generation failed for ${documentType}. Tried templates: ${candidates.join(
+      ', '
+    )}`
+  );
+  if (lastError) {
+    failure.cause = lastError;
+  }
+  failure.templatesTried = candidates;
+  throw failure;
+}
+
 async function extractText(file) {
   const ext = path.extname(file.originalname).toLowerCase();
   if (ext !== '.pdf') {
@@ -3962,6 +4071,8 @@ app.post(
     const urls = [];
     for (const [name, text] of Object.entries(outputs)) {
       if (!text) continue;
+      const isCvDocument = name === 'version1' || name === 'version2';
+      const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
       let fileName;
       if (name === 'version1') {
         fileName = sanitizedName;
@@ -3970,77 +4081,112 @@ app.post(
       } else {
         fileName = name;
       }
-      const subdir =
-        name === 'version1' || name === 'version2'
-          ? 'cv/'
-          : name === 'cover_letter1' || name === 'cover_letter2'
-          ? 'cover_letter/'
-          : '';
+      const subdir = isCvDocument
+        ? 'cv/'
+        : isCoverLetter
+        ? 'cover_letter/'
+        : '';
       const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-      const tpl =
-        name === 'version1'
+      const primaryTemplate = isCvDocument
+        ? name === 'version1'
           ? template1
-          : name === 'version2'
-          ? template2
-          : name === 'cover_letter1'
+          : template2
+        : isCoverLetter
+        ? name === 'cover_letter1'
           ? coverTemplate1
-          : coverTemplate2;
-      const resolvedTemplateParams = resolveTemplateParamsConfig(
-        templateParamConfig,
-        tpl,
-        name
-      );
-      const options =
-        name === 'version1' || name === 'version2'
-          ? {
-              resumeExperience,
-              linkedinExperience,
-              resumeEducation,
-              linkedinEducation,
-              resumeCertifications,
-              linkedinCertifications,
-              credlyCertifications,
-              credlyProfileUrl,
-              jobTitle,
-              jobSkills,
-              project: projectText,
-              templateParams: resolvedTemplateParams,
-              linkedinProfileUrl,
-              applicantName
-            }
-          : name === 'cover_letter1' || name === 'cover_letter2'
-          ? { skipRequiredSections: true, defaultHeading: '' }
-          : {};
-      if (options && typeof options === 'object' && !options.templateParams) {
-        options.templateParams = resolvedTemplateParams;
-      }
-      const inputText =
-        name === 'cover_letter1' || name === 'cover_letter2'
-          ? relocateProfileLinks(sanitizeGeneratedText(text, options))
-          : text;
-      logStructured('info', 'pdf_generation_started', {
+          : coverTemplate2
+        : template1;
+
+      const baseCvOptions = isCvDocument
+        ? {
+            resumeExperience,
+            linkedinExperience,
+            resumeEducation,
+            linkedinEducation,
+            resumeCertifications,
+            linkedinCertifications,
+            credlyCertifications,
+            credlyProfileUrl,
+            jobTitle,
+            jobSkills,
+            project: projectText,
+            linkedinProfileUrl,
+            applicantName,
+          }
+        : null;
+      const baseCoverOptions = isCoverLetter
+        ? { skipRequiredSections: true, defaultHeading: '' }
+        : null;
+
+      const inputText = isCoverLetter
+        ? relocateProfileLinks(
+            sanitizeGeneratedText(text, { ...baseCoverOptions })
+          )
+        : text;
+
+      logStructured('debug', 'pdf_input_prepared', {
         ...logContext,
         documentType: name,
-        template: tpl,
+        primaryTemplate,
+        characters: inputText.length,
       });
-      let pdfBuffer;
-      try {
-        pdfBuffer = await generatePdf(inputText, tpl, options, generativeModel);
-      } catch (err) {
-        logStructured('error', 'pdf_generation_failed', {
-          ...logContext,
+
+      const candidateTemplates = isCvDocument
+        ? [primaryTemplate, ...CV_TEMPLATES]
+        : isCoverLetter
+        ? [primaryTemplate, ...CL_TEMPLATES]
+        : [primaryTemplate];
+
+      const { buffer: pdfBuffer, template: usedTemplate } =
+        await generatePdfWithFallback({
           documentType: name,
-          template: tpl,
-          error: serializeError(err),
+          templates: candidateTemplates,
+          inputText,
+          generativeModel,
+          logContext,
+          buildOptionsForTemplate: (templateId) => {
+            if (isCvDocument) {
+              const options = { ...baseCvOptions };
+              const params = resolveTemplateParamsConfig(
+                templateParamConfig,
+                templateId,
+                name
+              );
+              if (params && typeof params === 'object' && Object.keys(params).length) {
+                options.templateParams = {
+                  ...(options.templateParams || {}),
+                  ...params,
+                };
+              }
+              return options;
+            }
+            if (isCoverLetter) {
+              const options = { ...baseCoverOptions };
+              const params = resolveTemplateParamsConfig(
+                templateParamConfig,
+                templateId,
+                name
+              );
+              if (params && typeof params === 'object' && Object.keys(params).length) {
+                options.templateParams = {
+                  ...(options.templateParams || {}),
+                  ...params,
+                };
+              }
+              return options;
+            }
+            const params = resolveTemplateParamsConfig(
+              templateParamConfig,
+              templateId,
+              name
+            );
+            if (params && typeof params === 'object' && Object.keys(params).length) {
+              return { templateParams: { ...params } };
+            }
+            return {};
+          },
         });
-        throw new Error(`PDF generation failed for ${name}`, { cause: err });
-      }
-      logStructured('info', 'pdf_generation_completed', {
-        ...logContext,
-        documentType: name,
-        template: tpl,
-        bytes: pdfBuffer.length,
-      });
+
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -4052,9 +4198,17 @@ app.post(
       logStructured('info', 'pdf_uploaded', {
         ...logContext,
         documentType: name,
+        template: usedTemplate,
         key,
       });
-      await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: `uploaded_${name}_pdf`,
+        message: `template=${usedTemplate}`,
+      });
       const signedUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: key }),
