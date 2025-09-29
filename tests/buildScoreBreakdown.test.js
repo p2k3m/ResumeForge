@@ -12,6 +12,8 @@ const weakResume = `John Smith\n\nExperience\nWorked on software stuff\nResponsi
 
 const wordyResume = `John Smith\n\nSUMMARY\nExperienced engineer.\n\nEXPERIENCE\nSoftware Engineer at Generic Corp (2020 - Present)\n- Collaborated with a wide array of global stakeholders across multiple divisions and departments to design, negotiate, document, and finally implement numerous overlapping initiatives that attempted to improve the customer support platform and therefore add value.\n- Responsible for working on tasks.\n\nEDUCATION\nState University\n\nSKILLS\nReact, Node.js`;
 
+const denseParagraphResume = `JANE DOE\n\nSUMMARY\n${'Built scalable systems and collaborated with partners. '.repeat(20)}\n\nEXPERIENCE\nSenior Software Engineer at Growth Labs (2019 - Present)\n${'Led initiatives across cross-functional squads to optimize deployment and coaching processes while partnering with stakeholders to deliver measurable results. '.repeat(12)}\n\nEDUCATION\nB.S. Computer Science, University of Example\n\nSKILLS\nReact, Node.js, TypeScript, Leadership, Optimization, AWS`;
+
 describe('buildScoreBreakdown', () => {
   test('returns structured metrics with actionable tips', () => {
     const breakdown = buildScoreBreakdown(strongResume, {
@@ -189,5 +191,22 @@ describe('buildScoreBreakdown', () => {
 
     expect(structured.layoutSearchability.score).toBeGreaterThan(minimal.layoutSearchability.score);
     expect(minimal.layoutSearchability.tips.some((tip) => tip.toLowerCase().includes('section'))).toBe(true);
+  });
+
+  test('layout penalizes dense paragraphs that reduce scanability', () => {
+    const structured = buildScoreBreakdown(strongResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    const dense = buildScoreBreakdown(denseParagraphResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    expect(dense.layoutSearchability.score).toBeLessThan(structured.layoutSearchability.score);
+    expect(dense.layoutSearchability.tips.some((tip) => tip.toLowerCase().includes('paragraph'))).toBe(true);
   });
 });

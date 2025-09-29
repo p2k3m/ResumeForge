@@ -3641,6 +3641,15 @@ function analyzeResumeForMetrics(
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const denseParagraphs = paragraphs.filter((block) => {
+    if (/^[-•\u2022\u2023\u25e6\*]/.test(block)) return false;
+    const wordCount = block.split(/\s+/).filter(Boolean).length;
+    return wordCount >= 70;
+  });
   const bulletLines = lines.filter((line) => /^[-•\u2022\u2023\u25e6\*]/.test(line));
   const headingLines = lines.filter((line) => {
     if (line.length > 42) return false;
@@ -3714,6 +3723,8 @@ function analyzeResumeForMetrics(
     bulletWordCounts,
     avgBulletWords,
     fillerBullets,
+    paragraphs,
+    denseParagraphs,
     achievementLines,
     normalizedJobSkills,
     normalizedResumeSkills,
@@ -3727,8 +3738,15 @@ function analyzeResumeForMetrics(
 }
 
 function evaluateLayoutMetric(analysis) {
-  const { headingLines, headingSet, bulletRatio, bulletLines, lines, hasContactInfo } =
-    analysis;
+  const {
+    headingLines,
+    headingSet,
+    bulletRatio,
+    bulletLines,
+    lines,
+    hasContactInfo,
+    denseParagraphs,
+  } = analysis;
 
   const keySections = ['experience', 'education', 'skills', 'summary'];
   const sectionPresence = keySections.filter((section) =>
@@ -3742,10 +3760,18 @@ function evaluateLayoutMetric(analysis) {
     : 0;
   const contactScore = hasContactInfo ? 1 : 0;
 
+  const paragraphPenalty = denseParagraphs.length
+    ? Math.min(0.25, denseParagraphs.length * 0.08)
+    : 0;
+
   const layoutScore =
     100 *
     clamp01(
-      headingScore * 0.25 + sectionScore * 0.25 + bulletScore * 0.35 + contactScore * 0.15
+      headingScore * 0.25 +
+        sectionScore * 0.25 +
+        bulletScore * 0.35 +
+        contactScore * 0.15 -
+        paragraphPenalty
     );
 
   const missingHeadings = keySections
@@ -3768,6 +3794,11 @@ function evaluateLayoutMetric(analysis) {
   }
   if (!hasContactInfo) {
     layoutTips.push('Add contact details (email or phone) so hiring teams can reach you quickly.');
+  }
+  if (denseParagraphs.length) {
+    layoutTips.push(
+      `Break up ${denseParagraphs.length} dense paragraph${denseParagraphs.length === 1 ? '' : 's'} with bullet points so resume scanners do not skip your achievements.`
+    );
   }
   if (!layoutTips.length) {
     layoutTips.push(
