@@ -3553,25 +3553,30 @@ app.post(
         .replace('{{jobSkills}}', jobSkills.join(', ')) +
       '\n\nNote: The candidate performed duties matching the job description in their last role.';
 
+    logStructured('info', 'resume_versions_prompt_generated', {
+      ...logContext,
+      jobTitle,
+      jobSkillsCount: jobSkills.length,
+    });
+
     let versionData = {};
     let parsedVersions = false;
+    let lastAiResponse;
     try {
+      logStructured('info', 'resume_versions_generation_started', logContext);
       const result = await generativeModel.generateContent(versionsPrompt);
-      const responseText = result.response.text();
+      const responseText = result?.response?.text?.();
+      lastAiResponse = responseText;
+      logStructured('info', 'resume_versions_response_received', {
+        ...logContext,
+        hasResponseText: Boolean(responseText),
+        responsePreview:
+          typeof responseText === 'string'
+            ? responseText.slice(0, 200)
+            : undefined,
+      });
       const parsed = parseAiJson(responseText);
-      if (!parsed) {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'invalid_ai_response',
-          level: 'error',
-          message: 'AI response invalid',
-        });
-        return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
-      }
-      if (parsed) {
+      if (parsed && typeof parsed.version1 === 'string' && typeof parsed.version2 === 'string') {
         parsedVersions = true;
         const projectField =
           parsed.project || parsed.projects || parsed.Projects;
@@ -3610,6 +3615,31 @@ app.post(
           generativeModel,
           sanitizeOptions
         );
+      } else {
+        logStructured('error', 'resume_versions_parsing_failed', {
+          ...logContext,
+          reason: 'missing_or_invalid_versions',
+          responsePreview:
+            typeof lastAiResponse === 'string'
+              ? lastAiResponse.slice(0, 200)
+              : undefined,
+        });
+        try {
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'resume_versions_parsing_failed',
+            level: 'error',
+            message: 'AI response missing required resume versions',
+          });
+        } catch (logErr) {
+          logStructured('error', 's3_log_failure', {
+            ...logContext,
+            error: serializeError(logErr),
+          });
+        }
       }
     } catch (e) {
       logStructured('error', 'resume_versions_generation_failed', {
@@ -3643,8 +3673,82 @@ app.post(
           usedFallback = true;
         }
         if (usedFallback) {
-          logStructured('warn', 'resume_versions_fallback_used', logContext);
+          logStructured('warn', 'resume_versions_fallback_used', {
+            ...logContext,
+            reason: 'partial_versions_generated',
+          });
+          try {
+            await logEvent({
+              s3,
+              bucket,
+              key: logKey,
+              jobId,
+              event: 'resume_versions_fallback_used',
+              level: 'warn',
+              message: 'Partial AI response, using sanitized resume copy',
+            });
+          } catch (logErr) {
+            logStructured('error', 's3_log_failure', {
+              ...logContext,
+              error: serializeError(logErr),
+            });
+          }
         }
+      }
+    }
+
+    if (!versionData.version1 || !versionData.version2) {
+      const fallbackOptions = {
+        resumeExperience,
+        linkedinExperience,
+        resumeEducation,
+        linkedinEducation,
+        resumeCertifications,
+        linkedinCertifications,
+        credlyCertifications,
+        credlyProfileUrl,
+        jobTitle,
+        project: projectText,
+      };
+      const fallbackResume = sanitizeGeneratedText(combinedProfile, fallbackOptions);
+      if (fallbackResume && fallbackResume.trim()) {
+        let usedFallback = false;
+        if (!versionData.version1) {
+          versionData.version1 = fallbackResume;
+          usedFallback = true;
+        }
+        if (!versionData.version2) {
+          versionData.version2 = fallbackResume;
+          usedFallback = true;
+        }
+        if (usedFallback) {
+          logStructured('warn', 'resume_versions_fallback_used', {
+            ...logContext,
+            reason: 'ai_response_invalid',
+          });
+          try {
+            await logEvent({
+              s3,
+              bucket,
+              key: logKey,
+              jobId,
+              event: 'resume_versions_fallback_used',
+              level: 'warn',
+              message: 'AI response invalid, reverting to sanitized resume',
+            });
+          } catch (logErr) {
+            logStructured('error', 's3_log_failure', {
+              ...logContext,
+              error: serializeError(logErr),
+            });
+          }
+        }
+      } else {
+        logStructured('error', 'resume_versions_fallback_failed', {
+          ...logContext,
+          reason: 'empty_fallback_resume',
+          hadAiResponse: Boolean(lastAiResponse),
+        });
       }
     }
 
