@@ -120,8 +120,8 @@ jobs:
           set -euo pipefail
 
           tmp_err=$(mktemp)
-          tmp_deploy_err=$(mktemp)
-          trap 'rm -f "$tmp_err" "$tmp_deploy_err"' EXIT
+          tmp_deploy_log=$(mktemp)
+          trap 'rm -f "$tmp_err" "$tmp_deploy_log"' EXIT
 
           wait_for_terminal_stack_status() {
             local status="$1"
@@ -240,7 +240,7 @@ jobs:
           deploy_succeeded=false
           while [ "$deploy_attempt" -le "$max_deploy_attempts" ]; do
             echo "Starting sam deploy attempt $deploy_attempt of $max_deploy_attempts"
-            : >"$tmp_deploy_err"
+            : >"$tmp_deploy_log"
 
             if sam deploy \
                 --stack-name "$STACK_NAME" \
@@ -256,13 +256,13 @@ jobs:
                   SecretName="$SECRET_NAME" \
                   CreateDataBucket="$create_data_bucket" \
                   CreateResumeTable="$create_resume_table" \
-                2> >(tee "$tmp_deploy_err" >&2); then
+                2>&1 | tee "$tmp_deploy_log"; then
               echo "sam deploy completed successfully on attempt $deploy_attempt"
               deploy_succeeded=true
               break
             fi
 
-            deploy_err=$(cat "$tmp_deploy_err")
+            deploy_err=$(cat "$tmp_deploy_log")
             if echo "$deploy_err" | grep -Eqi "is in (UPDATE|DELETE)_IN_PROGRESS state and can not be updated"; then
               if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
                 echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
