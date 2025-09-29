@@ -64,6 +64,11 @@ describe('buildScoreBreakdown', () => {
       expect(tips.length).toBeGreaterThan(0);
       tips.forEach((tip) => expect(typeof tip).toBe('string'));
     });
+
+    Object.values(breakdown).forEach(({ score }) => {
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+    });
   });
 
   test('scores improve when resume addresses layout, impact, and keywords', () => {
@@ -103,7 +108,9 @@ describe('buildScoreBreakdown', () => {
 
     expect(strong.crispness.score).toBeGreaterThan(rambling.crispness.score);
     expect(
-      rambling.crispness.tips.some((tip) => tip.toLowerCase().includes('tighten') || tip.toLowerCase().includes('responsible'))
+      rambling.crispness.tips.some((tip) =>
+        tip.toLowerCase().includes('tighten') || tip.toLowerCase().includes('responsible')
+      )
     ).toBe(true);
   });
 
@@ -147,5 +154,40 @@ describe('buildScoreBreakdown', () => {
       )
     ).toBe(true);
     expect(improved.otherQuality.tips.length).toBeGreaterThan(0);
+  });
+
+  test('ats readability penalizes tables and images', () => {
+    const problematicResume = `${strongResume}\n\nTABLE OF CONTENTS\n| Skill | Years |\nPage 1 of 1\n![graph](http://example.com/chart.png)`;
+    const clean = buildScoreBreakdown(strongResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    const messy = buildScoreBreakdown(problematicResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    expect(messy.atsReadability.score).toBeLessThan(clean.atsReadability.score);
+    expect(messy.atsReadability.tips[0].toLowerCase()).toContain('remove');
+  });
+
+  test('layout metric rewards adding bullet structure', () => {
+    const minimal = buildScoreBreakdown('Name\nExperience\nWorked on stuff', {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['Communication'],
+    });
+
+    const structured = buildScoreBreakdown(strongResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    expect(structured.layoutSearchability.score).toBeGreaterThan(minimal.layoutSearchability.score);
+    expect(minimal.layoutSearchability.tips.some((tip) => tip.toLowerCase().includes('section'))).toBe(true);
   });
 });

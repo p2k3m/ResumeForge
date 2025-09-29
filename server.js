@@ -3525,7 +3525,8 @@ function scoreRatingLabel(score) {
 }
 
 function createMetric(category, score, tips = []) {
-  const roundedScore = Math.round(score);
+  const boundedScore = clamp(score, 0, 100);
+  const roundedScore = Math.round(boundedScore);
   const rating = scoreRatingLabel(roundedScore);
   return {
     category,
@@ -3538,6 +3539,27 @@ function createMetric(category, score, tips = []) {
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function clamp01(value) {
+  return clamp(value, 0, 1);
+}
+
+function idealRatioScore(value, { ideal = 0.4, tolerance = 0.25 } = {}) {
+  if (!isFinite(value) || value <= 0) return 0;
+  const diff = Math.abs(value - ideal);
+  return clamp01(1 - diff / tolerance);
+}
+
+function idealRangeScore(
+  value,
+  { idealMin = 0, idealMax = 1, tolerance = (idealMax - idealMin) / 2 } = {}
+) {
+  if (!isFinite(value) || value <= 0) return 0;
+  if (value >= idealMin && value <= idealMax) return 1;
+  const distance = value < idealMin ? idealMin - value : value - idealMax;
+  if (tolerance <= 0) return 0;
+  return clamp01(1 - distance / tolerance);
 }
 
 function summarizeList(values = [], { limit = 3, conjunction = 'and' } = {}) {
@@ -3707,23 +3729,27 @@ function analyzeResumeForMetrics(
 function evaluateLayoutMetric(analysis) {
   const { headingLines, headingSet, bulletRatio, bulletLines, lines, hasContactInfo } =
     analysis;
-  const layoutSectionBonus = ['experience', 'education', 'skills', 'summary'].reduce(
-    (acc, section) =>
-      acc + (Array.from(headingSet).some((heading) => heading.includes(section)) ? 1 : 0),
-    0
-  );
-  const layoutScore = clamp(
-    38 +
-      Math.min(4, headingLines.length) * 9 +
-      Math.min(0.7, bulletRatio) * 45 +
-      (hasContactInfo ? 6 : 0) +
-      layoutSectionBonus * 3,
-    30,
-    96
+
+  const keySections = ['experience', 'education', 'skills', 'summary'];
+  const sectionPresence = keySections.filter((section) =>
+    Array.from(headingSet).some((heading) => heading.includes(section))
   );
 
-  const missingHeadings = ['experience', 'education', 'skills', 'summary']
-    .filter((section) => !Array.from(headingSet).some((heading) => heading.includes(section)))
+  const headingScore = clamp01(headingLines.length / 6);
+  const sectionScore = clamp01(sectionPresence.length / keySections.length);
+  const bulletScore = bulletLines.length
+    ? idealRatioScore(bulletRatio, { ideal: 0.42, tolerance: 0.28 })
+    : 0;
+  const contactScore = hasContactInfo ? 1 : 0;
+
+  const layoutScore =
+    100 *
+    clamp01(
+      headingScore * 0.25 + sectionScore * 0.25 + bulletScore * 0.35 + contactScore * 0.15
+    );
+
+  const missingHeadings = keySections
+    .filter((section) => !sectionPresence.includes(section))
     .map((heading) => heading.charAt(0).toUpperCase() + heading.slice(1));
 
   const layoutTips = [];
@@ -3732,10 +3758,16 @@ function evaluateLayoutMetric(analysis) {
       `Add clear section headers for ${summarizeList(missingHeadings)} so ATS bots can index your resume (only ${headingLines.length} heading${headingLines.length === 1 ? '' : 's'} detected).`
     );
   }
-  if (bulletRatio < 0.18) {
+  if (bulletLines.length && bulletScore < 0.55) {
     layoutTips.push(
-      `Introduce more bullet points to highlight accomplishments—currently only ${bulletLines.length} bullet${bulletLines.length === 1 ? '' : 's'} found across ${lines.length} lines.`
+      `Adjust your bullet usage—${bulletLines.length} bullet${bulletLines.length === 1 ? '' : 's'} across ${lines.length} lines makes scanning harder for recruiters.`
     );
+  }
+  if (!bulletLines.length) {
+    layoutTips.push('Break dense paragraphs into bullets so scanners can pick out wins.');
+  }
+  if (!hasContactInfo) {
+    layoutTips.push('Add contact details (email or phone) so hiring teams can reach you quickly.');
   }
   if (!layoutTips.length) {
     layoutTips.push(
@@ -3748,37 +3780,38 @@ function evaluateLayoutMetric(analysis) {
 
 function evaluateAtsMetric(analysis) {
   const { normalizedResume, text, multiColumnIndicators, nonAsciiCharacters } = analysis;
-  const atsPenalties = [
-    normalizedResume.includes('table of contents'),
-    /\btable\b/.test(normalizedResume) && /\|/.test(text),
-    /\bpage \d+ of \d+/i.test(text),
-    multiColumnIndicators.length > 4,
-    /https?:\/\/\S+\.(png|jpg|jpeg|gif|svg)/i.test(text),
-    /[{}<>]/.test(text),
-  ].filter(Boolean).length;
-
-  const atsScore = clamp(
-    92 - atsPenalties * 14 - Math.min(nonAsciiCharacters * 0.8, 12),
-    40,
-    95
-  );
-
   const atsIssues = [];
-  if (multiColumnIndicators.length > 4) {
-    atsIssues.push('multi-column spacing that ATS bots misread');
-  }
-  if (/\btable\b/.test(normalizedResume) && /\|/.test(text)) {
+
+  let penalty = 0;
+  const hasTableLikeFormatting = /\btable\b/.test(normalizedResume) && /\|/.test(text);
+  if (hasTableLikeFormatting) {
+    penalty += 22;
     atsIssues.push('table-like formatting');
   }
   if (normalizedResume.includes('table of contents')) {
+    penalty += 18;
     atsIssues.push('a table of contents');
   }
   if (/\bpage \d+ of \d+/i.test(text)) {
+    penalty += 12;
     atsIssues.push('page number footers');
   }
   if (/https?:\/\/\S+\.(png|jpg|jpeg|gif|svg)/i.test(text)) {
+    penalty += 16;
     atsIssues.push('embedded images');
   }
+  if (multiColumnIndicators.length > 0) {
+    penalty += Math.min(5 + multiColumnIndicators.length * 3, 20);
+    atsIssues.push('multi-column spacing that ATS bots misread');
+  }
+  if (/[{}<>]/.test(text)) {
+    penalty += 8;
+    atsIssues.push('decorative characters or HTML brackets');
+  }
+
+  penalty += Math.min(nonAsciiCharacters * 1.5, 18);
+
+  const atsScore = clamp(100 - penalty, 0, 100);
 
   const atsTips = atsIssues.length
     ? [`Remove ${summarizeList(atsIssues)}—they frequently break ATS parsing engines.`]
@@ -3790,14 +3823,13 @@ function evaluateAtsMetric(analysis) {
 function evaluateImpactMetric(analysis) {
   const { achievementLines, bulletLines, bulletKeywordHits, jobKeywordSet } = analysis;
 
-  const impactScore = clamp(
-    42 +
-      Math.min(achievementLines.length * 10, 40) +
-      Math.min(bulletKeywordHits.length * 6, 18) +
-      Math.min((achievementLines.length / Math.max(1, bulletLines.length)) * 20, 20),
-    35,
-    97
-  );
+  const bulletCount = bulletLines.length;
+  const achievementRatio = bulletCount ? achievementLines.length / bulletCount : 0;
+  const keywordHitRatio = bulletCount ? bulletKeywordHits.length / bulletCount : 0;
+  const achievementVolumeScore = clamp01(achievementLines.length / Math.max(3, bulletCount * 0.6));
+
+  const impactScore =
+    100 * clamp01(achievementRatio * 0.5 + keywordHitRatio * 0.25 + achievementVolumeScore * 0.25);
 
   const impactTips = [];
   if (!achievementLines.length) {
@@ -3834,25 +3866,25 @@ function evaluateImpactMetric(analysis) {
 function evaluateCrispnessMetric(analysis) {
   const { bulletLines, avgBulletWords, fillerBullets } = analysis;
 
-  let crispnessScore = 64;
-  if (avgBulletWords >= 12 && avgBulletWords <= 24) {
-    crispnessScore += 28;
-  } else if (avgBulletWords >= 8 && avgBulletWords <= 30) {
-    crispnessScore += 16;
-  } else if (avgBulletWords) {
-    crispnessScore -= 10;
-  }
-
-  crispnessScore -= Math.min(fillerBullets.length * 6, 18);
-
   const bulletsStartingWithVerbs = bulletLines.filter((line) =>
     METRIC_ACTION_VERBS.some((verb) =>
       new RegExp(`^[-•\u2022\u2023\u25e6\*]?\s*${escapeRegex(verb)}\b`, 'i').test(line)
     )
   );
-  crispnessScore += Math.min(bulletsStartingWithVerbs.length * 4, 16);
 
-  const finalCrispnessScore = clamp(crispnessScore, 40, 96);
+  const lengthScore = idealRangeScore(avgBulletWords, {
+    idealMin: 12,
+    idealMax: 22,
+    tolerance: 10,
+  });
+  const fillerRatio = bulletLines.length ? fillerBullets.length / bulletLines.length : 1;
+  const fillerScore = clamp01(1 - fillerRatio);
+  const verbStartRatio = bulletLines.length
+    ? bulletsStartingWithVerbs.length / bulletLines.length
+    : 0;
+
+  const crispnessScore =
+    100 * clamp01(lengthScore * 0.45 + fillerScore * 0.3 + verbStartRatio * 0.25);
 
   const crispnessTips = [];
   if (!bulletLines.length) {
@@ -3865,7 +3897,7 @@ function evaluateCrispnessMetric(analysis) {
       `Expand key bullets beyond ${Math.round(avgBulletWords)} words to explain scope and outcomes without losing clarity.`
     );
   }
-  if (avgBulletWords > 24) {
+  if (avgBulletWords > 22) {
     crispnessTips.push(
       `Tighten lengthy bullets—your average is ${Math.round(avgBulletWords)} words, above the ATS-friendly 18–22 word sweet spot.`
     );
@@ -3881,7 +3913,7 @@ function evaluateCrispnessMetric(analysis) {
     );
   }
 
-  return createMetric('Crispness', finalCrispnessScore, crispnessTips);
+  return createMetric('Crispness', crispnessScore, crispnessTips);
 }
 
 function evaluateOtherMetric(analysis) {
@@ -3917,15 +3949,11 @@ function evaluateOtherMetric(analysis) {
     /summary|profile|overview/.test(heading)
   );
 
-  const otherScore = clamp(
-    50 +
-      skillMatchRatio * 35 +
-      keywordCoverage * 25 +
-      (summaryPresent ? 6 : 0) +
-      Math.min(impactDensity * 20, 10),
-    40,
-    96
-  );
+  const otherScore =
+    100 *
+    clamp01(
+      skillMatchRatio * 0.4 + keywordCoverage * 0.3 + impactDensity * 0.2 + (summaryPresent ? 0.1 : 0)
+    );
 
   const jobSkillsArray = Array.from(normalizedJobSkills);
   const missingSkillSet = jobSkillsArray
