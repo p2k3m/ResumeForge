@@ -1,20 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { formatMatchMessage } from './formatMatchMessage.js'
 import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
-
-const gradientPalette = [
-  'from-[#6366F1] via-[#8B5CF6] to-[#7C3AED]',
-  'from-[#4C51BF] via-[#6D28D9] to-[#3B82F6]',
-  'from-[#1E3A8A] via-[#4338CA] to-[#9333EA]',
-  'from-[#5B21B6] via-[#7C3AED] to-[#2563EB]',
-  'from-[#312E81] via-[#4338CA] to-[#8B5CF6]'
-]
-
-const ratingBadgeStyles = {
-  EXCELLENT: 'bg-emerald-500/15 text-emerald-100 border border-emerald-300/60',
-  GOOD: 'bg-amber-500/15 text-amber-100 border border-amber-300/60',
-  'NEEDS IMPROVEMENT': 'bg-rose-500/15 text-rose-100 border border-rose-300/60'
-}
+import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
+import TemplateSelector from './components/TemplateSelector.jsx'
 
 const improvementActions = [
   {
@@ -67,23 +55,35 @@ const templateOptions = [
   }
 ]
 
-function MetricCard({ metric, accent }) {
-  const badgeClass = ratingBadgeStyles[metric.ratingLabel] || ratingBadgeStyles.GOOD
-  return (
-    <div
-      className={`rounded-2xl bg-gradient-to-br ${accent} p-6 shadow-lg text-white border border-white/10 flex flex-col gap-4`}
-    >
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold tracking-wide uppercase">{metric.category}</h3>
-        <span className={`text-xs px-2 py-1 rounded-full ${badgeClass}`}>{metric.ratingLabel}</span>
-      </div>
-      <div className="flex items-end gap-2">
-        <span className="text-5xl font-black leading-none">{metric.score}</span>
-        <span className="uppercase text-xs tracking-widest opacity-90">Score</span>
-      </div>
-      <p className="text-sm leading-relaxed text-white/90">{metric.tip}</p>
-    </div>
-  )
+function getApiBaseCandidate() {
+  if (typeof window !== 'undefined') {
+    const fromWindow = window.__RESUMEFORGE_API_BASE_URL__
+    if (typeof fromWindow === 'string' && fromWindow.trim()) {
+      return fromWindow.trim()
+    }
+
+    if (typeof document !== 'undefined') {
+      const metaTag = document.querySelector('meta[name="resumeforge-api-base"]')
+      const metaContent = metaTag?.content
+      if (typeof metaContent === 'string' && metaContent.trim()) {
+        return metaContent.trim()
+      }
+    }
+  }
+
+  if (typeof process !== 'undefined' && process.env) {
+    if (typeof process.env.VITE_API_BASE_URL === 'string' && process.env.VITE_API_BASE_URL.trim()) {
+      return process.env.VITE_API_BASE_URL.trim()
+    }
+    if (
+      typeof process.env.RESUMEFORGE_API_BASE_URL === 'string' &&
+      process.env.RESUMEFORGE_API_BASE_URL.trim()
+    ) {
+      return process.env.RESUMEFORGE_API_BASE_URL.trim()
+    }
+  }
+
+  return ''
 }
 
 function ImprovementCard({ suggestion, onAccept, onReject }) {
@@ -163,7 +163,7 @@ function App() {
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const improvementLockRef = useRef(false)
 
-  const rawBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
+  const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
 
   useEffect(() => {
@@ -510,34 +510,12 @@ function App() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-purple-700">Template Style</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {templateOptions.map((option) => {
-                const selected = option.id === selectedTemplate
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setSelectedTemplate(option.id)}
-                    className={`text-left rounded-2xl border p-4 transition transform hover:-translate-y-0.5 ${
-                      selected
-                        ? 'border-purple-500 bg-purple-50 shadow-md'
-                        : 'border-purple-200 bg-white'
-                    }`}
-                  >
-                    <h3 className="text-lg font-semibold text-purple-800">{option.name}</h3>
-                    <p className="text-sm text-purple-600">{option.description}</p>
-                    {selected && (
-                      <span className="mt-2 inline-block text-xs font-semibold text-purple-500 uppercase">
-                        Selected
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+          <TemplateSelector
+            options={templateOptions}
+            selectedTemplate={selectedTemplate}
+            onSelect={setSelectedTemplate}
+            disabled={isProcessing}
+          />
 
           <button
             onClick={handleSubmit}
@@ -561,34 +539,11 @@ function App() {
         </section>
 
         {scoreBreakdown.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-2xl font-bold text-purple-900">ATS Metric Breakdown</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {scoreBreakdown.map((metric, idx) => (
-                <MetricCard
-                  key={metric.category}
-                  metric={metric}
-                  accent={gradientPalette[idx % gradientPalette.length]}
-                />
-              ))}
-            </div>
-          </section>
+          <ATSScoreDashboard metrics={scoreBreakdown} match={match} />
         )}
 
         {match && (
           <section className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="rounded-2xl bg-white/80 backdrop-blur border border-indigo-200/70 shadow p-6">
-                <h3 className="text-sm uppercase tracking-wide text-indigo-500">Original Match</h3>
-                <p className="text-4xl font-bold text-indigo-700">{match.originalScore}%</p>
-                <p className="text-sm text-indigo-600 mt-2">{match.originalTitle || '—'}</p>
-              </div>
-              <div className="rounded-2xl bg-white/80 backdrop-blur border border-emerald-200/70 shadow p-6">
-                <h3 className="text-sm uppercase tracking-wide text-emerald-500">Enhanced Match</h3>
-                <p className="text-4xl font-bold text-emerald-700">{match.enhancedScore}%</p>
-                <p className="text-sm text-emerald-600 mt-2">{match.modifiedTitle || match.originalTitle || '—'}</p>
-              </div>
-            </div>
             <div className="rounded-3xl bg-white/80 backdrop-blur border border-purple-200/70 shadow-xl p-6 space-y-4">
               <h3 className="text-xl font-semibold text-purple-900">Skill Coverage Snapshot</h3>
               <table className="w-full text-left text-sm text-purple-800">
