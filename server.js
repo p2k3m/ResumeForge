@@ -2291,6 +2291,11 @@ let generatePdf = async function (
     }
   }
   templateId = canonicalTemplateId;
+  logStructured('debug', 'pdf_template_resolved', {
+    requestedTemplateId,
+    templateId,
+    usingRenderer: templateId === '2025',
+  });
   const data = parseContent(text, options);
   data.sections.forEach((sec) => {
     sec.heading = normalizeHeading(sec.heading);
@@ -2301,13 +2306,27 @@ let generatePdf = async function (
       ? { ...options.templateParams }
       : {};
   if (templateId === '2025') {
-    return renderTemplatePdf(requestedTemplateId, {
-      data,
-      rawText: text,
-      options: { ...options },
-      templateParams,
-      templateId
+    logStructured('debug', 'pdf_renderer_invoked', {
+      templateId,
+      requestedTemplateId,
+      sectionCount: data.sections.length,
     });
+    try {
+      return await renderTemplatePdf(requestedTemplateId, {
+        data,
+        rawText: text,
+        options: { ...options },
+        templateParams,
+        templateId
+      });
+    } catch (err) {
+      logStructured('error', 'pdf_renderer_failed', {
+        templateId,
+        requestedTemplateId,
+        error: serializeError(err),
+      });
+      throw err;
+    }
   }
   let html;
   if (templateId === 'ucmo' && generativeModel?.generateContent) {
@@ -2327,6 +2346,10 @@ let generatePdf = async function (
   }
   if (!html) {
     const templatePath = path.resolve('templates', `${templateId}.html`);
+    logStructured('debug', 'pdf_template_loading', {
+      templateId,
+      templatePath,
+    });
     const templateSource = await fs.readFile(templatePath, 'utf-8');
     let css = '';
     try {
@@ -2373,16 +2396,29 @@ let generatePdf = async function (
     if (css) {
       html = html.replace('</head>', `<style>${css}</style></head>`);
     }
+    logStructured('debug', 'pdf_template_compiled', {
+      templateId,
+      htmlLength: html.length,
+    });
   }
   try {
     const browser = await getChromiumBrowser();
     if (browser) {
       try {
+        logStructured('debug', 'pdf_chromium_render_start', {
+          templateId,
+          requestedTemplateId,
+        });
         const page = await browser.newPage();
         await page.setContent(html, { waitUntil: 'networkidle0' });
         const pdfBuffer = await page.pdf({
           format: 'A4',
           printBackground: true
+        });
+        logStructured('debug', 'pdf_chromium_render_complete', {
+          templateId,
+          requestedTemplateId,
+          bytes: pdfBuffer.length,
         });
         return pdfBuffer;
       } finally {
@@ -2396,6 +2432,10 @@ let generatePdf = async function (
   }
 
   const { default: PDFDocument } = await import('pdfkit');
+  logStructured('debug', 'pdf_pdfkit_fallback', {
+    templateId,
+    requestedTemplateId,
+  });
   const styleMap = {
     modern: {
       font: 'Helvetica',
