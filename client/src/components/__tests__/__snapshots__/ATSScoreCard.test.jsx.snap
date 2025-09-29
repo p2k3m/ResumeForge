@@ -3,65 +3,88 @@
 exports[`ATSScoreCard matches the gradient snapshot for consistency 1`] = `
 <DocumentFragment>
   <article
-    class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+    class="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-500 text-white shadow-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
     data-testid="ats-score-card"
   >
     <div
-      class="absolute inset-0 opacity-30 mix-blend-screen"
+      class="absolute inset-0 opacity-20"
     >
       <div
-        class="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-white/30 blur-2xl"
+        class="absolute -top-16 -right-12 h-40 w-40 rounded-full bg-white/40 blur-3xl"
       />
       <div
-        class="absolute -bottom-10 -left-10 h-36 w-36 rounded-full bg-white/20 blur-3xl"
+        class="absolute -bottom-16 -left-10 h-44 w-44 rounded-full bg-white/30 blur-[90px]"
+      />
+      <div
+        class="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25),_transparent_60%)]"
       />
     </div>
     <div
-      class="relative flex flex-col gap-6 p-6 md:p-8"
+      class="relative flex h-full flex-col gap-6 p-6 md:p-8"
     >
       <header
-        class="flex items-start justify-between gap-4"
+        class="flex flex-col gap-4"
       >
-        <div>
-          <p
-            class="text-xs font-semibold uppercase tracking-[0.3em] text-white/70"
-          >
-            Metric
-          </p>
+        <span
+          class="w-fit rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.4em] text-white/70"
+        >
+          Metric
+        </span>
+        <div
+          class="flex items-start justify-between gap-4"
+        >
           <h3
-            class="text-2xl font-black leading-snug tracking-wide"
+            class="text-2xl font-black leading-snug tracking-wide md:text-[26px]"
           >
             Keyword Match
           </h3>
+          <span
+            class="text-[10px] font-semibold uppercase tracking-[0.35em] px-3 py-1 rounded-full bg-white/15 text-white border border-white/40 shadow-[0_8px_20px_rgba(255,255,255,0.18)] backdrop-blur-sm"
+            data-testid="rating-badge"
+          >
+            EXCELLENT
+          </span>
         </div>
-        <span
-          class="text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full bg-white/20 text-white border border-white/40 shadow-[0_0_0_1px_rgba(255,255,255,0.2)] backdrop-blur-sm"
-          data-testid="rating-badge"
-        >
-          EXCELLENT
-        </span>
       </header>
       <div
-        class="flex items-baseline gap-4"
+        class="flex flex-wrap items-end gap-x-3 gap-y-1"
       >
         <p
-          class="text-6xl font-black leading-none drop-shadow-md"
+          class="text-6xl font-black leading-none drop-shadow-md md:text-7xl"
           data-testid="metric-score"
         >
           82
         </p>
         <span
-          class="text-sm font-semibold uppercase tracking-[0.4em] text-white"
+          class="text-2xl font-semibold uppercase tracking-[0.3em] text-white/80"
+        >
+          %
+        </span>
+        <span
+          class="text-xs font-semibold uppercase tracking-[0.45em] text-white"
         >
           Score
         </span>
       </div>
-      <p
-        class="text-sm md:text-base leading-relaxed text-white/85"
+      <footer
+        class="mt-auto rounded-2xl border border-white/10 bg-white/10 p-4 text-sm md:text-base leading-relaxed text-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.28)]"
         data-testid="metric-tip"
       >
-        Incorporate the role-specific leadership verbs to boost resonance.
-      </p>
+        <div
+          class="flex items-start gap-3"
+        >
+          <span
+            class="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-white/20 text-xs font-semibold uppercase tracking-[0.35em]"
+          >
+            Tip
+          </span>
+          <p
+            class="flex-1"
+          >
+            Incorporate the role-specific leadership verbs to boost resonance.
+          </p>
+        </div>
+      </footer>
     </div>
   </article>
 </DocumentFragment>
