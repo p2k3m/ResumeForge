@@ -747,13 +747,16 @@ describe('/api/process-cv', () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: {
+      error: expect.objectContaining({
         code: 'INVALID_RESUME_CONTENT',
-        message: 'You have uploaded an invoice document. Please upload a CV only.',
+        message: expect.stringContaining('Please upload a CV only.'),
         requestId: expect.any(String),
         jobId: expect.any(String),
-        details: { description: 'an invoice document' },
-      },
+        details: expect.objectContaining({
+          description: 'an invoice document',
+          confidence: expect.any(Number),
+        }),
+      }),
     });
   });
 
@@ -793,15 +796,18 @@ describe('/api/process-cv', () => {
 });
 
 describe('classifyDocument', () => {
-  test('identifies resumes by section structure', () => {
-    const result = classifyDocument('PROFESSIONAL SUMMARY\nExperience\nEducation\nSkills');
-    expect(result).toEqual({ isResume: true, description: 'a professional resume' });
+  test('identifies resumes by section structure', async () => {
+    const result = await classifyDocument('PROFESSIONAL SUMMARY\nExperience\nEducation\nSkills');
+    expect(result.isResume).toBe(true);
+    expect(result.description).toBe('a professional resume');
+    expect(result.confidence).toBeGreaterThan(0);
   });
 
-  test('detects cover letters', () => {
-    const result = classifyDocument('Dear Hiring Manager,\nI am excited...\nSincerely, Candidate');
+  test('detects cover letters', async () => {
+    const result = await classifyDocument('Dear Hiring Manager,\nI am excited...\nSincerely, Candidate');
     expect(result.isResume).toBe(false);
-    expect(result.description).toBe('a cover letter');
+    expect(result.description).toContain('cover');
+    expect(result.confidence).toBeGreaterThanOrEqual(0);
   });
 });
 

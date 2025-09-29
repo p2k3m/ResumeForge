@@ -51,7 +51,9 @@
       "^@aws-sdk/client-dynamodb$": "<rootDir>/tests/mocks/aws-sdk-client-dynamodb.js",
       "^@aws-sdk/s3-request-presigner$": "<rootDir>/tests/mocks/aws-sdk-s3-request-presigner.js",
       "^@vendia/serverless-express$": "<rootDir>/tests/mocks/serverless-express.js",
-      "^puppeteer$": "<rootDir>/tests/mocks/puppeteer.js"
+      "^puppeteer$": "<rootDir>/tests/mocks/puppeteer.js",
+      "^handlebars$": "<rootDir>/tests/mocks/handlebars.js",
+      "^qrcode$": "<rootDir>/tests/mocks/qrcode.js"
     },
     "collectCoverage": true,
     "collectCoverageFrom": [

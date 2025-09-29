@@ -112,6 +112,8 @@ let puppeteerCore;
 let chromiumLaunchAttempted = false;
 let customChromiumLauncher;
 
+let sharedGenerativeModelPromise;
+
 function isModuleNotFoundError(err, moduleName) {
   if (!err) return false;
   const code = err.code || err?.cause?.code;
@@ -178,6 +180,26 @@ function setChromiumLauncher(fn) {
     puppeteerCore = undefined;
     chromiumLaunchAttempted = false;
   }
+}
+
+async function getSharedGenerativeModel() {
+  if (sharedGenerativeModelPromise) {
+    return sharedGenerativeModelPromise;
+  }
+  sharedGenerativeModelPromise = (async () => {
+    try {
+      const { GEMINI_API_KEY } = getSecrets();
+      if (!GEMINI_API_KEY) {
+        throw new Error('GEMINI_API_KEY missing for generative model');
+      }
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      return genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    } catch (err) {
+      sharedGenerativeModelPromise = undefined;
+      throw err;
+    }
+  })();
+  return sharedGenerativeModelPromise;
 }
 
 async function parseUserAgent(ua) {
@@ -681,7 +703,8 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -1064,12 +1087,535 @@ async function fetchCredlyProfile(url) {
       });
     }
     return badges;
-  } catch {
+  } catch (err) {
+    if (err?.response?.status === 401 || err?.response?.status === 403) {
+      const authError = new Error('Credly authentication required');
+      authError.code = 'CREDLY_AUTH_REQUIRED';
+      throw authError;
+    }
+    if (err?.response?.status === 404) {
+      const notFound = new Error('Credly profile not found');
+      notFound.code = 'CREDLY_PROFILE_NOT_FOUND';
+      throw notFound;
+    }
+    logStructured('warn', 'credly_profile_fetch_error', {
+      url,
+      status: err?.response?.status,
+      error: serializeError(err),
+    });
     return [];
   }
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function parseManualCertificates(value) {
+  if (!value) return [];
+  const results = [];
+  const pushCertificate = (item) => {
+    if (!item) return;
+    if (typeof item === 'string') {
+      const text = item.trim();
+      if (!text) return;
+      let name = text;
+      let provider = '';
+      const byMatch = text.match(/^(.*?)[\s-]*\bby\b\s+(.*)$/i);
+      if (byMatch) {
+        name = byMatch[1].trim();
+        provider = byMatch[2].trim();
+      } else {
+        const split = text.split(/[-–|]/);
+        if (split.length >= 2) {
+          name = split[0].trim();
+          provider = split.slice(1).join(' ').trim();
+        } else {
+          const parenMatch = text.match(/^(.*?)\s*\(([^)]+)\)$/);
+          if (parenMatch) {
+            name = parenMatch[1].trim();
+            provider = parenMatch[2].trim();
+          }
+        }
+      }
+      results.push({ name, provider, source: 'manual' });
+      return;
+    }
+    if (typeof item === 'object' && item) {
+      const name = (item.name || item.title || '').trim();
+      const provider = (item.provider || item.issuer || item.organization || '').trim();
+      if (!name && !provider) return;
+      results.push({ name, provider, source: item.source || 'manual' });
+    }
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach(pushCertificate);
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (/^\s*\[/.test(trimmed)) {
+      try {
+        const parsed = JSON5.parse(trimmed);
+        if (Array.isArray(parsed)) parsed.forEach(pushCertificate);
+      } catch (err) {
+        logStructured('warn', 'manual_certificate_json_parse_failed', {
+          error: serializeError(err),
+        });
+      }
+    } else {
+      trimmed
+        .split(/\r?\n|;/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach(pushCertificate);
+    }
+  } else if (typeof value === 'object') {
+    pushCertificate(value);
+  }
+
+  return results;
+}
+
+const COMMON_CERTIFICATIONS = [
+  { keyword: 'aws', suggestion: 'AWS Certified Solutions Architect' },
+  { keyword: 'azure', suggestion: 'Microsoft Certified: Azure Administrator Associate' },
+  { keyword: 'gcp', suggestion: 'Google Cloud Professional Cloud Architect' },
+  { keyword: 'pmp', suggestion: 'Project Management Professional (PMP)' },
+  { keyword: 'scrum', suggestion: 'Certified Scrum Master (CSM)' },
+  { keyword: 'security+', suggestion: 'CompTIA Security+' },
+  { keyword: 'cissp', suggestion: 'CISSP - Certified Information Systems Security Professional' },
+  { keyword: 'cpa', suggestion: 'Certified Public Accountant (CPA)' },
+];
+
+function dedupeCertificates(certificates = []) {
+  const seen = new Set();
+  const result = [];
+  certificates.forEach((cert = {}) => {
+    const name = (cert.name || '').trim();
+    const provider = (cert.provider || '').trim();
+    const url = (cert.url || '').trim();
+    if (!name && !provider && !url) return;
+    const key = `${name.toLowerCase()}|${provider.toLowerCase()}|${url.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push({
+      name,
+      provider,
+      url,
+      source: cert.source || 'resume',
+    });
+  });
+  return result;
+}
+
+function computeSkillGap(jobSkills = [], resumeSkills = []) {
+  const resumeSet = new Set(
+    (resumeSkills || []).map((skill) => skill.toLowerCase())
+  );
+  return (jobSkills || [])
+    .map((skill) => String(skill || '').trim())
+    .filter(Boolean)
+    .filter((skill) => !resumeSet.has(skill.toLowerCase()));
+}
+
+function suggestRelevantCertifications(jobText = '', jobSkills = [], existing = []) {
+  const normalized = jobText.toLowerCase();
+  const existingNames = new Set(
+    existing.map((cert) => (cert.name || '').toLowerCase()).filter(Boolean)
+  );
+  const skillSet = new Set((jobSkills || []).map((skill) => skill.toLowerCase()));
+  const suggestions = [];
+  for (const item of COMMON_CERTIFICATIONS) {
+    if (existingNames.has(item.suggestion.toLowerCase())) continue;
+    if (normalized.includes(item.keyword) || skillSet.has(item.keyword)) {
+      suggestions.push(item.suggestion);
+    }
+  }
+  return suggestions;
+}
+
+function extractSectionContent(resumeText = '', headingPattern) {
+  const lines = String(resumeText).split(/\r?\n/);
+  const regex =
+    headingPattern instanceof RegExp
+      ? headingPattern
+      : new RegExp(`^#\s*${headingPattern}\b`, 'i');
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (regex.test(lines[i].trim())) {
+      start = i;
+      break;
+    }
+  }
+  if (start === -1) {
+    return { heading: '', content: [], start: -1, end: -1 };
+  }
+  let end = lines.length;
+  for (let j = start + 1; j < lines.length; j++) {
+    if (/^#\s+/.test(lines[j].trim())) {
+      end = j;
+      break;
+    }
+  }
+  return {
+    heading: lines[start],
+    content: lines.slice(start + 1, end),
+    start,
+    end,
+    lines,
+  };
+}
+
+function replaceSectionContent(
+  resumeText = '',
+  headingPattern,
+  newContentLines = [],
+  { headingLabel, insertIndex = 1 } = {}
+) {
+  const lines = String(resumeText).split(/\r?\n/);
+  const regex =
+    headingPattern instanceof RegExp
+      ? headingPattern
+      : new RegExp(`^#\s*${headingPattern}\b`, 'i');
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (regex.test(lines[i].trim())) {
+      start = i;
+      break;
+    }
+  }
+
+  const sanitizedContent = newContentLines.map((line) => line.replace(/\s+$/, ''));
+
+  if (start === -1) {
+    const headingLine = `# ${headingLabel || 'Summary'}`;
+    const before = lines.slice(0, Math.min(insertIndex, lines.length));
+    const after = lines.slice(Math.min(insertIndex, lines.length));
+    const block = [headingLine, ...sanitizedContent];
+    const merged = [...before, ...block, ...after]
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
+    return merged.trim();
+  }
+
+  let end = lines.length;
+  for (let j = start + 1; j < lines.length; j++) {
+    if (/^#\s+/.test(lines[j].trim())) {
+      end = j;
+      break;
+    }
+  }
+  const before = lines.slice(0, start + 1);
+  const after = lines.slice(end);
+  const merged = [...before, ...sanitizedContent, ...after]
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+  return merged.trim();
+}
+
+const IMPROVEMENT_CONFIG = {
+  'improve-summary': {
+    title: 'Improve Summary',
+    focus:
+      'Rewrite the professional summary so it reflects the target role, emphasises quantifiable impact, and remains truthful.',
+  },
+  'add-missing-skills': {
+    title: 'Add Missing Skills',
+    focus:
+      'Blend missing or underrepresented job keywords into the skills and experience sections without duplicating existing bullets.',
+  },
+  'change-designation': {
+    title: 'Change Designation',
+    focus:
+      'Align the headline/most recent job title with the target job title while keeping chronology and responsibilities accurate.',
+  },
+  'align-experience': {
+    title: 'Align Experience',
+    focus:
+      'Elevate the most relevant accomplishments so they mirror the job description tasks and outcomes.',
+  },
+  'enhance-all': {
+    title: 'Enhance All',
+    focus:
+      'Apply every targeted enhancement—summary, skills, designation, and experience—while keeping the resume ATS-safe.',
+  },
+};
+
+function buildImprovementPrompt(type, context, instructions) {
+  const bulletLines = [];
+  if (context.jobTitle) {
+    bulletLines.push(`Target job title: ${context.jobTitle}`);
+  }
+  if (context.jobSkills?.length) {
+    bulletLines.push(`Key job skills: ${context.jobSkills.join(', ')}`);
+  }
+  if (context.missingSkills?.length) {
+    bulletLines.push(`Missing skills in resume: ${context.missingSkills.join(', ')}`);
+  }
+  if (context.knownCertificates?.length) {
+    bulletLines.push(
+      `Known certifications: ${context.knownCertificates
+        .map((c) => c.name)
+        .filter(Boolean)
+        .join(', ')}`
+    );
+  }
+  if (context.manualCertificates?.length) {
+    bulletLines.push(
+      `Manually supplied certificates: ${context.manualCertificates
+        .map((c) => c.name)
+        .filter(Boolean)
+        .join(', ')}`
+    );
+  }
+
+  const contextBlock = bulletLines.length
+    ? `Additional context:\n- ${bulletLines.join('\n- ')}`
+    : 'Additional context: none provided';
+
+  return [
+    'You are an elite ATS resume editor. Apply the requested transformation without fabricating experience.',
+    `Focus area: ${instructions}`,
+    'Rules:\n- Preserve the existing chronology, dates, and employers.\n- Keep URLs untouched.\n- Maintain bullet formatting where present.\n- Leave unrelated sections unchanged.\n- Only include information that could reasonably be inferred from the original resume.',
+    'Return ONLY valid JSON with keys: updatedResume (string), beforeExcerpt (string), afterExcerpt (string), explanation (string), confidence (0-1).',
+    contextBlock,
+    'Resume text:',
+    context.resumeText,
+    'Job description text:',
+    context.jobDescription || 'Not provided',
+  ].join('\n\n');
+}
+
+function fallbackImprovement(type, context) {
+  const resumeText = context.resumeText || '';
+  const jobTitle = context.jobTitle || '';
+  const jobSkills = context.jobSkills || [];
+  const missingSkills = context.missingSkills || [];
+  const fallbackSkills = missingSkills.length ? missingSkills : jobSkills.slice(0, 3);
+  const fallbackSkillText = summarizeList(fallbackSkills, {
+    conjunction: 'and',
+  });
+
+  const baseResult = {
+    updatedResume: resumeText,
+    beforeExcerpt: '',
+    afterExcerpt: '',
+    explanation: 'No changes applied.',
+    confidence: 0.2,
+  };
+
+  if (!resumeText) {
+    return baseResult;
+  }
+
+  if (type === 'improve-summary') {
+    const section = extractSectionContent(resumeText, /^#\s*summary/i);
+    const before = section.content.join('\n').trim();
+    const summaryLine = `Forward-looking ${jobTitle || 'professional'} with strengths in ${
+      fallbackSkillText || 'delivering measurable outcomes'
+    } and a record of translating goals into results.`;
+    const updatedResume = replaceSectionContent(resumeText, /^#\s*summary/i, [summaryLine], {
+      headingLabel: 'Summary',
+      insertIndex: 1,
+    });
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: summaryLine,
+      explanation: 'Refreshed the summary using job-aligned language.',
+      confidence: 0.35,
+    };
+  }
+
+  if (type === 'add-missing-skills') {
+    if (!fallbackSkills.length) {
+      return {
+        ...baseResult,
+        explanation: 'No missing skills detected—resume already covers the job keywords.',
+      };
+    }
+    const section = extractSectionContent(resumeText, /^#\s*skills/i);
+    const before = section.content.join('\n').trim();
+    const bullet = `- ${fallbackSkills.join(', ')}`;
+    const existing = section.content.some((line) =>
+      fallbackSkills.some((skill) => line.toLowerCase().includes(skill.toLowerCase()))
+    );
+    const newContent = existing
+      ? section.content
+      : [...section.content.filter(Boolean), bullet];
+    const updatedResume = replaceSectionContent(
+      resumeText,
+      /^#\s*skills/i,
+      newContent,
+      { headingLabel: 'Skills', insertIndex: 2 }
+    );
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: existing ? before : bullet,
+      explanation: existing
+        ? 'Skills section already covers the requested keywords.'
+        : 'Added missing job keywords into the skills section.',
+      confidence: existing ? 0.25 : 0.33,
+    };
+  }
+
+  if (type === 'change-designation') {
+    if (!jobTitle) {
+      return {
+        ...baseResult,
+        explanation: 'No job title provided to align designation.',
+      };
+    }
+    const currentTitle = context.currentTitle || context.originalTitle || '';
+    const escaped = currentTitle
+      ? currentTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      : '';
+    let updatedResume = resumeText;
+    let before = currentTitle;
+    let replaced = false;
+    if (escaped) {
+      const regex = new RegExp(escaped, 'i');
+      if (regex.test(resumeText)) {
+        updatedResume = resumeText.replace(regex, jobTitle);
+        replaced = true;
+      }
+    }
+    if (!replaced) {
+      const lines = resumeText.split(/\r?\n/);
+      if (lines.length) {
+        lines.splice(1, 0, jobTitle.toUpperCase());
+        updatedResume = lines.join('\n');
+      }
+    }
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: jobTitle,
+      explanation: 'Aligned the visible designation with the target job title.',
+      confidence: 0.3,
+    };
+  }
+
+  if (type === 'align-experience') {
+    const section = extractSectionContent(resumeText, /^#\s*(work\s+)?experience/i);
+    const headingLabel = section.heading.replace(/^#\s*/, '') || 'Work Experience';
+    const before = section.content.join('\n').trim();
+    const focusPhrase = fallbackSkillText
+      ? `${fallbackSkillText} initiatives`
+      : 'role priorities';
+    const bullet = `- Highlighted ${jobTitle || 'role'} achievements demonstrating ownership of ${focusPhrase}.`;
+    const newContent = [...section.content, bullet];
+    const updatedResume = replaceSectionContent(
+      resumeText,
+      /^#\s*(work\s+)?experience/i,
+      newContent,
+      { headingLabel }
+    );
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: bullet,
+      explanation: 'Added an accomplishment bullet that mirrors the job description focus.',
+      confidence: 0.32,
+    };
+  }
+
+  if (type === 'enhance-all') {
+    let interim = fallbackImprovement('improve-summary', context);
+    interim = fallbackImprovement('add-missing-skills', {
+      ...context,
+      resumeText: interim.updatedResume,
+    });
+    interim = fallbackImprovement('change-designation', {
+      ...context,
+      resumeText: interim.updatedResume,
+    });
+    const finalResult = fallbackImprovement('align-experience', {
+      ...context,
+      resumeText: interim.updatedResume,
+    });
+    return {
+      ...finalResult,
+      explanation: 'Applied deterministic improvements for summary, skills, designation, and experience.',
+      confidence: 0.34,
+    };
+  }
+
+  return baseResult;
+}
+
+async function runTargetedImprovement(type, context = {}) {
+  const config = IMPROVEMENT_CONFIG[type];
+  if (!config) {
+    throw new Error(`Unsupported improvement type: ${type}`);
+  }
+  const resumeText = String(context.resumeText || '').trim();
+  if (!resumeText) {
+    throw new Error('resumeText is required');
+  }
+
+  const jobDescription = String(context.jobDescription || '').trim();
+  const jobSkills = Array.isArray(context.jobSkills) ? context.jobSkills : [];
+  const resumeSkills = Array.isArray(context.resumeSkills) && context.resumeSkills.length
+    ? context.resumeSkills
+    : extractResumeSkills(resumeText);
+  const missingSkills = Array.isArray(context.missingSkills) && context.missingSkills.length
+    ? context.missingSkills
+    : computeSkillGap(jobSkills, resumeSkills);
+  const knownCertificates = Array.isArray(context.knownCertificates)
+    ? dedupeCertificates(context.knownCertificates)
+    : [];
+  const manualCertificates = Array.isArray(context.manualCertificates)
+    ? context.manualCertificates
+    : parseManualCertificates(context.manualCertificates);
+
+  const promptContext = {
+    resumeText,
+    jobDescription,
+    jobTitle: context.jobTitle || '',
+    jobSkills,
+    resumeSkills,
+    missingSkills,
+    knownCertificates,
+    manualCertificates,
+  };
+
+  try {
+    const model = await getSharedGenerativeModel();
+    if (model?.generateContent) {
+      const prompt = buildImprovementPrompt(type, promptContext, config.focus);
+      const response = await model.generateContent(prompt);
+      const parsed = parseAiJson(response?.response?.text?.());
+      if (parsed && typeof parsed === 'object') {
+        const updated = sanitizeGeneratedText(parsed.updatedResume || parsed.resume || resumeText, {});
+        const beforeExcerpt = (parsed.beforeExcerpt || '').trim();
+        const afterExcerpt = (parsed.afterExcerpt || '').trim();
+        const explanation = parsed.explanation || `Applied improvement: ${config.title}`;
+        const confidence = Number.isFinite(parsed.confidence)
+          ? clamp(parsed.confidence, 0, 1)
+          : 0.6;
+        return {
+          updatedResume: updated,
+          beforeExcerpt,
+          afterExcerpt,
+          explanation,
+          confidence,
+        };
+      }
+    }
+  } catch (err) {
+    logStructured('warn', 'targeted_improvement_ai_failed', {
+      type,
+      error: serializeError(err),
+    });
+  }
+
+  return fallbackImprovement(type, {
+    ...promptContext,
+    currentTitle: context.currentTitle,
+    originalTitle: context.originalTitle,
+  });
+}
 
 async function scrapeJobDescription(url, options = {}) {
   if (!url) throw new Error('Job description URL is required');
@@ -2852,8 +3398,48 @@ const DOCUMENT_CLASSIFIERS = [
   },
 ];
 
-function classifyDocument(text = '') {
-  const normalized = text.toLowerCase();
+async function classifyDocument(text = '') {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { isResume: false, description: 'an empty document', confidence: 0 };
+  }
+
+  if (/professional summary/i.test(trimmed) && /experience/i.test(trimmed)) {
+    return { isResume: true, description: 'a professional resume', confidence: 0.6 };
+  }
+
+  const excerpt = trimmed.slice(0, 3600);
+  try {
+    const model = await getSharedGenerativeModel();
+    if (model?.generateContent) {
+      const prompt =
+        'You are an AI document classifier. Determine whether the provided text is a curriculum vitae/resume. ' +
+        'Return ONLY valid JSON with keys: type ("resume" or "non_resume"), probableType (string describing the document if not a resume), ' +
+        'confidence (0-1), and reason (short explanation). Consider layout clues, section headings, and whether the text emphasises experience.\n\n' +
+        `Document excerpt:\n"""${excerpt}"""`;
+      const response = await model.generateContent(prompt);
+      const parsed = parseAiJson(response?.response?.text?.());
+      if (parsed && typeof parsed === 'object' && typeof parsed.type === 'string') {
+        const type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
+        const isResume = type === 'resume';
+        const confidence = Number.isFinite(parsed.confidence) ? clamp(parsed.confidence, 0, 1) : isResume ? 0.75 : 0.5;
+        const probableType = parsed.probableType || (isResume ? 'a professional resume' : 'a non-resume document');
+        const description = isResume ? 'a professional resume' : probableType;
+        return {
+          isResume,
+          description,
+          confidence,
+          reason: parsed.reason || '',
+        };
+      }
+    }
+  } catch (err) {
+    logStructured('warn', 'document_classification_ai_failed', {
+      error: serializeError(err),
+    });
+  }
+
+  const normalized = trimmed.toLowerCase();
   const words = normalized.split(/\s+/).filter(Boolean);
   const uniqueWords = new Set(words);
   const resumeSignals = [
@@ -2885,13 +3471,13 @@ function classifyDocument(text = '') {
     resumeScore += 1;
   }
 
-  const headingMatches = (text.match(/\n[A-Z][A-Z\s]{3,}\n/g) || []).length;
+  const headingMatches = (trimmed.match(/\n[A-Z][A-Z\s]{3,}\n/g) || []).length;
   if (headingMatches >= 2) {
     resumeScore += 1;
   }
 
   if (resumeScore >= 3) {
-    return { isResume: true, description: 'a professional resume' };
+    return { isResume: true, description: 'a professional resume', confidence: 0.6 };
   }
 
   for (const classifier of DOCUMENT_CLASSIFIERS) {
@@ -2900,39 +3486,60 @@ function classifyDocument(text = '') {
       0
     );
     if (count >= classifier.threshold) {
-      return { isResume: false, description: classifier.description };
+      return { isResume: false, description: classifier.description, confidence: 0.4 };
     }
   }
 
-  const lines = text
+  const lines = trimmed
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  if (!lines.length) {
-    return { isResume: false, description: 'an empty document' };
+  if (
+    /experience/i.test(trimmed) &&
+    /education/i.test(trimmed) &&
+    /skills/i.test(trimmed)
+  ) {
+    return { isResume: true, description: 'a professional resume', confidence: 0.55 };
   }
 
-  const snippet = lines[0].slice(0, 60).trim();
+  const snippet = lines[0]?.slice(0, 60).trim() || '';
   return {
     isResume: false,
-    description: snippet ? `a document starting with "${snippet}${lines[0].length > 60 ? '…' : ''}"` : 'a non-resume document',
+    description: snippet
+      ? `a document starting with "${snippet}${lines[0].length > 60 ? '…' : ''}"`
+      : 'a non-resume document',
+    confidence: 0.3,
   };
 }
 
-function isResume(text) {
-  return classifyDocument(text).isResume;
+async function isResume(text) {
+  const result = await classifyDocument(text);
+  return result.isResume;
 }
 
-function scoreStatus(score) {
-  if (score >= 85) return 'Excellent';
-  if (score >= 70) return 'Strong';
-  if (score >= 55) return 'Average';
-  return 'Needs work';
+function scoreRatingLabel(score) {
+  if (score >= 85) return 'EXCELLENT';
+  if (score >= 70) return 'GOOD';
+  return 'NEEDS IMPROVEMENT';
 }
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
+}
+
+function summarizeList(values = [], { limit = 3, conjunction = 'and' } = {}) {
+  if (!values.length) return '';
+  const unique = Array.from(new Set(values)).filter(Boolean);
+  if (!unique.length) return '';
+  if (unique.length === 1) return unique[0];
+  if (unique.length === 2) return `${unique[0]} ${conjunction} ${unique[1]}`;
+  const display = unique.slice(0, limit);
+  const remaining = unique.length - display.length;
+  if (remaining > 0) {
+    return `${display.join(', ')} and ${remaining} more`;
+  }
+  return `${display.slice(0, -1).join(', ')} ${conjunction} ${display.slice(-1)}`;
 }
 
 function buildScoreBreakdown(text = '', { jobSkills = [], resumeSkills = [] } = {}) {
@@ -2993,37 +3600,98 @@ function buildScoreBreakdown(text = '', { jobSkills = [], resumeSkills = [] } = 
   const matchRatio = normalizedJobSkills.size ? matchedSkills / normalizedJobSkills.size : 0;
   const otherScore = clamp(55 + matchRatio * 45 + Math.min(headingLines.length, 6) * 3, 50, 94);
 
+  const expectedSections = ['experience', 'education', 'skills', 'summary'];
+  const headingSet = new Set(headingLines.map((line) => line.replace(/[^a-z]/gi, '').toLowerCase()));
+  const missingHeadings = expectedSections
+    .filter((section) => !Array.from(headingSet).some((heading) => heading.includes(section)))
+    .map((heading) => heading.charAt(0).toUpperCase() + heading.slice(1));
+  const bulletRatio = lines.length ? bulletLines.length / lines.length : 0;
+
+  const layoutTip = (() => {
+    if (missingHeadings.length) {
+      return `Add clear section headers for ${summarizeList(missingHeadings)} so ATS bots can index your resume (only ${headingLines.length} heading${headingLines.length === 1 ? '' : 's'} detected).`;
+    }
+    if (bulletRatio < 0.18) {
+      return `Introduce more bullet points to highlight accomplishments—currently only ${bulletLines.length} bullet${bulletLines.length === 1 ? '' : 's'} found across ${lines.length} lines.`;
+    }
+    return 'Your structure is solid—keep the consistent headings and bullet patterns to remain searchable.';
+  })();
+
+  const atsIssues = [];
+  if (normalized.includes('table of contents')) atsIssues.push('a table of contents');
+  if (/\btable\b/.test(normalized) && /\|/.test(text)) atsIssues.push('table-like formatting');
+  if (/\bpage \d+ of \d+/i.test(text)) atsIssues.push('page number footers');
+  const atsTip = atsIssues.length
+    ? `Remove ${summarizeList(atsIssues)}—they frequently break ATS parsing engines.`
+    : 'Great job avoiding tables or decorative elements that confuse ATS parsers.';
+
+  const impactTip = (() => {
+    if (achievementLines.length >= 6) {
+      return 'Your bullets already show strong impact—keep pairing metrics with outcome-driven verbs.';
+    }
+    if (!achievementLines.length) {
+      return 'Add metrics or outcome verbs (e.g., increased, reduced) to your bullets—none of the bullet points currently show quantified results.';
+    }
+    return `Strengthen impact statements by pairing more bullets with numbers—only ${achievementLines.length} of ${bulletLines.length || 'your'} bullet${achievementLines.length === 1 ? '' : 's'} include metrics or performance verbs.`;
+  })();
+
+  const crispnessTip = (() => {
+    if (!bulletLines.length) {
+      return 'Introduce concise bullet points (8–24 words) so recruiters can skim quickly.';
+    }
+    if (avgBulletWords < 8) {
+      return `Expand key bullets beyond ${Math.round(avgBulletWords)} words to explain scope and outcomes without losing clarity.`;
+    }
+    if (avgBulletWords > 26) {
+      return `Tighten lengthy bullets—your average is ${Math.round(avgBulletWords)} words, above the ATS-friendly 18–22 word sweet spot.`;
+    }
+    return 'Bullet length is crisp and skimmable—maintain this balance while adding fresh wins as needed.';
+  })();
+
+  const missingSkillSet = jobSkills
+    .filter((skill) => !resumeSkills.some((s) => s.toLowerCase() === skill.toLowerCase()))
+    .slice(0, 6);
+  const otherTip = (() => {
+    if (missingSkillSet.length) {
+      return `Incorporate keywords such as ${summarizeList(missingSkillSet)} to mirror the job description.`;
+    }
+    if (headingLines.length < 3) {
+      return 'Consider adding supporting sections (e.g., Certifications, Tools) to give the ATS more keyword density.';
+    }
+    return 'Good alignment with the job description—keep updating certifications and tools as you gain them.';
+  })();
+
   const templates = [
     {
       category: 'Layout & Searchability',
       score: Math.round(layoutScore),
-      tip: 'Keep section headers consistent and rely on clear bullet formatting for ATS parsing.',
+      tip: layoutTip,
     },
     {
       category: 'ATS Readability',
       score: Math.round(atsScore),
-      tip: 'Avoid tables, graphics, or multi-column text that traditional parsers cannot interpret.',
+      tip: atsTip,
     },
     {
       category: 'Impact',
       score: Math.round(impactScore),
-      tip: 'Quantify achievements with numbers, percentages, and outcome-focused verbs.',
+      tip: impactTip,
     },
     {
       category: 'Crispness',
       score: Math.round(clamp(crispnessScore, 50, 95)),
-      tip: 'Keep bullet points to one or two lines and favor concise, high-energy phrases.',
+      tip: crispnessTip,
     },
     {
       category: 'Other Quality Metrics',
       score: Math.round(otherScore),
-      tip: 'Mirror the job description keywords, certifications, and tools to improve alignment.',
+      tip: otherTip,
     },
   ];
 
   return templates.map((entry) => ({
     ...entry,
-    status: scoreStatus(entry.score),
+    ratingLabel: scoreRatingLabel(entry.score),
   }));
 }
 
@@ -3354,6 +4022,95 @@ function assignJobContext(req, res, next) {
   next();
 }
 
+async function handleImprovementRequest(type, req, res) {
+  const jobId = req.jobId || createIdentifier();
+  res.locals.jobId = jobId;
+  const requestId = res.locals.requestId;
+  const logContext = { requestId, jobId, type };
+
+  const payload = req.body || {};
+  const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
+  const jobDescription = typeof payload.jobDescription === 'string' ? payload.jobDescription : '';
+
+  if (!resumeText.trim() || !jobDescription.trim()) {
+    return sendError(
+      res,
+      400,
+      'IMPROVEMENT_INPUT_REQUIRED',
+      'resumeText and jobDescription are required to generate improvements.',
+      { fields: ['resumeText', 'jobDescription'] }
+    );
+  }
+
+  const parseList = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === 'string') {
+      return value
+        .split(/[,\n;]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const jobSkills = parseList(payload.jobSkills);
+  const resumeSkills = parseList(payload.resumeSkills).length
+    ? parseList(payload.resumeSkills)
+    : extractResumeSkills(resumeText);
+  const missingSkills = parseList(payload.missingSkills).length
+    ? parseList(payload.missingSkills)
+    : computeSkillGap(jobSkills, resumeSkills);
+
+  const knownCertificates = Array.isArray(payload.knownCertificates)
+    ? dedupeCertificates(payload.knownCertificates)
+    : dedupeCertificates(parseManualCertificates(payload.knownCertificates));
+  const manualCertificates = Array.isArray(payload.manualCertificates)
+    ? payload.manualCertificates
+    : parseManualCertificates(payload.manualCertificates);
+
+  try {
+    const result = await runTargetedImprovement(type, {
+      resumeText,
+      jobDescription,
+      jobTitle: payload.jobTitle || payload.targetTitle || '',
+      currentTitle: payload.currentTitle || payload.originalTitle || '',
+      originalTitle: payload.originalTitle || '',
+      jobSkills,
+      resumeSkills,
+      missingSkills,
+      knownCertificates,
+      manualCertificates,
+    });
+    logStructured('info', 'targeted_improvement_completed', {
+      ...logContext,
+      confidence: result.confidence,
+      appliedSkills: missingSkills.length,
+    });
+    return res.json({
+      success: true,
+      type,
+      title: IMPROVEMENT_CONFIG[type]?.title || '',
+      beforeExcerpt: result.beforeExcerpt,
+      afterExcerpt: result.afterExcerpt,
+      explanation: result.explanation,
+      confidence: result.confidence,
+      updatedResume: result.updatedResume,
+      missingSkills,
+    });
+  } catch (err) {
+    logStructured('error', 'targeted_improvement_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'IMPROVEMENT_FAILED',
+      err.message || 'Failed to generate the targeted improvement.'
+    );
+  }
+}
+
 app.get('/', async (req, res) => {
   try {
     const html = await getPortalHtml();
@@ -3372,6 +4129,20 @@ app.get('/favicon.ico', (req, res) => {
 
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+const improvementRoutes = [
+  { path: '/api/improve-summary', type: 'improve-summary' },
+  { path: '/api/add-missing-skills', type: 'add-missing-skills' },
+  { path: '/api/change-designation', type: 'change-designation' },
+  { path: '/api/align-experience', type: 'align-experience' },
+  { path: '/api/enhance-all', type: 'enhance-all' },
+];
+
+improvementRoutes.forEach(({ path: routePath, type }) => {
+  app.post(routePath, assignJobContext, async (req, res) => {
+    await handleImprovementRequest(type, req, res);
+  });
 });
 
 app.post(
@@ -3518,24 +4289,30 @@ app.post(
     ...logContext,
     characters: text.length,
   });
-  const classification = classifyDocument(text);
+  const classification = await classifyDocument(text);
   logStructured('info', 'resume_classified', {
     ...logContext,
     isResume: classification.isResume,
     description: classification.description,
+    confidence: classification.confidence,
   });
   if (!classification.isResume) {
     logStructured('warn', 'resume_validation_failed', {
       ...logContext,
       reason: 'not_identified_as_resume',
       description: classification.description,
+      confidence: classification.confidence,
     });
     return sendError(
       res,
       400,
       'INVALID_RESUME_CONTENT',
       `You have uploaded ${classification.description}. Please upload a CV only.`,
-      { description: classification.description }
+      {
+        description: classification.description,
+        confidence: classification.confidence,
+        reason: classification.reason,
+      }
     );
   }
   const applicantName = extractName(text);
@@ -3698,7 +4475,21 @@ app.post(
       });
     }
 
+    const manualCertificates = parseManualCertificates(req.body.manualCertificates);
+    if (manualCertificates.length) {
+      logStructured('info', 'manual_certificates_received', {
+        ...logContext,
+        manualCount: manualCertificates.length,
+      });
+    }
+
     let credlyCertifications = [];
+    let credlyStatus = {
+      attempted: Boolean(credlyProfileUrl),
+      success: false,
+      manualEntryRequired: false,
+      message: '',
+    };
     if (credlyProfileUrl) {
       try {
         credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
@@ -3706,6 +4497,12 @@ app.post(
           ...logContext,
           certifications: credlyCertifications.length,
         });
+        credlyStatus = {
+          attempted: true,
+          success: true,
+          manualEntryRequired: false,
+          count: credlyCertifications.length,
+        };
         await logEvent({
           s3,
           bucket,
@@ -3718,6 +4515,12 @@ app.post(
           ...logContext,
           error: serializeError(err),
         });
+        credlyStatus = {
+          attempted: true,
+          success: false,
+          manualEntryRequired: err.code === 'CREDLY_AUTH_REQUIRED',
+          message: err.message,
+        };
         await logEvent({
           s3,
           bucket,
@@ -3730,6 +4533,11 @@ app.post(
       }
     }
 
+    const aggregatedCertifications = [
+      ...credlyCertifications,
+      ...manualCertificates,
+    ];
+
     const resumeExperience = extractExperience(text);
     const linkedinExperience = extractExperience(linkedinData.experience || []);
     const resumeEducation = extractEducation(text);
@@ -3739,8 +4547,23 @@ app.post(
       linkedinData.certifications || []
     );
 
+    const knownCertificates = dedupeCertificates([
+      ...resumeCertifications,
+      ...linkedinCertifications,
+      ...aggregatedCertifications,
+    ]);
+    const certificateSuggestions = suggestRelevantCertifications(
+      jobDescription,
+      jobSkills,
+      knownCertificates
+    );
+    const manualCertificatesRequired =
+      credlyStatus.manualEntryRequired && manualCertificates.length === 0;
+
     const originalTitle =
       resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
+
+    const originalResumeText = text;
 
       // Use GEMINI_API_KEY from validated runtime configuration
     const geminiApiKey = secrets.GEMINI_API_KEY;
@@ -3755,7 +4578,7 @@ app.post(
         const sectionTexts = collectSectionText(
           text,
           linkedinData,
-          credlyCertifications
+          aggregatedCertifications
         );
         const enhanced = await rewriteSectionsWithGemini(
           applicantName,
@@ -3769,7 +4592,7 @@ app.post(
             linkedinEducation,
             resumeCertifications,
             linkedinCertifications,
-            credlyCertifications,
+            credlyCertifications: aggregatedCertifications,
             credlyProfileUrl,
           }
         );
@@ -4378,6 +5201,18 @@ app.post(
       originalTitle,
       modifiedTitle: modifiedTitle || originalTitle,
       scoreBreakdown,
+      resumeText: combinedProfile,
+      originalResumeText,
+      jobDescriptionText: jobDescription,
+      jobSkills,
+      resumeSkills,
+      certificateInsights: {
+        known: knownCertificates,
+        suggestions: certificateSuggestions,
+        manualEntryRequired: manualCertificatesRequired,
+        credlyStatus,
+      },
+      manualCertificates,
     });
   } catch (err) {
     const failureMessage = describeProcessingFailure(err);
