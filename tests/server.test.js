@@ -266,24 +266,35 @@ describe('/api/process-cv', () => {
   });
 
   test('malformed AI response', async () => {
-    generateContentMock.mockResolvedValueOnce({
-      response: { text: () => 'not json' }
-    });
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: { text: () => 'not json' }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              cover_letter1: 'cover 1',
+              cover_letter2: 'cover 2'
+            })
+        }
+      });
+
     const res = await request(app)
       .post('/api/process-cv')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-    expect(res.status).toBe(500);
-    expect(res.body).toEqual({
-      success: false,
-      error: {
-        code: 'AI_RESPONSE_INVALID',
-        message: 'AI response invalid',
-        requestId: expect.any(String),
-        jobId: expect.any(String),
-      },
-    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.urls.map((u) => u.type).sort()).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'version1',
+      'version2'
+    ]);
   });
 
   test('handles code-fenced JSON with extra text', async () => {
