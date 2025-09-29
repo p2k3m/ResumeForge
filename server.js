@@ -3295,7 +3295,16 @@ app.post(
       { stage: 'extract_text' }
     );
   }
+  logStructured('info', 'resume_text_extracted', {
+    ...logContext,
+    characters: text.length,
+  });
   const classification = classifyDocument(text);
+  logStructured('info', 'resume_classified', {
+    ...logContext,
+    isResume: classification.isResume,
+    description: classification.description,
+  });
   if (!classification.isResume) {
     logStructured('warn', 'resume_validation_failed', {
       ...logContext,
@@ -3327,6 +3336,11 @@ app.post(
         ContentType: req.file.mimetype
       })
     );
+    logStructured('info', 'initial_upload_completed', {
+      ...logContext,
+      bucket,
+      key: `${prefix}${sanitizedName}${ext}`,
+    });
   } catch (e) {
     logStructured('error', 'initial_upload_failed', {
       ...logContext,
@@ -3380,6 +3394,11 @@ app.post(
     let jobDescriptionHtml;
     try {
       jobDescriptionHtml = await scrapeJobDescription(jobDescriptionUrl);
+      logStructured('info', 'job_description_fetched', {
+        ...logContext,
+        url: jobDescriptionUrl,
+        bytes: jobDescriptionHtml.length,
+      });
       await logEvent({
         s3,
         bucket,
@@ -3414,13 +3433,29 @@ app.post(
       skills: jobSkills,
       text: jobDescription
     } = analyzeJobDescription(jobDescriptionHtml);
+    logStructured('info', 'job_description_analyzed', {
+      ...logContext,
+      jobTitle,
+      jobSkills: jobSkills.length,
+    });
     const resumeSkills = extractResumeSkills(text);
     const scoreBreakdown = buildScoreBreakdown(text, { jobSkills, resumeSkills });
     const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
+    logStructured('info', 'resume_skills_analyzed', {
+      ...logContext,
+      resumeSkills: resumeSkills.length,
+      originalMatchScore: originalMatch.score,
+    });
 
     let linkedinData = {};
     try {
       linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
+      logStructured('info', 'linkedin_profile_fetched', {
+        ...logContext,
+        experience: linkedinData.experience?.length || 0,
+        education: linkedinData.education?.length || 0,
+        certifications: linkedinData.certifications?.length || 0,
+      });
       await logEvent({
         s3,
         bucket,
@@ -3429,6 +3464,10 @@ app.post(
         event: 'fetched_linkedin_profile'
       });
     } catch (err) {
+      logStructured('warn', 'linkedin_profile_fetch_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
       await logEvent({
         s3,
         bucket,
@@ -3444,6 +3483,10 @@ app.post(
     if (credlyProfileUrl) {
       try {
         credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+        logStructured('info', 'credly_profile_fetched', {
+          ...logContext,
+          certifications: credlyCertifications.length,
+        });
         await logEvent({
           s3,
           bucket,
@@ -3452,6 +3495,10 @@ app.post(
           event: 'fetched_credly_profile'
         });
       } catch (err) {
+        logStructured('warn', 'credly_profile_fetch_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
         await logEvent({
           s3,
           bucket,
@@ -3511,6 +3558,11 @@ app.post(
         projectText = enhanced.project;
         modifiedTitle = enhanced.modifiedTitle || '';
         geminiAddedSkills = enhanced.addedSkills || [];
+        logStructured('info', 'section_rewrite_completed', {
+          ...logContext,
+          modifiedTitle: modifiedTitle || '',
+          addedSkills: geminiAddedSkills.length,
+        });
       } catch (e) {
         logStructured('error', 'section_rewrite_failed', {
           ...logContext,
@@ -3777,6 +3829,10 @@ app.post(
       const coverText = coverResult.response.text();
       const parsed = parseAiJson(coverText);
       if (parsed) coverData = parsed;
+      logStructured('info', 'cover_letter_generation_completed', {
+        ...logContext,
+        variants: Object.keys(coverData).length,
+      });
     } catch (e) {
       logStructured('error', 'cover_letter_generation_failed', {
         ...logContext,
@@ -3852,7 +3908,29 @@ app.post(
         name === 'cover_letter1' || name === 'cover_letter2'
           ? relocateProfileLinks(sanitizeGeneratedText(text, options))
           : text;
-      const pdfBuffer = await generatePdf(inputText, tpl, options, generativeModel);
+      logStructured('info', 'pdf_generation_started', {
+        ...logContext,
+        documentType: name,
+        template: tpl,
+      });
+      let pdfBuffer;
+      try {
+        pdfBuffer = await generatePdf(inputText, tpl, options, generativeModel);
+      } catch (err) {
+        logStructured('error', 'pdf_generation_failed', {
+          ...logContext,
+          documentType: name,
+          template: tpl,
+          error: serializeError(err),
+        });
+        throw new Error(`PDF generation failed for ${name}`, { cause: err });
+      }
+      logStructured('info', 'pdf_generation_completed', {
+        ...logContext,
+        documentType: name,
+        template: tpl,
+        bytes: pdfBuffer.length,
+      });
       await s3.send(
         new PutObjectCommand({
           Bucket: bucket,
@@ -3861,6 +3939,11 @@ app.post(
           ContentType: 'application/pdf'
         })
       );
+      logStructured('info', 'pdf_uploaded', {
+        ...logContext,
+        documentType: name,
+        key,
+      });
       await logEvent({ s3, bucket, key: logKey, jobId, event: `uploaded_${name}_pdf` });
       const signedUrl = await getSignedUrl(
         s3,
