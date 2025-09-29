@@ -175,7 +175,11 @@ Resources:
               Action:
                 - s3:GetObject
                 - s3:PutObject
-              Resource: !Sub arn:aws:s3:::${DataBucketName}/*
+                - s3:DeleteObject
+                - s3:ListBucket
+              Resource:
+                - !Sub arn:aws:s3:::${DataBucketName}
+                - !Sub arn:aws:s3:::${DataBucketName}/*
             - Sid: AllowWafIntegration
               Effect: Allow
               Action:

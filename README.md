@@ -89,8 +89,13 @@ Minimal permissions required by the server:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
       "Resource": "arn:aws:s3:::S3_BUCKET/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::S3_BUCKET"
     },
     {
       "Effect": "Allow",
