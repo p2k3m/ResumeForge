@@ -263,7 +263,7 @@ jobs:
             fi
 
             deploy_err=$(cat "$tmp_deploy_log")
-            if echo "$deploy_err" | grep -Eqi "is in (UPDATE|DELETE)_IN_PROGRESS state and can not be updated"; then
+            if echo "$deploy_err" | grep -Eqi "is in (CREATE|UPDATE|DELETE)_IN_PROGRESS state and can not be updated"; then
               if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
                 echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
                 exit 1
