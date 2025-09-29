@@ -3651,16 +3651,51 @@ const METRIC_ACTION_VERBS = [
   'streamlined',
 ];
 
+function extractSummaryText(text = '') {
+  if (!text) return '';
+  const lines = text.split(/\r?\n/);
+  const headingPattern = /^[A-Z][A-Z0-9\s/&-]{2,}$/;
+  const summaryHeadingPattern = /^(summary|professional summary|profile|overview)$/i;
+  let collecting = false;
+  const collected = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
+    if (!collecting) {
+      if (trimmed && summaryHeadingPattern.test(trimmed)) {
+        collecting = true;
+      }
+      continue;
+    }
+    if (!trimmed) {
+      collected.push('');
+      continue;
+    }
+    const isHeading =
+      headingPattern.test(trimmed) && trimmed === trimmed.toUpperCase();
+    if (isHeading) {
+      break;
+    }
+    if (
+      /^(experience|work experience|employment history|education|skills|projects|certifications|awards|accomplishments)$/i.test(
+        trimmed
+      )
+    ) {
+      break;
+    }
+    collected.push(trimmed.replace(/\s+/g, ' '));
+  }
+  return collected.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 function analyzeResumeForMetrics(
   text = '',
   { jobText = '', jobSkills = [], resumeSkills = [] } = {}
 ) {
   const normalizedResume = text.toLowerCase();
   const normalizedJobText = (jobText || '').toLowerCase();
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const allLines = text.split(/\r?\n/);
+  const lines = allLines.map((line) => line.trim()).filter(Boolean);
   const paragraphs = text
     .split(/\n\s*\n/)
     .map((block) => block.trim())
@@ -3688,6 +3723,17 @@ function analyzeResumeForMetrics(
       .split(/\s+/)
       .filter(Boolean).length
   );
+  const longBulletLines = [];
+  const shortBulletLines = [];
+  bulletLines.forEach((line, index) => {
+    const wordCount = bulletWordCounts[index] || 0;
+    if (wordCount > 28) {
+      longBulletLines.push(line);
+    }
+    if (wordCount > 0 && wordCount < 8) {
+      shortBulletLines.push(line);
+    }
+  });
   const avgBulletWords = bulletWordCounts.length
     ? bulletWordCounts.reduce((sum, val) => sum + val, 0) / bulletWordCounts.length
     : 0;
@@ -3722,6 +3768,21 @@ function analyzeResumeForMetrics(
     new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(text)
   );
 
+  const summaryText = extractSummaryText(text);
+  const summaryKeywordHits = summaryText
+    ? Array.from(jobKeywordSet).filter((keyword) =>
+        new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(summaryText)
+      )
+    : [];
+  const summarySkillHits = summaryText
+    ? Array.from(normalizedJobSkills).filter((skill) =>
+        new RegExp(`\\b${escapeRegex(skill)}\\b`, 'i').test(summaryText)
+      )
+    : [];
+
+  const rawLineCount = allLines.length;
+  const estimatedPageCount = Math.max(1, Math.ceil(rawLineCount / 55));
+
   const nonAsciiCharacters = (text.match(/[\u2460-\u24ff\u2500-\u257f]/g) || []).length;
   const hasContactInfo =
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text) ||
@@ -3746,14 +3807,21 @@ function analyzeResumeForMetrics(
     paragraphs,
     denseParagraphs,
     achievementLines,
+    longBulletLines,
+    shortBulletLines,
     normalizedJobSkills,
     normalizedResumeSkills,
     jobKeywordSet,
     bulletKeywordHits,
     jobKeywordMatches,
+    summaryText,
+    summaryKeywordHits,
+    summarySkillHits,
     nonAsciiCharacters,
     hasContactInfo,
     summaryPresent,
+    rawLineCount,
+    estimatedPageCount,
   };
 }
 
@@ -3766,6 +3834,8 @@ function evaluateLayoutMetric(analysis) {
     lines,
     hasContactInfo,
     denseParagraphs,
+    estimatedPageCount,
+    rawLineCount,
   } = analysis;
 
   const keySections = ['experience', 'education', 'skills', 'summary'];
@@ -3784,14 +3854,19 @@ function evaluateLayoutMetric(analysis) {
     ? Math.min(0.25, denseParagraphs.length * 0.08)
     : 0;
 
+  const pagePenalty = estimatedPageCount > 2 ? Math.min(0.3, (estimatedPageCount - 2) * 0.18) : 0;
+  const lengthPenalty = rawLineCount > 130 ? Math.min(0.2, (rawLineCount - 130) * 0.003) : 0;
+
   const layoutScore =
     100 *
     clamp01(
-      headingScore * 0.25 +
-        sectionScore * 0.25 +
-        bulletScore * 0.35 +
-        contactScore * 0.15 -
-        paragraphPenalty
+      headingScore * 0.23 +
+        sectionScore * 0.24 +
+        bulletScore * 0.33 +
+        contactScore * 0.14 -
+        paragraphPenalty -
+        pagePenalty -
+        lengthPenalty
     );
 
   const missingHeadings = keySections
@@ -3818,6 +3893,16 @@ function evaluateLayoutMetric(analysis) {
   if (denseParagraphs.length) {
     layoutTips.push(
       `Break up ${denseParagraphs.length} dense paragraph${denseParagraphs.length === 1 ? '' : 's'} with bullet points so resume scanners do not skip your achievements.`
+    );
+  }
+  if (estimatedPageCount > 2) {
+    layoutTips.push(
+      `Tighten the document to two pages—ATS scoring drops once resumes stretch to ${estimatedPageCount} pages.`
+    );
+  }
+  if (rawLineCount > 130 && estimatedPageCount <= 2) {
+    layoutTips.push(
+      'Trim excess line spacing or sections so the resume stays within a quick-scan length.'
     );
   }
   if (!layoutTips.length) {
@@ -3872,15 +3957,42 @@ function evaluateAtsMetric(analysis) {
 }
 
 function evaluateImpactMetric(analysis) {
-  const { achievementLines, bulletLines, bulletKeywordHits, jobKeywordSet } = analysis;
+  const {
+    achievementLines,
+    bulletLines,
+    bulletKeywordHits,
+    jobKeywordSet,
+    summaryKeywordHits,
+    summaryPresent,
+    summarySkillHits,
+    normalizedJobSkills,
+  } = analysis;
 
   const bulletCount = bulletLines.length;
   const achievementRatio = bulletCount ? achievementLines.length / bulletCount : 0;
   const keywordHitRatio = bulletCount ? bulletKeywordHits.length / bulletCount : 0;
   const achievementVolumeScore = clamp01(achievementLines.length / Math.max(3, bulletCount * 0.6));
 
+  const summarySkillScore = normalizedJobSkills.size
+    ? clamp01(summarySkillHits.length / Math.max(1, Math.min(normalizedJobSkills.size, 6)))
+    : 0;
+  const summaryKeywordScore = jobKeywordSet.size
+    ? clamp01(
+        (summaryKeywordHits.length + summarySkillScore * Math.min(jobKeywordSet.size, 6)) /
+          Math.max(2, Math.min(jobKeywordSet.size, 12))
+      )
+    : summaryKeywordHits.length
+    ? 0.6
+    : 0;
+
   const impactScore =
-    100 * clamp01(achievementRatio * 0.5 + keywordHitRatio * 0.25 + achievementVolumeScore * 0.25);
+    100 *
+    clamp01(
+      achievementRatio * 0.45 +
+        keywordHitRatio * 0.22 +
+        achievementVolumeScore * 0.23 +
+        Math.max(summaryKeywordScore, summarySkillScore) * 0.1
+    );
 
   const impactTips = [];
   if (!achievementLines.length) {
@@ -3911,11 +4023,17 @@ function evaluateImpactMetric(analysis) {
     }
   }
 
+  if (summaryPresent && summarySkillHits.length === 0 && normalizedJobSkills.size > 0) {
+    impactTips.push(
+      'Rework your summary to echo critical job keywords so reviewers immediately see the alignment.'
+    );
+  }
+
   return createMetric('Impact', impactScore, impactTips);
 }
 
 function evaluateCrispnessMetric(analysis) {
-  const { bulletLines, avgBulletWords, fillerBullets } = analysis;
+  const { bulletLines, avgBulletWords, fillerBullets, longBulletLines, shortBulletLines } = analysis;
 
   const bulletsStartingWithVerbs = bulletLines.filter((line) =>
     METRIC_ACTION_VERBS.some((verb) =>
@@ -3934,8 +4052,16 @@ function evaluateCrispnessMetric(analysis) {
     ? bulletsStartingWithVerbs.length / bulletLines.length
     : 0;
 
+  const longBulletRatio = bulletLines.length
+    ? longBulletLines.length / bulletLines.length
+    : 0;
+  const shortBulletRatio = bulletLines.length
+    ? shortBulletLines.length / bulletLines.length
+    : 0;
+  const balanceScore = clamp01(1 - Math.min(1, longBulletRatio * 1.1 + Math.max(0, shortBulletRatio - 0.3)));
+
   const crispnessScore =
-    100 * clamp01(lengthScore * 0.45 + fillerScore * 0.3 + verbStartRatio * 0.25);
+    100 * clamp01(lengthScore * 0.3 + fillerScore * 0.25 + verbStartRatio * 0.25 + balanceScore * 0.2);
 
   const crispnessTips = [];
   if (!bulletLines.length) {
@@ -3952,6 +4078,14 @@ function evaluateCrispnessMetric(analysis) {
     crispnessTips.push(
       `Tighten lengthy bullets—your average is ${Math.round(avgBulletWords)} words, above the ATS-friendly 18–22 word sweet spot.`
     );
+  }
+  if (longBulletLines.length) {
+    crispnessTips.push(
+      `Break overly long bullets (${longBulletLines.length}) into two lines so each accomplishment pops.`
+    );
+  }
+  if (shortBulletLines.length > Math.ceil(bulletLines.length * 0.4)) {
+    crispnessTips.push('Add a bit more context to ultra-short bullets so they explain the impact.');
   }
   if (fillerBullets.length) {
     crispnessTips.push(
@@ -3977,6 +4111,10 @@ function evaluateOtherMetric(analysis) {
     achievementLines,
     bulletLines,
     text,
+    summaryKeywordHits,
+    summaryText,
+    summaryPresent,
+    summarySkillHits,
   } = analysis;
 
   let matchedSkills = 0;
@@ -3996,14 +4134,24 @@ function evaluateOtherMetric(analysis) {
     ? achievementLines.length / bulletLines.length
     : 0;
 
-  const summaryPresent = Array.from(headingSet).some((heading) =>
-    /summary|profile|overview/.test(heading)
-  );
+  const summarySkillScore = normalizedJobSkills.size
+    ? clamp01(summarySkillHits.length / Math.max(1, Math.min(normalizedJobSkills.size, 6)))
+    : 0;
+  const summaryRelevanceScore = summaryPresent
+    ? jobKeywordSet.size
+      ? clamp01((summaryKeywordHits.length + summarySkillScore * Math.min(jobKeywordSet.size, 6)) / Math.max(2, Math.min(jobKeywordSet.size, 10)))
+      : summaryText
+      ? Math.max(0.4, summarySkillScore)
+      : 0.4
+    : 0;
 
   const otherScore =
     100 *
     clamp01(
-      skillMatchRatio * 0.4 + keywordCoverage * 0.3 + impactDensity * 0.2 + (summaryPresent ? 0.1 : 0)
+      skillMatchRatio * 0.35 +
+        keywordCoverage * 0.25 +
+        impactDensity * 0.2 +
+        summaryRelevanceScore * 0.2
     );
 
   const jobSkillsArray = Array.from(normalizedJobSkills);
@@ -4031,6 +4179,11 @@ function evaluateOtherMetric(analysis) {
   if (!summaryPresent) {
     otherTips.push(
       'Add a professional summary or profile section to front-load your strongest qualifications.'
+    );
+  }
+  if (summaryPresent && summarySkillHits.length === 0 && normalizedJobSkills.size > 0) {
+    otherTips.push(
+      'Tweak your summary/headline to feature the same hard skills and themes the job description emphasizes.'
     );
   }
   if (!otherTips.length) {
