@@ -2370,84 +2370,119 @@ let generatePdf = async function (
       templateId,
       templatePath,
     });
-    const templateSource = await fs.readFile(templatePath, 'utf-8');
-    let css = '';
+    let templateSource;
     try {
-      css = await fs.readFile(path.resolve('templates', `${templateId}.css`), 'utf-8');
-    } catch {}
-    // Convert token-based data to HTML for Handlebars templates
-    const htmlData = {
-      ...data,
-      sections: data.sections.map((sec) => ({
-        ...sec,
-        items: sec.items.map((tokens) =>
-          tokens
-            .map((t, i) => {
-              const text = t.text ? escapeHtml(t.text) : '';
-              if (t.type === 'link') {
-                const next = tokens[i + 1];
-                const space = next && next.text && !/^\s/.test(next.text)
-                  ? ' '
-                  : '';
-                return `<a href="${t.href}">${text.trim()}</a>${space}`;
-              }
-              if (t.type === 'heading') {
-                return `<strong>${text}</strong>`;
-              }
-              if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
-              if (t.style === 'bold') return `<strong>${text}</strong>`;
-              if (t.style === 'italic') return `<em>${text}</em>`;
-              if (t.type === 'newline') return '<br>';
-              if (t.type === 'tab') return '<span class="tab"></span>';
-              if (t.type === 'bullet') {
-                if (sec.heading?.toLowerCase() === 'education') {
-                  return '<span class="edu-bullet">•</span> ';
-                }
-                return '<span class="bullet">•</span> ';
-              }
-              if (t.type === 'jobsep') return '';
-              return text;
-            })
-            .join('')
-        )
-      }))
-    };
-    html = Handlebars.compile(templateSource)(htmlData);
-    if (css) {
-      html = html.replace('</head>', `<style>${css}</style></head>`);
+      templateSource = await fs.readFile(templatePath, 'utf-8');
+    } catch (err) {
+      logStructured('error', 'pdf_template_load_failed', {
+        templateId,
+        templatePath,
+        error: serializeError(err),
+      });
     }
-    logStructured('debug', 'pdf_template_compiled', {
-      templateId,
-      htmlLength: html.length,
-    });
-  }
-  try {
-    const browser = await getChromiumBrowser();
-    if (browser) {
+    if (templateSource) {
+      let css = '';
       try {
-        logStructured('debug', 'pdf_chromium_render_start', {
+        css = await fs.readFile(path.resolve('templates', `${templateId}.css`), 'utf-8');
+      } catch (err) {
+        logStructured('debug', 'pdf_template_css_missing', {
           templateId,
-          requestedTemplateId,
+          cssPath: path.resolve('templates', `${templateId}.css`),
+          error: serializeError(err),
         });
-        const page = await browser.newPage();
-        await page.setContent(html, { waitUntil: 'networkidle0' });
-        const pdfBuffer = await page.pdf({
-          format: 'A4',
-          printBackground: true
-        });
-        logStructured('debug', 'pdf_chromium_render_complete', {
-          templateId,
-          requestedTemplateId,
-          bytes: pdfBuffer.length,
-        });
-        return pdfBuffer;
-      } finally {
-        await browser.close();
       }
+      // Convert token-based data to HTML for Handlebars templates
+      const htmlData = {
+        ...data,
+        sections: data.sections.map((sec) => ({
+          ...sec,
+          items: sec.items.map((tokens) =>
+            tokens
+              .map((t, i) => {
+                const text = t.text ? escapeHtml(t.text) : '';
+                if (t.type === 'link') {
+                  const next = tokens[i + 1];
+                  const space = next && next.text && !/^\s/.test(next.text)
+                    ? ' '
+                    : '';
+                  return `<a href="${t.href}">${text.trim()}</a>${space}`;
+                }
+                if (t.type === 'heading') {
+                  return `<strong>${text}</strong>`;
+                }
+                if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+                if (t.style === 'bold') return `<strong>${text}</strong>`;
+                if (t.style === 'italic') return `<em>${text}</em>`;
+                if (t.type === 'newline') return '<br>';
+                if (t.type === 'tab') return '<span class="tab"></span>';
+                if (t.type === 'bullet') {
+                  if (sec.heading?.toLowerCase() === 'education') {
+                    return '<span class="edu-bullet">•</span> ';
+                  }
+                  return '<span class="bullet">•</span> ';
+                }
+                if (t.type === 'jobsep') return '';
+                return text;
+              })
+              .join('')
+          )
+        }))
+      };
+      html = Handlebars.compile(templateSource)(htmlData);
+      if (css) {
+        html = html.replace('</head>', `<style>${css}</style></head>`);
+      }
+      logStructured('debug', 'pdf_template_compiled', {
+        templateId,
+        htmlLength: html.length,
+      });
+    } else {
+      logStructured('warn', 'pdf_template_unavailable_fallback', {
+        templateId,
+      });
     }
-  } catch (err) {
-    logStructured('error', 'chromium_pdf_generation_failed', {
-      error: serializeError(err),
+  }
+  if (html) {
+    try {
+      const browser = await getChromiumBrowser();
+      if (browser) {
+        try {
+          logStructured('debug', 'pdf_chromium_render_start', {
+            templateId,
+            requestedTemplateId,
+          });
+          const page = await browser.newPage();
+          await page.setContent(html, { waitUntil: 'networkidle0' });
+          const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true
+          });
+          logStructured('debug', 'pdf_chromium_render_complete', {
+            templateId,
+            requestedTemplateId,
+            bytes: pdfBuffer.length,
+          });
+          return pdfBuffer;
+        } finally {
+          await browser.close();
+        }
+      } else {
+        logStructured('debug', 'pdf_chromium_unavailable', {
+          templateId,
+          requestedTemplateId,
+        });
+      }
+    } catch (err) {
+      logStructured('error', 'chromium_pdf_generation_failed', {
+        templateId,
+        requestedTemplateId,
+        error: serializeError(err),
+      });
+    }
+  } else {
+    logStructured('debug', 'pdf_chromium_skipped_no_html', {
+      templateId,
+      requestedTemplateId,
     });
   }
 
@@ -2522,8 +2557,23 @@ let generatePdf = async function (
     const doc = new PDFDocument({ margin: 50 });
     const buffers = [];
     doc.on('data', (d) => buffers.push(d));
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
-    doc.on('error', reject);
+    doc.on('end', () => {
+      const result = Buffer.concat(buffers);
+      logStructured('debug', 'pdf_pdfkit_fallback_complete', {
+        templateId,
+        requestedTemplateId,
+        bytes: result.length,
+      });
+      resolve(result);
+    });
+    doc.on('error', (err) => {
+      logStructured('error', 'pdf_pdfkit_fallback_failed', {
+        templateId,
+        requestedTemplateId,
+        error: serializeError(err),
+      });
+      reject(err);
+    });
     // Optional font embedding for Roboto/Helvetica families if available
     let robotoAvailable = false;
     try {
