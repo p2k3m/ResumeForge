@@ -6,6 +6,23 @@ ResumeForge generates tailored cover letters and enhanced CV versions by combini
 ## Environment configuration
 ResumeForge now relies exclusively on environment variables for sensitive and deployment-specific configuration. The Express server validates the presence of required values at startup and fails fast if any are missing, ensuring secrets are not shipped inline with the source code. For local development you can alternatively provide a `runtime-config.json`/`runtime-config.json5` file (or set `RUNTIME_CONFIG_PATH` to point at one) in the project root or inside the `config/` directory. The loader understands JSON5, so comments and trailing commas are allowed. An example file lives at `config/runtime-config.example.json5`—copy it to `config/runtime-config.json5`, fill in the secrets, and the server will load them automatically.
 
+### Troubleshooting configuration errors
+
+If the portal immediately displays **“Processing failed”** when you click **Evaluate me against the JD**, the backend has rejected the request because mandatory configuration is missing. The API now responds with a descriptive message such as:
+
+```
+ResumeForge is missing required configuration values: S3_BUCKET, GEMINI_API_KEY. Set them via environment variables or config/runtime-config.json5.
+```
+
+To resolve the error, either export the required environment variables before starting the server:
+
+```bash
+export S3_BUCKET="<your-s3-bucket>"
+export GEMINI_API_KEY="<your-gemini-api-key>"
+```
+
+or copy `config/runtime-config.example.json5` to `config/runtime-config.json5` and populate the missing fields. Restart the server afterwards so the updated configuration is loaded.
+
 The runtime looks for the following keys:
 
 ```json
