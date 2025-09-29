@@ -97,11 +97,27 @@ function App() {
         let message = 'Request failed'
         try {
           const data = await response.json()
-          message = data.error || data.message || message
+          const apiMessage =
+            (typeof data?.error === 'string' && data.error) ||
+            data?.error?.message ||
+            data?.message
+          if (apiMessage) {
+            message = apiMessage
+          }
+          if (data?.error?.code && data?.error?.code !== 'PROCESSING_FAILED') {
+            message = `${message} (${data.error.code})`
+          }
         } catch {
-          const text = await response.text()
-          message = text || message
+          try {
+            const text = await response.text()
+            if (text) message = text
+          } catch {}
         }
+        console.error('Resume processing request failed', {
+          status: response.status,
+          statusText: response.statusText,
+          message,
+        })
         throw new Error(message)
       }
 
@@ -131,6 +147,7 @@ function App() {
         modifiedTitle: data.modifiedTitle || ''
       })
     } catch (err) {
+      console.error('Unable to enhance CV', err)
       setError(err.message || 'Something went wrong. Please try again.')
     } finally {
       setIsProcessing(false)
