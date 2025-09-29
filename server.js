@@ -3521,7 +3521,19 @@ async function isResume(text) {
 function scoreRatingLabel(score) {
   if (score >= 85) return 'EXCELLENT';
   if (score >= 70) return 'GOOD';
-  return 'NEEDS IMPROVEMENT';
+  return 'NEEDS_IMPROVEMENT';
+}
+
+function createMetric(category, score, tips = []) {
+  const roundedScore = Math.round(score);
+  const rating = scoreRatingLabel(roundedScore);
+  return {
+    category,
+    score: roundedScore,
+    rating,
+    ratingLabel: rating,
+    tips,
+  };
 }
 
 function clamp(value, min, max) {
@@ -3838,36 +3850,12 @@ function buildScoreBreakdown(
     );
   }
 
-  const layout = {
-    category: 'Layout & Searchability',
-    score: Math.round(layoutScore),
-    ratingLabel: scoreRatingLabel(Math.round(layoutScore)),
-    tips: layoutTips,
-  };
-  const ats = {
-    category: 'ATS Readability',
-    score: Math.round(atsScore),
-    ratingLabel: scoreRatingLabel(Math.round(atsScore)),
-    tips: atsTips,
-  };
-  const impact = {
-    category: 'Impact',
-    score: Math.round(impactScore),
-    ratingLabel: scoreRatingLabel(Math.round(impactScore)),
-    tips: impactTips,
-  };
-  const crispness = {
-    category: 'Crispness',
-    score: Math.round(clamp(crispnessScore, 40, 96)),
-    ratingLabel: scoreRatingLabel(Math.round(clamp(crispnessScore, 40, 96))),
-    tips: crispnessTips,
-  };
-  const other = {
-    category: 'Other Quality Metrics',
-    score: Math.round(otherScore),
-    ratingLabel: scoreRatingLabel(Math.round(otherScore)),
-    tips: otherTips,
-  };
+  const layout = createMetric('Layout & Searchability', layoutScore, layoutTips);
+  const ats = createMetric('ATS Readability', atsScore, atsTips);
+  const impact = createMetric('Impact', impactScore, impactTips);
+  const finalCrispnessScore = clamp(crispnessScore, 40, 96);
+  const crispness = createMetric('Crispness', finalCrispnessScore, crispnessTips);
+  const other = createMetric('Other Quality Metrics', otherScore, otherTips);
 
   return {
     layoutSearchability: layout,

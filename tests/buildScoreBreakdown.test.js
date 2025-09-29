@@ -25,30 +25,35 @@ describe('buildScoreBreakdown', () => {
         layoutSearchability: expect.objectContaining({
           category: 'Layout & Searchability',
           score: expect.any(Number),
+          rating: expect.any(String),
           ratingLabel: expect.any(String),
           tips: expect.arrayContaining([expect.any(String)]),
         }),
         atsReadability: expect.objectContaining({
           category: 'ATS Readability',
           score: expect.any(Number),
+          rating: expect.any(String),
           ratingLabel: expect.any(String),
           tips: expect.arrayContaining([expect.any(String)]),
         }),
         impact: expect.objectContaining({
           category: 'Impact',
           score: expect.any(Number),
+          rating: expect.any(String),
           ratingLabel: expect.any(String),
           tips: expect.arrayContaining([expect.any(String)]),
         }),
         crispness: expect.objectContaining({
           category: 'Crispness',
           score: expect.any(Number),
+          rating: expect.any(String),
           ratingLabel: expect.any(String),
           tips: expect.arrayContaining([expect.any(String)]),
         }),
         otherQuality: expect.objectContaining({
           category: 'Other Quality Metrics',
           score: expect.any(Number),
+          rating: expect.any(String),
           ratingLabel: expect.any(String),
           tips: expect.arrayContaining([expect.any(String)]),
         }),
@@ -78,6 +83,9 @@ describe('buildScoreBreakdown', () => {
     expect(good.impact.score).toBeGreaterThan(bad.impact.score);
     expect(good.otherQuality.score).toBeGreaterThan(bad.otherQuality.score);
     expect(good.atsReadability.score).toBeGreaterThanOrEqual(bad.atsReadability.score);
+    Object.values(good).forEach((metric) => {
+      expect(metric.ratingLabel).toBe(metric.rating);
+    });
   });
 
   test('crispness penalizes rambling bullets and filler language', () => {
@@ -96,6 +104,25 @@ describe('buildScoreBreakdown', () => {
     expect(strong.crispness.score).toBeGreaterThan(rambling.crispness.score);
     expect(
       rambling.crispness.tips.some((tip) => tip.toLowerCase().includes('tighten') || tip.toLowerCase().includes('responsible'))
+    ).toBe(true);
+  });
+
+  test('ratings surface needs improvement on weak resumes', () => {
+    const breakdown = buildScoreBreakdown(weakResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['Microsoft Office', 'Communication'],
+    });
+
+    const allowedRatings = ['EXCELLENT', 'GOOD', 'NEEDS_IMPROVEMENT'];
+    Object.values(breakdown).forEach((metric) => {
+      expect(allowedRatings).toContain(metric.rating);
+      expect(metric.ratingLabel).toBe(metric.rating);
+      expect(metric.tips.length).toBeGreaterThan(0);
+    });
+
+    expect(
+      Object.values(breakdown).some((metric) => metric.rating === 'NEEDS_IMPROVEMENT')
     ).toBe(true);
   });
 });
