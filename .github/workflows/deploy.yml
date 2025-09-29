@@ -237,6 +237,7 @@ jobs:
 
           max_deploy_attempts=5
           deploy_attempt=1
+          deploy_succeeded=false
           while [ "$deploy_attempt" -le "$max_deploy_attempts" ]; do
             echo "Starting sam deploy attempt $deploy_attempt of $max_deploy_attempts"
             : >"$tmp_deploy_err"
@@ -257,6 +258,7 @@ jobs:
                   CreateResumeTable="$create_resume_table" \
                 2> >(tee "$tmp_deploy_err" >&2); then
               echo "sam deploy completed successfully on attempt $deploy_attempt"
+              deploy_succeeded=true
               break
             fi
 
@@ -290,9 +292,30 @@ jobs:
               continue
             fi
 
+            : >"$tmp_err"
+            if echo "$deploy_err" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
+              echo "sam deploy failed because the stack entered a rollback-complete state. Deleting stack '$STACK_NAME' before retrying..."
+              aws cloudformation delete-stack --stack-name "$STACK_NAME"
+              if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                echo "Stack deletion complete. Retrying deployment from a clean slate."
+              else
+                delete_err=$(cat "$tmp_err")
+                echo "Failed to delete stack after rollback: $delete_err" >&2
+                exit 1
+              fi
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
             echo "$deploy_err" >&2
             exit 1
           done
+
+          if [ "$deploy_succeeded" != "true" ]; then
+            echo "sam deploy failed after $max_deploy_attempts attempts." >&2
+            exit 1
+          fi
 
       - name: Publish deployment URLs
         id: deployment_urls
