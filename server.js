@@ -454,6 +454,39 @@ function describeConfigurationError(err) {
   return message;
 }
 
+function describeProcessingFailure(err) {
+  if (!err) {
+    return 'Processing failed. Check the server logs for additional details.';
+  }
+
+  const collectMessages = (value) => {
+    const messages = [];
+    let current = value;
+    const seen = new Set();
+    while (current && typeof current === 'object' && !seen.has(current)) {
+      seen.add(current);
+      const message = typeof current.message === 'string' ? current.message.trim() : '';
+      if (message && !messages.includes(message)) {
+        messages.push(message);
+      }
+      current = current.cause;
+    }
+    return messages;
+  };
+
+  const messages = collectMessages(err);
+  if (!messages.length) {
+    return 'Processing failed. Please try again later.';
+  }
+
+  const meaningful = messages.find((msg) => !/^processing failed$/i.test(msg));
+  const summary = meaningful || messages[0];
+  if (/^processing failed$/i.test(summary)) {
+    return 'Processing failed. Please try again later.';
+  }
+  return `Processing failed: ${summary}`;
+}
+
 function buildRuntimeConfig() {
   const fileConfig = (() => {
     try {
@@ -3896,13 +3929,23 @@ app.post(
       scoreBreakdown,
     });
   } catch (err) {
+    const failureMessage = describeProcessingFailure(err);
     logStructured('error', 'process_cv_failed', {
       ...logContext,
       error: serializeError(err),
+      failureMessage,
     });
     if (bucket) {
       try {
-        await logEvent({ s3, bucket, key: logKey, jobId, event: 'error', level: 'error', message: err.message });
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'error',
+          level: 'error',
+          message: failureMessage,
+        });
       } catch (e) {
         logStructured('error', 's3_log_failure', {
           ...logContext,
@@ -3910,7 +3953,18 @@ app.post(
         });
       }
     }
-    return sendError(res, 500, 'PROCESSING_FAILED', 'processing failed');
+    const details = {};
+    if (err?.code) details.code = err.code;
+    if (err?.message && err.message !== failureMessage) {
+      details.reason = err.message;
+    }
+    return sendError(
+      res,
+      500,
+      'PROCESSING_FAILED',
+      failureMessage,
+      Object.keys(details).length ? details : undefined
+    );
   }
 });
 
