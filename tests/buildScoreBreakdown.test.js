@@ -14,6 +14,17 @@ const wordyResume = `John Smith\n\nSUMMARY\nExperienced engineer.\n\nEXPERIENCE\
 
 const denseParagraphResume = `JANE DOE\n\nSUMMARY\n${'Built scalable systems and collaborated with partners. '.repeat(20)}\n\nEXPERIENCE\nSenior Software Engineer at Growth Labs (2019 - Present)\n${'Led initiatives across cross-functional squads to optimize deployment and coaching processes while partnering with stakeholders to deliver measurable results. '.repeat(12)}\n\nEDUCATION\nB.S. Computer Science, University of Example\n\nSKILLS\nReact, Node.js, TypeScript, Leadership, Optimization, AWS`;
 
+const multiPageResume =
+  'JANE DOE\n\nSUMMARY\nSeasoned leader.\n\nEXPERIENCE\n' +
+  Array.from({ length: 180 })
+    .map((_, idx) => `- Delivered initiative ${idx + 1} with cross-functional partners across regions.`)
+    .join('\n') +
+  '\n\nEDUCATION\nState University\n\nSKILLS\nReact, Node.js, TypeScript';
+
+const summaryNoKeywordsResume = `John Smith\n\nSUMMARY\nExperienced engineer delivering results for stakeholders.\n\nEXPERIENCE\nWorked on software stuff\nResponsible for various duties\n\nEDUCATION\nCollege\n\nSKILLS\nMicrosoft Office, Communication`;
+
+const summaryKeywordResume = `John Smith\n\nSUMMARY\nExperienced engineer leading React and Node.js optimization initiatives in the cloud.\n\nEXPERIENCE\nWorked on software stuff\nResponsible for various duties\n\nEDUCATION\nCollege\n\nSKILLS\nReact, Node.js, Communication`;
+
 describe('buildScoreBreakdown', () => {
   test('returns structured metrics with actionable tips', () => {
     const breakdown = buildScoreBreakdown(strongResume, {
@@ -208,5 +219,44 @@ describe('buildScoreBreakdown', () => {
 
     expect(dense.layoutSearchability.score).toBeLessThan(structured.layoutSearchability.score);
     expect(dense.layoutSearchability.tips.some((tip) => tip.toLowerCase().includes('paragraph'))).toBe(true);
+  });
+
+  test('layout flags overly long resumes and suggests trimming pages', () => {
+    const shortForm = buildScoreBreakdown(strongResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    const longForm = buildScoreBreakdown(multiPageResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript'],
+    });
+
+    expect(longForm.layoutSearchability.score).toBeLessThan(shortForm.layoutSearchability.score);
+    expect(longForm.layoutSearchability.tips.some((tip) => tip.toLowerCase().includes('page'))).toBe(true);
+  });
+
+  test('summary alignment with job keywords improves impact and other metrics', () => {
+    const genericSummary = buildScoreBreakdown(summaryNoKeywordsResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['Microsoft Office', 'Communication'],
+    });
+
+    const keywordSummary = buildScoreBreakdown(summaryKeywordResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'Communication'],
+    });
+
+    expect(keywordSummary.impact.score).toBeGreaterThanOrEqual(genericSummary.impact.score);
+    expect(keywordSummary.otherQuality.score).toBeGreaterThan(genericSummary.otherQuality.score);
+    expect(
+      genericSummary.otherQuality.tips.some((tip) =>
+        tip.toLowerCase().includes('summary') || tip.toLowerCase().includes('headline')
+      )
+    ).toBe(true);
   });
 });
