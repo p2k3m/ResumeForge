@@ -2312,20 +2312,40 @@ let generatePdf = async function (
       sectionCount: data.sections.length,
     });
     try {
-      return await renderTemplatePdf(requestedTemplateId, {
+      const pdfBuffer = await renderTemplatePdf(requestedTemplateId, {
         data,
         rawText: text,
         options: { ...options },
         templateParams,
         templateId
       });
+      logStructured('info', 'pdf_renderer_completed', {
+        templateId,
+        requestedTemplateId,
+        bytes: pdfBuffer.length,
+      });
+      return pdfBuffer;
     } catch (err) {
       logStructured('error', 'pdf_renderer_failed', {
         templateId,
         requestedTemplateId,
         error: serializeError(err),
       });
-      throw err;
+      if (err?.code === 'PDF_LIB_MISSING') {
+        logStructured('warn', 'pdf_renderer_dependency_missing', {
+          templateId,
+          requestedTemplateId,
+          dependency: 'pdf-lib',
+        });
+        canonicalTemplateId = 'modern';
+        templateId = 'modern';
+        logStructured('info', 'pdf_template_fallback_applied', {
+          requestedTemplateId,
+          fallbackTemplateId: templateId,
+        });
+      } else {
+        throw err;
+      }
     }
   }
   let html;
