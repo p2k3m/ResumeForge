@@ -75,7 +75,13 @@ async function runEsbuild() {
     banner: {
       js: [
         "import { createRequire as __createRequire } from 'module';",
+        "import { fileURLToPath as __fileURLToPath } from 'url';",
+        "import path from 'path';",
         "const require = __createRequire(import.meta.url);",
+        "const __filename = __fileURLToPath(import.meta.url);",
+        "const __dirname = path.dirname(__filename);",
+        "globalThis.__filename = globalThis.__filename || __filename;",
+        "globalThis.__dirname = globalThis.__dirname || __dirname;",
       ].join('\n'),
     },
   })
