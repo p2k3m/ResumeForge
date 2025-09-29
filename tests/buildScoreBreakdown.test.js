@@ -125,4 +125,27 @@ describe('buildScoreBreakdown', () => {
       Object.values(breakdown).some((metric) => metric.rating === 'NEEDS_IMPROVEMENT')
     ).toBe(true);
   });
+
+  test('other quality metric reacts to missing and added keywords', () => {
+    const bare = buildScoreBreakdown(weakResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['Microsoft Office'],
+    });
+
+    const improvedResume = `${weakResume}\n\nSUMMARY\nSeasoned engineer building measurable outcomes.\nSKILLS\nReact, Node.js, TypeScript, Leadership, Optimization, Cloud`;
+    const improved = buildScoreBreakdown(improvedResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'Cloud'],
+    });
+
+    expect(improved.otherQuality.score).toBeGreaterThan(bare.otherQuality.score);
+    expect(
+      bare.otherQuality.tips.some((tip) =>
+        tip.toLowerCase().includes('keyword') || tip.toLowerCase().includes('summary')
+      )
+    ).toBe(true);
+    expect(improved.otherQuality.tips.length).toBeGreaterThan(0);
+  });
 });
