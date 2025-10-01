@@ -373,7 +373,13 @@ function App() {
       const breakdownArray = Array.isArray(data.scoreBreakdown)
         ? data.scoreBreakdown
         : Object.values(data.scoreBreakdown || {})
-      setScoreBreakdown(breakdownArray)
+      const normalizedBreakdown = breakdownArray
+        .filter(Boolean)
+        .map((metric) => ({
+          ...metric,
+          tip: metric?.tip ?? metric?.tips?.[0] ?? '',
+        }))
+      setScoreBreakdown(normalizedBreakdown)
       setResumeText(data.resumeText || '')
       setJobDescriptionText(data.jobDescriptionText || '')
       setJobSkills(data.jobSkills || [])

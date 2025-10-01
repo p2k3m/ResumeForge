@@ -6,11 +6,36 @@ import ATSScoreDashboard from '../ATSScoreDashboard.jsx'
 
 describe('ATSScoreDashboard', () => {
   const metrics = [
-    { category: 'Keyword Match', score: 82, ratingLabel: 'Excellent', tip: 'Optimise your summary to mirror the JD headline.' },
-    { category: 'Skills Coverage', score: 76, ratingLabel: 'Good', tip: 'Blend missing keywords into experience bullets.' },
-    { category: 'Format Compliance', score: 91, ratingLabel: 'Excellent', tip: 'Keep headings concise for ATS parsing.' },
-    { category: 'Readability', score: 70, ratingLabel: 'Good', tip: 'Shorten longer paragraphs into high-impact bullets.' },
-    { category: 'Experience Alignment', score: 65, ratingLabel: 'Needs Improvement', tip: 'Lead with quantified outcomes tied to job priorities.' }
+    {
+      category: 'Keyword Match',
+      score: 82,
+      ratingLabel: 'Excellent',
+      tips: ['Optimise your summary to mirror the JD headline.'],
+    },
+    {
+      category: 'Skills Coverage',
+      score: 76,
+      ratingLabel: 'Good',
+      tips: ['Blend missing keywords into experience bullets.'],
+    },
+    {
+      category: 'Format Compliance',
+      score: 91,
+      ratingLabel: 'Excellent',
+      tips: ['Keep headings concise for ATS parsing.'],
+    },
+    {
+      category: 'Readability',
+      score: 70,
+      ratingLabel: 'Good',
+      tips: ['Shorten longer paragraphs into high-impact bullets.'],
+    },
+    {
+      category: 'Experience Alignment',
+      score: 65,
+      ratingLabel: 'Needs Improvement',
+      tips: ['Lead with quantified outcomes tied to job priorities.'],
+    }
   ]
 
   const match = {
