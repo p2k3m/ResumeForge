@@ -1182,10 +1182,12 @@ async function fetchCredlyProfile(url) {
       const nameMatch = block.match(/class=["'][^"']*badge-name[^"']*["'][^>]*>(.*?)<\/span>/i);
       const providerMatch = block.match(/class=["'][^"']*(?:issuer-name|org|organization)[^"']*["'][^>]*>(.*?)<\/span>/i);
       const urlMatch = block.match(/<a[^>]*href=["']([^"']+)["']/i);
+      let url = urlMatch ? strip(urlMatch[1]) : '';
+      url = normalizeUrl(url);
       badges.push({
         name: nameMatch ? strip(nameMatch[1]) : '',
         provider: providerMatch ? strip(providerMatch[1]) : '',
-        url: urlMatch ? strip(urlMatch[1]) : '',
+        url,
         source: 'credly'
       });
     }
@@ -2630,6 +2632,27 @@ function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
   return parts.join('\n');
 }
 
+function stripUrlPunctuation(url = '') {
+  let trimmed = String(url || '').trim();
+  trimmed = trimmed.replace(/^[\[({<]+/, '');
+  while (/[)>.,;:!]+$/.test(trimmed)) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return trimmed;
+}
+
+function normalizeUrl(url = '') {
+  let trimmed = stripUrlPunctuation(url);
+  if (!trimmed) return '';
+  if (/^(?:https?|mailto|tel):/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  if (trimmed.startsWith('/')) return `https://www.credly.com${trimmed}`;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  if (/^(?:[a-z0-9.-]*\.)?linkedin\.com/i.test(trimmed)) return `https://${trimmed}`;
+  if (/^(?:[a-z0-9.-]*\.)?credly\.com/i.test(trimmed)) return `https://${trimmed}`;
+  return trimmed;
+}
+
 function parseLine(text) {
   let bullet = false;
   text = text.replace(/^[\-*–]\s+/, () => {
@@ -2650,7 +2673,8 @@ function parseLine(text) {
         tokens.push({ type: 'tab' });
         continue;
       }
-      const linkRegex = /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+)/g;
+      const linkRegex =
+        /\[([^\]]+)\]\((https?:\/\/\S+?)\)|(https?:\/\/\S+|(?:www\.)?(?:[a-z0-9.-]*linkedin\.com|credly\.com)\S*)/gi;
       let lastIndex = 0;
       let match;
 
@@ -2673,8 +2697,12 @@ function parseLine(text) {
           flushSegment(segment);
         }
         if (match[1] && match[2]) {
-          let href = match[2];
-          if (href.endsWith(')')) href = href.slice(0, -1);
+          const href = normalizeUrl(match[2]);
+          if (!href) {
+            flushSegment(match[0]);
+            lastIndex = linkRegex.lastIndex;
+            continue;
+          }
           tokens.push({
             type: 'link',
             text: match[1].replace(/[*_]/g, ''),
@@ -2683,15 +2711,31 @@ function parseLine(text) {
             ...(forceBold ? { style: 'bold' } : {})
           });
         } else if (match[3]) {
-          let href = match[3];
-          if (href.endsWith(')')) href = href.slice(0, -1);
-          const domainMap = { 'linkedin.com': 'LinkedIn', 'github.com': 'GitHub' };
-          let label = href;
+          let raw = match[3];
+          let trailing = '';
+          while (/[)>.,;:]+$/.test(raw)) {
+            trailing = raw.slice(-1) + trailing;
+            raw = raw.slice(0, -1);
+          }
+          const href = normalizeUrl(raw);
+          if (!href) {
+            flushSegment(match[0]);
+            lastIndex = linkRegex.lastIndex;
+            continue;
+          }
+          const domainMap = {
+            'linkedin.com': 'LinkedIn',
+            'github.com': 'GitHub',
+            'credly.com': 'Credly'
+          };
+          let label = raw;
           try {
             const hostname = new URL(href).hostname.replace(/^www\./, '');
             label = domainMap[hostname] || href;
           } catch {
-            label = href;
+            if (/linkedin\.com/i.test(href)) label = 'LinkedIn';
+            else if (/credly\.com/i.test(href)) label = 'Credly';
+            else label = href;
           }
           tokens.push({
             type: 'link',
@@ -2700,6 +2744,9 @@ function parseLine(text) {
             continued: true,
             ...(forceBold ? { style: 'bold' } : {})
           });
+          if (trailing) {
+            flushSegment(trailing);
+          }
         }
         if (piece[linkRegex.lastIndex] === ')') linkRegex.lastIndex++;
         lastIndex = linkRegex.lastIndex;
@@ -3049,7 +3096,7 @@ function ensureRequiredSections(
       .join('|');
     if (!(cert.name || cert.provider) || seenCerts.has(key)) return;
     seenCerts.add(key);
-    deduped.push(cert);
+    deduped.push({ ...cert, url: normalizeUrl(cert.url) });
   });
 
   const getCertDate = (cert = {}) =>
@@ -3071,18 +3118,20 @@ function ensureRequiredSections(
     const text = cert.provider
       ? `${cert.name} - ${cert.provider}`
       : cert.name;
-    tokens.push({ type: 'link', text, href: cert.url });
+    const href = normalizeUrl(cert.url);
+    tokens.push({ type: 'link', text, href });
     return tokens;
   });
 
-  if (credlyProfileUrl) {
+  const normalizedCredlyProfileUrl = normalizeUrl(credlyProfileUrl);
+  if (normalizedCredlyProfileUrl) {
     const alreadyHasProfile = certItems.some((item) =>
-      item.some((t) => t.type === 'link' && t.href === credlyProfileUrl)
+      item.some((t) => t.type === 'link' && t.href === normalizedCredlyProfileUrl)
     );
     if (!alreadyHasProfile) {
       certItems.push([
         { type: 'bullet' },
-        { type: 'link', text: 'Credly Profile', href: credlyProfileUrl },
+        { type: 'link', text: 'Credly Profile', href: normalizedCredlyProfileUrl },
       ]);
     }
   }
@@ -5445,9 +5494,14 @@ function extractCertifications(source) {
   if (!source) return [];
 
   const parseEntry = (text = '') => {
-    const urlMatch = text.match(/https?:\/\/\S+/);
-    const url = urlMatch ? urlMatch[0] : '';
-    if (url) text = text.replace(url, '').trim();
+    const urlMatch = text.match(
+      /(https?:\/\/\S+|www\.\S+|(?:[a-z0-9.-]*linkedin\.com|credly\.com)\S*)/i
+    );
+    let url = '';
+    if (urlMatch) {
+      url = normalizeUrl(urlMatch[0]);
+      text = text.replace(urlMatch[0], '').trim();
+    }
 
     let name = '';
     let provider = '';
@@ -5485,6 +5539,7 @@ function extractCertifications(source) {
         );
         if (found) url = found;
       }
+      url = normalizeUrl(url);
       if (url || name || provider) return { name, provider, url };
       return parseEntry(String(item));
     });

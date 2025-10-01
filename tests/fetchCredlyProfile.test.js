@@ -36,6 +36,26 @@ describe('fetchCredlyProfile', () => {
     ]);
   });
 
+  test('normalizes relative badge URLs', async () => {
+    const html = `
+      <div class="badge">
+        <a href="/badges/aws-dev"><span class="badge-name">AWS Certified Developer</span></a>
+        <span class="issuer-name">Amazon</span>
+        <span class="badge-status">Active</span>
+      </div>
+    `;
+    mockGet.mockResolvedValueOnce({ data: html });
+    const certs = await fetchCredlyProfile('http://example.com');
+    expect(certs).toEqual([
+      {
+        name: 'AWS Certified Developer',
+        provider: 'Amazon',
+        url: 'https://www.credly.com/badges/aws-dev',
+        source: 'credly'
+      }
+    ]);
+  });
+
   test('integrates with ensureRequiredSections to render certification hyperlink and profile link', async () => {
     const html = `
       <div class="badge">
