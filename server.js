@@ -1687,8 +1687,72 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
     confidence: result.confidence,
   };
 
-  if (!safeOriginal || type === 'enhance-all') {
+  if (!safeOriginal) {
     return baseResult;
+  }
+
+  if (type === 'enhance-all') {
+    let workingResume = safeOriginal;
+    const beforeSnippets = [];
+    const afterSnippets = [];
+
+    const trackChange = (sectionResult = {}) => {
+      const nextResume = sectionResult.updatedResume || workingResume;
+      if (nextResume !== workingResume) {
+        const before = (sectionResult.beforeExcerpt || '').trim();
+        const after = (sectionResult.afterExcerpt || '').trim();
+        if (before) beforeSnippets.push(before);
+        if (after) afterSnippets.push(after);
+        workingResume = nextResume;
+      }
+    };
+
+    trackChange(
+      applySectionUpdate(workingResume, baseResult.updatedResume, {
+        pattern: /^#\s*summary/i,
+        defaultLabel: 'Summary',
+        insertIndex: 1,
+      })
+    );
+
+    trackChange(
+      applySectionUpdate(workingResume, baseResult.updatedResume, {
+        pattern: /^#\s*skills/i,
+        defaultLabel: 'Skills',
+        insertIndex: 2,
+      })
+    );
+
+    trackChange(
+      applySectionUpdate(workingResume, baseResult.updatedResume, {
+        pattern: /^#\s*(work\s+)?experience/i,
+        defaultLabel: 'Work Experience',
+      })
+    );
+
+    trackChange(
+      applyDesignationUpdate(
+        workingResume,
+        baseResult.updatedResume,
+        context
+      )
+    );
+
+    const combinedBefore = [baseResult.beforeExcerpt, ...beforeSnippets]
+      .map((snippet) => (snippet || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+    const combinedAfter = [baseResult.afterExcerpt, ...afterSnippets]
+      .map((snippet) => (snippet || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+
+    return {
+      ...baseResult,
+      updatedResume: workingResume,
+      beforeExcerpt: combinedBefore || baseResult.beforeExcerpt || '',
+      afterExcerpt: combinedAfter || baseResult.afterExcerpt || '',
+    };
   }
 
   if (!baseResult.updatedResume) {
