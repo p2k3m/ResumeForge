@@ -5732,7 +5732,7 @@ app.post(
           res,
           400,
           'JOB_DESCRIPTION_FETCH_FAILED',
-          'Unable to fetch JD from this URL. Please paste the full job description below.',
+          'Unable to fetch JD from this URL. Please paste full job description below.',
           { url: jobDescriptionUrl, manualInputRequired: true }
         );
       }

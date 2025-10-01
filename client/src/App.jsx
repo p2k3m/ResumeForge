@@ -608,7 +608,7 @@ function App() {
                 />
                 {manualJobDescriptionRequired ? (
                   <p className="text-xs font-semibold text-rose-600">
-                    Unable to fetch the JD from the provided link. Paste the description here to continue.
+                    Unable to fetch JD from this URL. Please paste full job description below.
                   </p>
                 ) : (
                   <p className="text-xs text-purple-500">
