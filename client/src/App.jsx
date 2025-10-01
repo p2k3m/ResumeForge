@@ -257,7 +257,7 @@ function getApiBaseCandidate() {
   return ''
 }
 
-function ImprovementCard({ suggestion, onAccept, onReject }) {
+function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
   return (
     <div className="rounded-xl bg-white/80 backdrop-blur border border-purple-200/60 shadow p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
@@ -291,6 +291,13 @@ function ImprovementCard({ suggestion, onAccept, onReject }) {
         </div>
       </div>
       <div className="flex flex-wrap gap-3 justify-end pt-2">
+        <button
+          type="button"
+          onClick={onPreview}
+          className="px-4 py-2 rounded-full text-sm font-medium border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+        >
+          Preview Update
+        </button>
         <button
           type="button"
           onClick={onReject}
@@ -336,10 +343,73 @@ function App() {
   const [error, setError] = useState('')
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
+  const [previewSuggestion, setPreviewSuggestion] = useState(null)
   const improvementLockRef = useRef(false)
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
+
+  useEffect(() => {
+    if (!previewSuggestion || typeof window === 'undefined') {
+      return undefined
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setPreviewSuggestion(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [previewSuggestion])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    const isDevEnvironment =
+      typeof import.meta !== 'undefined' &&
+      import.meta.env &&
+      import.meta.env.DEV
+
+    if (isDevEnvironment) {
+      window.__RESUMEFORGE_DEBUG_SET_IMPROVEMENTS__ = (payload) => {
+        if (!Array.isArray(payload)) {
+          setImprovementResults([])
+          return
+        }
+
+        const hydrated = payload.map((entry, index) => ({
+          id: entry?.id || `debug-improvement-${index}`,
+          type: entry?.type || 'custom',
+          title: entry?.title || 'Improvement',
+          beforeExcerpt: entry?.beforeExcerpt || '',
+          afterExcerpt: entry?.afterExcerpt || '',
+          explanation: entry?.explanation || '',
+          updatedResume: entry?.updatedResume || '',
+          confidence: typeof entry?.confidence === 'number' ? entry.confidence : 0.6,
+          accepted: entry?.accepted ?? null,
+          improvementSummary: Array.isArray(entry?.improvementSummary)
+            ? entry.improvementSummary
+            : []
+        }))
+
+        setImprovementResults(hydrated)
+      }
+    }
+
+    return () => {
+      if (isDevEnvironment && window.__RESUMEFORGE_DEBUG_SET_IMPROVEMENTS__) {
+        delete window.__RESUMEFORGE_DEBUG_SET_IMPROVEMENTS__
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
@@ -740,6 +810,26 @@ function App() {
     setChangeLog((prev) => prev.filter((entry) => entry.id !== id))
   }
 
+  const handlePreviewImprovement = useCallback(
+    (suggestion) => {
+      if (!suggestion) return
+      setPreviewSuggestion({
+        id: suggestion.id,
+        title: suggestion.title,
+        updatedResume: suggestion.updatedResume || '',
+        beforeExcerpt: suggestion.beforeExcerpt || '',
+        afterExcerpt: suggestion.afterExcerpt || '',
+        explanation: suggestion.explanation || '',
+        baseResume: resumeText
+      })
+    },
+    [resumeText]
+  )
+
+  const closePreview = useCallback(() => {
+    setPreviewSuggestion(null)
+  }, [])
+
   const disabled = !profileUrl || !jobUrl || !cvFile || isProcessing
 
   return (
@@ -1074,6 +1164,7 @@ function App() {
                   suggestion={item}
                   onAccept={() => handleAcceptImprovement(item.id)}
                   onReject={() => handleRejectImprovement(item.id)}
+                  onPreview={() => handlePreviewImprovement(item)}
                 />
               ))}
             </div>
@@ -1189,6 +1280,70 @@ function App() {
               })}
             </div>
           </section>
+        )}
+
+        {previewSuggestion && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 px-4 py-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Preview for ${previewSuggestion.title}`}
+            onClick={closePreview}
+          >
+            <div
+              className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl border border-purple-200/70 overflow-hidden"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4">
+                <div>
+                  <h3 className="text-xl font-semibold text-purple-900">{previewSuggestion.title}</h3>
+                  <p className="text-sm text-purple-700/90">
+                    Review how this change will look alongside your current resume before accepting or downloading.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePreview}
+                  className="text-sm font-semibold text-purple-700 hover:text-purple-900"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-6 px-6 py-6 text-sm text-purple-900">
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-500">Current Resume</h4>
+                  <div className="h-64 md:h-72 overflow-y-auto rounded-2xl border border-purple-200 bg-purple-50/70 p-4 whitespace-pre-wrap leading-relaxed">
+                    {previewSuggestion.baseResume || 'No resume content available.'}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">With Improvement</h4>
+                  <div className="h-64 md:h-72 overflow-y-auto rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 whitespace-pre-wrap leading-relaxed">
+                    {previewSuggestion.updatedResume || 'No preview available for this improvement.'}
+                  </div>
+                </div>
+              </div>
+              {(previewSuggestion.beforeExcerpt || previewSuggestion.afterExcerpt) && (
+                <div className="border-t border-purple-100 bg-slate-50 px-6 py-4 text-sm text-slate-700">
+                  <p className="font-semibold text-slate-800">Focused change</p>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {previewSuggestion.beforeExcerpt && (
+                      <div className="rounded-xl border border-purple-100 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Before snippet</p>
+                        <p className="mt-1 whitespace-pre-wrap leading-snug">{previewSuggestion.beforeExcerpt}</p>
+                      </div>
+                    )}
+                    {previewSuggestion.afterExcerpt && (
+                      <div className="rounded-xl border border-indigo-100 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">After snippet</p>
+                        <p className="mt-1 whitespace-pre-wrap leading-snug">{previewSuggestion.afterExcerpt}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
