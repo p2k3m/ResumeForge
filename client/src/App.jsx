@@ -637,18 +637,22 @@ function App() {
   const downloadCount = outputFiles.length
   const changeCount = changeLog.length
   const scoreMetricCount = scoreBreakdown.length
+  const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
+  const hasAnalysisData =
+    scoreMetricCount > 0 || hasMatch || improvementCount > 0 || downloadCount > 0 || changeCount > 0
+  const uploadComplete =
+    (hasCvFile && (isProcessing || Boolean(queuedText))) || hasAnalysisData || Boolean(queuedText)
+  const scoreComplete = scoreMetricCount > 0
+  const jdValidationComplete = Boolean(jobDescriptionText && jobDescriptionText.trim()) && !manualJobDescriptionRequired
+  const improvementsUnlocked = uploadComplete && scoreComplete && jdValidationComplete
+  const improvementUnlockMessage = !uploadComplete
+    ? 'Upload your resume and job description to unlock improvements.'
+    : !scoreComplete
+      ? 'Wait for the ATS scoring to finish before generating improvements.'
+      : !jdValidationComplete
+        ? 'Job description validation is still in progress. Please wait until it completes.'
+        : ''
   const flowSteps = useMemo(() => {
-    const hasAnalysisData =
-      scoreMetricCount > 0 ||
-      hasMatch ||
-      improvementCount > 0 ||
-      downloadCount > 0 ||
-      changeCount > 0
-
-    const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
-    const uploadComplete =
-      (hasCvFile && (isProcessing || Boolean(queuedText))) || hasAnalysisData || Boolean(queuedText)
-    const scoreComplete = scoreMetricCount > 0
     const improvementsComplete = improvementCount > 0
     const downloadComplete = downloadCount > 0
     const changelogComplete = changeCount > 0
@@ -753,13 +757,14 @@ function App() {
   }, [
     changeCount,
     downloadCount,
+    hasAnalysisData,
     hasCvFile,
-    hasMatch,
     improvementBusy,
     improvementCount,
     isProcessing,
-    queuedMessage,
-    scoreMetricCount
+    queuedText,
+    scoreComplete,
+    uploadComplete
   ])
 
   const downloadGroups = useMemo(() => {
@@ -1221,7 +1226,8 @@ function App() {
     setPreviewSuggestion(null)
   }, [initialAnalysisSnapshot])
 
-  const improvementAvailable = resumeText && jobDescriptionText
+  const improvementAvailable =
+    improvementsUnlocked && Boolean(resumeText && resumeText.trim()) && Boolean(jobDescriptionText && jobDescriptionText.trim())
   const improvementBusy = Boolean(activeImprovement)
   const manualJobDescriptionActive =
     manualJobDescriptionRequired || manualJobDescription.trim().length > 0
@@ -1309,7 +1315,9 @@ function App() {
       return
     }
     if (!improvementAvailable) {
-      setError('Run the main CV analysis first so we can personalise the improvements.')
+      setError(
+        improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
+      )
       return
     }
     improvementLockRef.current = true
@@ -1915,7 +1923,7 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {improvementActions.map((action) => {
                 const isActive = activeImprovement === action.key
-                const buttonDisabled = isProcessing || improvementBusy
+                const buttonDisabled = isProcessing || improvementBusy || !improvementsUnlocked
                 return (
                   <button
                     key={action.key}
@@ -1931,6 +1939,9 @@ function App() {
                     }`}
                     aria-busy={isActive}
                     aria-disabled={buttonDisabled}
+                    title={
+                      !improvementsUnlocked && improvementUnlockMessage ? improvementUnlockMessage : undefined
+                    }
                   >
                     <div className="flex items-center justify-between gap-4">
                       <div>
