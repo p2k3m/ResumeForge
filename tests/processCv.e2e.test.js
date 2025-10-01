@@ -26,6 +26,11 @@ describe('end-to-end CV processing', () => {
         addedSkills: expect.any(Array),
         missingSkills: expect.any(Array),
         scoreBreakdown: expect.any(Object),
+        selectionProbability: expect.any(Number),
+        selectionInsights: expect.objectContaining({
+          probability: expect.any(Number),
+          flags: expect.any(Array),
+        }),
       })
     );
 
