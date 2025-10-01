@@ -85,6 +85,84 @@ const ATS_SUB_SCORE_ORDER = [
   'Other Quality Metrics'
 ]
 
+const CHANGE_TYPE_LABELS = {
+  added: 'Added',
+  fixed: 'Fixed',
+  rephrased: 'Rephrased',
+  removed: 'Removed'
+}
+
+const changeLabelStyles = {
+  added: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+  fixed: 'bg-sky-100 text-sky-700 border border-sky-200',
+  rephrased: 'bg-indigo-100 text-indigo-700 border border-indigo-200',
+  removed: 'bg-rose-100 text-rose-700 border border-rose-200'
+}
+
+function deriveChangeLabel(suggestion) {
+  const type = suggestion?.type || ''
+  const before = (suggestion?.beforeExcerpt || '').trim()
+  const after = (suggestion?.afterExcerpt || '').trim()
+
+  if (!before && after) return 'added'
+  if (before && !after) return 'removed'
+  if (before && after && before !== after) {
+    if (type === 'improve-summary') return 'rephrased'
+    if (type === 'change-designation') return 'fixed'
+    if (type === 'add-missing-skills' || type === 'align-experience') return 'added'
+    if (type === 'enhance-all') return 'fixed'
+  }
+
+  const fallback =
+    type === 'improve-summary'
+      ? 'rephrased'
+      : type === 'change-designation'
+        ? 'fixed'
+        : type === 'add-missing-skills' || type === 'align-experience'
+          ? 'added'
+          : 'fixed'
+
+  return fallback
+}
+
+function buildChangeLogEntry(suggestion) {
+  const label = deriveChangeLabel(suggestion)
+  const reason = (suggestion?.explanation || '').trim()
+  const defaultReasons = {
+    'improve-summary':
+      'Reframed your summary so the opener mirrors the job description priorities.',
+    'add-missing-skills':
+      'Inserted missing keywords so the CV satisfies the role requirements.',
+    'change-designation':
+      'Aligned the visible designation with the target role title.',
+    'align-experience':
+      'Expanded experience bullets to reflect the selection criteria.',
+    'enhance-all':
+      'Rolled out combined updates so every section aligns with the JD.'
+  }
+  const baseReason = reason || defaultReasons[suggestion?.type] || 'Applied improvement to strengthen alignment.'
+
+  const selectionNotes = {
+    'improve-summary': 'Selection focus: mirrors JD tone and value propositions.',
+    'add-missing-skills': 'Selection focus: surfaces keywords recruiters screen for.',
+    'change-designation': 'Selection focus: resolves designation mismatch flagged in ATS scans.',
+    'align-experience': 'Selection focus: evidences accomplishments tied to job metrics.',
+    'enhance-all': 'Selection focus: synchronises every section with the job criteria.'
+  }
+
+  const selectionDetail = selectionNotes[suggestion?.type]
+
+  return {
+    id: suggestion?.id,
+    label,
+    title: suggestion?.title || 'Improvement Applied',
+    detail: selectionDetail ? `${baseReason} ${selectionDetail}` : baseReason,
+    before: (suggestion?.beforeExcerpt || '').trim(),
+    after: (suggestion?.afterExcerpt || '').trim(),
+    timestamp: Date.now()
+  }
+}
+
 function orderAtsMetrics(metrics) {
   if (!Array.isArray(metrics)) return []
   const categoryMap = new Map()
@@ -207,6 +285,7 @@ function App() {
   const [certificateInsights, setCertificateInsights] = useState(null)
   const [selectionInsights, setSelectionInsights] = useState(null)
   const [improvementResults, setImprovementResults] = useState([])
+  const [changeLog, setChangeLog] = useState([])
   const [activeImprovement, setActiveImprovement] = useState('')
   const [error, setError] = useState('')
   const [queuedMessage, setQueuedMessage] = useState('')
@@ -286,6 +365,7 @@ function App() {
     setCertificateInsights(null)
     setSelectionInsights(null)
     setImprovementResults([])
+    setChangeLog([])
   }
 
   const handleSubmit = async () => {
@@ -576,6 +656,15 @@ function App() {
     if (suggestion?.updatedResume) {
       setResumeText(suggestion.updatedResume)
     }
+    if (suggestion) {
+      setChangeLog((prev) => {
+        if (prev.some((entry) => entry.id === suggestion.id)) {
+          return prev
+        }
+        const entry = buildChangeLogEntry(suggestion)
+        return [entry, ...prev]
+      })
+    }
   }
 
   const handleRejectImprovement = (id) => {
@@ -584,6 +673,7 @@ function App() {
         item.id === id ? { ...item, accepted: false } : item
       )
     )
+    setChangeLog((prev) => prev.filter((entry) => entry.id !== id))
   }
 
   const disabled = !profileUrl || !jobUrl || !cvFile || isProcessing
@@ -923,6 +1013,60 @@ function App() {
                 />
               ))}
             </div>
+          </section>
+        )}
+
+        {changeLog.length > 0 && (
+          <section className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-purple-900">Change Log</h2>
+                <p className="text-sm text-purple-700/80">
+                  Track every accepted enhancement and why it strengthens your selection chances.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-purple-600 bg-white/70 border border-purple-200 rounded-full px-3 py-1">
+                {changeLog.length} update{changeLog.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <ul className="space-y-3">
+              {changeLog.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="rounded-2xl border border-purple-200 bg-white/85 shadow-sm p-4 space-y-2"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-base font-semibold text-purple-900">{entry.title}</p>
+                      <p className="text-sm text-purple-700/90 leading-relaxed">{entry.detail}</p>
+                    </div>
+                    <span
+                      className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
+                        changeLabelStyles[entry.label] || changeLabelStyles.fixed
+                      }`}
+                    >
+                      {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
+                    </span>
+                  </div>
+                  {(entry.before || entry.after) && (
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-sm text-purple-800">
+                      {entry.before && (
+                        <div className="rounded-xl border border-purple-100 bg-purple-50/70 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Before</p>
+                          <p className="mt-1 whitespace-pre-wrap leading-snug">{entry.before}</p>
+                        </div>
+                      )}
+                      {entry.after && (
+                        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">After</p>
+                          <p className="mt-1 whitespace-pre-wrap leading-snug">{entry.after}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
