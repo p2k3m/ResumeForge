@@ -5,6 +5,7 @@ import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
 import TemplateSelector from './components/TemplateSelector.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
+import ChangeComparisonView from './components/ChangeComparisonView.jsx'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 
 const improvementActions = [
@@ -1584,6 +1585,7 @@ function App() {
   const handlePreviewImprovement = useCallback(
     (suggestion) => {
       if (!suggestion) return
+      const previewEntry = buildChangeLogEntry(suggestion)
       setPreviewSuggestion({
         id: suggestion.id,
         title: suggestion.title,
@@ -1591,7 +1593,10 @@ function App() {
         beforeExcerpt: suggestion.beforeExcerpt || '',
         afterExcerpt: suggestion.afterExcerpt || '',
         explanation: suggestion.explanation || '',
-        baseResume: resumeText
+        baseResume: resumeText,
+        summarySegments: previewEntry?.summarySegments || suggestion.improvementSummary || [],
+        addedItems: previewEntry?.addedItems || [],
+        removedItems: previewEntry?.removedItems || []
       })
     },
     [resumeText]
@@ -1978,21 +1983,18 @@ function App() {
                       {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
                     </span>
                   </div>
-                  {(entry.before || entry.after) && (
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 text-sm text-purple-800">
-                      {entry.before && (
-                        <div className="rounded-xl border border-purple-100 bg-purple-50/70 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Before</p>
-                          <p className="mt-1 whitespace-pre-wrap leading-snug">{entry.before}</p>
-                        </div>
-                      )}
-                      {entry.after && (
-                        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">After</p>
-                          <p className="mt-1 whitespace-pre-wrap leading-snug">{entry.after}</p>
-                        </div>
-                      )}
-                    </div>
+                  {(entry.before ||
+                    entry.after ||
+                    (entry.summarySegments && entry.summarySegments.length > 0) ||
+                    (entry.addedItems && entry.addedItems.length > 0) ||
+                    (entry.removedItems && entry.removedItems.length > 0)) && (
+                    <ChangeComparisonView
+                      before={entry.before}
+                      after={entry.after}
+                      summarySegments={entry.summarySegments}
+                      addedItems={entry.addedItems}
+                      removedItems={entry.removedItems}
+                    />
                   )}
                 </li>
               ))}
@@ -2109,19 +2111,18 @@ function App() {
                   Close
                 </button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-6 px-6 py-6 text-sm text-purple-900">
-                <div className="space-y-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-500">Current Resume</h4>
-                  <div className="h-64 md:h-72 overflow-y-auto rounded-2xl border border-purple-200 bg-purple-50/70 p-4 whitespace-pre-wrap leading-relaxed">
-                    {previewSuggestion.baseResume || 'No resume content available.'}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-indigo-500">With Improvement</h4>
-                  <div className="h-64 md:h-72 overflow-y-auto rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4 whitespace-pre-wrap leading-relaxed">
-                    {previewSuggestion.updatedResume || 'No preview available for this improvement.'}
-                  </div>
-                </div>
+              <div className="px-6 py-6 text-sm text-purple-900">
+                <ChangeComparisonView
+                  before={previewSuggestion.baseResume}
+                  after={previewSuggestion.updatedResume}
+                  beforeLabel="Current Resume"
+                  afterLabel="With Improvement"
+                  summarySegments={previewSuggestion.summarySegments}
+                  addedItems={previewSuggestion.addedItems}
+                  removedItems={previewSuggestion.removedItems}
+                  variant="modal"
+                  className="text-purple-900"
+                />
               </div>
               {(previewSuggestion.beforeExcerpt || previewSuggestion.afterExcerpt) && (
                 <div className="border-t border-purple-100 bg-slate-50 px-6 py-4 text-sm text-slate-700">
