@@ -62,5 +62,15 @@ describe('enforceTargetedUpdate', () => {
     expect(educationIndex).toBeGreaterThan(-1);
     expect(projectsIndex).toBeLessThan(experienceIndex);
     expect(experienceIndex).toBeLessThan(educationIndex);
+
+    expect(Array.isArray(result.changeDetails)).toBe(true);
+    const sections = result.changeDetails.map((detail) => detail.section || detail.label);
+    expect(sections).toEqual(
+      expect.arrayContaining(['Summary', 'Skills', 'Work Experience', 'Headline'])
+    );
+    result.changeDetails.forEach((detail) => {
+      expect(Array.isArray(detail.reasons)).toBe(true);
+      expect(detail.reasons.length).toBeGreaterThan(0);
+    });
   });
 });

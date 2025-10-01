@@ -1685,6 +1685,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
     afterExcerpt: result.afterExcerpt || '',
     explanation: result.explanation,
     confidence: result.confidence,
+    changeDetails: Array.isArray(result.changeDetails) ? result.changeDetails : [],
   };
 
   if (!safeOriginal) {
@@ -1695,47 +1696,91 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
     let workingResume = safeOriginal;
     const beforeSnippets = [];
     const afterSnippets = [];
+    const changeDetails = Array.isArray(baseResult.changeDetails)
+      ? [...baseResult.changeDetails]
+      : [];
+    const targetJobTitle = (context.jobTitle || '').trim();
 
-    const trackChange = (sectionResult = {}) => {
+    const defaultReasons = {
+      summary: targetJobTitle
+        ? `Summary now mirrors the ${targetJobTitle} mandate with measurable wins.`
+        : 'Summary now mirrors the target role with measurable wins.',
+      skills: targetJobTitle
+        ? `Skills list surfaces ${targetJobTitle} keywords pulled from the JD.`
+        : 'Skills list surfaces the JD keywords recruiters scan for.',
+      experience: targetJobTitle
+        ? `Experience bullets emphasise impact tied to ${targetJobTitle} responsibilities.`
+        : 'Experience bullets emphasise accomplishments tied to the JD priorities.',
+      designation: targetJobTitle
+        ? `Headline now states ${targetJobTitle} to remove designation mismatch.`
+        : 'Headline now reflects the target job title for ATS clarity.',
+    };
+
+    const trackChange = (key, label, sectionResult = {}, reasons) => {
       const nextResume = sectionResult.updatedResume || workingResume;
       if (nextResume !== workingResume) {
         const before = (sectionResult.beforeExcerpt || '').trim();
         const after = (sectionResult.afterExcerpt || '').trim();
         if (before) beforeSnippets.push(before);
         if (after) afterSnippets.push(after);
+        const reasonList = Array.isArray(reasons)
+          ? reasons.filter(Boolean)
+          : reasons
+          ? [reasons]
+          : [];
+        changeDetails.push({
+          key,
+          section: label,
+          label,
+          before,
+          after,
+          reasons: reasonList,
+        });
         workingResume = nextResume;
       }
     };
 
     trackChange(
+      'summary',
+      'Summary',
       applySectionUpdate(workingResume, baseResult.updatedResume, {
         pattern: /^#\s*summary/i,
         defaultLabel: 'Summary',
         insertIndex: 1,
-      })
+      }),
+      defaultReasons.summary
     );
 
     trackChange(
+      'skills',
+      'Skills',
       applySectionUpdate(workingResume, baseResult.updatedResume, {
         pattern: /^#\s*skills/i,
         defaultLabel: 'Skills',
         insertIndex: 2,
-      })
+      }),
+      defaultReasons.skills
     );
 
     trackChange(
+      'experience',
+      'Work Experience',
       applySectionUpdate(workingResume, baseResult.updatedResume, {
         pattern: /^#\s*(work\s+)?experience/i,
         defaultLabel: 'Work Experience',
-      })
+      }),
+      defaultReasons.experience
     );
 
     trackChange(
+      'designation',
+      'Headline',
       applyDesignationUpdate(
         workingResume,
         baseResult.updatedResume,
         context
-      )
+      ),
+      defaultReasons.designation
     );
 
     const combinedBefore = [baseResult.beforeExcerpt, ...beforeSnippets]
@@ -1752,6 +1797,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       updatedResume: workingResume,
       beforeExcerpt: combinedBefore || baseResult.beforeExcerpt || '',
       afterExcerpt: combinedAfter || baseResult.afterExcerpt || '',
+      changeDetails,
     };
   }
 
@@ -5663,7 +5709,45 @@ function extractReasonsList(explanation = '') {
   return deduped.length ? deduped : [cleaned];
 }
 
-function buildImprovementSummary(beforeText = '', afterText = '', explanation = '') {
+function buildImprovementSummary(
+  beforeText = '',
+  afterText = '',
+  explanation = '',
+  changeDetails = []
+) {
+  if (Array.isArray(changeDetails) && changeDetails.length) {
+    return changeDetails.map((detail) => {
+      const before = typeof detail?.before === 'string' ? detail.before : '';
+      const after = typeof detail?.after === 'string' ? detail.after : '';
+      const beforeLines = extractDiffLines(before);
+      const afterLines = extractDiffLines(after);
+      const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+      const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+      const added = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+      const removed = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+      const providedReasons = Array.isArray(detail?.reasons)
+        ? detail.reasons.filter(Boolean)
+        : [];
+      const fallbackReasons = extractReasonsList(explanation);
+      const reasons = providedReasons.length
+        ? providedReasons
+        : fallbackReasons.length
+          ? fallbackReasons
+          : [
+              detail?.section
+                ? `${detail.section} updated to align with the job description.`
+                : 'Update applied to align with the job description.',
+            ];
+
+      return {
+        section: detail?.section || detail?.label || detail?.key || '',
+        added,
+        removed,
+        reason: reasons,
+      };
+    });
+  }
+
   const added = [];
   const removed = [];
   const beforeLines = extractDiffLines(beforeText);
@@ -5771,7 +5855,8 @@ async function handleImprovementRequest(type, req, res) {
       improvementSummary: buildImprovementSummary(
         result.beforeExcerpt,
         result.afterExcerpt,
-        result.explanation
+        result.explanation,
+        result.changeDetails
       ),
     });
   } catch (err) {
