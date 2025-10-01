@@ -315,28 +315,58 @@ jobs:
 
             if printf '%s\n' "$deploy_err_normalized" | grep -qi "InvalidChangeSetStatus" && \
                printf '%s\n' "$deploy_err_normalized" | grep -qi "\[OBSOLETE\]"; then
-              echo "sam deploy reported an obsolete change set. Cleaning up before retrying..."
+              echo "sam deploy reported an obsolete change set. Inspecting status..."
 
               change_set_arn=$(printf '%s\n' "$deploy_err" | \
                 sed -n 's/.*\(arn:aws:cloudformation:[^ ]*changeSet[^ ]*\).*/\1/p' | head -n1)
 
-              if [ -n "$change_set_arn" ]; then
+              if [ -z "$change_set_arn" ]; then
+                echo "Unable to determine change set ARN from sam deploy output. Aborting." >&2
+                exit 1
+              fi
+
+              describe_reason=''
+              : >"$tmp_err"
+              if ! describe_reason=$(aws cloudformation describe-change-set \
+                    --stack-name "$STACK_NAME" \
+                    --change-set-name "$change_set_arn" \
+                    --query 'StatusReason' \
+                    --output text 2>"$tmp_err"); then
+                describe_err=$(cat "$tmp_err")
+                echo "Failed to describe change set $change_set_arn: $describe_err" >&2
+                exit 1
+              fi
+
+              if printf '%s\n' "$describe_reason" | grep -Eqi 'did.?n.t contain changes|No updates'; then
+                echo "Change set is obsolete because no updates were detected. Treating deployment as already up-to-date."
                 if aws cloudformation delete-change-set \
                     --stack-name "$STACK_NAME" \
                     --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
                   echo "Deleted obsolete change set $change_set_arn"
                 else
                   delete_change_set_err=$(cat "$tmp_err")
-                  if echo "$delete_change_set_err" | grep -qi "does not exist"; then
-                    echo "Change set $change_set_arn no longer exists. Continuing with retry."
-                  else
+                  if ! echo "$delete_change_set_err" | grep -qi "does not exist"; then
                     echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
                     exit 1
                   fi
                 fi
+
+                deploy_succeeded=true
+                break
+              fi
+
+              if aws cloudformation delete-change-set \
+                  --stack-name "$STACK_NAME" \
+                  --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
+                echo "Deleted obsolete change set $change_set_arn"
               else
-                echo "Unable to determine change set ARN from sam deploy output. Aborting." >&2
-                exit 1
+                delete_change_set_err=$(cat "$tmp_err")
+                if echo "$delete_change_set_err" | grep -qi "does not exist"; then
+                  echo "Change set $change_set_arn no longer exists. Continuing with retry."
+                else
+                  echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
+                  exit 1
+                fi
               fi
 
               deploy_attempt=$((deploy_attempt + 1))
