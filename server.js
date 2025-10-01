@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
@@ -26,12 +27,16 @@ import fsSync from 'fs';
 import { logEvent } from './logger.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import mammoth from 'mammoth';
+import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
 import { renderTemplatePdf } from './lib/pdf/index.js';
 import {
   parseTemplateParams as parseTemplateParamsConfig,
   resolveTemplateParams as resolveTemplateParamsConfig
 } from './lib/pdf/utils.js';
+
+const WordExtractor = WordExtractorPackage?.default || WordExtractorPackage;
 
 function ensureAxiosResponseInterceptor(client) {
   if (!client) return null;
@@ -113,6 +118,7 @@ let chromiumLaunchAttempted = false;
 let customChromiumLauncher;
 
 let sharedGenerativeModelPromise;
+let sharedWordExtractor;
 
 function isModuleNotFoundError(err, moduleName) {
   if (!err) return false;
@@ -709,26 +715,38 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const mimetype = file.mimetype;
-    if (ext === '.doc') {
+    const ext = (path.extname(file.originalname) || '').toLowerCase();
+    const mimetype = file.mimetype || '';
+    const allowedExtensions = new Set(['.pdf', '.doc', '.docx']);
+
+    if (!allowedExtensions.has(ext)) {
       return cb(
-        new Error(
-          'Legacy .doc resumes are no longer supported. Please convert your file to PDF before uploading.'
-        )
+        new Error('Unsupported resume format. Please upload a PDF, DOC, or DOCX file.')
       );
     }
-    if (ext !== '.pdf') {
-      const message =
-        ext === '.docx'
-          ? 'DOCX resumes are not accepted. Please upload your resume as a PDF file.'
-          : 'Unsupported resume format. Please upload a PDF file.';
-      return cb(new Error(message));
+
+    if (ext === '.pdf') {
+      if (mimetype && mimetype !== 'application/pdf') {
+        return cb(new Error('The uploaded file is not a valid PDF document.'));
+      }
+      return cb(null, true);
     }
-    if (mimetype && mimetype !== 'application/pdf') {
-      return cb(new Error('The uploaded file is not a valid PDF document.'));
+
+    if (ext === '.docx') {
+      if (mimetype && !/wordprocessingml|officedocument|ms-?word/i.test(mimetype)) {
+        return cb(new Error('The uploaded file is not a valid DOCX document.'));
+      }
+      return cb(null, true);
     }
-    cb(null, true);
+
+    if (ext === '.doc') {
+      if (mimetype && !/ms-?word|officedocument|application\/octet-stream/i.test(mimetype)) {
+        return cb(new Error('The uploaded file is not a valid DOC document.'));
+      }
+      return cb(null, true);
+    }
+
+    return cb(null, true);
   }
 });
 
@@ -3513,13 +3531,99 @@ async function generatePdfWithFallback({
   throw failure;
 }
 
-async function extractText(file) {
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (ext !== '.pdf') {
-    throw new Error('Unsupported resume format encountered. Only PDF files are processed.');
+function normalizeExtractedText(text = '') {
+  if (!text) return '';
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000\u2028\u2029]/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+async function extractDocxText(buffer) {
+  const result = await mammoth.extractRawText({ buffer });
+  if (!result || typeof result.value !== 'string') {
+    throw new Error('Unable to extract text from DOCX resume.');
   }
-  const data = await pdfParse(file.buffer);
-  return data.text;
+  return result.value;
+}
+
+async function extractDocText(buffer) {
+  if (!sharedWordExtractor) {
+    sharedWordExtractor = new WordExtractor();
+  }
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'resumeforge-'));
+  const tmpPath = path.join(tmpDir, `resume-${Date.now()}.doc`);
+  try {
+    await fs.writeFile(tmpPath, buffer);
+    const document = await sharedWordExtractor.extract(tmpPath);
+    if (!document) {
+      throw new Error('Unable to read DOC resume.');
+    }
+    const sections = [];
+    if (typeof document.getBody === 'function') {
+      sections.push(document.getBody());
+    }
+    if (typeof document.getHeaders === 'function') {
+      const headers = document.getHeaders();
+      if (Array.isArray(headers)) {
+        sections.push(headers.join('\n'));
+      }
+    }
+    if (typeof document.getFooters === 'function') {
+      const footers = document.getFooters();
+      if (Array.isArray(footers)) {
+        sections.push(footers.join('\n'));
+      }
+    }
+    if (typeof document.getText === 'function') {
+      sections.push(document.getText());
+    }
+    const combined = sections.filter(Boolean).join('\n\n');
+    if (!combined.trim()) {
+      throw new Error('DOC resume appears to be empty.');
+    }
+    return combined;
+  } finally {
+    await fs.rm(tmpPath, { force: true }).catch(() => {});
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+async function extractText(file) {
+  const ext = (path.extname(file.originalname) || '').toLowerCase();
+  const mimetype = (file.mimetype || '').toLowerCase();
+  const buffer = file.buffer;
+
+  if (!buffer) {
+    throw new Error('Resume file buffer is missing.');
+  }
+
+  const normalizedExt =
+    ext ||
+    (mimetype.includes('pdf')
+      ? '.pdf'
+      : mimetype.includes('wordprocessingml')
+        ? '.docx'
+        : mimetype.includes('msword')
+          ? '.doc'
+          : '');
+
+  if (normalizedExt === '.pdf') {
+    const data = await pdfParse(buffer);
+    return normalizeExtractedText(data.text);
+  }
+
+  if (normalizedExt === '.docx') {
+    const text = await extractDocxText(buffer);
+    return normalizeExtractedText(text);
+  }
+
+  if (normalizedExt === '.doc') {
+    const text = await extractDocText(buffer);
+    return normalizeExtractedText(text);
+  }
+
+  throw new Error('Unsupported resume format encountered. Only PDF, DOC, or DOCX files are processed.');
 }
 
 const DOCUMENT_CLASSIFIERS = [
@@ -5307,11 +5411,25 @@ app.post(
       description: classification.description,
       confidence: classification.confidence,
     });
+    const rawDescription =
+      typeof classification.description === 'string'
+        ? classification.description.trim()
+        : 'non-resume';
+    const includesDocument = /document/i.test(rawDescription);
+    const shortDescriptor = includesDocument
+      ? rawDescription
+      : `${rawDescription || 'non-resume'}${rawDescription.endsWith(' document') ? '' : ' document'}`;
+    const descriptorWithArticle = /^(a|an)\s/i.test(shortDescriptor)
+      ? shortDescriptor
+      : /^[aeiou]/i.test(shortDescriptor)
+        ? `an ${shortDescriptor}`
+        : `a ${shortDescriptor}`;
+    const validationMessage = `You have uploaded ${descriptorWithArticle}, please upload a correct CV.`;
     return sendError(
       res,
       400,
       'INVALID_RESUME_CONTENT',
-      `You have uploaded ${classification.description}. Please upload a CV only.`,
+      validationMessage,
       {
         description: classification.description,
         confidence: classification.confidence,

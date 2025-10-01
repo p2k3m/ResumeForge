@@ -95,6 +95,21 @@ jest.unstable_mockModule('pdf-parse/lib/pdf-parse.js', () => ({
     })
 }));
 
+const wordExtractorExtractMock = jest.fn().mockResolvedValue({
+  getBody: () => 'Doc body text',
+  getHeaders: () => ['Header text'],
+  getFooters: () => ['Footer text'],
+  getText: () => 'Doc fallback text',
+});
+
+jest.unstable_mockModule('word-extractor', () => ({
+  default: class WordExtractorMock {
+    extract(filePath) {
+      return wordExtractorExtractMock(filePath);
+    }
+  }
+}));
+
 jest.unstable_mockModule('mammoth', () => ({
   default: {
     extractRawText: jest.fn().mockResolvedValue({ value: 'Docx text' })
@@ -113,6 +128,7 @@ beforeEach(() => {
   setupDefaultDynamoMock();
   getSignedUrlMock.mockClear();
   getObjectCommandMock.mockClear();
+  wordExtractorExtractMock.mockClear();
 });
 
 describe('health check', () => {
@@ -856,7 +872,7 @@ describe('/api/process-cv', () => {
       success: false,
       error: {
         code: 'UPLOAD_VALIDATION_FAILED',
-        message: 'Unsupported resume format. Please upload a PDF file.',
+        message: 'Unsupported resume format. Please upload a PDF, DOC, or DOCX file.',
         requestId: expect.any(String),
         jobId: expect.any(String),
         details: { field: 'resume' },
@@ -880,7 +896,7 @@ describe('/api/process-cv', () => {
       success: false,
       error: expect.objectContaining({
         code: 'INVALID_RESUME_CONTENT',
-        message: expect.stringContaining('Please upload a CV only.'),
+        message: expect.stringContaining('please upload a correct CV'),
         requestId: expect.any(String),
         jobId: expect.any(String),
         details: expect.objectContaining({
@@ -950,17 +966,23 @@ describe('extractText', () => {
     );
   });
 
-  test('rejects docx files', async () => {
-    const file = { originalname: 'file.docx', buffer: Buffer.from('') };
-    await expect(extractText(file)).rejects.toThrow(
-      'Unsupported resume format encountered. Only PDF files are processed.'
+  test('extracts text from docx', async () => {
+    const file = { originalname: 'file.docx', buffer: Buffer.from('docx') };
+    await expect(extractText(file)).resolves.toBe('Docx text');
+  });
+
+  test('extracts text from doc', async () => {
+    const file = { originalname: 'file.doc', buffer: Buffer.from('doc') };
+    await expect(extractText(file)).resolves.toBe(
+      'Doc body text\n\nHeader text\n\nFooter text\n\nDoc fallback text'
     );
+    expect(wordExtractorExtractMock).toHaveBeenCalled();
   });
 
   test('rejects plain text files', async () => {
     const file = { originalname: 'file.txt', buffer: Buffer.from('plain') };
     await expect(extractText(file)).rejects.toThrow(
-      'Unsupported resume format encountered. Only PDF files are processed.'
+      'Unsupported resume format encountered. Only PDF, DOC, or DOCX files are processed.'
     );
   });
 });
