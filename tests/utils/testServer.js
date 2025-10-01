@@ -88,6 +88,21 @@ export async function setupTestServer({
     default: jest.fn().mockResolvedValue({ text: pdfText }),
   }));
 
+  const wordExtractorExtractMock = jest.fn().mockResolvedValue({
+    getBody: () => 'Doc body text',
+    getHeaders: () => ['Header text'],
+    getFooters: () => ['Footer text'],
+    getText: () => 'Doc fallback text',
+  });
+
+  jest.unstable_mockModule('word-extractor', () => ({
+    default: class WordExtractorMock {
+      extract(filePath) {
+        return wordExtractorExtractMock(filePath);
+      }
+    }
+  }));
+
   jest.unstable_mockModule('mammoth', () => ({
     default: { extractRawText: jest.fn().mockResolvedValue({ value: 'Doc text' }) },
   }));

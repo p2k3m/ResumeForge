@@ -210,8 +210,8 @@ function App() {
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
-    if (file && !file.name.toLowerCase().match(/\.(pdf|docx)$/)) {
-      setError('Only PDF or DOCX files are supported.')
+    if (file && !file.name.toLowerCase().match(/\.(pdf|docx?)$/)) {
+      setError('Only PDF, DOC, or DOCX files are supported.')
       return
     }
     if (file) setCvFile(file)
@@ -219,8 +219,8 @@ function App() {
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
-    if (file && !file.name.toLowerCase().match(/\.(pdf|docx)$/)) {
-      setError('Only PDF or DOCX files are supported.')
+    if (file && !file.name.toLowerCase().match(/\.(pdf|docx?)$/)) {
+      setError('Only PDF, DOC, or DOCX files are supported.')
       return
     }
     if (file) setCvFile(file)
@@ -486,12 +486,12 @@ function App() {
               <p className="text-purple-800 font-semibold">{cvFile.name}</p>
             ) : (
               <p className="text-purple-700">
-                Drag and drop your CV here, or click to select (PDF or DOCX, max 5MB)
+                Drag and drop your CV here, or click to select (PDF, DOC, or DOCX · max 5MB)
               </p>
             )}
             <input
               type="file"
-              accept=".pdf,.docx"
+              accept=".pdf,.doc,.docx"
               onChange={handleFileChange}
               className="hidden"
               id="cv-input"
