@@ -20,10 +20,10 @@ describe('TemplateSelector', () => {
       />
     )
 
-    const modernButton = screen.getByRole('button', { name: /Modern Minimal/i })
+    const modernButton = screen.getByRole('radio', { name: /Modern Minimal/i })
     expect(within(modernButton).getByText(/Selected/i)).toBeInTheDocument()
 
-    const professionalButton = screen.getByRole('button', { name: /Professional Blue/i })
+    const professionalButton = screen.getByRole('radio', { name: /Professional Blue/i })
     expect(within(professionalButton).queryByText(/Selected/i)).toBeNull()
 
     fireEvent.click(professionalButton)

@@ -143,6 +143,8 @@ function App() {
   const [profileUrl, setProfileUrl] = useState('')
   const [jobUrl, setJobUrl] = useState('')
   const [credlyUrl, setCredlyUrl] = useState('')
+  const [manualJobDescription, setManualJobDescription] = useState('')
+  const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -242,6 +244,10 @@ function App() {
       setError('Please upload a CV before submitting.')
       return
     }
+    if (manualJobDescriptionRequired && !manualJobDescription.trim()) {
+      setError('Please paste the full job description before continuing.')
+      return
+    }
 
     setIsProcessing(true)
     setError('')
@@ -254,6 +260,9 @@ function App() {
       formData.append('resume', cvFile)
       formData.append('linkedinProfileUrl', profileUrl)
       formData.append('jobDescriptionUrl', jobUrl)
+      if (manualJobDescription.trim()) {
+        formData.append('manualJobDescription', manualJobDescription.trim())
+      }
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       if (manualCertificatesInput.trim()) {
         formData.append('manualCertificates', manualCertificatesInput.trim())
@@ -271,6 +280,7 @@ function App() {
 
       if (!response.ok) {
         let message = 'Request failed'
+        let manualFallbackTriggered = false
         try {
           const data = await response.json()
           const apiMessage =
@@ -283,11 +293,17 @@ function App() {
           if (data?.error?.code && data?.error?.code !== 'PROCESSING_FAILED') {
             message = `${message} (${data.error.code})`
           }
+          if (data?.error?.details?.manualInputRequired) {
+            manualFallbackTriggered = true
+          }
         } catch {
           try {
             const text = await response.text()
             if (text) message = text
           } catch {}
+        }
+        if (manualFallbackTriggered) {
+          setManualJobDescriptionRequired(true)
         }
         console.error('Resume processing request failed', {
           status: response.status,
@@ -314,6 +330,7 @@ function App() {
       }
 
       setOutputFiles(data.urls || [])
+      setManualJobDescriptionRequired(false)
       setMatch({
         table: data.table || [],
         addedSkills: data.addedSkills || [],
@@ -344,6 +361,8 @@ function App() {
 
   const improvementAvailable = resumeText && jobDescriptionText
   const improvementBusy = Boolean(activeImprovement)
+  const manualJobDescriptionActive =
+    manualJobDescriptionRequired || manualJobDescription.trim().length > 0
 
   const handleImprovementClick = async (type) => {
     if (improvementLockRef.current) {
@@ -488,6 +507,28 @@ function App() {
               onChange={(e) => setJobUrl(e.target.value)}
               className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
+            {manualJobDescriptionActive && (
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-sm font-semibold text-purple-700">
+                  Paste Full Job Description
+                </label>
+                <textarea
+                  value={manualJobDescription}
+                  onChange={(e) => setManualJobDescription(e.target.value)}
+                  placeholder="Paste the entire job post when automatic fetching is blocked."
+                  className="w-full h-32 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+                {manualJobDescriptionRequired ? (
+                  <p className="text-xs font-semibold text-rose-600">
+                    Unable to fetch the JD from the provided link. Paste the description here to continue.
+                  </p>
+                ) : (
+                  <p className="text-xs text-purple-500">
+                    We&apos;ll analyse this text directly instead of scraping the URL.
+                  </p>
+                )}
+              </div>
+            )}
             <input
               type="url"
               placeholder="Credly Profile URL (optional)"

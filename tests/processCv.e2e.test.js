@@ -44,8 +44,7 @@ describe('end-to-end CV processing', () => {
       .join('_')
       .toLowerCase();
     urls.forEach(({ url }) => {
-      expect(url).toContain(`/first/`);
-      expect(url).toContain(`/${sanitized}/`);
+      expect(url).toContain(`/${sanitized}/cv/`);
     });
   });
 });

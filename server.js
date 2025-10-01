@@ -881,7 +881,8 @@ const SESSION_RETENTION_DAYS =
   Number.isFinite(parsedRetention) && parsedRetention > 0
     ? parsedRetention
     : 30;
-const SESSION_PREFIX = 'first/';
+const SESSION_PREFIX = '';
+const SESSION_PATH_REGEX = /^([^/]+)\/cv\/(\d{4}-\d{2}-\d{2})\//;
 
 function anonymizePersonalData(value) {
   if (!value) return '';
@@ -892,6 +893,41 @@ function anonymizePersonalData(value) {
   }
   // GDPR: store irreversible hashes so DynamoDB never contains raw identifiers.
   return hash.digest('hex');
+}
+
+function extractLocationMetadata(req = {}) {
+  const headers = req?.headers || {};
+  const readHeader = (name) => {
+    const raw = headers[name];
+    if (Array.isArray(raw)) return raw[0];
+    return raw || '';
+  };
+
+  const city =
+    readHeader('x-vercel-ip-city') ||
+    readHeader('cloudfront-viewer-city') ||
+    readHeader('x-geoip-city');
+  const region =
+    readHeader('x-vercel-ip-country-region') ||
+    readHeader('x-vercel-ip-region') ||
+    readHeader('cloudfront-viewer-state') ||
+    readHeader('x-geoip-region');
+  const country =
+    readHeader('x-vercel-ip-country') ||
+    readHeader('cloudfront-viewer-country') ||
+    readHeader('x-geoip-country');
+
+  const parts = [];
+  if (city) parts.push(city);
+  if (region) parts.push(region);
+  if (country) parts.push(country);
+
+  return {
+    city: city || '',
+    region: region || '',
+    country: country || '',
+    label: parts.length ? parts.join(', ') : 'Unknown',
+  };
 }
 
 async function purgeExpiredSessions({
@@ -923,9 +959,9 @@ async function purgeExpiredSessions({
       const key = object.Key;
       if (!key) continue;
       scanned += 1;
-      const match = key.match(/^first\/(\d{4}-\d{2}-\d{2})\//);
+      const match = key.match(SESSION_PATH_REGEX);
       if (!match) continue;
-      const sessionDate = new Date(match[1]);
+      const sessionDate = new Date(match[2]);
       if (Number.isNaN(sessionDate.getTime())) continue;
       if (sessionDate.getTime() <= cutoff) {
         keysToDelete.push(key);
@@ -4204,6 +4240,47 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
+function sanitizeManualJobDescription(input = '') {
+  if (typeof input !== 'string') return '';
+
+  let sanitized = input.replace(/\u0000/g, '').replace(/\r\n/g, '\n');
+
+  const blockedTags = [
+    'script',
+    'style',
+    'iframe',
+    'object',
+    'embed',
+    'applet',
+    'meta',
+    'link',
+    'base',
+    'form',
+    'input',
+    'button',
+    'textarea',
+  ];
+
+  for (const tag of blockedTags) {
+    const paired = new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, 'gi');
+    const single = new RegExp(`<${tag}[^>]*\\/>`, 'gi');
+    const opening = new RegExp(`<${tag}[^>]*>`, 'gi');
+    sanitized = sanitized.replace(paired, '');
+    sanitized = sanitized.replace(single, '');
+    sanitized = sanitized.replace(opening, '');
+  }
+
+  sanitized = sanitized.replace(/<!--[\s\S]*?-->/g, '');
+  sanitized = sanitized.replace(/\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  sanitized = sanitized.replace(
+    /\s+(href|src)\s*=\s*("|')?\s*(?:javascript|data|vbscript):[^"'\s>]*\2?/gi,
+    ''
+  );
+  sanitized = sanitized.replace(/\s+style\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+  return sanitized.trim();
+}
+
 function extractExperience(source) {
   if (!source) return [];
   const parseEntry = (text) => {
@@ -4711,6 +4788,7 @@ app.post(
       .map((s) => s.trim())
       .filter(Boolean)[0] || req.ip;
   const userAgent = req.headers['user-agent'] || '';
+  const locationMeta = extractLocationMetadata(req);
   const { browser, os, device } = await parseUserAgent(userAgent);
   const defaultCvTemplate =
     req.body.template || req.query.template || CV_TEMPLATES[0];
@@ -4816,9 +4894,11 @@ app.post(
     );
   }
   const applicantName = extractName(text);
-  const sanitizedName = sanitizeName(applicantName);
-  const ext = path.extname(req.file.originalname).toLowerCase();
-  const prefix = `first/${date}/${sanitizedName}/`;
+  const sanitizedName = sanitizeName(applicantName) || 'candidate';
+  const ext = (path.extname(req.file.originalname) || '').toLowerCase();
+  const normalizedExt = ext || '.pdf';
+  const prefix = `${sanitizedName}/cv/${date}/`;
+  const originalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
   const logKey = `${prefix}logs/processing.jsonl`;
 
   // Store raw file to configured bucket
@@ -4827,7 +4907,7 @@ app.post(
     await initialS3.send(
       new PutObjectCommand({
         Bucket: bucket,
-        Key: `${prefix}${sanitizedName}${ext}`,
+        Key: originalUploadKey,
         Body: req.file.buffer,
         ContentType: req.file.mimetype
       })
@@ -4835,7 +4915,7 @@ app.post(
     logStructured('info', 'initial_upload_completed', {
       ...logContext,
       bucket,
-      key: `${prefix}${sanitizedName}${ext}`,
+      key: originalUploadKey,
     });
   } catch (e) {
     logStructured('error', 'initial_upload_failed', {
@@ -4887,42 +4967,67 @@ app.post(
       message: `template1=${template1}; template2=${template2}`
     });
 
+    const manualJobDescriptionInput =
+      typeof req.body.manualJobDescription === 'string'
+        ? req.body.manualJobDescription
+        : typeof req.body.jobDescriptionText === 'string'
+          ? req.body.jobDescriptionText
+          : '';
+    const manualJobDescription = sanitizeManualJobDescription(
+      manualJobDescriptionInput
+    );
+
     let jobDescriptionHtml;
-    try {
-      jobDescriptionHtml = await scrapeJobDescription(jobDescriptionUrl);
-      logStructured('info', 'job_description_fetched', {
+    if (manualJobDescription) {
+      jobDescriptionHtml = manualJobDescription;
+      logStructured('info', 'job_description_supplied_manually', {
         ...logContext,
-        url: jobDescriptionUrl,
-        bytes: jobDescriptionHtml.length,
+        characters: manualJobDescription.length,
       });
       await logEvent({
         s3,
         bucket,
         key: logKey,
         jobId,
-        event: 'fetched_job_description'
+        event: 'job_description_supplied_manually'
       });
-    } catch (err) {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'job_description_fetch_failed',
-        level: 'error',
-        message: err.message
-      });
-      logStructured('error', 'job_description_fetch_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-      return sendError(
-        res,
-        502,
-        'JOB_DESCRIPTION_FETCH_FAILED',
-        'Failed to retrieve the job description. Please verify the URL and try again.',
-        { url: jobDescriptionUrl }
-      );
+    } else {
+      try {
+        jobDescriptionHtml = await scrapeJobDescription(jobDescriptionUrl);
+        logStructured('info', 'job_description_fetched', {
+          ...logContext,
+          url: jobDescriptionUrl,
+          bytes: jobDescriptionHtml.length,
+        });
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'fetched_job_description'
+        });
+      } catch (err) {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'job_description_fetch_failed',
+          level: 'error',
+          message: err.message
+        });
+        logStructured('error', 'job_description_fetch_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+        return sendError(
+          res,
+          400,
+          'JOB_DESCRIPTION_FETCH_FAILED',
+          'Unable to fetch JD from this URL. Please paste the full job description below.',
+          { url: jobDescriptionUrl, manualInputRequired: true }
+        );
+      }
     }
     const {
       title: jobTitle,
@@ -5629,6 +5734,11 @@ app.post(
     const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
     const anonymizedIp = anonymizePersonalData(ipAddress);
     const anonymizedUserAgent = anonymizePersonalData(userAgent);
+    const anonymizedCredly = anonymizePersonalData(credlyProfileUrl);
+    const s3Location = `s3://${bucket}/${originalUploadKey}`;
+    const storedFileType =
+      req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
+    const locationLabel = locationMeta.label || 'Unknown';
 
     await dynamo.send(
       new PutItemCommand({
@@ -5645,7 +5755,16 @@ app.post(
           userAgent: { S: anonymizedUserAgent },
           os: { S: os },
           browser: { S: browser },
-          device: { S: device }
+          device: { S: device },
+          location: { S: locationLabel },
+          locationCity: { S: locationMeta.city || '' },
+          locationRegion: { S: locationMeta.region || '' },
+          locationCountry: { S: locationMeta.country || '' },
+          credlyProfileUrl: { S: anonymizedCredly },
+          s3Bucket: { S: bucket },
+          s3Key: { S: originalUploadKey },
+          s3Url: { S: s3Location },
+          fileType: { S: storedFileType }
         }
       })
     );
