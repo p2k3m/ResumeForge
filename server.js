@@ -1716,28 +1716,36 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
         : 'Headline now reflects the target job title for ATS clarity.',
     };
 
-    const trackChange = (key, label, sectionResult = {}, reasons) => {
+    const trackChange = (key, label, sectionResult = {}, reasons, options = {}) => {
       const nextResume = sectionResult.updatedResume || workingResume;
-      if (nextResume !== workingResume) {
-        const before = (sectionResult.beforeExcerpt || '').trim();
-        const after = (sectionResult.afterExcerpt || '').trim();
+      const didChange = nextResume !== workingResume;
+      const forceRecord = Boolean(options.forceRecord);
+      if (!didChange && !forceRecord) {
+        return;
+      }
+
+      const before = (sectionResult.beforeExcerpt || '').trim();
+      const after = (sectionResult.afterExcerpt || '').trim();
+      if (didChange) {
         if (before) beforeSnippets.push(before);
         if (after) afterSnippets.push(after);
-        const reasonList = Array.isArray(reasons)
-          ? reasons.filter(Boolean)
-          : reasons
-          ? [reasons]
-          : [];
-        changeDetails.push({
-          key,
-          section: label,
-          label,
-          before,
-          after,
-          reasons: reasonList,
-        });
         workingResume = nextResume;
+      } else if (forceRecord && after) {
+        afterSnippets.push(after);
       }
+      const reasonList = Array.isArray(reasons)
+        ? reasons.filter(Boolean)
+        : reasons
+        ? [reasons]
+        : [];
+      changeDetails.push({
+        key,
+        section: label,
+        label,
+        before,
+        after,
+        reasons: reasonList,
+      });
     };
 
     trackChange(
@@ -1780,7 +1788,13 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
         baseResult.updatedResume,
         context
       ),
-      defaultReasons.designation
+      defaultReasons.designation,
+      {
+        forceRecord: Boolean(
+          (context && (context.jobTitle || context.currentTitle || context.originalTitle)) ||
+            (baseResult.beforeExcerpt || baseResult.afterExcerpt)
+        ),
+      }
     );
 
     const combinedBefore = [baseResult.beforeExcerpt, ...beforeSnippets]
