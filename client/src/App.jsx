@@ -4,6 +4,7 @@ import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
 import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
 import TemplateSelector from './components/TemplateSelector.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
+import ProcessFlow from './components/ProcessFlow.jsx'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 
 const improvementActions = [
@@ -625,6 +626,137 @@ function App() {
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
   const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
   const improvementLockRef = useRef(false)
+
+  const hasMatch = Boolean(match)
+  const hasCvFile = Boolean(cvFile)
+  const improvementCount = improvementResults.length
+  const downloadCount = outputFiles.length
+  const changeCount = changeLog.length
+  const scoreMetricCount = scoreBreakdown.length
+  const flowSteps = useMemo(() => {
+    const hasAnalysisData =
+      scoreMetricCount > 0 ||
+      hasMatch ||
+      improvementCount > 0 ||
+      downloadCount > 0 ||
+      changeCount > 0
+
+    const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
+    const uploadComplete =
+      (hasCvFile && (isProcessing || Boolean(queuedText))) || hasAnalysisData || Boolean(queuedText)
+    const scoreComplete = scoreMetricCount > 0
+    const improvementsComplete = improvementCount > 0
+    const downloadComplete = downloadCount > 0
+    const changelogComplete = changeCount > 0
+
+    const baseSteps = [
+      {
+        key: 'upload',
+        label: 'Upload & Submit',
+        description: 'Attach your CV and target JD to kick off the analysis.'
+      },
+      {
+        key: 'score',
+        label: 'ATS Score',
+        description: 'Review the ATS breakdown and keyword coverage.'
+      },
+      {
+        key: 'improvements',
+        label: 'Improvement Selection',
+        description: 'Generate targeted rewrites and choose what to apply.'
+      },
+      {
+        key: 'download',
+        label: 'Enhanced Download',
+        description: 'Grab the upgraded CVs and tailored cover letters.'
+      },
+      {
+        key: 'changelog',
+        label: 'Changelog Display',
+        description: 'See every accepted change to prep talking points.'
+      }
+    ]
+
+    let currentAssigned = false
+
+    return baseSteps.map((step) => {
+      const isComplete =
+        step.key === 'upload'
+          ? uploadComplete
+          : step.key === 'score'
+            ? scoreComplete
+            : step.key === 'improvements'
+              ? improvementsComplete
+              : step.key === 'download'
+                ? downloadComplete
+                : step.key === 'changelog'
+                  ? changelogComplete
+                  : false
+
+      let status = 'upcoming'
+      if (isComplete) {
+        status = 'complete'
+      } else if (!currentAssigned) {
+        status = 'current'
+        currentAssigned = true
+      }
+
+      let note = ''
+      switch (step.key) {
+        case 'upload':
+          if (!uploadComplete) {
+            note = hasCvFile ? 'Ready to submit for scoring.' : 'Waiting for your resume upload.'
+          } else if (isProcessing && !hasAnalysisData) {
+            note = 'Uploading & parsing your documents…'
+          } else if (queuedText) {
+            note = queuedText
+          } else if (hasAnalysisData) {
+            note = 'Upload complete.'
+          }
+          break
+        case 'score':
+          if (isProcessing && !scoreComplete) {
+            note = 'Scanning resume against the JD…'
+          } else if (scoreComplete) {
+            note = 'ATS dashboard ready.'
+          } else if (hasAnalysisData) {
+            note = 'Waiting for ATS metrics…'
+          }
+          break
+        case 'improvements':
+          if (improvementBusy) {
+            note = 'Generating AI rewrite…'
+          } else if (improvementCount > 0) {
+            note = `${improvementCount} suggestion${improvementCount === 1 ? '' : 's'} ready.`
+          }
+          break
+        case 'download':
+          if (downloadCount > 0) {
+            note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} available.`
+          }
+          break
+        case 'changelog':
+          if (changeCount > 0) {
+            note = `${changeCount} accepted update${changeCount === 1 ? '' : 's'}.`
+          }
+          break
+        default:
+          break
+      }
+
+      return { ...step, status, note }
+    })
+  }, [
+    changeCount,
+    downloadCount,
+    hasCvFile,
+    hasMatch,
+    improvementBusy,
+    improvementCount,
+    isProcessing,
+    queuedMessage,
+    scoreMetricCount
+  ])
 
   const downloadGroups = useMemo(() => {
     if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
@@ -1483,6 +1615,8 @@ function App() {
             breakdown with tailored improvements you can accept or reject.
           </p>
         </header>
+
+        <ProcessFlow steps={flowSteps} />
 
         <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
           <div
