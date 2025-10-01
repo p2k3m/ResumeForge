@@ -2653,6 +2653,49 @@ function normalizeUrl(url = '') {
   return trimmed;
 }
 
+function extractContactDetails(text = '', linkedinProfileUrl = '') {
+  const result = {
+    email: '',
+    phone: '',
+    linkedin: '',
+    contactLines: [],
+  };
+
+  if (text) {
+    const emailMatch = String(text).match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    if (emailMatch) {
+      result.email = emailMatch[0];
+    }
+
+    const phoneMatch = String(text).match(/(\+?\d[\d\s().-]{7,}\d)/);
+    if (phoneMatch) {
+      result.phone = phoneMatch[0].replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  const normalizedLinkedIn = normalizeUrl(linkedinProfileUrl);
+  if (normalizedLinkedIn) {
+    result.linkedin = normalizedLinkedIn;
+  }
+
+  const seen = new Set();
+  const pushLine = (label, value) => {
+    if (!value) return;
+    const trimmed = String(value).trim();
+    if (!trimmed) return;
+    const key = `${label}:${trimmed}`.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.contactLines.push(`${label}: ${trimmed}`);
+  };
+
+  pushLine('Email', result.email);
+  pushLine('Phone', result.phone);
+  pushLine('LinkedIn', result.linkedin);
+
+  return result;
+}
+
 function parseLine(text) {
   let bullet = false;
   text = text.replace(/^[\-*–]\s+/, () => {
@@ -5659,8 +5702,27 @@ function sanitizeGeneratedText(text, options = {}) {
   const data = parseContent(reparsed, { ...options, skipRequiredSections: true });
   const merged = mergeDuplicateSections(data.sections);
   const pruned = pruneEmptySections(merged);
+  const sections = [...pruned];
+  const contactLines = Array.isArray(options.contactLines)
+    ? options.contactLines
+        .map((line) => String(line || '').trim())
+        .filter(Boolean)
+    : [];
+  const hasContactSection = sections.some(
+    (sec) => normalizeHeading(sec.heading || '').toLowerCase() === 'contact'
+  );
+  if (!hasContactSection && contactLines.length) {
+    sections.unshift({
+      heading: normalizeHeading('Contact'),
+      items: contactLines.map((line) => {
+        const tokens = parseLine(line);
+        if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+        return tokens;
+      })
+    });
+  }
   const lines = [data.name];
-  pruned.forEach((sec) => {
+  sections.forEach((sec) => {
     lines.push(`# ${sec.heading}`);
     sec.items.forEach((tokens) => {
       lines.push(
@@ -6610,6 +6672,7 @@ app.post(
       resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
 
     const originalResumeText = text;
+    const contactDetails = extractContactDetails(originalResumeText, linkedinProfileUrl);
 
       // Use GEMINI_API_KEY from validated runtime configuration
     const geminiApiKey = secrets.GEMINI_API_KEY;
@@ -6640,6 +6703,7 @@ app.post(
             linkedinCertifications,
             credlyCertifications: aggregatedCertifications,
             credlyProfileUrl,
+            contactLines: contactDetails.contactLines,
           }
         );
         text = enhanced.text;
@@ -6741,7 +6805,8 @@ app.post(
           credlyCertifications,
           credlyProfileUrl,
           jobTitle,
-          project: projectText
+          project: projectText,
+          contactLines: contactDetails.contactLines,
         };
         versionData.version1 = await verifyResume(
           sanitizeGeneratedText(parsed.version1, sanitizeOptions),
@@ -6800,6 +6865,7 @@ app.post(
         credlyProfileUrl,
         jobTitle,
         project: projectText,
+        contactLines: contactDetails.contactLines,
       };
       const fallbackResume = sanitizeGeneratedText(combinedProfile, fallbackOptions);
       if (fallbackResume && fallbackResume.trim()) {
@@ -6849,6 +6915,7 @@ app.post(
         credlyProfileUrl,
         jobTitle,
         project: projectText,
+        contactLines: contactDetails.contactLines,
       };
       const fallbackResume = sanitizeGeneratedText(combinedProfile, fallbackOptions);
       if (fallbackResume && fallbackResume.trim()) {
@@ -6981,6 +7048,8 @@ app.post(
             project: projectText,
             linkedinProfileUrl,
             applicantName,
+            email: contactDetails.email,
+            phone: contactDetails.phone,
           }
         : null;
       const baseCoverOptions = isCoverLetter
