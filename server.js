@@ -3941,7 +3941,7 @@ function buildSelectionInsights(context = {}) {
 
   const metrics = Array.isArray(scoreBreakdown)
     ? scoreBreakdown
-    : Object.values(scoreBreakdown || {});
+    : scoreBreakdownToArray(scoreBreakdown);
   const metricScores = metrics
     .map((metric) => (typeof metric?.score === 'number' ? metric.score : null))
     .filter((score) => Number.isFinite(score));
@@ -4221,12 +4221,62 @@ const STOP_WORDS = new Set(
     .map((word) => word.trim())
 );
 
+const ATS_METRIC_DEFINITIONS = [
+  { key: 'layoutSearchability', category: 'Layout & Searchability' },
+  { key: 'atsReadability', category: 'ATS Readability' },
+  { key: 'impact', category: 'Impact' },
+  { key: 'crispness', category: 'Crispness' },
+  { key: 'otherQuality', category: 'Other Quality Metrics' },
+];
+
+function sanitizeMetric(metric, category) {
+  if (!metric || typeof metric !== 'object') {
+    return createMetric(category, 0);
+  }
+
+  const boundedScore = typeof metric.score === 'number' ? clamp(metric.score, 0, 100) : 0;
+  const roundedScore = Math.round(boundedScore);
+  const rating = scoreRatingLabel(roundedScore);
+  const tips = Array.from(
+    new Set(
+      []
+        .concat(typeof metric.tip === 'string' ? metric.tip : [])
+        .concat(Array.isArray(metric.tips) ? metric.tips : [])
+        .map((tip) => (typeof tip === 'string' ? tip.trim() : ''))
+        .filter(Boolean)
+    )
+  );
+
+  const defaultTips = createMetric(category, roundedScore, tips).tips;
+
+  return {
+    ...metric,
+    category: metric.category || category,
+    score: roundedScore,
+    rating,
+    ratingLabel: rating,
+    tips: tips.length ? tips : defaultTips,
+  };
+}
+
+function ensureScoreBreakdownCompleteness(source = {}) {
+  return ATS_METRIC_DEFINITIONS.reduce((acc, { key, category }) => {
+    const metric = sanitizeMetric(source[key], category);
+    return { ...acc, [key]: metric };
+  }, {});
+}
+
+function scoreBreakdownToArray(scoreBreakdown = {}) {
+  const normalized = ensureScoreBreakdownCompleteness(scoreBreakdown);
+  return ATS_METRIC_DEFINITIONS.map(({ key }) => normalized[key]);
+}
+
 function buildScoreBreakdown(
   text = '',
   { jobText = '', jobSkills = [], resumeSkills = [] } = {}
 ) {
   if (!text?.trim()) {
-    return {};
+    return ensureScoreBreakdownCompleteness();
   }
 
   const analysis = analyzeResumeForMetrics(text, { jobText, jobSkills, resumeSkills });
@@ -4237,13 +4287,13 @@ function buildScoreBreakdown(
   const crispness = evaluateCrispnessMetric(analysis);
   const other = evaluateOtherMetric(analysis);
 
-  return {
+  return ensureScoreBreakdownCompleteness({
     layoutSearchability: layout,
     atsReadability: ats,
     impact,
     crispness,
     otherQuality: other,
-  };
+  });
 }
 
 const METRIC_ACTION_VERBS = [
@@ -6566,6 +6616,7 @@ app.post(
       originalTitle,
       modifiedTitle: modifiedTitle || originalTitle,
       scoreBreakdown,
+      atsSubScores: scoreBreakdownToArray(scoreBreakdown),
       resumeText: combinedProfile,
       originalResumeText,
       jobDescriptionText: jobDescription,

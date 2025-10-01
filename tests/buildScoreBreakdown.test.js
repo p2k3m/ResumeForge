@@ -106,6 +106,24 @@ describe('buildScoreBreakdown', () => {
     });
   });
 
+  test('includes all ATS metrics even when resume text is empty', () => {
+    const breakdown = buildScoreBreakdown('', {});
+
+    expect(breakdown).toEqual(
+      expect.objectContaining({
+        layoutSearchability: expect.objectContaining({ category: 'Layout & Searchability', score: 0 }),
+        atsReadability: expect.objectContaining({ category: 'ATS Readability', score: 0 }),
+        impact: expect.objectContaining({ category: 'Impact', score: 0 }),
+        crispness: expect.objectContaining({ category: 'Crispness', score: 0 }),
+        otherQuality: expect.objectContaining({ category: 'Other Quality Metrics', score: 0 }),
+      })
+    );
+    Object.values(breakdown).forEach((metric) => {
+      expect(Array.isArray(metric.tips)).toBe(true);
+      expect(metric.ratingLabel).toBe(metric.rating);
+    });
+  });
+
   test('crispness penalizes rambling bullets and filler language', () => {
     const strong = buildScoreBreakdown(strongResume, {
       jobText: jobDescription,
