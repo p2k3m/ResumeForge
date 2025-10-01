@@ -20,7 +20,8 @@ import {
   DynamoDBClient,
   CreateTableCommand,
   DescribeTableCommand,
-  PutItemCommand
+  PutItemCommand,
+  UpdateItemCommand
 } from '@aws-sdk/client-dynamodb';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -5305,6 +5306,76 @@ app.post(
     );
   }
 
+  const dynamo = new DynamoDBClient({ region });
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+  const tablePollInterval = Math.max(
+    1,
+    Math.min(DYNAMO_TABLE_POLL_INTERVAL_MS, DYNAMO_TABLE_MAX_WAIT_MS)
+  );
+  let tableEnsured = false;
+
+  const waitForTableActive = async (ignoreNotFound = false) => {
+    const startedAt = Date.now();
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        const desc = await dynamo.send(
+          new DescribeTableCommand({ TableName: tableName })
+        );
+        if (desc.Table && desc.Table.TableStatus === 'ACTIVE') {
+          return;
+        }
+      } catch (err) {
+        if (!ignoreNotFound || err.name !== 'ResourceNotFoundException') {
+          throw err;
+        }
+      }
+
+      if (Date.now() - startedAt >= DYNAMO_TABLE_MAX_WAIT_MS) {
+        throw new Error(
+          `DynamoDB table ${tableName} did not become ACTIVE within ${DYNAMO_TABLE_MAX_WAIT_MS} ms`
+        );
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, tablePollInterval));
+    }
+  };
+
+  const ensureTableExists = async () => {
+    if (tableEnsured) {
+      return;
+    }
+    try {
+      await waitForTableActive(false);
+      tableEnsured = true;
+      return;
+    } catch (err) {
+      if (err.name !== 'ResourceNotFoundException') {
+        throw err;
+      }
+    }
+
+    try {
+      await dynamo.send(
+        new CreateTableCommand({
+          TableName: tableName,
+          AttributeDefinitions: [
+            { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
+          ],
+          KeySchema: [
+            { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
+          ],
+          BillingMode: 'PAY_PER_REQUEST'
+        })
+      );
+    } catch (createErr) {
+      if (createErr.name !== 'ResourceInUseException') throw createErr;
+    }
+
+    await waitForTableActive(true);
+    tableEnsured = true;
+  };
+
   const { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
   logStructured('info', 'process_cv_started', {
     ...logContext,
@@ -5439,11 +5510,20 @@ app.post(
   }
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName) || 'candidate';
+  const anonymizedApplicantName = anonymizePersonalData(applicantName);
+  const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
+  const anonymizedIp = anonymizePersonalData(ipAddress);
+  const anonymizedUserAgent = anonymizePersonalData(userAgent);
+  const anonymizedCredly = anonymizePersonalData(credlyProfileUrl);
   const ext = (path.extname(req.file.originalname) || '').toLowerCase();
   const normalizedExt = ext || '.pdf';
   const prefix = `${sanitizedName}/cv/${date}/`;
   const originalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
   const logKey = `${prefix}logs/processing.jsonl`;
+  const s3Location = `s3://${bucket}/${originalUploadKey}`;
+  const storedFileType =
+    req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
+  const locationLabel = locationMeta.label || 'Unknown';
 
   // Store raw file to configured bucket
   const initialS3 = s3Client;
@@ -5490,6 +5570,90 @@ app.post(
       'INITIAL_UPLOAD_FAILED',
       `Initial S3 upload to bucket ${bucket} failed: ${message}`,
       { bucket }
+    );
+  }
+
+  const safeRequestId =
+    typeof requestId === 'string' && requestId.trim()
+      ? requestId.trim()
+      : String(requestId || '');
+  const jobDescriptionUrlValue =
+    typeof jobDescriptionUrl === 'string' ? jobDescriptionUrl : '';
+
+  try {
+    await ensureTableExists();
+    const timestamp = new Date().toISOString();
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: tableName,
+        Item: {
+          linkedinProfileUrl: { S: anonymizedLinkedIn },
+          candidateName: { S: anonymizedApplicantName },
+          timestamp: { S: timestamp },
+          uploadedAt: { S: timestamp },
+          requestId: { S: safeRequestId },
+          jobId: { S: jobId },
+          jobDescriptionUrl: { S: jobDescriptionUrlValue },
+          credlyProfileUrl: { S: anonymizedCredly },
+          cv1Url: { S: '' },
+          cv2Url: { S: '' },
+          coverLetter1Url: { S: '' },
+          coverLetter2Url: { S: '' },
+          ipAddress: { S: anonymizedIp },
+          userAgent: { S: anonymizedUserAgent },
+          os: { S: os },
+          browser: { S: browser },
+          device: { S: device },
+          location: { S: locationLabel },
+          locationCity: { S: locationMeta.city || '' },
+          locationRegion: { S: locationMeta.region || '' },
+          locationCountry: { S: locationMeta.country || '' },
+          s3Bucket: { S: bucket },
+          s3Key: { S: originalUploadKey },
+          s3Url: { S: s3Location },
+          fileType: { S: storedFileType },
+          status: { S: 'uploaded' }
+        }
+      })
+    );
+    logStructured('info', 'dynamo_initial_record_written', {
+      ...logContext,
+      bucket,
+      key: originalUploadKey,
+    });
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'dynamodb_initial_record_written'
+    });
+  } catch (err) {
+    logStructured('error', 'dynamo_initial_record_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    try {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'dynamodb_initial_record_failed',
+        level: 'error',
+        message: err.message || 'Failed to write initial DynamoDB record'
+      });
+    } catch (logErr) {
+      logStructured('error', 'dynamo_initial_record_log_failed', {
+        ...logContext,
+        error: serializeError(logErr),
+      });
+    }
+    return sendError(
+      res,
+      500,
+      'INITIAL_METADATA_WRITE_FAILED',
+      'Failed to record upload metadata. Please try again later.'
     );
   }
 
@@ -6210,109 +6374,6 @@ app.post(
       return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
     }
 
-    const dynamo = new DynamoDBClient({ region });
-    const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
-    const tablePollInterval = Math.max(
-      1,
-      Math.min(DYNAMO_TABLE_POLL_INTERVAL_MS, DYNAMO_TABLE_MAX_WAIT_MS)
-    );
-    const waitForTableActive = async (ignoreNotFound = false) => {
-      const startedAt = Date.now();
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        try {
-          const desc = await dynamo.send(
-            new DescribeTableCommand({ TableName: tableName })
-          );
-          if (desc.Table && desc.Table.TableStatus === 'ACTIVE') {
-            return;
-          }
-        } catch (err) {
-          if (!ignoreNotFound || err.name !== 'ResourceNotFoundException') {
-            throw err;
-          }
-        }
-
-        if (Date.now() - startedAt >= DYNAMO_TABLE_MAX_WAIT_MS) {
-          throw new Error(
-            `DynamoDB table ${tableName} did not become ACTIVE within ${DYNAMO_TABLE_MAX_WAIT_MS} ms`
-          );
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, tablePollInterval));
-      }
-    };
-
-    async function ensureTableExists() {
-      try {
-        await waitForTableActive(false);
-        return;
-      } catch (err) {
-        if (err.name !== 'ResourceNotFoundException') {
-          throw err;
-        }
-      }
-
-      try {
-        await dynamo.send(
-          new CreateTableCommand({
-            TableName: tableName,
-            AttributeDefinitions: [
-              { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
-            ],
-            KeySchema: [
-              { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
-            ],
-            BillingMode: 'PAY_PER_REQUEST'
-          })
-        );
-      } catch (createErr) {
-        if (createErr.name !== 'ResourceInUseException') throw createErr;
-      }
-
-      await waitForTableActive(true);
-    }
-    await ensureTableExists();
-    const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
-    const anonymizedApplicantName = anonymizePersonalData(applicantName);
-    const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
-    const anonymizedIp = anonymizePersonalData(ipAddress);
-    const anonymizedUserAgent = anonymizePersonalData(userAgent);
-    const anonymizedCredly = anonymizePersonalData(credlyProfileUrl);
-    const s3Location = `s3://${bucket}/${originalUploadKey}`;
-    const storedFileType =
-      req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
-    const locationLabel = locationMeta.label || 'Unknown';
-
-    await dynamo.send(
-      new PutItemCommand({
-        TableName: tableName,
-        Item: {
-          linkedinProfileUrl: { S: anonymizedLinkedIn },
-          candidateName: { S: anonymizedApplicantName },
-          timestamp: { S: new Date().toISOString() },
-          cv1Url: { S: urlMap.version1 || '' },
-          cv2Url: { S: urlMap.version2 || '' },
-          coverLetter1Url: { S: urlMap.cover_letter1 || '' },
-          coverLetter2Url: { S: urlMap.cover_letter2 || '' },
-          ipAddress: { S: anonymizedIp },
-          userAgent: { S: anonymizedUserAgent },
-          os: { S: os },
-          browser: { S: browser },
-          device: { S: device },
-          location: { S: locationLabel },
-          locationCity: { S: locationMeta.city || '' },
-          locationRegion: { S: locationMeta.region || '' },
-          locationCountry: { S: locationMeta.country || '' },
-          credlyProfileUrl: { S: anonymizedCredly },
-          s3Bucket: { S: bucket },
-          s3Key: { S: originalUploadKey },
-          s3Url: { S: s3Location },
-          fileType: { S: storedFileType }
-        }
-      })
-    );
-
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -6356,6 +6417,66 @@ app.post(
       knownCertificates,
       certificateSuggestions,
       manualCertificatesRequired,
+    });
+
+    await ensureTableExists();
+    const urlMap = Object.fromEntries(urls.map((u) => [u.type, u.url]));
+    const completedAt = new Date().toISOString();
+    const missingSkillList = missingSkills.map((skill) => ({ S: String(skill) }));
+    const addedSkillList = addedSkills.map((skill) => ({ S: String(skill) }));
+    const updateParts = [
+      'cv1Url = :cv1',
+      'cv2Url = :cv2',
+      'coverLetter1Url = :cl1',
+      'coverLetter2Url = :cl2',
+      'status = :status',
+      'analysisCompletedAt = :completedAt',
+      'missingSkills = :missingSkills',
+      'addedSkills = :addedSkills'
+    ];
+    const expressionValues = {
+      ':cv1': { S: urlMap.version1 || '' },
+      ':cv2': { S: urlMap.version2 || '' },
+      ':cl1': { S: urlMap.cover_letter1 || '' },
+      ':cl2': { S: urlMap.cover_letter2 || '' },
+      ':status': { S: 'completed' },
+      ':completedAt': { S: completedAt },
+      ':missingSkills': { L: missingSkillList },
+      ':addedSkills': { L: addedSkillList },
+      ':jobId': { S: jobId }
+    };
+
+    if (Number.isFinite(originalScore)) {
+      updateParts.push('originalScore = :originalScore');
+      expressionValues[':originalScore'] = { N: String(originalScore) };
+    }
+    if (Number.isFinite(enhancedScore)) {
+      updateParts.push('enhancedScore = :enhancedScore');
+      expressionValues[':enhancedScore'] = { N: String(enhancedScore) };
+    }
+    if (typeof selectionInsights?.probability === 'number') {
+      updateParts.push('selectionProbability = :probability');
+      expressionValues[':probability'] = {
+        N: String(selectionInsights.probability)
+      };
+    }
+
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+        UpdateExpression: `SET ${updateParts.join(', ')}`,
+        ExpressionAttributeValues: expressionValues,
+        ConditionExpression: 'jobId = :jobId'
+      })
+    );
+
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'dynamodb_metadata_updated'
     });
     logStructured('info', 'selection_insights_computed', {
       ...logContext,

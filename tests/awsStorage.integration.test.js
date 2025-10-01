@@ -43,6 +43,16 @@ describe('AWS integrations for /api/process-cv', () => {
     expect(dynamoPut[0].input.Item.linkedinProfileUrl.S).toBe(
       hash('https://linkedin.com/in/example')
     );
+    expect(dynamoPut[0].input.Item.status.S).toBe('uploaded');
+
+    const dynamoUpdate = mocks.mockDynamoSend.mock.calls.find(
+      ([command]) => command.__type === 'UpdateItemCommand'
+    );
+    expect(dynamoUpdate).toBeTruthy();
+    expect(dynamoUpdate[0].input.ExpressionAttributeValues[':status'].S).toBe(
+      'completed'
+    );
+    expect(dynamoUpdate[0].input.UpdateExpression).toContain('analysisCompletedAt');
 
     expect(mocks.logEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'uploaded_metadata' })
@@ -103,6 +113,7 @@ describe('AWS integrations for /api/process-cv', () => {
       'CreateTableCommand',
       'DescribeTableCommand',
       'PutItemCommand',
+      'UpdateItemCommand',
     ]);
   });
 });

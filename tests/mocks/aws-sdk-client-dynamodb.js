@@ -22,3 +22,9 @@ export class PutItemCommand {
     this.__type = 'PutItemCommand';
   }
 }
+export class UpdateItemCommand {
+  constructor(input) {
+    this.input = input;
+    this.__type = 'UpdateItemCommand';
+  }
+}

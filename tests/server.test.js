@@ -41,7 +41,8 @@ jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn(() => ({ send: mockDynamoSend })),
   CreateTableCommand: jest.fn((input) => ({ input, __type: 'CreateTableCommand' })),
   DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
-  PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' }))
+  PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' })),
+  UpdateItemCommand: jest.fn((input) => ({ input, __type: 'UpdateItemCommand' }))
 }));
 
 jest.unstable_mockModule('../logger.js', () => ({
@@ -179,7 +180,8 @@ describe('/api/process-cv', () => {
       'DescribeTableCommand',
       'CreateTableCommand',
       'DescribeTableCommand',
-      'PutItemCommand'
+      'PutItemCommand',
+      'UpdateItemCommand'
     ]);
 
     setupDefaultDynamoMock();
@@ -291,8 +293,27 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.s3Key.S).toContain(`${sanitized}/cv/`);
     expect(putCall[0].input.Item.s3Url.S).toContain(`${sanitized}/cv/`);
     expect(putCall[0].input.Item.fileType.S).toMatch(/pdf/);
+    expect(putCall[0].input.Item.status.S).toBe('uploaded');
+    expect(putCall[0].input.Item.cv1Url.S).toBe('');
+    expect(putCall[0].input.Item.cv2Url.S).toBe('');
+
+    const updateCall = mockDynamoSend.mock.calls.find(
+      ([cmd]) => cmd.__type === 'UpdateItemCommand'
+    );
+    expect(updateCall).toBeTruthy();
+    expect(updateCall[0].input.ConditionExpression).toBe('jobId = :jobId');
+    expect(updateCall[0].input.ExpressionAttributeValues[':status'].S).toBe(
+      'completed'
+    );
+    expect(updateCall[0].input.UpdateExpression).toContain('cv1Url');
+    expect(updateCall[0].input.UpdateExpression).toContain('coverLetter1Url');
+
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
-    expect(types).toEqual(['DescribeTableCommand', 'PutItemCommand']);
+    expect(types).toEqual([
+      'DescribeTableCommand',
+      'PutItemCommand',
+      'UpdateItemCommand'
+    ]);
   });
 
   test('prompts for manual job description when scraping fails', async () => {
