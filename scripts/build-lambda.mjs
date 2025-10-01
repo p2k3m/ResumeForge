@@ -3,6 +3,7 @@ import { build } from 'esbuild'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import { mkdir, rm, cp } from 'fs/promises'
+import { spawn } from 'child_process'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -48,6 +49,25 @@ function resolveOutDir() {
 
 const outDir = resolveOutDir()
 
+async function runClientBuild() {
+  await new Promise((resolve, reject) => {
+    const child = spawn('npm', ['run', 'build', '--prefix', 'client'], {
+      cwd: projectRoot,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+    })
+
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+        return
+      }
+      reject(new Error(`Client build failed with exit code ${code}`))
+    })
+  })
+}
+
 async function ensureCleanOutput() {
   await rm(outDir, { recursive: true, force: true })
   await mkdir(outDir, { recursive: true })
@@ -91,6 +111,7 @@ async function copyStaticAssets() {
   const copyPairs = [
     [path.join(projectRoot, 'templates'), path.join(outDir, 'templates')],
     [path.join(projectRoot, 'lib', 'pdf', 'templates'), path.join(outDir, 'lib', 'pdf', 'templates')],
+    [path.join(projectRoot, 'client', 'dist'), path.join(outDir, 'client', 'dist')],
   ]
 
   for (const [source, destination] of copyPairs) {
@@ -106,6 +127,7 @@ async function copyStaticAssets() {
 }
 
 async function main() {
+  await runClientBuild()
   await ensureCleanOutput()
   await runEsbuild()
   await copyStaticAssets()
