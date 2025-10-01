@@ -3,6 +3,8 @@ import { formatMatchMessage } from './formatMatchMessage.js'
 import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
 import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
 import TemplateSelector from './components/TemplateSelector.jsx'
+import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
+import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 
 const improvementActions = [
   {
@@ -198,6 +200,58 @@ function buildChangeLogEntry(suggestion) {
     return baseReason
   })()
 
+  const summarySegments = Array.isArray(suggestion?.improvementSummary)
+    ? suggestion.improvementSummary
+        .map((segment) => {
+          if (!segment) return null
+          const sectionLabel = [segment.section, segment.label, segment.key]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find(Boolean) || ''
+          const addedItems = Array.isArray(segment.added)
+            ? segment.added
+                .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+                .filter(Boolean)
+            : []
+          const removedItems = Array.isArray(segment.removed)
+            ? segment.removed
+                .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+                .filter(Boolean)
+            : []
+          const reasons = Array.isArray(segment.reason)
+            ? segment.reason
+                .map((line) => (typeof line === 'string' ? line.trim() : ''))
+                .filter(Boolean)
+            : []
+          if (!sectionLabel && addedItems.length === 0 && removedItems.length === 0 && reasons.length === 0) {
+            return null
+          }
+          return {
+            section: sectionLabel,
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons
+          }
+        })
+        .filter(Boolean)
+    : []
+
+  const aggregateUnique = (items) => {
+    const seen = new Set()
+    const ordered = []
+    items.forEach((item) => {
+      const text = typeof item === 'string' ? item.trim() : String(item || '').trim()
+      if (!text) return
+      const key = text.toLowerCase()
+      if (seen.has(key)) return
+      seen.add(key)
+      ordered.push(text)
+    })
+    return ordered
+  }
+
+  const addedItems = aggregateUnique(summarySegments.flatMap((segment) => segment.added || []))
+  const removedItems = aggregateUnique(summarySegments.flatMap((segment) => segment.removed || []))
+
   return {
     id: suggestion?.id,
     label,
@@ -205,7 +259,11 @@ function buildChangeLogEntry(suggestion) {
     detail: detailText.trim(),
     before: (suggestion?.beforeExcerpt || '').trim(),
     after: (suggestion?.afterExcerpt || '').trim(),
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    type: suggestion?.type || 'custom',
+    summarySegments,
+    addedItems,
+    removedItems
   }
 }
 
@@ -697,6 +755,29 @@ function App() {
     return items
   }, [match, certificateInsights])
 
+  const deltaSummary = useMemo(
+    () =>
+      deriveDeltaSummary({
+        match,
+        changeLog,
+        certificateInsights,
+        manualCertificates: manualCertificatesData,
+        jobSkills,
+        resumeSkills
+      }),
+    [match, changeLog, certificateInsights, manualCertificatesData, jobSkills, resumeSkills]
+  )
+
+  const showDeltaSummary = Boolean(
+    match ||
+      (certificateInsights &&
+        ((certificateInsights.known && certificateInsights.known.length > 0) ||
+          (certificateInsights.suggestions && certificateInsights.suggestions.length > 0) ||
+          certificateInsights.manualEntryRequired)) ||
+      manualCertificatesData.length > 0 ||
+      changeLog.length > 0
+  )
+
   const handleImprovementClick = async (type) => {
     if (improvementLockRef.current) {
       setError('Please wait for the current improvement to finish before requesting another one.')
@@ -963,6 +1044,8 @@ function App() {
         {scoreBreakdown.length > 0 && (
           <ATSScoreDashboard metrics={scoreBreakdown} match={match} />
         )}
+
+        {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
 
         {selectionInsights && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
