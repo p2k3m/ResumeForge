@@ -38,7 +38,7 @@ function ATSScoreCard({ metric, accentClass = defaultAccent }) {
   const badgeClass = badgeThemes[ratingLabel] || badgeThemes.GOOD
   const labelClass = labelTone[ratingLabel] || labelTone.GOOD
   const { display: scoreDisplay, suffix: scoreSuffix } = formatScore(metric?.score)
-  const tip = metric?.tip ?? ''
+  const tip = metric?.tip ?? metric?.tips?.[0] ?? ''
   const category = metric?.category ?? 'Metric'
 
   return (
