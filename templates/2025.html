@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Resume</title>
+    <link rel="stylesheet" href="2025.css" />
   </head>
   <body>
     <div class="page">
@@ -13,14 +14,14 @@
           <p class="tagline">Future-ready professional profile &mdash; tailored for 2025 hiring</p>
         </div>
         <div class="meta-pills">
-          <span class="pill">ATS Optimised</span>
-          <span class="pill">Two-column Layout</span>
-          <span class="pill">Keyword Aligned</span>
+          <span class="pill">ATS optimised</span>
+          <span class="pill">Two-column layout</span>
+          <span class="pill">Keyword aligned</span>
         </div>
       </header>
       <main class="resume-grid">
         {{#each sections}}
-        <section class="resume-section">
+        <section class="resume-section {{#if @first}}span-2{{/if}}">
           {{#if heading}}
           <div class="section-header">
             <h2>{{heading}}</h2>
@@ -30,7 +31,10 @@
           {{#if items}}
           <ul class="section-list">
             {{#each items}}
-            <li class="section-item">{{{this}}}</li>
+            <li class="section-item">
+              <span class="bullet">◆</span>
+              <span class="item-content">{{{this}}}</span>
+            </li>
             {{/each}}
           </ul>
           {{/if}}
