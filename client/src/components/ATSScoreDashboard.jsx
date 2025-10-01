@@ -1,4 +1,5 @@
 import ATSScoreCard from './ATSScoreCard.jsx'
+import InfoTooltip from './InfoTooltip.jsx'
 
 const gradientPalette = [
   'from-[#5B21B6] via-[#7C3AED] to-[#4C1D95]',
@@ -85,6 +86,17 @@ function ATSScoreDashboard({ metrics = [], match }) {
       ]
     : []
 
+  const originalScoreDescription =
+    match?.originalScoreExplanation ||
+    'Baseline ATS alignment from your uploaded resume before any ResumeForge refinements.'
+  const enhancedScoreDescription =
+    match?.enhancedScoreExplanation ||
+    'Recalculated ATS alignment after applying the recommended ResumeForge improvements.'
+  const scoreComparisonDescription =
+    'Illustrates how the enhanced resume closes gaps versus ATS benchmarks by comparing both scores side-by-side.'
+  const selectionProbabilityDescription =
+    'Combines ATS scores, keyword coverage, and credential alignment to estimate how likely you are to be shortlisted.'
+
   return (
     <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -117,7 +129,15 @@ function ATSScoreDashboard({ metrics = [], match }) {
           aria-label="match comparison"
         >
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-lg backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Original Match</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Original Match</p>
+              <InfoTooltip
+                variant="light"
+                align="right"
+                label="How is the original match score calculated?"
+                content={originalScoreDescription}
+              />
+            </div>
             <p className="mt-3 text-5xl font-black text-indigo-700" data-testid="original-score">
               {match.originalScore ?? '—'}%
             </p>
@@ -126,15 +146,23 @@ function ATSScoreDashboard({ metrics = [], match }) {
             </p>
           </div>
           <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-100 via-white to-emerald-50 p-6 shadow-lg backdrop-blur">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Enhanced Match</p>
-                <p className="mt-3 text-5xl font-black text-emerald-700" data-testid="enhanced-score">
-                  {match.enhancedScore ?? '—'}%
-                </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Enhanced Match</p>
+                  <p className="mt-3 text-5xl font-black text-emerald-700" data-testid="enhanced-score">
+                    {match.enhancedScore ?? '—'}%
+                  </p>
+                </div>
+                <InfoTooltip
+                  variant="light"
+                  align="left"
+                  label="How is the enhanced match score calculated?"
+                  content={enhancedScoreDescription}
+                />
               </div>
               {matchDelta && (
-                <span className="self-start rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700" data-testid="match-delta">
+                <span className="self-start rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700" data-testid="match-delta">
                   {matchDelta}
                 </span>
               )}
@@ -155,11 +183,19 @@ function ATSScoreDashboard({ metrics = [], match }) {
                     Visualise how the enhanced version closes the gap against ATS expectations.
                   </p>
                 </div>
-                {matchDelta && (
-                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
-                    {matchDelta}
-                  </span>
-                )}
+                <div className="flex items-start gap-2">
+                  <InfoTooltip
+                    variant="light"
+                    align="right"
+                    label="What does the score comparison show?"
+                    content={scoreComparisonDescription}
+                  />
+                  {matchDelta && (
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                      {matchDelta}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="mt-4 space-y-4" role="img" aria-label={`Original score ${originalScoreValue}%, enhanced score ${enhancedScoreValue}%`}>
                 {scoreBands.map(({ label, value, tone, textTone }) => (
@@ -185,7 +221,15 @@ function ATSScoreDashboard({ metrics = [], match }) {
           )}
           {hasSelectionProbability && (
             <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 shadow-lg backdrop-blur">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection Probability</p>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection Probability</p>
+                <InfoTooltip
+                  variant="light"
+                  align="right"
+                  label="How is the selection probability estimated?"
+                  content={selectionProbabilityDescription}
+                />
+              </div>
               <div className="mt-3 flex items-baseline gap-3">
                 <p className="text-5xl font-black text-emerald-700">{selectionProbabilityValue}%</p>
                 {selectionProbabilityMeaning && (

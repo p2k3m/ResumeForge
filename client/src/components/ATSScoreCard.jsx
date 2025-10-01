@@ -1,3 +1,5 @@
+import InfoTooltip from './InfoTooltip.jsx'
+
 const badgeThemes = {
   EXCELLENT:
     'bg-white/15 text-white border border-white/40 shadow-[0_8px_20px_rgba(255,255,255,0.18)] backdrop-blur-sm',
@@ -33,6 +35,39 @@ function formatScore(score) {
 
 const defaultAccent = 'from-indigo-500 via-purple-500 to-purple-700'
 
+const metricDescriptions = {
+  'Keyword Match':
+    'Measures how closely your resume keyword usage mirrors the job description so ATS scanners can confidently match you.',
+  'Skills Coverage':
+    'Summarises how well you showcase the core technical and soft skills the job emphasises.',
+  'Format Compliance':
+    'Checks whether your layout, headings, and file structure follow ATS-friendly formatting conventions.',
+  Readability:
+    'Looks at sentence length, clarity, and scannability to ensure recruiters can digest your story quickly.',
+  'Experience Alignment':
+    'Evaluates how your accomplishments map to the role’s responsibilities and impact areas.',
+  Structure:
+    'Reviews the ordering of sections, headings, and spacing that help ATS parsers read the resume correctly.',
+  Achievements:
+    'Highlights the presence of quantified, outcome-focused statements that prove your impact.',
+  'Core Competencies':
+    'Captures whether the resume surfaces the core competencies and proficiencies the JD prioritises.',
+}
+
+function describeMetric(metric) {
+  const explicit = typeof metric?.description === 'string' ? metric.description.trim() : ''
+  if (explicit) return explicit
+
+  const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
+  if (category) {
+    const mapped = metricDescriptions[category]
+    if (mapped) return mapped
+    return `Represents how well your resume performs for ${category.toLowerCase()} when parsed by applicant tracking systems.`
+  }
+
+  return 'Shows how this aspect of your resume aligns with ATS expectations.'
+}
+
 function ATSScoreCard({ metric, accentClass = defaultAccent }) {
   const ratingLabel = normalizeLabel(metric?.ratingLabel)
   const badgeClass = badgeThemes[ratingLabel] || badgeThemes.GOOD
@@ -40,6 +75,7 @@ function ATSScoreCard({ metric, accentClass = defaultAccent }) {
   const { display: scoreDisplay, suffix: scoreSuffix } = formatScore(metric?.score)
   const tip = metric?.tip ?? metric?.tips?.[0] ?? ''
   const category = metric?.category ?? 'Metric'
+  const metricDescription = describeMetric(metric)
 
   return (
     <article
@@ -57,7 +93,15 @@ function ATSScoreCard({ metric, accentClass = defaultAccent }) {
             Metric
           </span>
           <div className="flex items-start justify-between gap-4">
-            <h3 className="text-2xl font-black leading-snug tracking-wide md:text-[26px]">{category}</h3>
+            <div className="flex items-start gap-2">
+              <h3 className="text-2xl font-black leading-snug tracking-wide md:text-[26px]">{category}</h3>
+              <InfoTooltip
+                variant="dark"
+                align="left"
+                label={`What does the ${category} score mean?`}
+                content={metricDescription}
+              />
+            </div>
             {ratingLabel && (
               <span
                 className={`text-[10px] font-semibold uppercase tracking-[0.35em] px-3 py-1 rounded-full ${badgeClass}`}

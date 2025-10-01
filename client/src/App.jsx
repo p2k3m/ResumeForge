@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { formatMatchMessage } from './formatMatchMessage.js'
 import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
 import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
+import InfoTooltip from './components/InfoTooltip.jsx'
 import TemplateSelector from './components/TemplateSelector.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
@@ -507,6 +508,16 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
           ? 'text-rose-600'
           : 'text-slate-600'
       : 'text-slate-600'
+  const rawConfidence =
+    typeof suggestion.confidence === 'number' && Number.isFinite(suggestion.confidence)
+      ? suggestion.confidence
+      : null
+  const confidenceDisplay =
+    rawConfidence !== null ? `${Math.round(rawConfidence * 100)}%` : '—'
+  const confidenceDescription =
+    'Indicates how certain ResumeForge is that this change will resonate with ATS scoring and recruiter expectations based on the source analysis.'
+  const deltaDescription =
+    'Estimated impact on your ATS score if you apply this improvement. Positive values mean a projected lift; negative values signal a potential drop.'
   const acceptDisabled = Boolean(suggestion.rescorePending)
   const improvementHints = useMemo(() => {
     if (!Array.isArray(suggestion.improvementSummary)) return []
@@ -521,9 +532,16 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h4 className="text-lg font-semibold text-purple-800">{suggestion.title}</h4>
-          <p className="text-xs uppercase tracking-wide text-purple-500">
-            Confidence: {(suggestion.confidence * 100).toFixed(0)}%
-          </p>
+          <div className="mt-1 flex items-center gap-2 text-xs uppercase tracking-wide text-purple-500">
+            <span>Confidence: {confidenceDisplay}</span>
+            <InfoTooltip
+              variant="light"
+              align="left"
+              maxWidthClass="w-72"
+              label="What does the improvement confidence mean?"
+              content={confidenceDescription}
+            />
+          </div>
         </div>
         {suggestion.accepted !== null && (
           <span
@@ -560,9 +578,18 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
       </div>
       <div className="space-y-1">
         {deltaText && (
-          <p className={`text-sm font-semibold ${deltaTone}`}>
-            ATS score delta: {deltaText}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className={`text-sm font-semibold ${deltaTone}`}>
+              ATS score delta: {deltaText}
+            </p>
+            <InfoTooltip
+              variant="light"
+              align="left"
+              maxWidthClass="w-72"
+              label="What does ATS score delta mean?"
+              content={deltaDescription}
+            />
+          </div>
         )}
         {suggestion.rescorePending && (
           <p className="text-xs font-medium text-purple-600">Updating ATS dashboard…</p>
