@@ -6483,7 +6483,7 @@ app.post(
       'cv2Url = :cv2',
       'coverLetter1Url = :cl1',
       'coverLetter2Url = :cl2',
-      'status = :status',
+      '#status = :status',
       'analysisCompletedAt = :completedAt',
       'missingSkills = :missingSkills',
       'addedSkills = :addedSkills'
@@ -6521,6 +6521,7 @@ app.post(
         Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
         UpdateExpression: `SET ${updateParts.join(', ')}`,
         ExpressionAttributeValues: expressionValues,
+        ExpressionAttributeNames: { '#status': 'status' },
         ConditionExpression: 'jobId = :jobId'
       })
     );

@@ -305,6 +305,10 @@ describe('/api/process-cv', () => {
     expect(updateCall[0].input.ExpressionAttributeValues[':status'].S).toBe(
       'completed'
     );
+    expect(updateCall[0].input.ExpressionAttributeNames['#status']).toBe(
+      'status'
+    );
+    expect(updateCall[0].input.UpdateExpression).toContain('#status');
     expect(updateCall[0].input.UpdateExpression).toContain('cv1Url');
     expect(updateCall[0].input.UpdateExpression).toContain('coverLetter1Url');
 
