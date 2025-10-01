@@ -1253,6 +1253,142 @@ function computeSkillGap(jobSkills = [], resumeSkills = []) {
     .filter((skill) => !resumeSet.has(skill.toLowerCase()));
 }
 
+const MONTH_LOOKUP = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  sept: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+function parseExperienceDate(value) {
+  if (!value) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  if (/present|current/i.test(normalized)) {
+    return new Date();
+  }
+
+  const isoMatch = normalized.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]) - 1;
+    if (Number.isFinite(year) && Number.isFinite(month)) {
+      return new Date(Date.UTC(year, Math.max(0, Math.min(11, month)), 1));
+    }
+  }
+
+  const monthMatch = normalized.match(
+    /(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{4})/i
+  );
+  if (monthMatch) {
+    const monthKey = monthMatch[1].slice(0, 3).toLowerCase();
+    const year = Number(monthMatch[2]);
+    const month = MONTH_LOOKUP[monthKey];
+    if (Number.isFinite(year) && typeof month === 'number') {
+      return new Date(Date.UTC(year, month, 1));
+    }
+  }
+
+  const yearMatch = normalized.match(/(\d{4})/);
+  if (yearMatch) {
+    const year = Number(yearMatch[1]);
+    if (Number.isFinite(year)) {
+      return new Date(Date.UTC(year, 0, 1));
+    }
+  }
+
+  return null;
+}
+
+function estimateExperienceYears(entries = []) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return 0;
+  }
+
+  const ranges = entries
+    .map((entry = {}) => {
+      const start = parseExperienceDate(entry.startDate);
+      const end = parseExperienceDate(entry.endDate) || new Date();
+      if (!start || Number.isNaN(start.valueOf())) return null;
+      if (Number.isNaN(end.valueOf()) || end < start) {
+        return [start.getTime(), new Date().getTime()];
+      }
+      return [start.getTime(), end.getTime()];
+    })
+    .filter(Boolean)
+    .sort((a, b) => a[0] - b[0]);
+
+  if (!ranges.length) return 0;
+
+  const merged = [];
+  for (const range of ranges) {
+    const [start, end] = range;
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push([start, end]);
+      continue;
+    }
+    if (start <= last[1]) {
+      last[1] = Math.max(last[1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+
+  const totalMs = merged.reduce((sum, [start, end]) => sum + Math.max(0, end - start), 0);
+  const years = totalMs / (1000 * 60 * 60 * 24 * 365.25);
+  return Math.max(0, Math.round(years * 10) / 10);
+}
+
+function extractRequiredExperience(text = '') {
+  if (!text) return null;
+  const normalized = String(text);
+  const regex = /(?:at\s+least|minimum(?:\s+of)?|min\.?|require(?:s|d)?|with)?\s*(\d+)(?:\s*[-–to]{1,3}\s*(\d+))?\s*(\+|plus)?\s*(?:years|yrs)/gi;
+  let highestMin = null;
+  let highestMax = null;
+  let match;
+  while ((match = regex.exec(normalized)) !== null) {
+    const first = Number(match[1]);
+    const second = match[2] ? Number(match[2]) : null;
+    const hasPlus = Boolean(match[3]);
+    if (!Number.isFinite(first)) continue;
+    let localMin = first;
+    let localMax = second;
+    if (Number.isFinite(localMax)) {
+      if (localMax < localMin) {
+        [localMin, localMax] = [localMax, localMin];
+      }
+    } else if (hasPlus) {
+      localMax = null;
+    } else {
+      localMax = first;
+    }
+    if (!Number.isFinite(localMin)) continue;
+    if (highestMin === null || localMin > highestMin) {
+      highestMin = localMin;
+    }
+    if (localMax === null) {
+      highestMax = null;
+    } else if (highestMax !== null) {
+      highestMax = Math.max(highestMax, localMax);
+    } else {
+      highestMax = localMax;
+    }
+  }
+
+  if (highestMin === null) return null;
+  return { minYears: highestMin, maxYears: highestMax };
+}
+
 function suggestRelevantCertifications(jobText = '', jobSkills = [], existing = []) {
   const normalized = jobText.toLowerCase();
   const existingNames = new Set(
@@ -3632,6 +3768,296 @@ function summarizeList(values = [], { limit = 3, conjunction = 'and' } = {}) {
   return `${display.slice(0, -1).join(', ')} ${conjunction} ${display.slice(-1)}`;
 }
 
+function buildSelectionInsights(context = {}) {
+  const {
+    jobTitle = '',
+    originalTitle = '',
+    modifiedTitle = '',
+    jobDescriptionText = '',
+    bestMatch = {},
+    originalMatch = {},
+    missingSkills = [],
+    addedSkills = [],
+    scoreBreakdown = {},
+    resumeExperience = [],
+    linkedinExperience = [],
+    knownCertificates = [],
+    certificateSuggestions = [],
+    manualCertificatesRequired = false,
+  } = context;
+
+  const metrics = Array.isArray(scoreBreakdown)
+    ? scoreBreakdown
+    : Object.values(scoreBreakdown || {});
+  const metricScores = metrics
+    .map((metric) => (typeof metric?.score === 'number' ? metric.score : null))
+    .filter((score) => Number.isFinite(score));
+  const metricAverage = metricScores.length
+    ? metricScores.reduce((sum, value) => sum + value, 0) / metricScores.length
+    : 0;
+
+  const targetTitle = String(jobTitle || '').trim();
+  const visibleTitle = String(modifiedTitle || originalTitle || '').trim();
+  const normalizeTitle = (value) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const normalizedTarget = normalizeTitle(targetTitle);
+  const normalizedVisible = normalizeTitle(visibleTitle);
+
+  let designationStatus = 'unknown';
+  let designationMessage = 'Designation information was not available.';
+  let designationScore = 65;
+  if (normalizedTarget && normalizedVisible) {
+    const matches =
+      normalizedVisible.includes(normalizedTarget) ||
+      normalizedTarget.includes(normalizedVisible);
+    designationStatus = matches ? 'match' : 'mismatch';
+    designationMessage = matches
+      ? 'Current resume title aligns with the job designation.'
+      : `Current resume title (“${visibleTitle || '—'}”) does not match the JD designation (“${targetTitle || '—'}”).`;
+    designationScore = matches ? 92 : 58;
+  } else if (normalizedTarget) {
+    designationStatus = 'partial';
+    designationMessage =
+      'Provide or adjust your current headline so we can confirm designation alignment.';
+    designationScore = 72;
+  } else if (normalizedVisible) {
+    designationStatus = 'partial';
+    designationMessage =
+      'The job post did not include a clear title. Keep your designation focused on the target role.';
+    designationScore = 70;
+  }
+
+  const combinedExperience = []
+    .concat(Array.isArray(resumeExperience) ? resumeExperience : [])
+    .concat(Array.isArray(linkedinExperience) ? linkedinExperience : []);
+  const candidateYears = estimateExperienceYears(combinedExperience);
+  const requiredRange = extractRequiredExperience(jobDescriptionText || '');
+  const requiredMin = requiredRange?.minYears ?? null;
+  const requiredMax = requiredRange?.maxYears ?? null;
+  let experienceStatus = 'unknown';
+  let experienceMessage = candidateYears
+    ? `Resume indicates roughly ${candidateYears} years of experience.`
+    : 'Experience duration not detected—ensure roles list start and end dates.';
+  let experienceScore = candidateYears > 0 ? 68 : 52;
+
+  if (requiredMin !== null) {
+    const gap = candidateYears - requiredMin;
+    if (candidateYears <= 0) {
+      experienceStatus = 'gap';
+      experienceMessage = `The JD requests ${requiredMin}+ years of experience. Add explicit tenure to highlight your depth.`;
+      experienceScore = 42;
+    } else if (gap >= 0) {
+      experienceStatus = 'match';
+      experienceMessage = `Resume shows ~${candidateYears} years, meeting the ${requiredMin}+ year requirement.`;
+      experienceScore = 94;
+    } else if (gap >= -1) {
+      experienceStatus = 'partial';
+      experienceMessage = `You're within about ${Math.abs(Math.round(gap * 10) / 10)} years of the ${requiredMin}+ year requirement—emphasise long-running projects to demonstrate depth.`;
+      experienceScore = 74;
+    } else {
+      experienceStatus = 'gap';
+      experienceMessage = `The JD requests ${requiredMin}+ years, but the resume highlights about ${candidateYears}. Surface earlier roles or clarify overlapping engagements.`;
+      experienceScore = 48;
+    }
+    if (requiredMax !== null && candidateYears > requiredMax + 2) {
+      experienceStatus = experienceStatus === 'match' ? 'info' : experienceStatus;
+      experienceMessage += ` The posting targets up to ${requiredMax} years—frame examples that match this level.`;
+      experienceScore = Math.min(experienceScore, 78);
+    }
+  } else if (candidateYears > 0) {
+    experienceStatus = 'info';
+    experienceMessage = `JD does not specify years, but the resume reflects ~${candidateYears} years of experience.`;
+    experienceScore = 76;
+  }
+
+  const skillCoverage = typeof bestMatch?.score === 'number' ? bestMatch.score : 0;
+  const originalCoverage = typeof originalMatch?.score === 'number' ? originalMatch.score : skillCoverage;
+  const missing = Array.isArray(missingSkills)
+    ? missingSkills.filter(Boolean)
+    : [];
+  const added = Array.isArray(addedSkills) ? addedSkills.filter(Boolean) : [];
+  let skillsStatus = 'match';
+  let skillsMessage = `Resume now covers ${skillCoverage}% of the JD skills.`;
+  if (missing.length) {
+    skillsStatus = 'gap';
+    skillsMessage = `Still missing ${summarizeList(missing, { limit: 4 })} from the JD.`;
+  } else if (skillCoverage < 70) {
+    skillsStatus = 'partial';
+    skillsMessage = `Resume covers ${skillCoverage}% of JD skills. Reinforce keywords in experience and summary.`;
+  } else if (added.length) {
+    skillsMessage = `Resume now covers ${skillCoverage}% of the JD skills, adding ${summarizeList(added, { limit: 4 })}.`;
+  }
+
+  const impactScore = Number(scoreBreakdown?.impact?.score) || 0;
+  let tasksStatus = 'unknown';
+  let tasksMessage = 'Task alignment insights were not available.';
+  if (impactScore >= 80) {
+    tasksStatus = 'match';
+    tasksMessage = 'Accomplishment bullets clearly mirror the JD tasks.';
+  } else if (impactScore >= 55) {
+    tasksStatus = 'partial';
+    tasksMessage = 'Some bullets align with the JD—add measurable outcomes to emphasise task ownership.';
+  } else {
+    tasksStatus = 'gap';
+    tasksMessage = 'Highlight JD-specific responsibilities with quantifiable results to improve task alignment.';
+  }
+
+  const crispnessScore = Number(scoreBreakdown?.crispness?.score) || 0;
+  const otherScore = Number(scoreBreakdown?.otherQuality?.score) || 0;
+  const highlightScore = Math.round((crispnessScore + otherScore) / 2) || 0;
+  let highlightsStatus = 'info';
+  let highlightsMessage = 'Maintain concise, impact-oriented bullets.';
+  if (highlightScore >= 80) {
+    highlightsStatus = 'match';
+    highlightsMessage = 'Highlights read crisply with strong, results-focused language.';
+  } else if (highlightScore < 55) {
+    highlightsStatus = 'gap';
+    highlightsMessage = 'Tighten lengthy bullets and emphasise quantifiable wins to strengthen highlights.';
+  }
+
+  const suggestions = (certificateSuggestions || [])
+    .map((item) => (typeof item === 'string' ? item : item?.name))
+    .filter(Boolean);
+  const knownNames = (knownCertificates || [])
+    .map((cert) => cert?.name)
+    .filter(Boolean);
+  let certificationStatus = 'match';
+  let certificationMessage = 'Existing certifications align with the posting.';
+  if (suggestions.length) {
+    certificationStatus = 'gap';
+    certificationMessage = `Consider adding ${summarizeList(suggestions, { limit: 3 })} to mirror the JD.`;
+  }
+  if (manualCertificatesRequired) {
+    certificationStatus = certificationStatus === 'match' ? 'info' : certificationStatus;
+    certificationMessage += ' Credly login was blocked—paste key certifications manually so we can include them.';
+  }
+  const certificationScore =
+    certificationStatus === 'match'
+      ? 88
+      : certificationStatus === 'info'
+        ? 72
+        : 60;
+
+  let probability =
+    metricAverage * 0.3 +
+    skillCoverage * 0.25 +
+    experienceScore * 0.15 +
+    designationScore * 0.1 +
+    (impactScore || metricAverage) * 0.1 +
+    certificationScore * 0.05 +
+    highlightScore * 0.05;
+  probability = clamp(Math.round(probability), 5, 97);
+  const level = probability >= 75 ? 'High' : probability >= 55 ? 'Medium' : 'Low';
+  const probabilityMessage = `Projected ${level.toLowerCase()} probability (${probability}%) that this resume will be selected for the JD.`;
+  const baseSummary = 'These skills and highlights were added to match the JD. Please prepare for the interview accordingly.';
+  const summary = added.length
+    ? `${baseSummary} Added focus areas: ${summarizeList(added, { limit: 4 })}.`
+    : baseSummary;
+
+  const flags = [];
+  const pushFlag = (key, type, title, detail) => {
+    flags.push({ key, type, title, detail });
+  };
+
+  if (designationStatus === 'mismatch') {
+    pushFlag('designation', 'warning', 'Designation mismatch', designationMessage);
+  } else if (designationStatus === 'match') {
+    pushFlag('designation', 'success', 'Designation aligned', designationMessage);
+  } else {
+    pushFlag('designation', 'info', 'Designation review', designationMessage);
+  }
+
+  if (experienceStatus === 'gap') {
+    pushFlag('experience', 'warning', 'Experience gap', experienceMessage);
+  } else if (experienceStatus === 'partial') {
+    pushFlag('experience', 'info', 'Experience nearly there', experienceMessage);
+  } else if (experienceStatus === 'match') {
+    pushFlag('experience', 'success', 'Experience requirement met', experienceMessage);
+  } else if (experienceStatus === 'info') {
+    pushFlag('experience', 'info', 'Experience context', experienceMessage);
+  }
+
+  if (missing.length) {
+    pushFlag('skills', 'warning', 'Missing skills', skillsMessage);
+  } else {
+    pushFlag('skills', 'success', 'Skill coverage strong', skillsMessage);
+  }
+
+  if (tasksStatus === 'gap') {
+    pushFlag('tasks', 'warning', 'Task alignment needed', tasksMessage);
+  } else if (tasksStatus === 'partial') {
+    pushFlag('tasks', 'info', 'Task alignment in progress', tasksMessage);
+  } else if (tasksStatus === 'match') {
+    pushFlag('tasks', 'success', 'Tasks aligned', tasksMessage);
+  }
+
+  if (certificationStatus === 'gap') {
+    pushFlag('certifications', 'warning', 'Missing certifications', certificationMessage);
+  } else if (certificationStatus === 'info') {
+    pushFlag('certifications', 'info', 'Certifications update', certificationMessage);
+  } else {
+    pushFlag('certifications', 'success', 'Certifications covered', certificationMessage);
+  }
+
+  if (highlightsStatus === 'gap') {
+    pushFlag('highlights', 'warning', 'Boost highlights', highlightsMessage);
+  } else if (highlightsStatus === 'match') {
+    pushFlag('highlights', 'success', 'Highlights resonate', highlightsMessage);
+  } else {
+    pushFlag('highlights', 'info', 'Highlights can improve', highlightsMessage);
+  }
+
+  return {
+    probability,
+    level,
+    message: probabilityMessage,
+    summary,
+    designation: {
+      status: designationStatus,
+      message: designationMessage,
+      currentTitle: visibleTitle,
+      targetTitle,
+    },
+    experience: {
+      status: experienceStatus,
+      message: experienceMessage,
+      candidateYears,
+      requiredYears: requiredMin,
+      maximumYears: requiredMax,
+    },
+    skills: {
+      status: skillsStatus,
+      message: skillsMessage,
+      coverage: skillCoverage,
+      missing,
+      added,
+      improvement: skillCoverage - originalCoverage,
+    },
+    tasks: {
+      status: tasksStatus,
+      message: tasksMessage,
+      score: impactScore,
+    },
+    certifications: {
+      status: certificationStatus,
+      message: certificationMessage,
+      suggestions,
+      known: knownNames,
+      manualEntryRequired: Boolean(manualCertificatesRequired),
+    },
+    highlights: {
+      status: highlightsStatus,
+      message: highlightsMessage,
+      score: highlightScore,
+    },
+    flags,
+  };
+}
+
 function escapeRegex(value = '') {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -5797,6 +6223,28 @@ app.post(
           .concat(geminiAddedSkills)
       )
     );
+    const selectionInsights = buildSelectionInsights({
+      jobTitle,
+      originalTitle,
+      modifiedTitle: modifiedTitle || originalTitle,
+      jobDescriptionText: jobDescription,
+      bestMatch,
+      originalMatch,
+      missingSkills,
+      addedSkills,
+      scoreBreakdown,
+      resumeExperience,
+      linkedinExperience,
+      knownCertificates,
+      certificateSuggestions,
+      manualCertificatesRequired,
+    });
+    logStructured('info', 'selection_insights_computed', {
+      ...logContext,
+      probability: selectionInsights.probability,
+      level: selectionInsights.level,
+      flags: selectionInsights.flags?.length || 0,
+    });
     logStructured('info', 'match_scores_calculated', {
       ...logContext,
       originalScore,
@@ -5836,6 +6284,8 @@ app.post(
         credlyStatus,
       },
       manualCertificates,
+      selectionProbability: selectionInsights?.probability ?? null,
+      selectionInsights,
     });
   } catch (err) {
     const failureMessage = describeProcessingFailure(err);
@@ -5913,6 +6363,9 @@ export {
   extractResumeSkills,
   generateProjectSummary,
   calculateMatchScore,
+  estimateExperienceYears,
+  extractRequiredExperience,
+  buildSelectionInsights,
   TEMPLATE_IDS,
   CV_TEMPLATES,
   CL_TEMPLATES,

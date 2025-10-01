@@ -158,6 +158,7 @@ function App() {
   const [knownCertificates, setKnownCertificates] = useState([])
   const [manualCertificatesData, setManualCertificatesData] = useState([])
   const [certificateInsights, setCertificateInsights] = useState(null)
+  const [selectionInsights, setSelectionInsights] = useState(null)
   const [improvementResults, setImprovementResults] = useState([])
   const [activeImprovement, setActiveImprovement] = useState('')
   const [error, setError] = useState('')
@@ -236,6 +237,7 @@ function App() {
     setKnownCertificates([])
     setManualCertificatesData([])
     setCertificateInsights(null)
+    setSelectionInsights(null)
     setImprovementResults([])
   }
 
@@ -338,9 +340,18 @@ function App() {
         originalScore: data.originalScore || 0,
         enhancedScore: data.enhancedScore || 0,
         originalTitle: data.originalTitle || '',
-        modifiedTitle: data.modifiedTitle || ''
+        modifiedTitle: data.modifiedTitle || '',
+        selectionProbability:
+          typeof data.selectionProbability === 'number'
+            ? data.selectionProbability
+            : typeof data.selectionInsights?.probability === 'number'
+              ? data.selectionInsights.probability
+              : null
       })
-      setScoreBreakdown(data.scoreBreakdown || [])
+      const breakdownArray = Array.isArray(data.scoreBreakdown)
+        ? data.scoreBreakdown
+        : Object.values(data.scoreBreakdown || {})
+      setScoreBreakdown(breakdownArray)
       setResumeText(data.resumeText || '')
       setJobDescriptionText(data.jobDescriptionText || '')
       setJobSkills(data.jobSkills || [])
@@ -351,6 +362,7 @@ function App() {
       })))
       setManualCertificatesData(data.manualCertificates || [])
       setCertificateInsights(data.certificateInsights || null)
+      setSelectionInsights(data.selectionInsights || null)
     } catch (err) {
       console.error('Unable to enhance CV', err)
       setError(err.message || 'Something went wrong. Please try again.')
@@ -581,6 +593,57 @@ function App() {
 
         {scoreBreakdown.length > 0 && (
           <ATSScoreDashboard metrics={scoreBreakdown} match={match} />
+        )}
+
+        {selectionInsights && (
+          <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">
+                  Selection Probability
+                </p>
+                <p className="mt-3 text-5xl font-black text-emerald-700">
+                  {selectionInsights.probability ?? '—'}%
+                </p>
+                <p className="mt-2 text-sm text-emerald-700/90">
+                  {selectionInsights.message ||
+                    'Projected probability that this resume will be shortlisted for the JD.'}
+                </p>
+              </div>
+              {selectionInsights.level && (
+                <span className="self-start rounded-full bg-emerald-100 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700">
+                  {selectionInsights.level} Outlook
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-emerald-800/90">
+              {selectionInsights.summary ||
+                'Your chances of selection have increased. Prepare for the interview and learn these skills!'}
+            </p>
+            {selectionInsights.flags?.length > 0 && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {selectionInsights.flags.map((flag) => {
+                  const toneClass =
+                    flag.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : flag.type === 'warning'
+                        ? 'bg-amber-50 border-amber-200 text-amber-800'
+                        : 'bg-sky-50 border-sky-200 text-sky-800'
+                  return (
+                    <div
+                      key={`${flag.key}-${flag.title}`}
+                      className={`rounded-2xl border px-4 py-3 shadow-sm ${toneClass}`}
+                    >
+                      <p className="text-sm font-semibold">{flag.title}</p>
+                      <p className="mt-1 text-sm leading-relaxed">
+                        {flag.detail || flag.message || ''}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
         )}
 
         {match && (

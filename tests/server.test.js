@@ -814,6 +814,15 @@ describe('/api/process-cv', () => {
         }),
       })
     );
+    expect(typeof res.body.selectionProbability).toBe('number');
+    expect(res.body.selectionInsights).toEqual(
+      expect.objectContaining({
+        probability: expect.any(Number),
+        level: expect.any(String),
+        message: expect.any(String),
+        flags: expect.any(Array),
+      })
+    );
     process.env.NODE_ENV = 'test';
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });

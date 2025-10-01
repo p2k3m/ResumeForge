@@ -19,11 +19,14 @@ function formatDelta(originalScore, enhancedScore) {
 }
 
 function ATSScoreDashboard({ metrics = [], match }) {
-  if (!metrics.length) {
+  const metricList = Array.isArray(metrics)
+    ? metrics
+    : Object.values(metrics || {})
+  if (!metricList.length) {
     return null
   }
 
-  const displayMetrics = metrics.map((metric, index) => ({
+  const displayMetrics = metricList.map((metric, index) => ({
     metric,
     accent: gradientPalette[index % gradientPalette.length]
   }))
