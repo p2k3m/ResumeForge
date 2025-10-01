@@ -8,6 +8,9 @@ import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 
+const CV_GENERATION_ERROR_MESSAGE =
+  'Your new CV could not be generated. Please try again or contact support.'
+
 const improvementActions = [
   {
     key: 'improve-summary',
@@ -1006,14 +1009,14 @@ function App() {
       })
 
       if (!response.ok) {
-        let message = 'Request failed'
+        let message = response.status >= 500 ? CV_GENERATION_ERROR_MESSAGE : 'Request failed'
         let manualFallbackTriggered = false
         try {
           const data = await response.json()
           const apiMessage =
-            (typeof data?.error === 'string' && data.error) ||
             data?.error?.message ||
-            data?.message
+            (typeof data?.message === 'string' ? data.message : undefined) ||
+            (typeof data?.error === 'string' ? data.error : undefined)
           if (apiMessage) {
             message = apiMessage
           }
@@ -1043,7 +1046,9 @@ function App() {
       const contentType = response.headers.get('content-type') || ''
       if (!contentType.includes('application/json')) {
         const text = await response.text()
-        throw new Error(text || 'Invalid JSON response')
+        const fallbackMessage =
+          response.status >= 500 ? CV_GENERATION_ERROR_MESSAGE : 'Invalid JSON response'
+        throw new Error(text || fallbackMessage)
       }
 
       const data = await response.json()
@@ -1139,7 +1144,10 @@ function App() {
       })
     } catch (err) {
       console.error('Unable to enhance CV', err)
-      setError(err.message || 'Something went wrong. Please try again.')
+      const errorMessage =
+        (typeof err?.message === 'string' && err.message.trim()) ||
+        CV_GENERATION_ERROR_MESSAGE
+      setError(errorMessage)
     } finally {
       setIsProcessing(false)
     }
@@ -1332,8 +1340,14 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
+        const serverMessage =
+          errPayload?.error?.message ||
+          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
+          (typeof errPayload?.error === 'string' ? errPayload.error : undefined)
         const message =
-          errPayload?.message || errPayload?.error || 'Unable to generate improvement.'
+          response.status >= 500
+            ? CV_GENERATION_ERROR_MESSAGE
+            : serverMessage || 'Unable to generate improvement.'
         throw new Error(message)
       }
 
@@ -1374,7 +1388,10 @@ function App() {
       setImprovementResults((prev) => [suggestion, ...prev])
     } catch (err) {
       console.error('Improvement request failed', err)
-      setError(err.message || 'Unable to generate the requested improvement.')
+      const errorMessage =
+        (typeof err?.message === 'string' && err.message.trim()) ||
+        CV_GENERATION_ERROR_MESSAGE
+      setError(errorMessage)
     } finally {
       setActiveImprovement('')
       improvementLockRef.current = false
