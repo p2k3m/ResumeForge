@@ -53,6 +53,10 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByLabelText('match comparison')).toBeInTheDocument()
     expect(screen.getByTestId('original-score')).toHaveTextContent('48')
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76')
+    const chart = screen.getByTestId('score-comparison-chart')
+    expect(chart).toBeInTheDocument()
+    expect(within(chart).getByText('Original')).toBeInTheDocument()
+    expect(within(chart).getByText('Enhanced')).toBeInTheDocument()
     expect(screen.getByTestId('dashboard-live-indicator')).toBeInTheDocument()
   })
 
@@ -65,6 +69,9 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('90')
     const deltaBadge = screen.getByTestId('match-delta')
     expect(deltaBadge).toHaveTextContent('+42 pts')
+    expect(screen.getByTestId('score-improvement-narrative')).toHaveTextContent(
+      'Score moved from 48% to 90%'
+    )
   })
 
   it('handles absent tips gracefully', () => {

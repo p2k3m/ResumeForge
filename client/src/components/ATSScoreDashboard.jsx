@@ -8,6 +8,13 @@ const gradientPalette = [
   'from-[#4338CA] via-[#6366F1] to-[#8B5CF6]'
 ]
 
+function clampScore(score) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) {
+    return null
+  }
+  return Math.min(Math.max(Math.round(score), 0), 100)
+}
+
 function formatDelta(originalScore, enhancedScore) {
   if (typeof originalScore !== 'number' || typeof enhancedScore !== 'number') {
     return null
@@ -31,7 +38,12 @@ function ATSScoreDashboard({ metrics = [], match }) {
     accent: gradientPalette[index % gradientPalette.length]
   }))
 
-  const matchDelta = formatDelta(match?.originalScore, match?.enhancedScore)
+  const originalScoreValue = clampScore(match?.originalScore)
+  const enhancedScoreValue = clampScore(match?.enhancedScore)
+  const matchDelta =
+    originalScoreValue !== null && enhancedScoreValue !== null
+      ? formatDelta(originalScoreValue, enhancedScoreValue)
+      : formatDelta(match?.originalScore, match?.enhancedScore)
   const selectionProbabilityValue =
     typeof match?.selectionProbability === 'number' ? match.selectionProbability : null
   const selectionProbabilityMeaning =
@@ -48,6 +60,30 @@ function ATSScoreDashboard({ metrics = [], match }) {
       ? `Projected ${selectionProbabilityMeaning.toLowerCase()} probability (${selectionProbabilityValue}%) that this resume will be shortlisted for the JD.`
       : null)
   const hasSelectionProbability = typeof selectionProbabilityValue === 'number'
+  const hasComparableScores =
+    typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number'
+  const improvementNarrative =
+    match?.improvementSummary ||
+    match?.selectionProbabilityRationale ||
+    (hasComparableScores
+      ? `Score moved from ${originalScoreValue}% to ${enhancedScoreValue}%, lifting selection odds by covering more of the JD's required keywords and achievements.`
+      : 'Enhanced resume aligns more closely with the job description, increasing selection odds.')
+  const scoreBands = hasComparableScores
+    ? [
+        {
+          label: 'Original',
+          value: originalScoreValue,
+          tone: 'bg-indigo-500',
+          textTone: 'text-indigo-700'
+        },
+        {
+          label: 'Enhanced',
+          value: enhancedScoreValue,
+          tone: 'bg-emerald-500',
+          textTone: 'text-emerald-700'
+        }
+      ]
+    : []
 
   return (
     <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
@@ -77,7 +113,7 @@ function ATSScoreDashboard({ metrics = [], match }) {
 
       {match && (
         <div
-          className={`grid grid-cols-1 gap-4 ${hasSelectionProbability ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}
+          className={`grid grid-cols-1 gap-4 ${hasSelectionProbability ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
           aria-label="match comparison"
         >
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-lg backdrop-blur">
@@ -107,6 +143,46 @@ function ATSScoreDashboard({ metrics = [], match }) {
               {match.modifiedTitle || match.originalTitle || 'Enhanced resume title coming soon.'}
             </p>
           </div>
+          {hasComparableScores && (
+            <div
+              className="rounded-3xl border border-slate-200/70 bg-white/90 p-6 shadow-lg backdrop-blur"
+              data-testid="score-comparison-chart"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Score Comparison</p>
+                  <p className="mt-2 text-sm text-slate-700/90">
+                    Visualise how the enhanced version closes the gap against ATS expectations.
+                  </p>
+                </div>
+                {matchDelta && (
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                    {matchDelta}
+                  </span>
+                )}
+              </div>
+              <div className="mt-4 space-y-4" role="img" aria-label={`Original score ${originalScoreValue}%, enhanced score ${enhancedScoreValue}%`}>
+                {scoreBands.map(({ label, value, tone, textTone }) => (
+                  <div key={label} className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-slate-600">
+                      <span>{label}</span>
+                      <span className={textTone}>{value}%</span>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-slate-200/80">
+                      <div
+                        className={`h-full rounded-full ${tone}`}
+                        style={{ width: `${value}%` }}
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-sm text-slate-700/95" data-testid="score-improvement-narrative">
+                {improvementNarrative}
+              </p>
+            </div>
+          )}
           {hasSelectionProbability && (
             <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 shadow-lg backdrop-blur">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection Probability</p>
