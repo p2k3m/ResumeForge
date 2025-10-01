@@ -39,6 +39,13 @@ import {
 
 const WordExtractor = WordExtractorPackage?.default || WordExtractorPackage;
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const clientDistDir = path.join(__dirname, 'client', 'dist');
+const clientIndexPath = path.join(clientDistDir, 'index.html');
+let cachedClientIndexHtml;
+
 function ensureAxiosResponseInterceptor(client) {
   if (!client) return null;
   if (!client.interceptors) {
@@ -225,16 +232,24 @@ async function parseUserAgent(ua) {
   }
 }
 
-const portalTemplateUrl = new URL('./templates/portal.html', import.meta.url);
-let cachedPortalHtml;
+function clientAssetsAvailable() {
+  return fsSync.existsSync(clientIndexPath);
+}
 
-async function getPortalHtml() {
-  if (cachedPortalHtml && process.env.NODE_ENV !== 'development') {
-    return cachedPortalHtml;
+async function getClientIndexHtml() {
+  if (!clientAssetsAvailable()) {
+    throw new Error(
+      `Client build assets not found at ${clientIndexPath}. Run "npm run build:client" before starting the server.`
+    );
   }
-  const html = await fs.readFile(portalTemplateUrl, 'utf8');
+
+  if (cachedClientIndexHtml && process.env.NODE_ENV !== 'development') {
+    return cachedClientIndexHtml;
+  }
+
+  const html = await fs.readFile(clientIndexPath, 'utf8');
   if (process.env.NODE_ENV !== 'development') {
-    cachedPortalHtml = html;
+    cachedClientIndexHtml = html;
   }
   return html;
 }
@@ -712,6 +727,14 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+if (clientAssetsAvailable()) {
+  app.use(express.static(clientDistDir, { index: false, fallthrough: true }));
+} else {
+  logStructured('warn', 'client_build_missing', {
+    path: clientIndexPath,
+  });
+}
 
 const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -5221,13 +5244,19 @@ async function handleImprovementRequest(type, req, res) {
 
 app.get('/', async (req, res) => {
   try {
-    const html = await getPortalHtml();
+    const html = await getClientIndexHtml();
     res.type('html').send(html);
   } catch (err) {
-    logStructured('error', 'portal_ui_load_failed', {
+    logStructured('error', 'client_ui_load_failed', {
       error: serializeError(err),
     });
-    res.json({ status: 'ok', message: 'ResumeForge API is running.' });
+    res
+      .status(500)
+      .json({
+        status: 'error',
+        message:
+          'Client application is unavailable. Please try again later or contact support.',
+      });
   }
 });
 
