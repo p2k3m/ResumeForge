@@ -35,11 +35,21 @@ describe('end-to-end CV processing', () => {
     );
 
     const { urls, applicantName } = response.body;
-    expect(urls).toHaveLength(4);
-    urls.forEach(({ url, expiresAt }) => {
+    expect(urls).toHaveLength(5);
+    expect(urls.map((item) => item.type).sort()).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'original_upload',
+      'version1',
+      'version2'
+    ]);
+    urls.forEach(({ type, url, expiresAt }) => {
       expect(url).toMatch(/https:\/\/example.com\//);
       expect(url).toMatch(/expires=3600/);
       expect(() => new Date(expiresAt)).not.toThrow();
+      if (type === 'original_upload') {
+        expect(url).not.toContain('/generated/');
+      }
     });
 
     const sanitized = applicantName
@@ -48,8 +58,11 @@ describe('end-to-end CV processing', () => {
       .slice(0, 2)
       .join('_')
       .toLowerCase();
-    urls.forEach(({ url }) => {
+    urls.forEach(({ url, type }) => {
       expect(url).toContain(`/${sanitized}/cv/`);
+      if (type !== 'original_upload') {
+        expect(url).toContain('/generated/');
+      }
     });
   });
 });

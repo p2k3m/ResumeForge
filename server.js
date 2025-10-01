@@ -7126,6 +7126,29 @@ app.post(
       version2: versionData.version2
     };
     const urls = [];
+
+    if (originalUploadKey) {
+      try {
+        const originalSignedUrl = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+          { expiresIn: URL_EXPIRATION_SECONDS }
+        );
+        const expiresAt = new Date(
+          Date.now() + URL_EXPIRATION_SECONDS * 1000
+        ).toISOString();
+        urls.push({
+          type: 'original_upload',
+          url: originalSignedUrl,
+          expiresAt
+        });
+      } catch (err) {
+        logStructured('warn', 'original_download_url_failed', {
+          ...logContext,
+          error: serializeError(err)
+        });
+      }
+    }
     for (const [name, text] of Object.entries(outputs)) {
       if (!text) continue;
       const isCvDocument = name === 'version1' || name === 'version2';

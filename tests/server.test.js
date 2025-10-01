@@ -228,10 +228,11 @@ describe('/api/process-cv', () => {
     expect(typeof res2.body.requestId).toBe('string');
     expect(typeof res2.body.jobId).toBe('string');
     expect(res2.body.urlExpiresInSeconds).toBe(3600);
-    expect(res2.body.urls).toHaveLength(4);
+    expect(res2.body.urls).toHaveLength(5);
     expect(res2.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
       'cover_letter2',
+      'original_upload',
       'version1',
       'version2'
     ]);
@@ -251,7 +252,9 @@ describe('/api/process-cv', () => {
       expect(url).toContain('expires=3600');
       expect(() => new Date(expiresAt)).not.toThrow();
       expect(new Date(expiresAt).toString()).not.toBe('Invalid Date');
-      if (type.startsWith('cover_letter')) {
+      if (type === 'original_upload') {
+        expect(url).not.toContain('/generated/');
+      } else if (type.startsWith('cover_letter')) {
         expect(url).toContain('/generated/cover_letter/');
       } else {
         expect(url).toContain('/generated/cv/');
@@ -417,6 +420,7 @@ describe('/api/process-cv', () => {
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
       'cover_letter2',
+      'original_upload',
       'version1',
       'version2'
     ]);
@@ -449,6 +453,7 @@ describe('/api/process-cv', () => {
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
       'cover_letter2',
+      'original_upload',
       'version1',
       'version2'
     ]);
@@ -481,6 +486,7 @@ describe('/api/process-cv', () => {
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
       'cover_letter2',
+      'original_upload',
       'version1',
       'version2'
     ]);
@@ -1023,15 +1029,16 @@ describe('client download labels', () => {
   test('App displays correct labels for each file type', () => {
     const source = fs.readFileSync('./client/src/App.jsx', 'utf8');
     const mappings = {
-      cover_letter1: 'Cover Letter 1 (PDF)',
-      cover_letter2: 'Cover Letter 2 (PDF)',
-      version1: 'CV Version 1 (PDF)',
-      version2: 'CV Version 2 (PDF)'
+      cover_letter1: 'Cover Letter 1',
+      cover_letter2: 'Cover Letter 2',
+      original_upload: 'Original CV Upload',
+      version1: 'Enhanced CV Version 1',
+      version2: 'Enhanced CV Version 2'
     };
 
     Object.entries(mappings).forEach(([type, label]) => {
       expect(source).toContain(`case '${type}':`);
-      expect(source).toContain(`label = '${label}'`);
+      expect(source).toContain(`label: '${label}'`);
     });
   });
 });

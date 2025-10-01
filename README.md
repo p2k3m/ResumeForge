@@ -349,6 +349,11 @@ ownload URLs expire after one hour:
   "urlExpiresInSeconds": 3600,
   "urls": [
     {
+      "type": "original_upload",
+      "url": "https://<bucket>.s3.<region>.amazonaws.com/jane_doe/cv/2025-01-15/jane_doe.pdf?X-Amz-Expires=3600&...",
+      "expiresAt": "2025-01-15T12:00:00.000Z"
+    },
+    {
       "type": "cover_letter1",
       "url": "https://<bucket>.s3.<region>.amazonaws.com/jane_doe/cv/2025-01-15/generated/cover_letter/cover_letter1.pdf?X-Amz-Expires=3600&...",
       "expiresAt": "2025-01-15T12:00:00.000Z"
@@ -377,13 +382,15 @@ ownload URLs expire after one hour:
 S3 keys follow the pattern `<candidate>/cv/<ISO-date>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type. The API now returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
-jane_doe/cv/2025-01-15/generated/
-├── cover_letter/
-│   ├── cover_letter1.pdf
-│   └── cover_letter2.pdf
-└── cv/
-    ├── Jane_Doe.pdf
-    └── Jane_Doe_2.pdf
+jane_doe/cv/2025-01-15/
+├── jane_doe.pdf
+└── generated/
+    ├── cover_letter/
+    │   ├── cover_letter1.pdf
+    │   └── cover_letter2.pdf
+    └── cv/
+        ├── Jane_Doe.pdf
+        └── Jane_Doe_2.pdf
 ```
 
 Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters or CVs are produced, the server responds with HTTP 500 and an error message.

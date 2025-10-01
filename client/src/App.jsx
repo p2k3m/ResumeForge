@@ -198,6 +198,84 @@ const changeLabelStyles = {
   removed: 'bg-rose-100 text-rose-700 border border-rose-200'
 }
 
+function getDownloadPresentation(file = {}) {
+  const type = file?.type || ''
+  switch (type) {
+    case 'original_upload':
+      return {
+        label: 'Original CV Upload',
+        description: 'Exact resume you submitted before any AI enhancements—keep this for applications that prefer the untouched version.',
+        badgeText: 'Original',
+        badgeStyle: 'bg-slate-100 text-slate-700 border-slate-200',
+        buttonStyle: 'bg-slate-700 hover:bg-slate-800 focus:ring-slate-500',
+        cardAccent: 'bg-gradient-to-br from-slate-50 via-white to-white',
+        cardBorder: 'border-slate-200',
+        linkLabel: 'Download original file',
+        category: 'resume'
+      }
+    case 'version1':
+      return {
+        label: 'Enhanced CV Version 1',
+        description: 'Primary rewrite balanced for ATS scoring and recruiter readability with the strongest keyword alignment.',
+        badgeText: 'Enhanced',
+        badgeStyle: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+        buttonStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
+        cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
+        cardBorder: 'border-emerald-200',
+        linkLabel: 'Download PDF',
+        category: 'resume'
+      }
+    case 'version2':
+      return {
+        label: 'Enhanced CV Version 2',
+        description: 'Alternate layout that spotlights impact metrics and leadership achievements for different screening preferences.',
+        badgeText: 'Enhanced Alt',
+        badgeStyle: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+        buttonStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
+        cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
+        cardBorder: 'border-emerald-200',
+        linkLabel: 'Download PDF',
+        category: 'resume'
+      }
+    case 'cover_letter1':
+      return {
+        label: 'Cover Letter 1',
+        description: 'Tailored opener mirroring the job description tone and top keyword themes.',
+        badgeText: 'Cover Letter',
+        badgeStyle: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+        buttonStyle: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
+        cardAccent: 'bg-gradient-to-br from-indigo-50 via-white to-white',
+        cardBorder: 'border-indigo-200',
+        linkLabel: 'Download PDF',
+        category: 'cover'
+      }
+    case 'cover_letter2':
+      return {
+        label: 'Cover Letter 2',
+        description: 'Alternate narrative emphasising quantified achievements and culture alignment.',
+        badgeText: 'Cover Letter',
+        badgeStyle: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+        buttonStyle: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
+        cardAccent: 'bg-gradient-to-br from-indigo-50 via-white to-white',
+        cardBorder: 'border-indigo-200',
+        linkLabel: 'Download PDF',
+        category: 'cover'
+      }
+    default:
+      return {
+        label: 'Generated Document',
+        description: 'Download the generated document.',
+        badgeText: 'Download',
+        badgeStyle: 'bg-purple-100 text-purple-700 border-purple-200',
+        buttonStyle: 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500',
+        cardAccent: 'bg-white/85',
+        cardBorder: 'border-purple-200',
+        linkLabel: 'Download file',
+        category: 'other'
+      }
+  }
+}
+
 function deriveChangeLabel(suggestion) {
   const type = suggestion?.type || ''
   const before = (suggestion?.beforeExcerpt || '').trim()
@@ -547,6 +625,68 @@ function App() {
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
   const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
   const improvementLockRef = useRef(false)
+
+  const downloadGroups = useMemo(() => {
+    if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
+      return { resume: [], cover: [], other: [] }
+    }
+    const resume = []
+    const cover = []
+    const other = []
+    const resumeOrder = { original_upload: 0, version1: 1, version2: 2 }
+    const coverOrder = { cover_letter1: 0, cover_letter2: 1 }
+    outputFiles.forEach((file) => {
+      if (!file || typeof file !== 'object') return
+      const presentation = getDownloadPresentation(file)
+      const entry = { ...file, presentation }
+      if (presentation.category === 'resume') {
+        resume.push(entry)
+      } else if (presentation.category === 'cover') {
+        cover.push(entry)
+      } else {
+        other.push(entry)
+      }
+    })
+    resume.sort((a, b) => (resumeOrder[a.type] ?? 50) - (resumeOrder[b.type] ?? 50))
+    cover.sort((a, b) => (coverOrder[a.type] ?? 50) - (coverOrder[b.type] ?? 50))
+    other.sort((a, b) => (a.presentation.label || '').localeCompare(b.presentation.label || ''))
+    return { resume, cover, other }
+  }, [outputFiles])
+
+  const renderDownloadCard = useCallback((file) => {
+    if (!file) return null
+    const presentation = file.presentation || getDownloadPresentation(file)
+    const cardClass = `p-5 rounded-2xl shadow-sm flex flex-col gap-4 border ${
+      presentation.cardBorder || 'border-purple-200'
+    } ${presentation.cardAccent || 'bg-white/85'}`
+    const badgeClass = `px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wide ${
+      presentation.badgeStyle || 'bg-purple-100 text-purple-700 border-purple-200'
+    }`
+    const buttonClass = `inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+      presentation.buttonStyle || 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500'
+    }`
+    return (
+      <div key={file.type} className={cardClass}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-lg font-semibold text-purple-900">{presentation.label}</p>
+            <p className="text-sm text-purple-700/90 leading-relaxed">{presentation.description}</p>
+          </div>
+          {presentation.badgeText && <span className={badgeClass}>{presentation.badgeText}</span>}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <a
+            href={file.url}
+            className={buttonClass}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {presentation.linkLabel || 'Download'}
+          </a>
+        </div>
+      </div>
+    )
+  }, [])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
@@ -1759,43 +1899,51 @@ function App() {
         )}
 
         {outputFiles.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {outputFiles.map((file) => {
-                let label
-                switch (file.type) {
-                  case 'cover_letter1':
-                    label = 'Cover Letter 1 (PDF)'
-                    break
-                  case 'cover_letter2':
-                    label = 'Cover Letter 2 (PDF)'
-                    break
-                  case 'version1':
-                    label = 'CV Version 1 (PDF)'
-                    break
-                  case 'version2':
-                    label = 'CV Version 2 (PDF)'
-                    break
-                  default:
-                    label = 'Download (PDF)'
-                }
-
-                return (
-                  <div
-                    key={file.type}
-                    className="p-4 bg-white/80 border border-purple-200 rounded-2xl shadow text-center"
-                  >
-                    <p className="mb-2 font-semibold text-purple-800">{label}</p>
-                    <a
-                      href={file.url}
-                      className="text-purple-700 hover:underline font-semibold"
-                    >
-                      Download PDF
-                    </a>
+          <section className="space-y-5">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
+              <p className="text-sm text-purple-700/80">
+                Download tailored cover letters plus your original and AI-enhanced CVs. Links remain active for 60 minutes.
+              </p>
+            </div>
+            <div className="space-y-6">
+              {downloadGroups.resume.length > 0 && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-semibold text-purple-900">CV Files</h3>
+                    <p className="text-sm text-purple-700/80">
+                      Compare the uploaded CV with enhanced versions optimised for the job description.
+                    </p>
                   </div>
-                )
-              })}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {downloadGroups.resume.map((file) => renderDownloadCard(file))}
+                  </div>
+                </div>
+              )}
+              {downloadGroups.cover.length > 0 && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-semibold text-purple-900">Cover Letters</h3>
+                    <p className="text-sm text-purple-700/80">
+                      Two tailored narratives to suit different recruiter preferences.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {downloadGroups.cover.map((file) => renderDownloadCard(file))}
+                  </div>
+                </div>
+              )}
+              {downloadGroups.other.length > 0 && (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-semibold text-purple-900">Additional Files</h3>
+                    <p className="text-sm text-purple-700/80">Other generated documents are available below.</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {downloadGroups.other.map((file) => renderDownloadCard(file))}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
         )}
