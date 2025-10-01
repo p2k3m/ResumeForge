@@ -167,6 +167,20 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 ```
 
+### Publish the active CloudFront URL
+
+After each deployment, publish the fresh CloudFront domain so the team knows the canonical entry point for candidates. The helper script stores the URL in `config/published-cloudfront.json` and automatically invalidates the previously published distribution so caches stop serving stale assets.
+
+```bash
+npm run publish:cloudfront-url -- <stack-name>
+```
+
+- **`config/published-cloudfront.json`** is regenerated with the latest domain, distribution id, and timestamp. Commit this file (or surface it through your release notes) to broadcast the production URL.
+- If the script detects that the previously published distribution differs from the new one, it issues a `/*` invalidation so the retired distribution immediately stops caching portal assets.
+
+The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment.
+
+
 ### Accessing the ResumeForge portal
 
 The SAM template deploys the API and a CloudFront distribution that forwards requests straight to API Gateway. Visiting the raw CloudFront domain now renders a lightweight HTML portal served directly by the API’s root route, so candidates can upload their CV, provide the job description, and receive enhanced documents without any additional hosting. CloudFront no longer rewrites `/` to `/healthz`; instead it forwards the viewer path verbatim so the portal is the default experience while the `/healthz` endpoint remains available for JSON health checks. CloudFront is configured to let AWS supply the `Host` header expected by API Gateway; forwarding the viewer’s `Host` would cause API Gateway to reject the request with a 403 because the CloudFront hostname is not mapped to the stage. If you omit the stage segment (for example, visiting `https://<api-id>.execute-api.<region>.amazonaws.com/`), API Gateway responds with `{"message":"Forbidden"}` because no resource matches that path.
