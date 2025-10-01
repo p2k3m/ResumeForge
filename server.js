@@ -236,11 +236,36 @@ function clientAssetsAvailable() {
   return fsSync.existsSync(clientIndexPath);
 }
 
+const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ResumeForge Portal</title>
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 2rem; background: #f7fafc; color: #1a202c; }
+      main { max-width: 640px; margin: 0 auto; background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08); }
+      h1 { margin-top: 0; font-size: 2rem; }
+      p { line-height: 1.6; }
+      .cta { margin-top: 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: #2563eb; color: white; border-radius: 9999px; text-decoration: none; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <main id="portal-form">
+      <h1>ResumeForge Portal</h1>
+      <p>The client application build assets are currently unavailable. This is a lightweight fallback view to keep the service responsive while the full interface is rebuilt.</p>
+      <p>You can regenerate the production UI by running <code>npm run build:client</code>. Until then, API endpoints remain available.</p>
+      <a class="cta" href="https://github.com/" rel="noreferrer">Return to dashboard</a>
+    </main>
+  </body>
+</html>`;
+
 async function getClientIndexHtml() {
   if (!clientAssetsAvailable()) {
-    throw new Error(
-      `Client build assets not found at ${clientIndexPath}. Run "npm run build:client" before starting the server.`
-    );
+    if (!cachedClientIndexHtml) {
+      cachedClientIndexHtml = FALLBACK_CLIENT_INDEX_HTML;
+    }
+    return cachedClientIndexHtml;
   }
 
   if (cachedClientIndexHtml && process.env.NODE_ENV !== 'development') {
