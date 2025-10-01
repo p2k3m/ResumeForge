@@ -77,6 +77,31 @@ const templateOptions = [
   }
 ]
 
+const ATS_SUB_SCORE_ORDER = [
+  'Layout & Searchability',
+  'ATS Readability',
+  'Impact',
+  'Crispness',
+  'Other Quality Metrics'
+]
+
+function orderAtsMetrics(metrics) {
+  if (!Array.isArray(metrics)) return []
+  const categoryMap = new Map()
+  metrics.filter(Boolean).forEach((metric) => {
+    if (metric?.category) {
+      categoryMap.set(metric.category, metric)
+    }
+  })
+
+  const ordered = ATS_SUB_SCORE_ORDER.map((category) => categoryMap.get(category)).filter(Boolean)
+  const extras = metrics.filter(
+    (metric) => metric?.category && !ATS_SUB_SCORE_ORDER.includes(metric.category)
+  )
+
+  return [...ordered, ...extras]
+}
+
 function getApiBaseCandidate() {
   if (typeof window !== 'undefined') {
     const fromWindow = window.__RESUMEFORGE_API_BASE_URL__
@@ -370,15 +395,15 @@ function App() {
               ? data.selectionInsights.probability
               : null
       })
-      const breakdownArray = Array.isArray(data.scoreBreakdown)
-        ? data.scoreBreakdown
-        : Object.values(data.scoreBreakdown || {})
-      const normalizedBreakdown = breakdownArray
-        .filter(Boolean)
-        .map((metric) => ({
-          ...metric,
-          tip: metric?.tip ?? metric?.tips?.[0] ?? '',
-        }))
+      const breakdownCandidates = Array.isArray(data.atsSubScores)
+        ? data.atsSubScores
+        : Array.isArray(data.scoreBreakdown)
+          ? data.scoreBreakdown
+          : Object.values(data.scoreBreakdown || {})
+      const normalizedBreakdown = orderAtsMetrics(breakdownCandidates).map((metric) => ({
+        ...metric,
+        tip: metric?.tip ?? metric?.tips?.[0] ?? '',
+      }))
       setScoreBreakdown(normalizedBreakdown)
       setResumeText(data.resumeText || '')
       setJobDescriptionText(data.jobDescriptionText || '')
