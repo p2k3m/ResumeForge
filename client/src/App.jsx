@@ -280,6 +280,27 @@ function formatScoreDelta(delta) {
   return `${prefix}${rounded} pts`
 }
 
+function cloneData(value) {
+  if (value === null || typeof value !== 'object') {
+    return value
+  }
+
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(value)
+    } catch (err) {
+      console.error('Structured clone failed, falling back to JSON cloning', err)
+    }
+  }
+
+  try {
+    return JSON.parse(JSON.stringify(value))
+  } catch (err) {
+    console.error('JSON clone failed, falling back to shallow copy', err)
+    return Array.isArray(value) ? [...value] : { ...value }
+  }
+}
+
 function orderAtsMetrics(metrics) {
   if (!Array.isArray(metrics)) return []
   const categoryMap = new Map()
@@ -442,6 +463,7 @@ function App() {
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
+  const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
   const improvementLockRef = useRef(false)
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
@@ -586,6 +608,7 @@ function App() {
     setSelectionInsights(null)
     setImprovementResults([])
     setChangeLog([])
+    setInitialAnalysisSnapshot(null)
   }
 
   const handleSubmit = async () => {
@@ -678,7 +701,8 @@ function App() {
         return
       }
 
-      setOutputFiles(data.urls || [])
+      const outputFilesValue = Array.isArray(data.urls) ? data.urls : []
+      setOutputFiles(outputFilesValue)
       setManualJobDescriptionRequired(false)
       const probabilityValue =
         typeof data.selectionProbability === 'number'
@@ -701,7 +725,7 @@ function App() {
           ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
           : null)
 
-      setMatch({
+      const matchPayload = {
         table: data.table || [],
         addedSkills: data.addedSkills || [],
         missingSkills: data.missingSkills || [],
@@ -711,8 +735,9 @@ function App() {
         modifiedTitle: data.modifiedTitle || '',
         selectionProbability: probabilityValue,
         selectionProbabilityMeaning: probabilityMeaning,
-        selectionProbabilityRationale: probabilityRationale,
-      })
+        selectionProbabilityRationale: probabilityRationale
+      }
+      setMatch(matchPayload)
       const breakdownCandidates = Array.isArray(data.atsSubScores)
         ? data.atsSubScores
         : Array.isArray(data.scoreBreakdown)
@@ -723,17 +748,40 @@ function App() {
         tip: metric?.tip ?? metric?.tips?.[0] ?? '',
       }))
       setScoreBreakdown(normalizedBreakdown)
-      setResumeText(data.resumeText || '')
-      setJobDescriptionText(data.jobDescriptionText || '')
-      setJobSkills(data.jobSkills || [])
-      setResumeSkills(data.resumeSkills || [])
-      setKnownCertificates((data.certificateInsights?.known || []).map((cert) => ({
+      const resumeTextValue = typeof data.resumeText === 'string' ? data.resumeText : ''
+      setResumeText(resumeTextValue)
+      const jobDescriptionValue =
+        typeof data.jobDescriptionText === 'string' ? data.jobDescriptionText : ''
+      setJobDescriptionText(jobDescriptionValue)
+      const jobSkillsValue = Array.isArray(data.jobSkills) ? data.jobSkills : []
+      setJobSkills(jobSkillsValue)
+      const resumeSkillsValue = Array.isArray(data.resumeSkills) ? data.resumeSkills : []
+      setResumeSkills(resumeSkillsValue)
+      const knownCertificatesValue = (data.certificateInsights?.known || []).map((cert) => ({
         ...cert,
         source: cert.source || 'resume'
-      })))
-      setManualCertificatesData(data.manualCertificates || [])
-      setCertificateInsights(data.certificateInsights || null)
-      setSelectionInsights(data.selectionInsights || null)
+      }))
+      setKnownCertificates(knownCertificatesValue)
+      const manualCertificatesValue = data.manualCertificates || []
+      setManualCertificatesData(manualCertificatesValue)
+      const certificateInsightsValue = data.certificateInsights || null
+      setCertificateInsights(certificateInsightsValue)
+      const selectionInsightsValue = data.selectionInsights || null
+      setSelectionInsights(selectionInsightsValue)
+
+      setInitialAnalysisSnapshot({
+        resumeText: resumeTextValue,
+        jobDescriptionText: jobDescriptionValue,
+        jobSkills: cloneData(jobSkillsValue),
+        resumeSkills: cloneData(resumeSkillsValue),
+        knownCertificates: cloneData(knownCertificatesValue),
+        manualCertificatesData: cloneData(manualCertificatesValue),
+        certificateInsights: cloneData(certificateInsightsValue),
+        selectionInsights: cloneData(selectionInsightsValue),
+        match: cloneData(matchPayload),
+        scoreBreakdown: cloneData(normalizedBreakdown),
+        outputFiles: cloneData(outputFilesValue)
+      })
     } catch (err) {
       console.error('Unable to enhance CV', err)
       setError(err.message || 'Something went wrong. Please try again.')
@@ -741,6 +789,74 @@ function App() {
       setIsProcessing(false)
     }
   }
+
+  const hasAcceptedImprovements = useMemo(
+    () => improvementResults.some((item) => item.accepted === true),
+    [improvementResults]
+  )
+
+  const resetAvailable =
+    Boolean(initialAnalysisSnapshot) &&
+    ((initialAnalysisSnapshot?.resumeText ?? '') !== resumeText ||
+      changeLog.length > 0 ||
+      hasAcceptedImprovements)
+
+  const handleResetToOriginal = useCallback(() => {
+    if (!initialAnalysisSnapshot) return
+
+    const snapshot = initialAnalysisSnapshot
+    const resumeValue = typeof snapshot.resumeText === 'string' ? snapshot.resumeText : ''
+    setResumeText(resumeValue)
+    const jobDescriptionValue =
+      typeof snapshot.jobDescriptionText === 'string' ? snapshot.jobDescriptionText : ''
+    setJobDescriptionText(jobDescriptionValue)
+
+    const jobSkillsValue = Array.isArray(snapshot.jobSkills)
+      ? cloneData(snapshot.jobSkills)
+      : []
+    setJobSkills(jobSkillsValue)
+
+    const resumeSkillsValue = Array.isArray(snapshot.resumeSkills)
+      ? cloneData(snapshot.resumeSkills)
+      : []
+    setResumeSkills(resumeSkillsValue)
+
+    const knownCertificatesValue = Array.isArray(snapshot.knownCertificates)
+      ? cloneData(snapshot.knownCertificates)
+      : []
+    setKnownCertificates(knownCertificatesValue)
+
+    const manualCertificatesValue = cloneData(snapshot.manualCertificatesData)
+    setManualCertificatesData(manualCertificatesValue || [])
+
+    setCertificateInsights(cloneData(snapshot.certificateInsights))
+    setSelectionInsights(cloneData(snapshot.selectionInsights))
+
+    setMatch(snapshot.match ? cloneData(snapshot.match) : null)
+
+    const scoreBreakdownValue = Array.isArray(snapshot.scoreBreakdown)
+      ? cloneData(snapshot.scoreBreakdown)
+      : []
+    setScoreBreakdown(scoreBreakdownValue)
+
+    const outputFilesValue = Array.isArray(snapshot.outputFiles)
+      ? cloneData(snapshot.outputFiles)
+      : []
+    setOutputFiles(outputFilesValue)
+
+    setChangeLog([])
+    setImprovementResults((prev) =>
+      prev.map((item) => ({
+        ...item,
+        accepted: null,
+        rescorePending: false,
+        rescoreError: '',
+        scoreDelta: null
+      }))
+    )
+    setError('')
+    setPreviewSuggestion(null)
+  }, [initialAnalysisSnapshot])
 
   const improvementAvailable = resumeText && jobDescriptionText
   const improvementBusy = Boolean(activeImprovement)
@@ -1530,7 +1646,24 @@ function App() {
 
         {resumeText && (
           <section className="space-y-3">
-            <h2 className="text-xl font-semibold text-purple-900">Latest Resume Preview</h2>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-xl font-semibold text-purple-900">Latest Resume Preview</h2>
+              {initialAnalysisSnapshot && (
+                <button
+                  type="button"
+                  onClick={handleResetToOriginal}
+                  disabled={!resetAvailable}
+                  className="inline-flex items-center justify-center rounded-full border border-purple-300 px-4 py-2 text-sm font-semibold text-purple-700 transition hover:border-purple-400 hover:text-purple-900 disabled:cursor-not-allowed disabled:opacity-60"
+                  title={
+                    resetAvailable
+                      ? 'Restore the resume and dashboard scores from your original upload.'
+                      : 'Original upload already in view.'
+                  }
+                >
+                  Reset to original upload
+                </button>
+              )}
+            </div>
             <textarea
               value={resumeText}
               onChange={(e) => setResumeText(e.target.value)}
