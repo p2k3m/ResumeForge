@@ -2734,14 +2734,22 @@ function parseLine(text) {
       }
 
       while ((match = linkRegex.exec(piece)) !== null) {
+        let leadingParenCount = 0;
         if (match.index > lastIndex) {
           let segment = piece.slice(lastIndex, match.index);
-          if (segment.endsWith('(')) segment = segment.slice(0, -1);
+          const leadingParens = segment.match(/\(+$/);
+          if (leadingParens) {
+            leadingParenCount = leadingParens[0].length;
+            segment = segment.slice(0, -leadingParenCount);
+          }
           flushSegment(segment);
         }
         if (match[1] && match[2]) {
           const href = normalizeUrl(match[2]);
           if (!href) {
+            if (leadingParenCount) {
+              flushSegment('('.repeat(leadingParenCount));
+            }
             flushSegment(match[0]);
             lastIndex = linkRegex.lastIndex;
             continue;
@@ -2762,6 +2770,9 @@ function parseLine(text) {
           }
           const href = normalizeUrl(raw);
           if (!href) {
+            if (leadingParenCount) {
+              flushSegment('('.repeat(leadingParenCount));
+            }
             flushSegment(match[0]);
             lastIndex = linkRegex.lastIndex;
             continue;
@@ -2788,10 +2799,23 @@ function parseLine(text) {
             ...(forceBold ? { style: 'bold' } : {})
           });
           if (trailing) {
-            flushSegment(trailing);
+            let trailingToFlush = trailing;
+            let parensToDrop = leadingParenCount;
+            while (parensToDrop > 0 && trailingToFlush.startsWith(')')) {
+              trailingToFlush = trailingToFlush.slice(1);
+              parensToDrop--;
+            }
+            if (trailingToFlush) {
+              flushSegment(trailingToFlush);
+            }
           }
         }
-        if (piece[linkRegex.lastIndex] === ')') linkRegex.lastIndex++;
+        if (leadingParenCount > 0) {
+          while (leadingParenCount > 0 && piece[linkRegex.lastIndex] === ')') {
+            linkRegex.lastIndex++;
+            leadingParenCount--;
+          }
+        }
         lastIndex = linkRegex.lastIndex;
       }
       if (lastIndex < piece.length) {
