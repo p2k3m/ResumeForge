@@ -32,6 +32,22 @@ function ATSScoreDashboard({ metrics = [], match }) {
   }))
 
   const matchDelta = formatDelta(match?.originalScore, match?.enhancedScore)
+  const selectionProbabilityValue =
+    typeof match?.selectionProbability === 'number' ? match.selectionProbability : null
+  const selectionProbabilityMeaning =
+    match?.selectionProbabilityMeaning ||
+    (typeof selectionProbabilityValue === 'number'
+      ? selectionProbabilityValue >= 75
+        ? 'High'
+        : selectionProbabilityValue >= 55
+          ? 'Medium'
+          : 'Low'
+      : null)
+  const selectionProbabilityRationale = match?.selectionProbabilityRationale ||
+    (selectionProbabilityMeaning && typeof selectionProbabilityValue === 'number'
+      ? `Projected ${selectionProbabilityMeaning.toLowerCase()} probability (${selectionProbabilityValue}%) that this resume will be shortlisted for the JD.`
+      : null)
+  const hasSelectionProbability = typeof selectionProbabilityValue === 'number'
 
   return (
     <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
@@ -60,7 +76,10 @@ function ATSScoreDashboard({ metrics = [], match }) {
       </div>
 
       {match && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2" aria-label="match comparison">
+        <div
+          className={`grid grid-cols-1 gap-4 ${hasSelectionProbability ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}
+          aria-label="match comparison"
+        >
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-lg backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Original Match</p>
             <p className="mt-3 text-5xl font-black text-indigo-700" data-testid="original-score">
@@ -88,6 +107,23 @@ function ATSScoreDashboard({ metrics = [], match }) {
               {match.modifiedTitle || match.originalTitle || 'Enhanced resume title coming soon.'}
             </p>
           </div>
+          {hasSelectionProbability && (
+            <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 shadow-lg backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection Probability</p>
+              <div className="mt-3 flex items-baseline gap-3">
+                <p className="text-5xl font-black text-emerald-700">{selectionProbabilityValue}%</p>
+                {selectionProbabilityMeaning && (
+                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                    {selectionProbabilityMeaning} Outlook
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-sm text-emerald-700/90">
+                {selectionProbabilityRationale ||
+                  'Likelihood estimate synthesised from ATS scores, role alignment, and credential coverage.'}
+              </p>
+            </div>
+          )}
         </div>
       )}
     </section>
