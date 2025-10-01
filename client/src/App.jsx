@@ -32,6 +32,28 @@ const improvementActions = [
   }
 ]
 
+function summariseItems(items, { limit = 5 } = {}) {
+  const list = Array.isArray(items)
+    ? items
+        .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+        .filter(Boolean)
+    : []
+  if (!list.length) return ''
+  const unique = Array.from(new Set(list))
+  if (unique.length <= limit) {
+    return unique.join(', ')
+  }
+  const shown = unique.slice(0, limit).join(', ')
+  const remaining = unique.length - limit
+  return `${shown}, and ${remaining} more`
+}
+
+const highlightToneStyles = {
+  warning: 'bg-amber-50 border-amber-200 text-amber-800',
+  success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+  info: 'bg-sky-50 border-sky-200 text-sky-800'
+}
+
 const templateOptions = [
   {
     id: 'modern',
@@ -376,6 +398,60 @@ function App() {
   const manualJobDescriptionActive =
     manualJobDescriptionRequired || manualJobDescription.trim().length > 0
 
+  const analysisHighlights = useMemo(() => {
+    const items = []
+    if (Array.isArray(match?.missingSkills) && match.missingSkills.length > 0) {
+      items.push({
+        key: 'missing-skills',
+        tone: 'warning',
+        title: 'Missing skills',
+        message: `Add ${summariseItems(match.missingSkills, { limit: 6 })} to mirror the JD keywords.`
+      })
+    }
+    if (
+      match?.originalTitle &&
+      match?.modifiedTitle &&
+      match.modifiedTitle !== match.originalTitle
+    ) {
+      items.push({
+        key: 'designation-mismatch',
+        tone: 'info',
+        title: 'Designation mismatch',
+        message: `Resume lists ${match.originalTitle}; align it with the target designation ${match.modifiedTitle}.`
+      })
+    }
+    const addedSkills = Array.isArray(match?.addedSkills) ? match.addedSkills : []
+    if (addedSkills.length > 0) {
+      items.push({
+        key: 'added-skills',
+        tone: 'success',
+        title: 'Highlights added',
+        message: `Enhanced drafts now surface ${summariseItems(addedSkills, { limit: 5 })}. Review them before the interview.`
+      })
+    }
+    if (certificateInsights?.manualEntryRequired) {
+      items.push({
+        key: 'cert-manual',
+        tone: 'warning',
+        title: 'Missing certifications',
+        message:
+          'Credly requires authentication. Paste critical certifications manually so we can include them.'
+      })
+    }
+    const recommendedCertificates = Array.isArray(certificateInsights?.suggestions)
+      ? certificateInsights.suggestions.filter(Boolean)
+      : []
+    if (recommendedCertificates.length > 0) {
+      items.push({
+        key: 'cert-suggestions',
+        tone: 'info',
+        title: 'Recommended certifications',
+        message: `Consider adding ${summariseItems(recommendedCertificates, { limit: 4 })} to strengthen the match.`
+      })
+    }
+    return items
+  }, [match, certificateInsights])
+
   const handleImprovementClick = async (type) => {
     if (improvementLockRef.current) {
       setError('Please wait for the current improvement to finish before requesting another one.')
@@ -646,6 +722,30 @@ function App() {
           </section>
         )}
 
+        {analysisHighlights.length > 0 && (
+          <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
+            <div>
+              <h2 className="text-xl font-semibold text-purple-900">Match Checklist</h2>
+              <p className="mt-1 text-sm text-purple-700/80">
+                Review these alignment notes to close remaining gaps before submitting your application.
+              </p>
+            </div>
+            <ul className="space-y-3">
+              {analysisHighlights.map((item) => (
+                <li
+                  key={item.key}
+                  className={`rounded-2xl border px-4 py-3 shadow-sm ${
+                    highlightToneStyles[item.tone] || highlightToneStyles.info
+                  }`}
+                >
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed">{item.message}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {match && (
           <section className="space-y-4">
             <div className="rounded-3xl bg-white/80 backdrop-blur border border-purple-200/70 shadow-xl p-6 space-y-4">
@@ -718,6 +818,10 @@ function App() {
         {improvementActions.length > 0 && (
           <section className="space-y-4">
             <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
+            <p className="text-sm text-purple-700/80">
+              Launch AI-powered fixes for any category below. Each enhancement rewrites your resume snippets without adding
+              unrealistic claims.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {improvementActions.map((action) => {
                 const isActive = activeImprovement === action.key
@@ -757,6 +861,9 @@ function App() {
         {improvementResults.length > 0 && (
           <section className="space-y-4">
             <h2 className="text-2xl font-bold text-purple-900">Suggested Edits</h2>
+            <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 p-4 text-sm text-purple-700">
+              These skills and highlights were added to match the JD. Please prepare for the interview accordingly.
+            </div>
             <div className="space-y-4">
               {improvementResults.map((item) => (
                 <ImprovementCard
