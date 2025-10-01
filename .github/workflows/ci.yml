@@ -211,18 +211,74 @@ jobs:
           set -euo pipefail
 
           tmp_err=$(mktemp)
-          trap 'rm -f "$tmp_err"' EXIT
+          tmp_deploy_log=$(mktemp)
+          trap 'rm -f "$tmp_err" "$tmp_deploy_log"' EXIT
 
+          wait_for_terminal_stack_status() {
+            local status="$1"
+
+            if [ "$status" = "DELETE_IN_PROGRESS" ]; then
+              echo "Stack '$STACK_NAME' is deleting. Waiting for CloudFormation to finish..."
+              : >"$tmp_err"
+              if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                echo "CloudFormation reports the stack deletion is complete."
+                status="DELETE_COMPLETE"
+              else
+                local wait_err
+                wait_err=$(cat "$tmp_err")
+                if echo "$wait_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' finished deleting while waiting."
+                  status="DELETE_COMPLETE"
+                else
+                  echo "$wait_err" >&2
+                  exit 1
+                fi
+              fi
+            fi
+
+            while [[ "$status" == *_IN_PROGRESS ]]; do
+              echo "Stack '$STACK_NAME' currently in progress ($status). Waiting for completion..."
+              sleep 15
+              : >"$tmp_err"
+              if status=$(aws cloudformation describe-stacks \
+                  --stack-name "$STACK_NAME" \
+                  --query "Stacks[0].StackStatus" \
+                  --output text 2>"$tmp_err"); then
+                echo "Current stack status: $status"
+              else
+                local describe_err
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' no longer exists. Proceeding with fresh deployment."
+                  status="DELETE_COMPLETE"
+                  break
+                else
+                  echo "$describe_err" >&2
+                  exit 1
+                fi
+              fi
+            done
+
+            printf '%s' "$status"
+          }
+
+          : >"$tmp_err"
           if stack_status=$(aws cloudformation describe-stacks \
               --stack-name "$STACK_NAME" \
               --query "Stacks[0].StackStatus" \
               --output text 2>"$tmp_err"); then
             echo "Found existing stack '$STACK_NAME' with status: $stack_status"
-            if [ "$stack_status" = "ROLLBACK_COMPLETE" ]; then
-              echo "Stack in ROLLBACK_COMPLETE state. Deleting before redeploy."
+            stack_status=$(wait_for_terminal_stack_status "$stack_status")
+            if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
+              echo "Stack in $stack_status state. Deleting before redeploy."
               aws cloudformation delete-stack --stack-name "$STACK_NAME"
               aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
               echo "Stack deletion complete. Proceeding with deployment."
+            elif [[ "$stack_status" == *_FAILED ]]; then
+              echo "Stack '$STACK_NAME' is in failure state ($stack_status). Resolve the issue in AWS before redeploying." >&2
+              exit 1
+            elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
+              echo "Stack '$STACK_NAME' was deleted before deployment. Proceeding with fresh deployment."
             fi
           else
             describe_err=$(cat "$tmp_err")
@@ -270,43 +326,150 @@ jobs:
 
           : >"$tmp_err"
 
-          if ! sam deploy \
-              --stack-name "$STACK_NAME" \
-              --resolve-s3 \
-              --capabilities CAPABILITY_IAM \
-              --no-confirm-changeset \
-              --no-fail-on-empty-changeset \
-              --force-upload \
-              --parameter-overrides \
-                StageName="$STAGE_NAME" \
-                PrimaryRegion="$PRIMARY_REGION" \
-                SecondaryRegion="$SECONDARY_REGION" \
-                ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
-                DataBucketName="$DATA_BUCKET" \
-                ResumeTableName="$TABLE_NAME" \
-                SecretName="$SECRET_NAME" \
-                CreateDataBucket="$create_data_bucket" \
-                CreateResumeTable="$create_resume_table"; then
-            echo "::error::Deployment failed. Attempting rollback." >&2
-            stack_status=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].StackStatus" --output text 2>/dev/null || true)
-            case "$stack_status" in
-              UPDATE_IN_PROGRESS|UPDATE_COMPLETE_CLEANUP_IN_PROGRESS)
-                aws cloudformation cancel-update-stack --stack-name "$STACK_NAME"
-                aws cloudformation wait stack-rollback-complete --stack-name "$STACK_NAME" || true
-                ;;
-              UPDATE_ROLLBACK_IN_PROGRESS|ROLLBACK_IN_PROGRESS)
-                aws cloudformation wait stack-rollback-complete --stack-name "$STACK_NAME" || true
-                ;;
-              UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED)
-                echo "Stack rollback previously failed. Manual intervention may be required." >&2
-                ;;
-              "")
-                echo "Stack status unavailable; rollback may not have been initiated." >&2
-                ;;
-              *)
-                echo "Stack status after failure: $stack_status" >&2
-                ;;
-            esac
+          max_deploy_attempts=5
+          deploy_attempt=1
+          deploy_succeeded=false
+          while [ "$deploy_attempt" -le "$max_deploy_attempts" ]; do
+            echo "Starting sam deploy attempt $deploy_attempt of $max_deploy_attempts"
+            : >"$tmp_deploy_log"
+
+            if sam deploy \
+                --stack-name "$STACK_NAME" \
+                --resolve-s3 \
+                --capabilities CAPABILITY_IAM \
+                --no-confirm-changeset \
+                --no-fail-on-empty-changeset \
+                --force-upload \
+                --parameter-overrides \
+                  StageName="$STAGE_NAME" \
+                  PrimaryRegion="$PRIMARY_REGION" \
+                  SecondaryRegion="$SECONDARY_REGION" \
+                  ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
+                  DataBucketName="$DATA_BUCKET" \
+                  ResumeTableName="$TABLE_NAME" \
+                  SecretName="$SECRET_NAME" \
+                  CreateDataBucket="$create_data_bucket" \
+                  CreateResumeTable="$create_resume_table" \
+                2>&1 | tee "$tmp_deploy_log"; then
+              echo "sam deploy completed successfully on attempt $deploy_attempt"
+              deploy_succeeded=true
+              break
+            fi
+
+            deploy_err=$(cat "$tmp_deploy_log")
+            deploy_err_normalized=$(printf '%s\n' "$deploy_err" | tr '\r\n' '  ' | tr -s ' ')
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE)_IN_PROGRESS state (and )?can[[:space:]]*not be updated"; then
+              if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
+                echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
+                exit 1
+              fi
+
+              echo "Stack update or deletion currently in progress. Waiting for CloudFormation to finish before retrying..."
+              : >"$tmp_err"
+              if stack_status=$(aws cloudformation describe-stacks \
+                  --stack-name "$STACK_NAME" \
+                  --query "Stacks[0].StackStatus" \
+                  --output text 2>"$tmp_err"); then
+                stack_status=$(wait_for_terminal_stack_status "$stack_status")
+                echo "Stack reached terminal status: $stack_status"
+              else
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' was deleted while waiting. Proceeding with fresh deployment."
+                else
+                  echo "$describe_err" >&2
+                  exit 1
+                fi
+              fi
+
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
+            : >"$tmp_err"
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
+              echo "sam deploy failed because the stack entered a rollback-complete state. Deleting stack '$STACK_NAME' before retrying..."
+              aws cloudformation delete-stack --stack-name "$STACK_NAME"
+              if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                echo "Stack deletion complete. Retrying deployment from a clean slate."
+              else
+                delete_err=$(cat "$tmp_err")
+                echo "Failed to delete stack after rollback: $delete_err" >&2
+                exit 1
+              fi
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
+            if printf '%s\n' "$deploy_err_normalized" | grep -qi "InvalidChangeSetStatus" && \
+               printf '%s\n' "$deploy_err_normalized" | grep -qi "\[OBSOLETE\]"; then
+              echo "sam deploy reported an obsolete change set. Inspecting status..."
+
+              change_set_arn=$(printf '%s\n' "$deploy_err" | \
+                sed -n 's/.*\(arn:aws:cloudformation:[^ ]*changeSet[^ ]*\).*/\1/p' | head -n1)
+
+              if [ -z "$change_set_arn" ]; then
+                echo "Unable to determine change set ARN from sam deploy output. Aborting." >&2
+                exit 1
+              fi
+
+              describe_reason=''
+              : >"$tmp_err"
+              if ! describe_reason=$(aws cloudformation describe-change-set \
+                    --stack-name "$STACK_NAME" \
+                    --change-set-name "$change_set_arn" \
+                    --query 'StatusReason' \
+                    --output text 2>"$tmp_err"); then
+                describe_err=$(cat "$tmp_err")
+                echo "Failed to describe change set $change_set_arn: $describe_err" >&2
+                exit 1
+              fi
+
+              if printf '%s\n' "$describe_reason" | grep -Eqi 'did.?n.t contain changes|No updates'; then
+                echo "Change set is obsolete because no updates were detected. Treating deployment as already up-to-date."
+                if aws cloudformation delete-change-set \
+                    --stack-name "$STACK_NAME" \
+                    --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
+                  echo "Deleted obsolete change set $change_set_arn"
+                else
+                  delete_change_set_err=$(cat "$tmp_err")
+                  if ! echo "$delete_change_set_err" | grep -qi "does not exist"; then
+                    echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
+                    exit 1
+                  fi
+                fi
+
+                deploy_succeeded=true
+                break
+              fi
+
+              if aws cloudformation delete-change-set \
+                  --stack-name "$STACK_NAME" \
+                  --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
+                echo "Deleted obsolete change set $change_set_arn"
+              else
+                delete_change_set_err=$(cat "$tmp_err")
+                if echo "$delete_change_set_err" | grep -qi "does not exist"; then
+                  echo "Change set $change_set_arn no longer exists. Continuing with retry."
+                else
+                  echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
+                  exit 1
+                fi
+              fi
+
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
+            echo "$deploy_err" >&2
+            exit 1
+          done
+
+          if [ "$deploy_succeeded" != "true" ]; then
+            echo "sam deploy failed after $max_deploy_attempts attempts." >&2
             exit 1
           fi
 
