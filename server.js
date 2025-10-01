@@ -1551,6 +1551,208 @@ function replaceSectionContent(
   return merged.trim();
 }
 
+function sanitizeSectionLines(lines = []) {
+  const cleaned = lines.map((line) => line.replace(/\s+$/, ''));
+  while (cleaned.length && !cleaned[0].trim()) cleaned.shift();
+  while (cleaned.length && !cleaned[cleaned.length - 1].trim()) cleaned.pop();
+  return cleaned;
+}
+
+function deriveHeadingLabel(sectionHeading = '', fallback = '') {
+  const heading = sectionHeading || fallback;
+  if (!heading) return '';
+  return heading.replace(/^#\s*/, '').trim();
+}
+
+function escapeRegExp(value = '') {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function applySectionUpdate(originalResume, updatedResume, options = {}) {
+  const { pattern, defaultLabel, insertIndex = 1 } = options;
+  const baseSection = extractSectionContent(originalResume, pattern);
+  const updatedSection = extractSectionContent(updatedResume, pattern);
+  const baseContent = sanitizeSectionLines(baseSection.content);
+  const newContent = sanitizeSectionLines(
+    updatedSection.content.length ? updatedSection.content : baseContent
+  );
+  if (!newContent.length) {
+    return {
+      updatedResume: originalResume,
+      beforeExcerpt: baseContent.join('\n').trim(),
+      afterExcerpt: '',
+    };
+  }
+
+  const headingLabel =
+    deriveHeadingLabel(updatedSection.heading, baseSection.heading) || defaultLabel;
+
+  const merged = replaceSectionContent(originalResume, pattern, newContent, {
+    headingLabel,
+    insertIndex,
+  });
+
+  return {
+    updatedResume: merged,
+    beforeExcerpt: baseContent.join('\n').trim(),
+    afterExcerpt: newContent.join('\n').trim(),
+  };
+}
+
+function inferDesignationLine(updatedLines = [], originalLines = [], context = {}) {
+  const { jobTitle = '' } = context;
+  const normalizedJob = jobTitle.trim().toLowerCase();
+  const searchWindow = Math.min(updatedLines.length, 12);
+
+  if (normalizedJob) {
+    for (let i = 0; i < searchWindow; i++) {
+      const line = updatedLines[i]?.trim();
+      if (line && line.toLowerCase().includes(normalizedJob)) {
+        return line;
+      }
+    }
+  }
+
+  for (let i = 1; i < searchWindow; i++) {
+    const updated = updatedLines[i]?.trim();
+    const original = originalLines[i]?.trim();
+    if (updated && updated !== original) {
+      return updated;
+    }
+  }
+
+  return jobTitle || '';
+}
+
+function applyDesignationUpdate(originalResume, updatedResume, context = {}) {
+  const baseLines = String(originalResume || '').split(/\r?\n/);
+  const updatedLines = String(updatedResume || '').split(/\r?\n/);
+  const candidate = inferDesignationLine(updatedLines, baseLines, context).trim();
+  if (!candidate) {
+    return {
+      updatedResume: originalResume,
+      beforeExcerpt: '',
+      afterExcerpt: '',
+    };
+  }
+
+  const { currentTitle = '', originalTitle = '' } = context;
+  const searchTitles = [currentTitle, originalTitle].filter(Boolean);
+  const maxIndex = Math.min(baseLines.length, 12);
+  let replaced = false;
+  let before = '';
+
+  for (let i = 0; i < maxIndex && !replaced; i++) {
+    const line = baseLines[i];
+    if (!line || !line.trim()) continue;
+    for (const title of searchTitles) {
+      if (!title) continue;
+      const regex = new RegExp(escapeRegExp(title), 'i');
+      const match = line.match(regex);
+      if (match) {
+        baseLines[i] = line.replace(regex, candidate);
+        before = match[0];
+        replaced = true;
+        break;
+      }
+    }
+  }
+
+  if (!replaced) {
+    const alreadyExists = baseLines.some(
+      (line) => line && line.trim().toLowerCase() === candidate.toLowerCase()
+    );
+    if (!alreadyExists) {
+      const insertIndex = baseLines.length > 1 ? 1 : baseLines.length;
+      baseLines.splice(insertIndex, 0, candidate);
+    }
+  }
+
+  const merged = baseLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+  return {
+    updatedResume: merged,
+    beforeExcerpt: before,
+    afterExcerpt: candidate,
+  };
+}
+
+function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) {
+  const safeOriginal = String(originalResume || '');
+  const baseResult = {
+    updatedResume: result.updatedResume || safeOriginal,
+    beforeExcerpt: result.beforeExcerpt || '',
+    afterExcerpt: result.afterExcerpt || '',
+    explanation: result.explanation,
+    confidence: result.confidence,
+  };
+
+  if (!safeOriginal || type === 'enhance-all') {
+    return baseResult;
+  }
+
+  if (!baseResult.updatedResume) {
+    return { ...baseResult, updatedResume: safeOriginal };
+  }
+
+  if (type === 'improve-summary') {
+    const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
+      pattern: /^#\s*summary/i,
+      defaultLabel: 'Summary',
+      insertIndex: 1,
+    });
+    return {
+      ...baseResult,
+      ...sectionResult,
+      beforeExcerpt: sectionResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: sectionResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  if (type === 'add-missing-skills') {
+    const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
+      pattern: /^#\s*skills/i,
+      defaultLabel: 'Skills',
+      insertIndex: 2,
+    });
+    return {
+      ...baseResult,
+      ...sectionResult,
+      beforeExcerpt: sectionResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: sectionResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  if (type === 'align-experience') {
+    const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
+      pattern: /^#\s*(work\s+)?experience/i,
+      defaultLabel: 'Work Experience',
+    });
+    return {
+      ...baseResult,
+      ...sectionResult,
+      beforeExcerpt: sectionResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: sectionResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  if (type === 'change-designation') {
+    const designationResult = applyDesignationUpdate(
+      safeOriginal,
+      baseResult.updatedResume,
+      context
+    );
+    return {
+      ...baseResult,
+      ...designationResult,
+      beforeExcerpt: designationResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: designationResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  return baseResult;
+}
+
 const IMPROVEMENT_CONFIG = {
   'improve-summary': {
     title: 'Improve Summary',
@@ -1923,6 +2125,12 @@ async function runTargetedImprovement(type, context = {}) {
     manualCertificates,
   };
 
+  const scopeContext = {
+    jobTitle: context.jobTitle || '',
+    currentTitle: context.currentTitle || '',
+    originalTitle: context.originalTitle || '',
+  };
+
   try {
     const model = await getSharedGenerativeModel();
     if (model?.generateContent) {
@@ -1937,13 +2145,18 @@ async function runTargetedImprovement(type, context = {}) {
         const confidence = Number.isFinite(parsed.confidence)
           ? clamp(parsed.confidence, 0, 1)
           : 0.6;
-        return {
-          updatedResume: updated,
-          beforeExcerpt,
-          afterExcerpt,
-          explanation,
-          confidence,
-        };
+        return enforceTargetedUpdate(
+          type,
+          resumeText,
+          {
+            updatedResume: updated,
+            beforeExcerpt,
+            afterExcerpt,
+            explanation,
+            confidence,
+          },
+          scopeContext
+        );
       }
     }
   } catch (err) {
@@ -1953,11 +2166,13 @@ async function runTargetedImprovement(type, context = {}) {
     });
   }
 
-  return fallbackImprovement(type, {
+  const fallbackResult = fallbackImprovement(type, {
     ...promptContext,
     currentTitle: context.currentTitle,
     originalTitle: context.originalTitle,
   });
+
+  return enforceTargetedUpdate(type, resumeText, fallbackResult, scopeContext);
 }
 
 async function scrapeJobDescription(url, options = {}) {
@@ -6829,4 +7044,5 @@ export {
   handleDataRetentionEvent,
   classifyDocument,
   buildScoreBreakdown,
+  enforceTargetedUpdate,
 };
