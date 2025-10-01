@@ -31,6 +31,7 @@ describe('AWS integrations for /api/process-cv', () => {
       (key) => key.endsWith('.pdf') && !key.includes('/generated/')
     );
     expect(rawUploadKey).toBeTruthy();
+    expect(rawUploadKey).toContain('/cv/');
 
     const metadataCall = uploadedKeys.find((key) => key.endsWith('log.json'));
     expect(metadataCall).toBeTruthy();

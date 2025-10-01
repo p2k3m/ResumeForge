@@ -104,6 +104,7 @@ jest.unstable_mockModule('mammoth', () => ({
 const serverModule = await import('../server.js');
 const { default: app, extractText, setGeneratePdf, parseContent, classifyDocument } = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
+const axios = (await import('axios')).default;
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -147,6 +148,9 @@ describe('/api/process-cv', () => {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
       )
       .set('X-Forwarded-For', '203.0.113.42')
+      .set('X-Vercel-IP-City', 'Mumbai')
+      .set('X-Vercel-IP-Country', 'IN')
+      .set('X-Vercel-IP-Country-Region', 'MH')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -195,6 +199,9 @@ describe('/api/process-cv', () => {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
       )
       .set('X-Forwarded-For', '203.0.113.42')
+      .set('X-Vercel-IP-City', 'Mumbai')
+      .set('X-Vercel-IP-Country', 'IN')
+      .set('X-Vercel-IP-Country-Region', 'MH')
       .field('jobDescriptionUrl', 'http://example.com')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -222,8 +229,7 @@ describe('/api/process-cv', () => {
       .toLowerCase();
 
     res2.body.urls.forEach(({ type, url, expiresAt }) => {
-      expect(url).toContain('/first/');
-      expect(url).toContain(`/${sanitized}/`);
+      expect(url).toContain(`/${sanitized}/cv/`);
       expect(url).toContain('expires=3600');
       expect(() => new Date(expiresAt)).not.toThrow();
       expect(new Date(expiresAt).toString()).not.toBe('Invalid Date');
@@ -239,8 +245,7 @@ describe('/api/process-cv', () => {
       .filter((k) => k && k.endsWith('.pdf'));
     expect(pdfKeys).toHaveLength(5);
     pdfKeys.forEach((k) => {
-      expect(k).toContain('first/');
-      expect(k).toContain(`/${sanitized}/`);
+      expect(k).toContain(`${sanitized}/cv/`);
     });
 
     const putCall = mockDynamoSend.mock.calls.find(
@@ -261,8 +266,87 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.os.S).toBe('iOS');
     expect(putCall[0].input.Item.device.S).toBe('iPhone');
     expect(putCall[0].input.Item.browser.S).toBe('Mobile Safari');
+    expect(putCall[0].input.Item.location.S).toBe('Mumbai, MH, IN');
+    expect(putCall[0].input.Item.locationCity.S).toBe('Mumbai');
+    expect(putCall[0].input.Item.locationRegion.S).toBe('MH');
+    expect(putCall[0].input.Item.locationCountry.S).toBe('IN');
+    expect(putCall[0].input.Item.credlyProfileUrl.S).toBe('');
+    expect(putCall[0].input.Item.s3Bucket.S).toBe('test-bucket');
+    expect(putCall[0].input.Item.s3Key.S).toContain(`${sanitized}/cv/`);
+    expect(putCall[0].input.Item.s3Url.S).toContain(`${sanitized}/cv/`);
+    expect(putCall[0].input.Item.fileType.S).toMatch(/pdf/);
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual(['DescribeTableCommand', 'PutItemCommand']);
+  });
+
+  test('prompts for manual job description when scraping fails', async () => {
+    axios.get.mockImplementation(() => Promise.reject(new Error('blocked')));
+
+    const failed = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field('jobDescriptionUrl', 'http://example.com/protected')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(failed.status).toBe(400);
+    expect(failed.body.success).toBe(false);
+    expect(failed.body.error.code).toBe('JOB_DESCRIPTION_FETCH_FAILED');
+    expect(failed.body.error.details.manualInputRequired).toBe(true);
+    expect(failed.body.error.message).toContain('Unable to fetch JD');
+
+    axios.get.mockImplementation(() => {
+      throw new Error('should not fetch when manual description supplied');
+    });
+
+    const manual = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field('jobDescriptionUrl', 'http://example.com/protected')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('manualJobDescription', 'Manual JD text outlining requirements and responsibilities.')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(manual.status).toBe(200);
+    expect(manual.body.success).toBe(true);
+    expect(manual.body.jobDescriptionText).toContain('Manual JD text');
+
+    axios.get.mockReset();
+    axios.get.mockResolvedValue({ data: 'Job description' });
+  });
+
+  test('sanitizes manual job description input before analysis', async () => {
+    axios.get.mockImplementation(() => {
+      throw new Error('should not fetch when manual description supplied');
+    });
+
+    const manual = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field('jobDescriptionUrl', 'http://example.com/protected')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field(
+        'manualJobDescription',
+        'Senior Engineer<script>alert("x")</script><div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a>'
+      )
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(manual.status).toBe(200);
+    expect(manual.body.success).toBe(true);
+    const jobText = String(manual.body.jobDescriptionText || '').toLowerCase();
+    expect(jobText).toContain('senior engineer');
+    expect(jobText).toContain('focus');
+    expect(jobText).toContain('apply');
+    expect(jobText).not.toContain('alert');
+    expect(jobText).not.toContain('steal');
+    expect(jobText).not.toContain('javascript');
+    expect(jobText).not.toContain('onclick');
+
+    axios.get.mockReset();
+    axios.get.mockResolvedValue({ data: 'Job description' });
   });
 
   test('malformed AI response', async () => {
