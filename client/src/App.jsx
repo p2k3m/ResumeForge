@@ -48,6 +48,38 @@ function summariseItems(items, { limit = 5 } = {}) {
   return `${shown}, and ${remaining} more`
 }
 
+function formatEnhanceAllSummary(entries) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return ''
+  }
+
+  const segments = entries
+    .map((entry) => {
+      if (!entry) return ''
+      const sectionLabel = (entry.section || entry.label || entry.key || '').trim() || 'Update'
+      const added = summariseItems(entry.added, { limit: 4 })
+      const removed = summariseItems(entry.removed, { limit: 4 })
+      const reasonLines = Array.isArray(entry.reason)
+        ? entry.reason.filter(Boolean)
+        : typeof entry.reason === 'string' && entry.reason.trim()
+          ? [entry.reason.trim()]
+          : []
+      const reasonText = reasonLines.join(' ')
+      const detailParts = [
+        reasonText,
+        added ? `Added ${added}.` : '',
+        removed ? `Removed ${removed}.` : ''
+      ]
+        .map((part) => part.trim())
+        .filter(Boolean)
+      const detailText = detailParts.join(' ')
+      return `${sectionLabel}: ${detailText || 'Updated to align with the JD.'}`
+    })
+    .filter(Boolean)
+
+  return segments.join(' · ')
+}
+
 const highlightToneStyles = {
   warning: 'bg-amber-50 border-amber-200 text-amber-800',
   success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
@@ -142,6 +174,11 @@ function buildChangeLogEntry(suggestion) {
   }
   const baseReason = reason || defaultReasons[suggestion?.type] || 'Applied improvement to strengthen alignment.'
 
+  const enhanceAllSummary =
+    suggestion?.type === 'enhance-all'
+      ? formatEnhanceAllSummary(suggestion?.improvementSummary)
+      : ''
+
   const selectionNotes = {
     'improve-summary': 'Selection focus: mirrors JD tone and value propositions.',
     'add-missing-skills': 'Selection focus: surfaces keywords recruiters screen for.',
@@ -151,12 +188,21 @@ function buildChangeLogEntry(suggestion) {
   }
 
   const selectionDetail = selectionNotes[suggestion?.type]
+  const detailText = (() => {
+    if (suggestion?.type === 'enhance-all' && enhanceAllSummary) {
+      return `${baseReason} Combined updates — ${enhanceAllSummary}`
+    }
+    if (selectionDetail) {
+      return `${baseReason} ${selectionDetail}`
+    }
+    return baseReason
+  })()
 
   return {
     id: suggestion?.id,
     label,
     title: suggestion?.title || 'Improvement Applied',
-    detail: selectionDetail ? `${baseReason} ${selectionDetail}` : baseReason,
+    detail: detailText.trim(),
     before: (suggestion?.beforeExcerpt || '').trim(),
     after: (suggestion?.afterExcerpt || '').trim(),
     timestamp: Date.now()
@@ -624,6 +670,23 @@ function App() {
       }
 
       const data = await response.json()
+      const improvementSummary = Array.isArray(data.improvementSummary)
+        ? data.improvementSummary
+        : []
+      let explanation = (data.explanation || 'Change generated successfully.').trim()
+      if (!explanation) {
+        explanation = 'Change generated successfully.'
+      }
+      if (type === 'enhance-all' && improvementSummary.length) {
+        const combinedSummary = formatEnhanceAllSummary(improvementSummary)
+        if (combinedSummary) {
+          const meaningfulBase =
+            explanation && !/^applied deterministic improvements/i.test(explanation)
+          explanation = meaningfulBase
+            ? `${explanation} ${combinedSummary}`
+            : combinedSummary
+        }
+      }
       const suggestion = {
         id: `${type}-${Date.now()}`,
         type,
@@ -631,10 +694,11 @@ function App() {
           data.title || improvementActions.find((action) => action.key === type)?.label || 'Improvement',
         beforeExcerpt: data.beforeExcerpt || '',
         afterExcerpt: data.afterExcerpt || '',
-        explanation: data.explanation || 'Change generated successfully.',
+        explanation,
         updatedResume: data.updatedResume || resumeText,
         confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
-        accepted: null
+        accepted: null,
+        improvementSummary
       }
       setImprovementResults((prev) => [suggestion, ...prev])
     } catch (err) {
