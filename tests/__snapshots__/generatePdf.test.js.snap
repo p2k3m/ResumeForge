@@ -7,15 +7,18 @@ exports[`generatePdf and parsing 2025 template renders expected HTML snapshot 1`
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Resume</title>
+    <link rel="stylesheet" href="2025.css" />
   <style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
 :root {
-  --accent: #2c3e7a;
-  --accent-soft: #f0f4ff;
-  --border: #dde3f0;
-  --text: #1f2937;
-  --muted: #64748b;
+  --accent: #24368a;
+  --accent-soft: #eff3ff;
+  --border: #d7def0;
+  --text: #1c2434;
+  --muted: #5b6b85;
   --pill: #6366f1;
+  --pill-bg: rgba(99, 102, 241, 0.12);
+  --card-shadow: 0 18px 32px rgba(48, 68, 134, 0.08);
 }
 
 body {
@@ -24,6 +27,8 @@ body {
   padding: 32px;
   color: var(--text);
   background: #f8fafc;
+  background-image: radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.12), transparent 55%),
+    radial-gradient(circle at 100% 30%, rgba(37, 99, 235, 0.08), transparent 45%);
 }
 
 .page {
@@ -31,10 +36,30 @@ body {
   margin: 0 auto;
   background: #fff;
   border-radius: 20px;
-  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.08);
-  padding: 48px clamp(32px, 6vw, 60px);
+  box-shadow: var(--card-shadow);
+  padding: clamp(40px, 8vw, 72px) clamp(32px, 6vw, 60px);
   display: grid;
   gap: 36px;
+  position: relative;
+  overflow: hidden;
+}
+
+.page::before,
+.page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.page::before {
+  background: radial-gradient(circle at 12% 8%, rgba(99, 102, 241, 0.18), transparent 42%);
+  mix-blend-mode: multiply;
+}
+
+.page::after {
+  background: radial-gradient(circle at 88% 92%, rgba(15, 118, 110, 0.12), transparent 40%);
+  mix-blend-mode: screen;
 }
 
 .masthead {
@@ -43,6 +68,8 @@ body {
   gap: 18px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 24px;
+  position: relative;
+  z-index: 1;
 }
 
 .identity h1 {
@@ -56,6 +83,7 @@ body {
   margin: 6px 0 0;
   font-size: 1.05rem;
   color: var(--muted);
+  max-width: 36ch;
 }
 
 .meta-pills {
@@ -69,25 +97,23 @@ body {
   align-items: center;
   padding: 6px 14px;
   border-radius: 999px;
-  background: rgba(99, 102, 241, 0.12);
+  background: var(--pill-bg);
   color: var(--pill);
   font-size: 0.85rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.2);
 }
 
 .resume-grid {
   display: grid;
-  gap: 24px;
+  gap: clamp(20px, 3vw, 28px);
 }
 
 @media (min-width: 900px) {
   .resume-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .resume-section:first-of-type {
-    grid-column: 1 / -1;
   }
 }
 
@@ -95,16 +121,38 @@ body {
   background: var(--accent-soft);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 24px 26px;
+  padding: clamp(22px, 3vw, 28px) clamp(22px, 3vw, 32px);
   display: grid;
   gap: 16px;
   box-shadow: inset 0 1px 0 rgba(99, 102, 241, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.resume-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(14, 165, 233, 0.08));
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+
+.resume-section:hover::before {
+  opacity: 1;
+}
+
+.span-2 {
+  grid-column: 1 / -1;
 }
 
 .section-header {
   display: flex;
   align-items: baseline;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .section-header h2 {
@@ -137,6 +185,11 @@ body {
   color: var(--text);
   line-height: 1.6;
   white-space: pre-wrap;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  position: relative;
+  z-index: 1;
 }
 
 .section-item .bullet {
@@ -145,6 +198,11 @@ body {
   margin-right: 6px;
   font-weight: 700;
   color: var(--pill);
+}
+
+.section-item .item-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .section-item strong {
@@ -156,6 +214,11 @@ body {
   width: 1.5em;
 }
 
+.item-content em {
+  color: var(--muted);
+  font-style: normal;
+}
+
 </style></head>
   <body>
     <div class="page">
@@ -165,37 +228,46 @@ body {
           <p class="tagline">Future-ready professional profile &mdash; tailored for 2025 hiring</p>
         </div>
         <div class="meta-pills">
-          <span class="pill">ATS Optimised</span>
-          <span class="pill">Two-column Layout</span>
-          <span class="pill">Keyword Aligned</span>
+          <span class="pill">ATS optimised</span>
+          <span class="pill">Two-column layout</span>
+          <span class="pill">Keyword aligned</span>
         </div>
       </header>
       <main class="resume-grid">
-        <section class="resume-section">
+        <section class="resume-section ">
           <div class="section-header">
             <h2>Skills</h2>
             <span class="section-accent"></span>
           </div>
           <ul class="section-list">
-            <li class="section-item"><span class="bullet">•</span>Testing</li>
+            <li class="section-item">
+              <span class="bullet">◆</span>
+              <span class="item-content"><span class="bullet">•</span>Testing</span>
+            </li>
           </ul>
         </section>
-        <section class="resume-section">
+        <section class="resume-section ">
           <div class="section-header">
             <h2>Work Experience</h2>
             <span class="section-accent"></span>
           </div>
           <ul class="section-list">
-            <li class="section-item">Information not provided</li>
+            <li class="section-item">
+              <span class="bullet">◆</span>
+              <span class="item-content">Information not provided</span>
+            </li>
           </ul>
         </section>
-        <section class="resume-section">
+        <section class="resume-section ">
           <div class="section-header">
             <h2>Education</h2>
             <span class="section-accent"></span>
           </div>
           <ul class="section-list">
-            <li class="section-item">Information not provided</li>
+            <li class="section-item">
+              <span class="bullet">◆</span>
+              <span class="item-content">Information not provided</span>
+            </li>
           </ul>
         </section>
       </main>
