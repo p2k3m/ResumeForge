@@ -50,6 +50,71 @@ function summariseItems(items, { limit = 5 } = {}) {
   return `${shown}, and ${remaining} more`
 }
 
+function toUniqueList(items) {
+  if (!Array.isArray(items)) return []
+  const seen = new Set()
+  const output = []
+  items.forEach((item) => {
+    const text = typeof item === 'string' ? item.trim() : String(item || '').trim()
+    if (!text) return
+    const key = text.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    output.push(text)
+  })
+  return output
+}
+
+function formatReadableList(items) {
+  const list = toUniqueList(Array.isArray(items) ? items : [items])
+  if (!list.length) return ''
+  if (list.length === 1) return list[0]
+  if (list.length === 2) return `${list[0]} and ${list[1]}`
+  return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`
+}
+
+function normaliseReasonLines(reason) {
+  if (!reason) return []
+  if (Array.isArray(reason)) {
+    return reason
+      .map((line) => (typeof line === 'string' ? line.trim() : String(line || '').trim()))
+      .filter(Boolean)
+  }
+  if (typeof reason === 'string') {
+    const trimmed = reason.trim()
+    return trimmed ? [trimmed] : []
+  }
+  return []
+}
+
+function buildActionableHint(segment) {
+  if (!segment || typeof segment !== 'object') return null
+  const sectionLabel = [segment.section, segment.label, segment.key]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .find(Boolean)
+  const addedText = formatReadableList(Array.isArray(segment.added) ? segment.added : [])
+  const removedText = formatReadableList(Array.isArray(segment.removed) ? segment.removed : [])
+  const reasonText = normaliseReasonLines(segment.reason).join(' ')
+
+  const detailParts = []
+  if (addedText) {
+    detailParts.push(`Added ${addedText}`)
+  }
+  if (removedText) {
+    detailParts.push(`Reworked ${removedText}`)
+  }
+  if (reasonText) {
+    detailParts.push(reasonText)
+  }
+
+  if (!detailParts.length) {
+    return null
+  }
+
+  const detail = detailParts.join(' • ')
+  return sectionLabel ? `${sectionLabel}: ${detail}` : detail
+}
+
 function formatEnhanceAllSummary(entries) {
   if (!Array.isArray(entries) || !entries.length) {
     return ''
@@ -360,6 +425,13 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
           : 'text-slate-600'
       : 'text-slate-600'
   const acceptDisabled = Boolean(suggestion.rescorePending)
+  const improvementHints = useMemo(() => {
+    if (!Array.isArray(suggestion.improvementSummary)) return []
+    return suggestion.improvementSummary.map((segment) => buildActionableHint(segment)).filter(Boolean)
+  }, [suggestion.improvementSummary])
+  const actionableHints = improvementHints.length
+    ? improvementHints
+    : ['Review this update and prepare to speak to the new talking points.']
 
   return (
     <div className="rounded-xl bg-white/80 backdrop-blur border border-purple-200/60 shadow p-5 flex flex-col gap-3">
@@ -392,6 +464,16 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
           <p className="text-xs uppercase font-semibold text-indigo-500">After</p>
           <p className="mt-1 text-indigo-800 whitespace-pre-wrap">{suggestion.afterExcerpt || '—'}</p>
         </div>
+      </div>
+      <div className="rounded-lg border border-purple-200/70 bg-purple-50/60 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+          AI added/modified these · Learn this for your interview
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-purple-900/80">
+          {actionableHints.map((hint, index) => (
+            <li key={`${hint}-${index}`}>{hint}</li>
+          ))}
+        </ul>
       </div>
       <div className="space-y-1">
         {deltaText && (
