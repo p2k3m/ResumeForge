@@ -1554,74 +1554,178 @@ function replaceSectionContent(
 const IMPROVEMENT_CONFIG = {
   'improve-summary': {
     title: 'Improve Summary',
-    focus:
-      'Rewrite the professional summary so it reflects the target role, emphasises quantifiable impact, and remains truthful.',
+    focus: [
+      'Rewrite the Summary section so it mirrors the target job title and top responsibilities.',
+      'Surface quantifiable achievements from the resume that prove readiness for the role.',
+      'Work in missing or high-priority skills naturally without introducing new facts.',
+    ],
   },
   'add-missing-skills': {
     title: 'Add Missing Skills',
-    focus:
-      'Blend missing or underrepresented job keywords into the skills and experience sections without duplicating existing bullets.',
+    focus: [
+      'Blend the missing or underrepresented skills into both the Skills list and relevant experience bullets.',
+      'Revise existing bullets so each new skill is backed by duties already present in the resume.',
+      'Avoid duplicating bullets—edit succinctly while keeping ATS-friendly formatting.',
+    ],
   },
   'change-designation': {
     title: 'Change Designation',
-    focus:
-      'Align the headline/most recent job title with the target job title while keeping chronology and responsibilities accurate.',
+    focus: [
+      'Update the headline or latest role title to match the target job title while keeping chronology intact.',
+      'Adjust surrounding bullets so they evidence the updated title with truthful scope and impact.',
+      'Retain original employers, dates, and role ordering exactly.',
+    ],
   },
   'align-experience': {
     title: 'Align Experience',
-    focus:
-      'Elevate the most relevant accomplishments so they mirror the job description tasks and outcomes.',
+    focus: [
+      'Rewrite the most relevant experience bullets so they mirror the job description’s responsibilities and metrics.',
+      'Highlight missing keywords or responsibilities from the JD using facts already in the resume.',
+      'Keep bullet formatting, tense, and chronology consistent throughout the section.',
+    ],
   },
   'enhance-all': {
     title: 'Enhance All',
-    focus:
-      'Apply every targeted enhancement—summary, skills, designation, and experience—while keeping the resume ATS-safe.',
+    focus: [
+      'Deliver the summary, skills, designation, and experience improvements in one cohesive pass.',
+      'Address missing skills and JD priorities everywhere they fit naturally in the resume.',
+      'Ensure the final resume remains ATS-safe, truthful, and consistent in tone and formatting.',
+    ],
   },
 };
 
-function buildImprovementPrompt(type, context, instructions) {
-  const bulletLines = [];
-  if (context.jobTitle) {
-    bulletLines.push(`Target job title: ${context.jobTitle}`);
-  }
-  if (context.jobSkills?.length) {
-    bulletLines.push(`Key job skills: ${context.jobSkills.join(', ')}`);
-  }
-  if (context.missingSkills?.length) {
-    bulletLines.push(`Missing skills in resume: ${context.missingSkills.join(', ')}`);
-  }
-  if (context.knownCertificates?.length) {
-    bulletLines.push(
-      `Known certifications: ${context.knownCertificates
-        .map((c) => c.name)
+function condensePromptValue(value, maxLength = 600) {
+  if (Array.isArray(value)) {
+    return condensePromptValue(
+      value
+        .flatMap((item) => {
+          if (!item) return [];
+          if (typeof item === 'string') return item;
+          if (typeof item === 'number') return String(item);
+          if (typeof item === 'object') {
+            if (item && typeof item.name === 'string') return item.name;
+            return Object.values(item || {})
+              .filter((val) => typeof val === 'string')
+              .join(' ');
+          }
+          return [];
+        })
         .filter(Boolean)
-        .join(', ')}`
-    );
-  }
-  if (context.manualCertificates?.length) {
-    bulletLines.push(
-      `Manually supplied certificates: ${context.manualCertificates
-        .map((c) => c.name)
-        .filter(Boolean)
-        .join(', ')}`
+        .join(', '),
+      maxLength
     );
   }
 
-  const contextBlock = bulletLines.length
-    ? `Additional context:\n- ${bulletLines.join('\n- ')}`
-    : 'Additional context: none provided';
+  if (value && typeof value === 'object') {
+    if (typeof value.text === 'string') {
+      return condensePromptValue(value.text, maxLength);
+    }
+    return condensePromptValue(
+      Object.values(value)
+        .filter((val) => typeof val === 'string')
+        .join(' '),
+      maxLength
+    );
+  }
+
+  const text = typeof value === 'number' ? String(value) : String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function formatPromptLine(label, value, { fallback = 'Not provided', maxLength = 600 } = {}) {
+  const condensed = condensePromptValue(value, maxLength);
+  return `- ${label}: ${condensed || fallback}`;
+}
+
+function buildImprovementPrompt(type, context, instructions) {
+  const requests = Array.isArray(instructions)
+    ? instructions.filter(Boolean)
+    : [instructions].filter(Boolean);
+
+  const resumeText = context.resumeText || '';
+  const jobDescription = context.jobDescription || '';
+  const sections = collectSectionText(resumeText, context.linkedinData || {}, context.knownCertificates || []);
+  const combinedCertificates = [
+    ...(context.knownCertificates || []),
+    ...(context.manualCertificates || []),
+  ];
+  const candidateName = extractName(resumeText);
+
+  const candidateContextBlock = [
+    'Candidate context:',
+    formatPromptLine('Candidate name', candidateName, { fallback: 'Not listed' }),
+    formatPromptLine('Summary snapshot', sections.summary, {
+      fallback: 'Summary not detected',
+      maxLength: 400,
+    }),
+    formatPromptLine('Experience snapshot', sections.experience, {
+      fallback: 'Experience details limited',
+      maxLength: 450,
+    }),
+    formatPromptLine('Resume-listed skills', sections.skills || context.resumeSkills || [], {
+      fallback: 'Skills not provided',
+      maxLength: 300,
+    }),
+    formatPromptLine('Certifications noted', sections.certifications || combinedCertificates, {
+      fallback: 'None mentioned',
+      maxLength: 250,
+    }),
+  ].join('\n');
+
+  const jobContextLines = [
+    formatPromptLine('Target job title', context.jobTitle, { fallback: 'Not supplied' }),
+    formatPromptLine('Job description priority skills', context.jobSkills || [], {
+      fallback: 'Not provided',
+      maxLength: 350,
+    }),
+    formatPromptLine('Skills missing from resume', context.missingSkills || [], {
+      fallback: 'None detected',
+      maxLength: 350,
+    }),
+  ];
+
+  const jobContextBlock = ['Job context:', ...jobContextLines, formatPromptLine('JD excerpt', jobDescription, {
+    fallback: 'Not provided',
+    maxLength: 600,
+  })].join('\n');
+
+  const actionBlock = requests.length
+    ? `Action requests for ${IMPROVEMENT_CONFIG[type]?.title || 'this improvement'}:\n- ${requests.join('\n- ')}`
+    : '';
+
+  const ruleLines = [
+    'Preserve the existing chronology, dates, and employers.',
+    'Keep URLs untouched.',
+    'Maintain bullet formatting where present.',
+    'Leave unrelated sections unchanged.',
+    'Only include information that can be inferred from the resume and supplied context.',
+    'Do not invent achievements, companies, or dates.',
+  ];
+
+  if (requests.length) {
+    ruleLines.push('In the explanation, reference the JD skill or responsibility you reinforced.');
+  }
+
+  const ruleBlock = `Rules:\n- ${ruleLines.join('\n- ')}`;
 
   return [
     'You are an elite ATS resume editor. Apply the requested transformation without fabricating experience.',
-    `Focus area: ${instructions}`,
-    'Rules:\n- Preserve the existing chronology, dates, and employers.\n- Keep URLs untouched.\n- Maintain bullet formatting where present.\n- Leave unrelated sections unchanged.\n- Only include information that could reasonably be inferred from the original resume.',
+    candidateContextBlock,
+    jobContextBlock,
+    actionBlock,
+    ruleBlock,
     'Return ONLY valid JSON with keys: updatedResume (string), beforeExcerpt (string), afterExcerpt (string), explanation (string), confidence (0-1).',
-    contextBlock,
-    'Resume text:',
-    context.resumeText,
-    'Job description text:',
-    context.jobDescription || 'Not provided',
-  ].join('\n\n');
+    'Resume text:\n"""',
+    resumeText,
+    '"""',
+    'Job description text:\n"""',
+    jobDescription || 'Not provided',
+    '"""',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 function fallbackImprovement(type, context) {
