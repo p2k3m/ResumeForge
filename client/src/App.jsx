@@ -263,8 +263,21 @@ function buildChangeLogEntry(suggestion) {
     type: suggestion?.type || 'custom',
     summarySegments,
     addedItems,
-    removedItems
+    removedItems,
+    scoreDelta:
+      typeof suggestion?.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
+        ? suggestion.scoreDelta
+        : null
   }
+}
+
+function formatScoreDelta(delta) {
+  if (typeof delta !== 'number' || Number.isNaN(delta)) {
+    return null
+  }
+  const rounded = Math.round(delta)
+  const prefix = rounded > 0 ? '+' : ''
+  return `${prefix}${rounded} pts`
 }
 
 function orderAtsMetrics(metrics) {
@@ -316,6 +329,17 @@ function getApiBaseCandidate() {
 }
 
 function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
+  const deltaText = formatScoreDelta(suggestion.scoreDelta)
+  const deltaTone =
+    typeof suggestion.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
+      ? suggestion.scoreDelta > 0
+        ? 'text-emerald-600'
+        : suggestion.scoreDelta < 0
+          ? 'text-rose-600'
+          : 'text-slate-600'
+      : 'text-slate-600'
+  const acceptDisabled = Boolean(suggestion.rescorePending)
+
   return (
     <div className="rounded-xl bg-white/80 backdrop-blur border border-purple-200/60 shadow p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
@@ -348,6 +372,19 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
           <p className="mt-1 text-indigo-800 whitespace-pre-wrap">{suggestion.afterExcerpt || '—'}</p>
         </div>
       </div>
+      <div className="space-y-1">
+        {deltaText && (
+          <p className={`text-sm font-semibold ${deltaTone}`}>
+            ATS score delta: {deltaText}
+          </p>
+        )}
+        {suggestion.rescorePending && (
+          <p className="text-xs font-medium text-purple-600">Updating ATS dashboard…</p>
+        )}
+        {suggestion.rescoreError && (
+          <p className="text-xs font-medium text-rose-600">{suggestion.rescoreError}</p>
+        )}
+      </div>
       <div className="flex flex-wrap gap-3 justify-end pt-2">
         <button
           type="button"
@@ -366,7 +403,10 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
         <button
           type="button"
           onClick={onAccept}
-          className="px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700"
+          disabled={acceptDisabled}
+          className={`px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 ${
+            acceptDisabled ? 'opacity-70 cursor-not-allowed' : ''
+          }`}
         >
           Accept
         </button>
@@ -455,7 +495,13 @@ function App() {
           accepted: entry?.accepted ?? null,
           improvementSummary: Array.isArray(entry?.improvementSummary)
             ? entry.improvementSummary
-            : []
+            : [],
+          scoreDelta:
+            typeof entry?.scoreDelta === 'number' && Number.isFinite(entry.scoreDelta)
+              ? entry.scoreDelta
+              : null,
+          rescorePending: Boolean(entry?.rescorePending),
+          rescoreError: typeof entry?.rescoreError === 'string' ? entry.rescoreError : ''
         }))
 
         setImprovementResults(hydrated)
@@ -849,7 +895,10 @@ function App() {
         updatedResume: data.updatedResume || resumeText,
         confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
         accepted: null,
-        improvementSummary
+        improvementSummary,
+        scoreDelta: null,
+        rescorePending: false,
+        rescoreError: ''
       }
       setImprovementResults((prev) => [suggestion, ...prev])
     } catch (err) {
@@ -861,31 +910,202 @@ function App() {
     }
   }
 
-  const handleAcceptImprovement = (id) => {
+  const rescoreAfterImprovement = useCallback(
+    async ({ updatedResume, baselineScore, previousMissingSkills }) => {
+      const resumeDraft = typeof updatedResume === 'string' ? updatedResume : ''
+      if (!resumeDraft.trim()) {
+        return { delta: null, enhancedScore: null }
+      }
+
+      const payload = {
+        resumeText: resumeDraft,
+        jobDescriptionText,
+        jobSkills,
+        previousMissingSkills
+      }
+
+      if (typeof baselineScore === 'number' && Number.isFinite(baselineScore)) {
+        payload.baselineScore = baselineScore
+      }
+
+      const requestUrl = buildApiUrl(API_BASE_URL, '/api/rescore-improvement')
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}))
+        const message =
+          errPayload?.message ||
+          errPayload?.error ||
+          'Unable to refresh scores after applying the improvement.'
+        throw new Error(message)
+      }
+
+      const data = await response.json()
+      const metrics = orderAtsMetrics(
+        Array.isArray(data.atsSubScores)
+          ? data.atsSubScores
+          : Array.isArray(data.scoreBreakdown)
+            ? data.scoreBreakdown
+            : Object.values(data.scoreBreakdown || {})
+      )
+      setScoreBreakdown(metrics)
+
+      const nextResumeSkills = Array.isArray(data.resumeSkills) ? data.resumeSkills : []
+      setResumeSkills(nextResumeSkills)
+
+      const normalizeSkillList = (value) =>
+        (Array.isArray(value) ? value : [])
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter(Boolean)
+
+      const previousMissingList = normalizeSkillList(previousMissingSkills)
+      const responseCovered = normalizeSkillList(data.coveredSkills)
+
+      setMatch((prev) => {
+        const base = prev || {}
+        const nextMissing = Array.isArray(data.missingSkills) ? data.missingSkills : []
+        const missingLower = new Set(
+          nextMissing
+            .map((item) => (typeof item === 'string' ? item.toLowerCase() : ''))
+            .filter(Boolean)
+        )
+        const newlyCovered = previousMissingList.filter((skill) => {
+          const lower = skill.toLowerCase()
+          return !missingLower.has(lower)
+        })
+        const combinedCovered = Array.from(
+          new Set(
+            [...newlyCovered, ...responseCovered]
+              .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+              .filter(Boolean)
+          )
+        )
+        const existingAdded = Array.isArray(base.addedSkills) ? base.addedSkills : []
+        const mergedAdded = Array.from(
+          new Set(
+            [...existingAdded, ...combinedCovered]
+              .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+              .filter(Boolean)
+          )
+        )
+        const enhancedScoreValue =
+          typeof data.enhancedScore === 'number' && Number.isFinite(data.enhancedScore)
+            ? Math.round(data.enhancedScore)
+            : base.enhancedScore
+        const nextTable = Array.isArray(data.table) ? data.table : base.table || []
+
+        return {
+          ...base,
+          table: nextTable,
+          missingSkills: nextMissing,
+          addedSkills: mergedAdded,
+          enhancedScore: enhancedScoreValue
+        }
+      })
+
+      const baselineValid = typeof baselineScore === 'number' && Number.isFinite(baselineScore)
+      const enhancedValid =
+        typeof data.enhancedScore === 'number' && Number.isFinite(data.enhancedScore)
+      const delta = baselineValid && enhancedValid ? data.enhancedScore - baselineScore : null
+
+      return { delta, enhancedScore: enhancedValid ? data.enhancedScore : null }
+    },
+    [API_BASE_URL, jobDescriptionText, jobSkills]
+  )
+
+  const handleAcceptImprovement = async (id) => {
     const suggestion = improvementResults.find((item) => item.id === id)
+    if (!suggestion) {
+      return
+    }
+
+    const updatedResumeDraft = suggestion.updatedResume || resumeText
+    const baselineScore = Number.isFinite(match?.enhancedScore)
+      ? match.enhancedScore
+      : Number.isFinite(match?.originalScore)
+        ? match.originalScore
+        : null
+    const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
+    const changeLogEntry = buildChangeLogEntry(suggestion)
+
     setImprovementResults((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, accepted: true } : item
+        item.id === id
+          ? { ...item, accepted: true, rescorePending: true, rescoreError: '' }
+          : item
       )
     )
-    if (suggestion?.updatedResume) {
-      setResumeText(suggestion.updatedResume)
+
+    if (updatedResumeDraft) {
+      setResumeText(updatedResumeDraft)
     }
-    if (suggestion) {
+
+    if (changeLogEntry) {
       setChangeLog((prev) => {
-        if (prev.some((entry) => entry.id === suggestion.id)) {
-          return prev
+        if (prev.some((entry) => entry.id === changeLogEntry.id)) {
+          return prev.map((entry) =>
+            entry.id === changeLogEntry.id ? { ...entry, ...changeLogEntry } : entry
+          )
         }
-        const entry = buildChangeLogEntry(suggestion)
-        return [entry, ...prev]
+        return [changeLogEntry, ...prev]
       })
+    }
+
+    try {
+      const result = await rescoreAfterImprovement({
+        updatedResume: updatedResumeDraft,
+        baselineScore,
+        previousMissingSkills
+      })
+      const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
+
+      if (changeLogEntry && Number.isFinite(deltaValue)) {
+        setChangeLog((prev) =>
+          prev.map((entry) =>
+            entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
+          )
+        )
+      }
+
+      setImprovementResults((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                rescorePending: false,
+                scoreDelta: deltaValue,
+                rescoreError: ''
+              }
+            : item
+        )
+      )
+    } catch (err) {
+      console.error('Improvement rescore failed', err)
+      setError(err.message || 'Unable to update scores after applying improvement.')
+      setImprovementResults((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                rescorePending: false,
+                rescoreError: err.message || 'Unable to refresh ATS scores.'
+              }
+            : item
+        )
+      )
     }
   }
 
   const handleRejectImprovement = (id) => {
     setImprovementResults((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, accepted: false } : item
+        item.id === id
+          ? { ...item, accepted: false, rescorePending: false, rescoreError: '' }
+          : item
       )
     )
     setChangeLog((prev) => prev.filter((entry) => entry.id !== id))

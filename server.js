@@ -6068,6 +6068,103 @@ improvementRoutes.forEach(({ path: routePath, type }) => {
   });
 });
 
+app.post('/api/rescore-improvement', assignJobContext, async (req, res) => {
+  const jobId = req.jobId || createIdentifier();
+  res.locals.jobId = jobId;
+  const requestId = res.locals.requestId;
+  const logContext = { requestId, jobId, route: 'rescore-improvement' };
+
+  const payload = req.body || {};
+  const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
+  const jobDescriptionText =
+    typeof payload.jobDescriptionText === 'string' ? payload.jobDescriptionText : '';
+  if (!resumeText.trim()) {
+    return sendError(
+      res,
+      400,
+      'RESCORE_INPUT_REQUIRED',
+      'resumeText is required to recalculate scores.'
+    );
+  }
+
+  try {
+    const normalizeSkillList = (value) =>
+      (Array.isArray(value) ? value : [])
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean);
+
+    let jobSkills = normalizeSkillList(payload.jobSkills);
+    if (!jobSkills.length && jobDescriptionText.trim()) {
+      try {
+        const analysis = analyzeJobDescription(jobDescriptionText);
+        jobSkills = normalizeSkillList(analysis?.skills);
+      } catch (err) {
+        logStructured('warn', 'rescore_job_skill_fallback_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+      }
+    }
+    const resumeSkills = extractResumeSkills(resumeText);
+    const matchResult = calculateMatchScore(jobSkills, resumeSkills);
+    const scoreBreakdown = buildScoreBreakdown(resumeText, {
+      jobText: jobDescriptionText,
+      jobSkills,
+      resumeSkills,
+    });
+    const atsSubScores = scoreBreakdownToArray(scoreBreakdown);
+
+    const previousMissingSkills = normalizeSkillList(payload.previousMissingSkills);
+    const missingLower = new Set(
+      matchResult.newSkills.map((skill) => skill.toLowerCase())
+    );
+    const coveredSkills = previousMissingSkills.filter(
+      (skill) => !missingLower.has(skill.toLowerCase())
+    );
+
+    const baselineScoreInput = payload.baselineScore;
+    const baselineScore =
+      typeof baselineScoreInput === 'number'
+        ? baselineScoreInput
+        : typeof baselineScoreInput === 'string' && baselineScoreInput.trim()
+          ? Number.parseFloat(baselineScoreInput)
+          : null;
+    const hasBaseline = Number.isFinite(baselineScore);
+    const scoreDelta = hasBaseline
+      ? matchResult.score - baselineScore
+      : null;
+
+    logStructured('info', 'improvement_rescored', {
+      ...logContext,
+      enhancedScore: matchResult.score,
+      coveredSkills: coveredSkills.length,
+    });
+
+    return res.json({
+      success: true,
+      enhancedScore: matchResult.score,
+      table: matchResult.table,
+      missingSkills: matchResult.newSkills,
+      resumeSkills,
+      atsSubScores,
+      scoreBreakdown,
+      coveredSkills,
+      scoreDelta,
+    });
+  } catch (err) {
+    logStructured('error', 'rescore_improvement_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'RESCORE_FAILED',
+      err.message || 'Unable to recalculate scores after applying the improvement.'
+    );
+  }
+});
+
 app.post(
   '/api/process-cv',
   assignJobContext,
