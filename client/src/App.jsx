@@ -380,6 +380,27 @@ function App() {
 
       setOutputFiles(data.urls || [])
       setManualJobDescriptionRequired(false)
+      const probabilityValue =
+        typeof data.selectionProbability === 'number'
+          ? data.selectionProbability
+          : typeof data.selectionInsights?.probability === 'number'
+            ? data.selectionInsights.probability
+            : null
+      const probabilityMeaning =
+        data.selectionInsights?.level ||
+        (typeof probabilityValue === 'number'
+          ? probabilityValue >= 75
+            ? 'High'
+            : probabilityValue >= 55
+              ? 'Medium'
+              : 'Low'
+          : null)
+      const probabilityRationale =
+        data.selectionInsights?.message ||
+        (typeof probabilityValue === 'number' && probabilityMeaning
+          ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
+          : null)
+
       setMatch({
         table: data.table || [],
         addedSkills: data.addedSkills || [],
@@ -388,12 +409,9 @@ function App() {
         enhancedScore: data.enhancedScore || 0,
         originalTitle: data.originalTitle || '',
         modifiedTitle: data.modifiedTitle || '',
-        selectionProbability:
-          typeof data.selectionProbability === 'number'
-            ? data.selectionProbability
-            : typeof data.selectionInsights?.probability === 'number'
-              ? data.selectionInsights.probability
-              : null
+        selectionProbability: probabilityValue,
+        selectionProbabilityMeaning: probabilityMeaning,
+        selectionProbabilityRationale: probabilityRationale,
       })
       const breakdownCandidates = Array.isArray(data.atsSubScores)
         ? data.atsSubScores
