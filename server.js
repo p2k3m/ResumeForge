@@ -120,6 +120,9 @@ axiosResponseInterceptor?.use(
   }
 );
 
+const CV_GENERATION_ERROR_MESSAGE =
+  'Your new CV could not be generated. Please try again or contact support.';
+
 let chromium;
 let puppeteerCore;
 let chromiumLaunchAttempted = false;
@@ -546,6 +549,10 @@ function describeProcessingFailure(err) {
   const messages = collectMessages(err);
   if (!messages.length) {
     return 'Processing failed. Please try again later.';
+  }
+
+  if (messages.some((msg) => /pdf generation failed/i.test(msg))) {
+    return CV_GENERATION_ERROR_MESSAGE;
   }
 
   const meaningful = messages.find((msg) => !/^processing failed$/i.test(msg));
@@ -6019,11 +6026,16 @@ async function handleImprovementRequest(type, req, res) {
       ...logContext,
       error: serializeError(err),
     });
+    const details =
+      err?.message && err.message !== CV_GENERATION_ERROR_MESSAGE
+        ? { reason: err.message }
+        : undefined;
     return sendError(
       res,
       500,
       'IMPROVEMENT_FAILED',
-      err.message || 'Failed to generate the targeted improvement.'
+      CV_GENERATION_ERROR_MESSAGE,
+      details
     );
   }
 }
