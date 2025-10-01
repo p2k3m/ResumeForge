@@ -5611,6 +5611,89 @@ function assignJobContext(req, res, next) {
   next();
 }
 
+function extractDiffLines(text = '') {
+  const seen = new Set();
+  const lines = [];
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const normalized = line.replace(/^[•*-]\s*/, '').replace(/\s+/g, ' ').trim();
+      if (!normalized) {
+        return;
+      }
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      lines.push(normalized);
+    });
+  return lines;
+}
+
+function extractReasonsList(explanation = '') {
+  const cleaned = String(explanation || '').trim();
+  if (!cleaned) {
+    return [];
+  }
+
+  const bulletLines = cleaned
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[•*-]\s*/, '').trim())
+    .filter(Boolean);
+
+  const reasonLines = bulletLines.length > 1 ? bulletLines : cleaned
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9])/)
+    .map((sentence) => sentence.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  const deduped = [];
+  const seen = new Set();
+  reasonLines.forEach((line) => {
+    const key = line.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(line);
+    }
+  });
+  return deduped.length ? deduped : [cleaned];
+}
+
+function buildImprovementSummary(beforeText = '', afterText = '', explanation = '') {
+  const added = [];
+  const removed = [];
+  const beforeLines = extractDiffLines(beforeText);
+  const afterLines = extractDiffLines(afterText);
+  const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+  const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+
+  afterLines.forEach((line) => {
+    if (!beforeSet.has(line.toLowerCase())) {
+      added.push(line);
+    }
+  });
+
+  beforeLines.forEach((line) => {
+    if (!afterSet.has(line.toLowerCase())) {
+      removed.push(line);
+    }
+  });
+
+  const reason = extractReasonsList(explanation);
+
+  return [
+    {
+      added,
+      removed,
+      reason,
+    },
+  ];
+}
+
 async function handleImprovementRequest(type, req, res) {
   const jobId = req.jobId || createIdentifier();
   res.locals.jobId = jobId;
@@ -5685,6 +5768,11 @@ async function handleImprovementRequest(type, req, res) {
       confidence: result.confidence,
       updatedResume: result.updatedResume,
       missingSkills,
+      improvementSummary: buildImprovementSummary(
+        result.beforeExcerpt,
+        result.afterExcerpt,
+        result.explanation
+      ),
     });
   } catch (err) {
     logStructured('error', 'targeted_improvement_failed', {
