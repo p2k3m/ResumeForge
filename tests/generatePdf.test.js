@@ -378,6 +378,31 @@ describe('generatePdf and parsing', () => {
     );
   });
 
+  test('parseContent detects bare LinkedIn and Credly links', () => {
+    const data = parseContent(
+      'Jane Doe\n- linkedin.com/in/janedoe\n- credly.com/badges/12345'
+    );
+    const items = data.sections[0].items;
+    expect(items[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          text: 'LinkedIn',
+          href: 'https://linkedin.com/in/janedoe'
+        })
+      ])
+    );
+    expect(items[1]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          text: 'Credly',
+          href: 'https://credly.com/badges/12345'
+        })
+      ])
+    );
+  });
+
   test('HTML mapping only hyperlinks link text', () => {
     const tokens = parseContent(
       'Jane Doe\n- Visit [OpenAI](https://openai.com) for more'
@@ -434,6 +459,31 @@ describe('generatePdf and parsing', () => {
     expect(raw).toContain('https://www.linkedin.com/in/johndoe');
     expect(raw).toContain('https://github.com/johndoe');
     expect(raw).not.toMatch(/<a[\s>]/);
+  });
+
+  test('generated PDF hyperlinks bare LinkedIn and Credly URLs', async () => {
+    const input = 'John Doe\n- linkedin.com/in/janedoe\n- credly.com/badges/xyz';
+    const buffer = await generatePdf(input);
+    const items = parseContent(input).sections[0].items;
+    expect(items[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          href: 'https://linkedin.com/in/janedoe'
+        })
+      ])
+    );
+    expect(items[1]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'link',
+          href: 'https://credly.com/badges/xyz'
+        })
+      ])
+    );
+    const raw = buffer.toString();
+    expect(raw).toContain('https://linkedin.com/in/janedoe');
+    expect(raw).toContain('https://credly.com/badges/xyz');
   });
 
   test('PDFKit link annotations stop before following text', async () => {

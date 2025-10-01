@@ -53,6 +53,18 @@ describe('extractCertifications', () => {
     ]);
   });
 
+  test('normalizes bare credly links to https URLs', () => {
+    const text = `Certifications\n- Azure Administrator credly.com/badges/xyz`;
+    const certs = extractCertifications(text);
+    expect(certs).toEqual([
+      {
+        name: 'Azure Administrator',
+        provider: '',
+        url: 'https://credly.com/badges/xyz'
+      }
+    ]);
+  });
+
   test('omits certification heading when no certifications are present', () => {
     const text = `No credentials listed here.`;
     const certs = extractCertifications(text);
@@ -96,6 +108,29 @@ describe('extractCertifications', () => {
       text: 'AWS Certified Developer - Amazon',
       href: 'https://www.credly.com/badges/abc'
     });
+  });
+
+  test('ensures Credly profile links include a scheme', () => {
+    const resumeCertifications = [
+      { name: 'AWS Developer', provider: 'Amazon', url: 'credly.com/aws-dev' }
+    ];
+    const ensured = ensureRequiredSections(
+      { sections: [] },
+      {
+        resumeCertifications,
+        credlyProfileUrl: 'credly.com/user'
+      }
+    );
+    const certSection = ensured.sections.find((s) => s.heading === 'Certification');
+    expect(certSection).toBeTruthy();
+    const firstLink = certSection.items[0].find((t) => t.type === 'link');
+    expect(firstLink).toMatchObject({
+      href: 'https://credly.com/aws-dev'
+    });
+    const profileLink = certSection.items
+      .flat()
+      .find((t) => t.type === 'link' && t.text === 'Credly Profile');
+    expect(profileLink).toMatchObject({ href: 'https://credly.com/user' });
   });
 
   test('consolidates training headings and links certificate names to their URLs', () => {
