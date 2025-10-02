@@ -7104,6 +7104,652 @@ improvementRoutes.forEach(({ path: routePath, type }) => {
   });
 });
 
+async function generateEnhancedDocumentsResponse({
+  res,
+  s3,
+  dynamo,
+  tableName,
+  bucket,
+  logKey,
+  jobId,
+  requestId,
+  logContext,
+  resumeText,
+  originalResumeTextInput,
+  jobDescription,
+  jobSkills,
+  resumeSkills,
+  originalMatch,
+  linkedinProfileUrl,
+  linkedinData = {},
+  credlyProfileUrl,
+  credlyCertifications = [],
+  credlyStatus = {
+    attempted: Boolean(credlyProfileUrl),
+    success: false,
+    manualEntryRequired: false,
+    message: '',
+  },
+  manualCertificates = [],
+  templateContextInput = {},
+  templateParamConfig,
+  applicantName,
+  sanitizedName,
+  anonymizedLinkedIn,
+  originalUploadKey,
+  selection,
+  geminiApiKey,
+}) {
+  const isTestEnvironment = process.env.NODE_ENV === 'test';
+  if (!bucket) {
+    logStructured('error', 'generation_bucket_missing', logContext);
+    sendError(
+      res,
+      500,
+      'STORAGE_UNAVAILABLE',
+      'Storage bucket is not configured for final generation.'
+    );
+    return null;
+  }
+
+  const resumeExperience = extractExperience(resumeText);
+  const linkedinExperience = extractExperience(linkedinData.experience || []);
+  const resumeEducation = extractEducation(resumeText);
+  const linkedinEducation = extractEducation(linkedinData.education || []);
+  const resumeCertifications = extractCertifications(resumeText);
+  const linkedinCertifications = extractCertifications(
+    linkedinData.certifications || []
+  );
+  const aggregatedCertifications = [
+    ...credlyCertifications,
+    ...manualCertificates,
+  ];
+
+  const knownCertificates = dedupeCertificates([
+    ...resumeCertifications,
+    ...linkedinCertifications,
+    ...aggregatedCertifications,
+  ]);
+  const certificateSuggestions = suggestRelevantCertifications(
+    jobDescription,
+    jobSkills,
+    knownCertificates
+  );
+  const manualCertificatesRequired =
+    credlyStatus.manualEntryRequired && manualCertificates.length === 0;
+
+  const applicantTitle =
+    resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
+  const sectionPreservation = buildSectionPreservationContext(resumeText);
+  const contactDetails = extractContactDetails(resumeText, linkedinProfileUrl);
+
+  const templateSelection =
+    selection ||
+    selectTemplates({
+      defaultCvTemplate: templateContextInput.template1 || CV_TEMPLATES[0],
+      defaultClTemplate: templateContextInput.coverTemplate1 || CL_TEMPLATES[0],
+      template1: templateContextInput.template1,
+      template2: templateContextInput.template2,
+      coverTemplate1: templateContextInput.coverTemplate1,
+      coverTemplate2: templateContextInput.coverTemplate2,
+      cvTemplates: templateContextInput.templates,
+      clTemplates: templateContextInput.coverTemplates,
+    });
+  let { template1, template2, coverTemplate1, coverTemplate2 } =
+    templateSelection;
+
+  const templateParamsConfig =
+    templateParamConfig ?? parseTemplateParamsConfig(undefined);
+
+  let resumeSkillsList = Array.isArray(resumeSkills)
+    ? resumeSkills
+    : extractResumeSkills(resumeText);
+  let originalMatchResult = originalMatch;
+  if (!originalMatchResult || !Array.isArray(originalMatchResult.table)) {
+    originalMatchResult = calculateMatchScore(jobSkills, resumeSkillsList);
+  }
+
+  const genAI = new GoogleGenerativeAI(geminiApiKey);
+  const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+  let text = resumeText;
+  let projectText = '';
+  let modifiedTitle = '';
+  let geminiAddedSkills = [];
+
+  if (!isTestEnvironment) {
+    try {
+      const sectionTexts = collectSectionText(
+        resumeText,
+        linkedinData,
+        aggregatedCertifications
+      );
+      const enhanced = await rewriteSectionsWithGemini(
+        applicantName,
+        sectionTexts,
+        jobDescription,
+        jobSkills,
+        generativeModel,
+        {
+          resumeExperience,
+          linkedinExperience,
+          resumeEducation,
+          linkedinEducation,
+          resumeCertifications,
+          linkedinCertifications,
+          credlyCertifications: aggregatedCertifications,
+          credlyProfileUrl,
+          contactLines: contactDetails.contactLines,
+          ...sectionPreservation,
+        }
+      );
+      text = enhanced.text;
+      projectText = enhanced.project;
+      modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
+      geminiAddedSkills = enhanced.addedSkills || [];
+      logStructured('info', 'generation_section_rewrite_completed', {
+        ...logContext,
+        modifiedTitle: modifiedTitle || '',
+        addedSkills: geminiAddedSkills.length,
+      });
+    } catch (err) {
+      logStructured('warn', 'generation_section_rewrite_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
+
+  const combinedProfile = text;
+
+  const versionsSchema = {
+    version1: 'string resume that preserves and enhances the original CV structure',
+    version2: 'string resume that preserves and enhances the original CV structure',
+  };
+  const versionsContext = {
+    cvText: combinedProfile,
+    jobDescription,
+    jobTitle: modifiedTitle || applicantTitle || '',
+    jobSkills,
+    note: 'The candidate performed duties matching the job description in their last role.',
+  };
+  const versionsPrompt = [
+    'You are an elite resume architect tasked with producing two targeted resume versions for Gemini/OpenAI.',
+    'Requirements:',
+    '- Never degrade CV structure; maintain clear sections, chronology, and formatting cues.',
+    '- Maximize ATS alignment using the job description and skill signals.',
+    '- Reflect the official job title exactly in the most recent role.',
+    '- Mirror critical responsibilities and highlight relevant projects, fabricating emphasis only when contextually implied.',
+    '- Preserve all original URLs.',
+    '- Respond ONLY with JSON adhering to the schema below.',
+    '',
+    'OUTPUT_SCHEMA:',
+    JSON.stringify(versionsSchema, null, 2),
+    '',
+    'INPUT_CONTEXT:',
+    JSON.stringify(versionsContext, null, 2),
+  ].join('\n');
+
+  logStructured('info', 'generation_versions_prompt_created', {
+    ...logContext,
+    jobSkillsCount: jobSkills.length,
+  });
+
+  let versionData = {};
+  let parsedVersions = false;
+  let lastAiResponse;
+  let sanitizedFallbackUsed = false;
+
+  const ensureProjectSummary = async () => {
+    if (projectText) return;
+    projectText = await generateProjectSummary(
+      jobDescription,
+      resumeSkillsList,
+      jobSkills,
+      isTestEnvironment ? null : generativeModel
+    );
+  };
+
+  const buildSanitizeOptions = () => ({
+    resumeExperience,
+    linkedinExperience,
+    resumeEducation,
+    linkedinEducation,
+    resumeCertifications,
+    linkedinCertifications,
+    credlyCertifications: aggregatedCertifications,
+    credlyProfileUrl,
+    jobTitle: versionsContext.jobTitle,
+    project: projectText,
+    contactLines: contactDetails.contactLines,
+    ...sectionPreservation,
+  });
+
+  const applyVersionFallback = async ({ reason }) => {
+    await ensureProjectSummary();
+    const sanitizeOptions = buildSanitizeOptions();
+    const sanitized = sanitizeGeneratedText(combinedProfile, sanitizeOptions);
+    const useSanitized = Boolean(sanitized && sanitized.trim());
+    if (useSanitized) {
+      sanitizedFallbackUsed = true;
+    }
+    const fallbackResume = useSanitized ? sanitized : combinedProfile;
+    if (fallbackResume && fallbackResume.trim()) {
+      if (!versionData.version1 || !versionData.version1.trim()) {
+        versionData.version1 = fallbackResume;
+      }
+      if (!versionData.version2 || !versionData.version2.trim()) {
+        versionData.version2 = fallbackResume;
+      }
+      const fallbackMessage = useSanitized
+        ? 'AI response missing structured resume versions, using sanitized resume copy'
+        : 'AI response missing structured resume versions, using original resume text';
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'generation_versions_fallback_used',
+        level: reason === 'parse_failed' ? 'error' : 'warn',
+        message:
+          reason === 'parse_failed'
+            ? fallbackMessage
+            : useSanitized
+              ? 'Partial AI response, using sanitized resume copy'
+              : 'Partial AI response, using original resume text',
+      });
+      logStructured('warn', 'generation_versions_fallback_applied', {
+        ...logContext,
+        reason,
+        fallback: useSanitized ? 'sanitized' : 'original',
+      });
+    }
+  };
+
+  try {
+    logStructured('info', 'generation_versions_requested', logContext);
+    const result = await generativeModel.generateContent(versionsPrompt);
+    const responseText = result?.response?.text?.();
+    lastAiResponse = responseText;
+    const parsed = parseAiJson(responseText);
+    if (parsed && typeof parsed.version1 === 'string' && typeof parsed.version2 === 'string') {
+      parsedVersions = true;
+      const projectField = parsed.project || parsed.projects || parsed.Projects;
+      projectText = Array.isArray(projectField)
+        ? projectField[0]
+        : projectField || projectText;
+      if (!projectText) {
+        await ensureProjectSummary();
+      }
+      const sanitizeOptions = buildSanitizeOptions();
+      versionData.version1 = await verifyResume(
+        sanitizeGeneratedText(parsed.version1, sanitizeOptions),
+        jobDescription,
+        generativeModel,
+        sanitizeOptions
+      );
+      versionData.version2 = await verifyResume(
+        sanitizeGeneratedText(parsed.version2, sanitizeOptions),
+        jobDescription,
+        generativeModel,
+        sanitizeOptions
+      );
+    } else {
+      logStructured('error', 'generation_versions_parse_failed', {
+        ...logContext,
+        responsePreview:
+          typeof lastAiResponse === 'string'
+            ? lastAiResponse.slice(0, 200)
+            : undefined,
+      });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'generation_versions_parse_failed',
+        level: 'error',
+        message: 'AI response missing resume versions',
+      });
+      await applyVersionFallback({ reason: 'parse_failed' });
+    }
+  } catch (err) {
+    logStructured('error', 'generation_versions_request_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    await applyVersionFallback({ reason: 'request_failed' });
+  }
+
+  if (parsedVersions && (!versionData.version1?.trim() || !versionData.version2?.trim())) {
+    await applyVersionFallback({ reason: 'partial_versions' });
+  }
+
+  if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'generation_versions_missing',
+      level: 'error',
+      message: 'AI response invalid',
+    });
+    sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
+    return null;
+  }
+
+  const version1Skills = extractResumeSkills(versionData.version1);
+  const match1 = calculateMatchScore(jobSkills, version1Skills);
+  const version2Skills = extractResumeSkills(versionData.version2);
+  const match2 = calculateMatchScore(jobSkills, version2Skills);
+  const bestMatch = match1.score >= match2.score ? match1 : match2;
+
+  const coverSchema = {
+    cover_letter1: 'string cover letter tailored to the job description',
+    cover_letter2: 'string cover letter tailored to the job description',
+  };
+  const coverContext = {
+    jobTitle: versionsContext.jobTitle,
+    jobSkills,
+    resume: combinedProfile,
+    jobDescription,
+  };
+  const coverPrompt = [
+    'You are an elite career copywriter supporting Gemini/OpenAI workflows.',
+    'Instructions:',
+    '- Produce exactly two distinct, ATS-aware cover letters.',
+    '- Mirror critical language from the job description and respect accomplishments from the resume.',
+    '- Preserve every URL appearing in the resume text.',
+    '- Maintain professional tone and structure without degrading the CV context referenced.',
+    '- Respond ONLY with JSON conforming to the schema below.',
+    '',
+    'OUTPUT_SCHEMA:',
+    JSON.stringify(coverSchema, null, 2),
+    '',
+    'INPUT_CONTEXT:',
+    JSON.stringify(coverContext, null, 2),
+  ].join('\n');
+
+  let coverData = {};
+  try {
+    const coverResult = await generativeModel.generateContent(coverPrompt);
+    const coverText = coverResult.response.text();
+    const parsed = parseAiJson(coverText);
+    if (parsed) coverData = parsed;
+    logStructured('info', 'generation_cover_letters_completed', {
+      ...logContext,
+      variants: Object.keys(coverData).length,
+    });
+  } catch (err) {
+    logStructured('warn', 'generation_cover_letters_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+  }
+
+  await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
+
+  const prefix = originalUploadKey
+    ? originalUploadKey.replace(/[^/]+$/, '')
+    : `${sanitizedName}/cv/${new Date().toISOString().slice(0, 10)}/`;
+  const generatedPrefix = `${prefix}generated/`;
+  const outputs = {
+    cover_letter1: coverData.cover_letter1,
+    cover_letter2: coverData.cover_letter2,
+    version1: versionData.version1,
+    version2: versionData.version2,
+  };
+  const urls = [];
+
+  if (originalUploadKey) {
+    try {
+      const originalSignedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+        { expiresIn: URL_EXPIRATION_SECONDS }
+      );
+      const expiresAt = new Date(
+        Date.now() + URL_EXPIRATION_SECONDS * 1000
+      ).toISOString();
+      urls.push({ type: 'original_upload', url: originalSignedUrl, expiresAt });
+    } catch (err) {
+      logStructured('warn', 'generation_original_url_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
+
+  for (const [name, textValue] of Object.entries(outputs)) {
+    if (!textValue) continue;
+    const isCvDocument = name === 'version1' || name === 'version2';
+    const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
+    let fileName;
+    if (name === 'version1') {
+      fileName = sanitizedName;
+    } else if (name === 'version2') {
+      fileName = `${sanitizedName}_2`;
+    } else {
+      fileName = name;
+    }
+    const subdir = isCvDocument
+      ? 'cv/'
+      : isCoverLetter
+        ? 'cover_letter/'
+        : '';
+    const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
+    const primaryTemplate = isCvDocument
+      ? name === 'version1'
+        ? template1
+        : template2
+      : isCoverLetter
+        ? name === 'cover_letter1'
+          ? coverTemplate1
+          : coverTemplate2
+        : template1;
+
+    const resolvedTemplateParams = resolveTemplateParamsConfig(
+      templateParamsConfig,
+      {
+        resumeExperience,
+        linkedinExperience,
+        resumeEducation,
+        linkedinEducation,
+        knownCertificates,
+        jobSkills,
+        project: projectText,
+        jobTitle: versionsContext.jobTitle,
+      }
+    );
+
+    const templateOptions = {
+      jobSkills,
+      linkedinExperience,
+      resumeEducation,
+      linkedinEducation,
+      resumeCertifications,
+      linkedinCertifications,
+      credlyCertifications,
+      credlyProfileUrl,
+      jobTitle: versionsContext.jobTitle,
+      project: projectText,
+      contactLines: contactDetails.contactLines,
+      ...sectionPreservation,
+      templateParams: resolvedTemplateParams,
+    };
+
+    if (isCvDocument) {
+      templateOptions.resumeExperience = resumeExperience;
+    } else if (isCoverLetter) {
+      templateOptions.skipRequiredSections = true;
+    }
+
+    const pdfBuffer = await generatePdf(
+      textValue,
+      primaryTemplate,
+      templateOptions,
+      generativeModel
+    );
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: pdfBuffer,
+        ContentType: 'application/pdf',
+      })
+    );
+
+    const signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      { expiresIn: URL_EXPIRATION_SECONDS }
+    );
+    const expiresAt = new Date(
+      Date.now() + URL_EXPIRATION_SECONDS * 1000
+    ).toISOString();
+    urls.push({ type: name, url: signedUrl, expiresAt });
+  }
+
+  if (urls.length === 0) {
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'generation_no_outputs',
+      level: 'error',
+      message: 'AI response invalid',
+    });
+    sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
+    return null;
+  }
+
+  await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
+
+  const addedSkills = sanitizedFallbackUsed
+    ? []
+    : Array.from(
+        new Set(
+          (bestMatch.table || [])
+            .filter((row) =>
+              row.matched &&
+              originalMatchResult.table?.some(
+                (baselineRow) =>
+                  baselineRow.skill === row.skill && !baselineRow.matched
+              )
+            )
+            .map((row) => row.skill)
+            .concat(geminiAddedSkills)
+        )
+      );
+
+  const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
+    jobSkills,
+    resumeSkills: extractResumeSkills(combinedProfile),
+    jobText: jobDescription,
+  });
+  const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
+
+  await dynamo.send(
+    new UpdateItemCommand({
+      TableName: tableName,
+      Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+      UpdateExpression:
+        'SET #status = :status, cv1Url = :cv1, cv2Url = :cv2, coverLetter1Url = :cl1, coverLetter2Url = :cl2, analysisCompletedAt = :completedAt, missingSkills = :missingSkills, addedSkills = :addedSkills, enhancedScore = :enhancedScore, originalScore = if_not_exists(originalScore, :originalScore)',
+      ExpressionAttributeValues: {
+        ':status': { S: 'completed' },
+        ':cv1': { S: urls.find((u) => u.type === 'version1')?.url || '' },
+        ':cv2': { S: urls.find((u) => u.type === 'version2')?.url || '' },
+        ':cl1': { S: urls.find((u) => u.type === 'cover_letter1')?.url || '' },
+        ':cl2': { S: urls.find((u) => u.type === 'cover_letter2')?.url || '' },
+        ':completedAt': { S: new Date().toISOString() },
+        ':missingSkills': {
+          L: (bestMatch.newSkills || []).map((skill) => ({ S: String(skill) })),
+        },
+        ':addedSkills': {
+          L: addedSkills.map((skill) => ({ S: String(skill) })),
+        },
+        ':enhancedScore': { N: String(bestMatch.score) },
+        ':originalScore': {
+          N: Number.isFinite(originalMatchResult.score)
+            ? String(originalMatchResult.score)
+            : '0',
+        },
+        ':jobId': { S: jobId },
+      },
+      ExpressionAttributeNames: { '#status': 'status' },
+      ConditionExpression: 'jobId = :jobId',
+    })
+  );
+
+  await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_metadata_updated' });
+
+  const selectionInsights = buildSelectionInsights({
+    jobTitle: versionsContext.jobTitle,
+    originalTitle: applicantTitle,
+    modifiedTitle: modifiedTitle || applicantTitle,
+    jobDescriptionText: jobDescription,
+    bestMatch,
+    originalMatch: originalMatchResult,
+    missingSkills: bestMatch.newSkills,
+    addedSkills,
+    scoreBreakdown: finalScoreBreakdown,
+    resumeExperience,
+    linkedinExperience,
+    knownCertificates,
+    certificateSuggestions,
+    manualCertificatesRequired,
+  });
+
+  logStructured('info', 'generation_completed', {
+    ...logContext,
+    enhancedScore: bestMatch.score,
+    outputs: urls.length,
+  });
+
+  return {
+    success: true,
+    requestId,
+    jobId,
+    urlExpiresInSeconds: URL_EXPIRATION_SECONDS,
+    urls,
+    applicantName,
+    originalScore: Number.isFinite(originalMatchResult.score)
+      ? originalMatchResult.score
+      : bestMatch.score,
+    enhancedScore: bestMatch.score,
+    table: bestMatch.table,
+    addedSkills,
+    missingSkills: bestMatch.newSkills,
+    originalTitle: applicantTitle,
+    modifiedTitle: modifiedTitle || applicantTitle,
+    scoreBreakdown: finalScoreBreakdown,
+    atsSubScores: finalAtsScores,
+    resumeText: combinedProfile,
+    originalResumeText: originalResumeTextInput || resumeText,
+    jobDescriptionText: jobDescription,
+    jobSkills,
+    resumeSkills: resumeSkillsList,
+    certificateInsights: {
+      known: knownCertificates,
+      suggestions: certificateSuggestions,
+      manualEntryRequired: manualCertificatesRequired,
+      credlyStatus,
+    },
+    manualCertificates,
+    selectionProbability: selectionInsights?.probability ?? null,
+    selectionInsights,
+    templateContext: {
+      template1,
+      template2,
+      coverTemplate1,
+      coverTemplate2,
+    },
+  };
+}
+
 
 app.post(
   '/api/generate-enhanced-docs',
@@ -7447,533 +8093,43 @@ app.post(
       const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
       const geminiApiKey = secrets.GEMINI_API_KEY;
-      const genAI = new GoogleGenerativeAI(geminiApiKey);
-      const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-      let text = resumeText;
-      let projectText = '';
-      let modifiedTitle = '';
-      let geminiAddedSkills = [];
-      if (process.env.NODE_ENV !== 'test') {
-        try {
-          const sectionTexts = collectSectionText(
-            resumeText,
-            linkedinData,
-            aggregatedCertifications
-          );
-          const enhanced = await rewriteSectionsWithGemini(
-            applicantName,
-            sectionTexts,
-            jobDescription,
-            jobSkills,
-            generativeModel,
-            {
-              resumeExperience,
-              linkedinExperience,
-              resumeEducation,
-              linkedinEducation,
-              resumeCertifications,
-              linkedinCertifications,
-              credlyCertifications: aggregatedCertifications,
-              credlyProfileUrl,
-              contactLines: contactDetails.contactLines,
-              ...sectionPreservation,
-            }
-          );
-          text = enhanced.text;
-          projectText = enhanced.project;
-          modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
-          geminiAddedSkills = enhanced.addedSkills || [];
-          logStructured('info', 'generation_section_rewrite_completed', {
-            ...logContext,
-            modifiedTitle: modifiedTitle || '',
-            addedSkills: geminiAddedSkills.length,
-          });
-        } catch (err) {
-          logStructured('warn', 'generation_section_rewrite_failed', {
-            ...logContext,
-            error: serializeError(err),
-          });
-        }
-      }
-
-      const combinedProfile = text;
-
-      const versionsSchema = {
-        version1: 'string resume that preserves and enhances the original CV structure',
-        version2: 'string resume that preserves and enhances the original CV structure',
-      };
-      const versionsContext = {
-        cvText: combinedProfile,
-        jobDescription,
-        jobTitle: req.body.jobTitle || modifiedTitle || applicantTitle || '',
-        jobSkills,
-        note: 'The candidate performed duties matching the job description in their last role.',
-      };
-      const versionsPrompt = [
-        'You are an elite resume architect tasked with producing two targeted resume versions for Gemini/OpenAI.',
-        'Requirements:',
-        '- Never degrade CV structure; maintain clear sections, chronology, and formatting cues.',
-        '- Maximize ATS alignment using the job description and skill signals.',
-        '- Reflect the official job title exactly in the most recent role.',
-        '- Mirror critical responsibilities and highlight relevant projects, fabricating emphasis only when contextually implied.',
-        '- Preserve all original URLs.',
-        '- Respond ONLY with JSON adhering to the schema below.',
-        '',
-        'OUTPUT_SCHEMA:',
-        JSON.stringify(versionsSchema, null, 2),
-        '',
-        'INPUT_CONTEXT:',
-        JSON.stringify(versionsContext, null, 2),
-      ].join('\n');
-
-
-      logStructured('info', 'generation_versions_prompt_created', {
-        ...logContext,
-        jobSkillsCount: jobSkills.length,
-      });
-
-      let versionData = {};
-      let parsedVersions = false;
-      let lastAiResponse;
-      let sanitizedFallbackUsed = false;
-
-      const ensureProjectSummary = async () => {
-        if (projectText) return;
-        projectText = await generateProjectSummary(
-          jobDescription,
-          resumeSkills,
-          jobSkills,
-          generativeModel
-        );
-      };
-
-      const buildSanitizeOptions = () => ({
-        resumeExperience,
-        linkedinExperience,
-        resumeEducation,
-        linkedinEducation,
-        resumeCertifications,
-        linkedinCertifications,
-        credlyCertifications: aggregatedCertifications,
-        credlyProfileUrl,
-        jobTitle: versionsContext.jobTitle,
-        project: projectText,
-        contactLines: contactDetails.contactLines,
-        ...sectionPreservation,
-      });
-
-      const applyVersionFallback = async ({ reason }) => {
-        await ensureProjectSummary();
-        const sanitizeOptions = buildSanitizeOptions();
-        const sanitized = sanitizeGeneratedText(combinedProfile, sanitizeOptions);
-        const useSanitized = Boolean(sanitized && sanitized.trim());
-        if (useSanitized) {
-          sanitizedFallbackUsed = true;
-        }
-        const fallbackResume = useSanitized ? sanitized : combinedProfile;
-        if (fallbackResume && fallbackResume.trim()) {
-          if (!versionData.version1 || !versionData.version1.trim()) {
-            versionData.version1 = fallbackResume;
-          }
-          if (!versionData.version2 || !versionData.version2.trim()) {
-            versionData.version2 = fallbackResume;
-          }
-          const fallbackMessage = useSanitized
-            ? 'AI response missing structured resume versions, using sanitized resume copy'
-            : 'AI response missing structured resume versions, using original resume text';
-          await logEvent({
-            s3,
-            bucket,
-            key: logKey,
-            jobId,
-            event: 'generation_versions_fallback_used',
-            level: reason === 'parse_failed' ? 'error' : 'warn',
-            message:
-              reason === 'parse_failed'
-                ? fallbackMessage
-                : useSanitized
-                  ? 'Partial AI response, using sanitized resume copy'
-                  : 'Partial AI response, using original resume text',
-          });
-          logStructured('warn', 'generation_versions_fallback_applied', {
-            ...logContext,
-            reason,
-            fallback: useSanitized ? 'sanitized' : 'original',
-          });
-        }
-      };
-      try {
-        logStructured('info', 'generation_versions_requested', logContext);
-        const result = await generativeModel.generateContent(versionsPrompt);
-        const responseText = result?.response?.text?.();
-        lastAiResponse = responseText;
-        const parsed = parseAiJson(responseText);
-        if (parsed && typeof parsed.version1 === 'string' && typeof parsed.version2 === 'string') {
-          parsedVersions = true;
-          const projectField = parsed.project || parsed.projects || parsed.Projects;
-          projectText = Array.isArray(projectField)
-            ? projectField[0]
-            : projectField || projectText;
-          if (!projectText) {
-            await ensureProjectSummary();
-          }
-          const sanitizeOptions = buildSanitizeOptions();
-          versionData.version1 = await verifyResume(
-            sanitizeGeneratedText(parsed.version1, sanitizeOptions),
-            jobDescription,
-            generativeModel,
-            sanitizeOptions
-          );
-          versionData.version2 = await verifyResume(
-            sanitizeGeneratedText(parsed.version2, sanitizeOptions),
-            jobDescription,
-            generativeModel,
-            sanitizeOptions
-          );
-        } else {
-          logStructured('error', 'generation_versions_parse_failed', {
-            ...logContext,
-            responsePreview:
-              typeof lastAiResponse === 'string'
-                ? lastAiResponse.slice(0, 200)
-                : undefined,
-          });
-          await logEvent({
-            s3,
-            bucket,
-            key: logKey,
-            jobId,
-            event: 'generation_versions_parse_failed',
-            level: 'error',
-            message: 'AI response missing resume versions',
-          });
-          await applyVersionFallback({ reason: 'parse_failed' });
-        }
-      } catch (err) {
-        logStructured('error', 'generation_versions_request_failed', {
-          ...logContext,
-          error: serializeError(err),
-        });
-        await applyVersionFallback({ reason: 'request_failed' });
-      }
-
-      if (parsedVersions && (!versionData.version1?.trim() || !versionData.version2?.trim())) {
-        await applyVersionFallback({ reason: 'partial_versions' });
-      }
-
-      if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'generation_versions_missing',
-          level: 'error',
-          message: 'AI response invalid',
-        });
-        return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
-      }
-
-      const version1Skills = extractResumeSkills(versionData.version1);
-      const match1 = calculateMatchScore(jobSkills, version1Skills);
-      const version2Skills = extractResumeSkills(versionData.version2);
-      const match2 = calculateMatchScore(jobSkills, version2Skills);
-      const bestMatch = match1.score >= match2.score ? match1 : match2;
-
-      const coverSchema = {
-        cover_letter1: 'string cover letter tailored to the job description',
-        cover_letter2: 'string cover letter tailored to the job description',
-      };
-      const coverContext = {
-        jobTitle: versionsContext.jobTitle,
-        jobSkills,
-        resume: combinedProfile,
-        jobDescription,
-      };
-      const coverPrompt = [
-        'You are an elite career copywriter supporting Gemini/OpenAI workflows.',
-        'Instructions:',
-        '- Produce exactly two distinct, ATS-aware cover letters.',
-        '- Mirror critical language from the job description and respect accomplishments from the resume.',
-        '- Preserve every URL appearing in the resume text.',
-        '- Maintain professional tone and structure without degrading the CV context referenced.',
-        '- Respond ONLY with JSON conforming to the schema below.',
-        '',
-        'OUTPUT_SCHEMA:',
-        JSON.stringify(coverSchema, null, 2),
-        '',
-        'INPUT_CONTEXT:',
-        JSON.stringify(coverContext, null, 2),
-      ].join('\n');
-
-      let coverData = {};
-      try {
-        const coverResult = await generativeModel.generateContent(coverPrompt);
-        const coverText = coverResult.response.text();
-        const parsed = parseAiJson(coverText);
-        if (parsed) coverData = parsed;
-        logStructured('info', 'generation_cover_letters_completed', {
-          ...logContext,
-          variants: Object.keys(coverData).length,
-        });
-      } catch (err) {
-        logStructured('warn', 'generation_cover_letters_failed', {
-          ...logContext,
-          error: serializeError(err),
-        });
-      }
-
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
-
-      const generatedPrefix = `${prefix}generated/`;
-      const outputs = {
-        cover_letter1: coverData.cover_letter1,
-        cover_letter2: coverData.cover_letter2,
-        version1: versionData.version1,
-        version2: versionData.version2,
-      };
-      const urls = [];
-
-      if (originalUploadKey) {
-        try {
-          const originalSignedUrl = await getSignedUrl(
-            s3,
-            new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
-            { expiresIn: URL_EXPIRATION_SECONDS }
-          );
-          const expiresAt = new Date(
-            Date.now() + URL_EXPIRATION_SECONDS * 1000
-          ).toISOString();
-          urls.push({ type: 'original_upload', url: originalSignedUrl, expiresAt });
-        } catch (err) {
-          logStructured('warn', 'generation_original_url_failed', {
-            ...logContext,
-            error: serializeError(err),
-          });
-        }
-      }
-
-      for (const [name, textValue] of Object.entries(outputs)) {
-        if (!textValue) continue;
-        const isCvDocument = name === 'version1' || name === 'version2';
-        const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
-        let fileName;
-        if (name === 'version1') {
-          fileName = sanitizedName;
-        } else if (name === 'version2') {
-          fileName = `${sanitizedName}_2`;
-        } else {
-          fileName = name;
-        }
-        const subdir = isCvDocument
-          ? 'cv/'
-          : isCoverLetter
-            ? 'cover_letter/'
-            : '';
-        const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-        const primaryTemplate = isCvDocument
-          ? name === 'version1'
-            ? template1
-            : template2
-          : isCoverLetter
-            ? name === 'cover_letter1'
-              ? coverTemplate1
-              : coverTemplate2
-            : template1;
-
-        const resolvedTemplateParams = resolveTemplateParamsConfig(
-          templateParamConfig,
-          {
-            resumeExperience,
-            linkedinExperience,
-            resumeEducation,
-            linkedinEducation,
-            knownCertificates,
-            jobSkills,
-            project: projectText,
-            jobTitle: versionsContext.jobTitle,
-          }
-        );
-
-        const templateOptions = {
-          jobSkills,
-          resumeExperience: isCvDocument ? resumeExperience : undefined,
-          linkedinExperience,
-          resumeEducation,
-          linkedinEducation,
-          resumeCertifications,
-          linkedinCertifications,
-          credlyCertifications,
-          credlyProfileUrl,
-          jobTitle: versionsContext.jobTitle,
-          project: projectText,
-          contactLines: contactDetails.contactLines,
-          ...sectionPreservation,
-          templateParams: resolvedTemplateParams,
-        };
-
-        const pdfBuffer = await generatePdf(
-          textValue,
-          primaryTemplate,
-          templateOptions,
-          generativeModel
-        );
-
-        await s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: pdfBuffer,
-            ContentType: 'application/pdf',
-          })
-        );
-
-        const signedUrl = await getSignedUrl(
-          s3,
-          new GetObjectCommand({ Bucket: bucket, Key: key }),
-          { expiresIn: URL_EXPIRATION_SECONDS }
-        );
-        const expiresAt = new Date(
-          Date.now() + URL_EXPIRATION_SECONDS * 1000
-        ).toISOString();
-        urls.push({ type: name, url: signedUrl, expiresAt });
-      }
-
-      if (urls.length === 0) {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'generation_no_outputs',
-          level: 'error',
-          message: 'AI response invalid',
-        });
-        return sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
-      }
-
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
-
-
-      const addedSkills = sanitizedFallbackUsed
-        ? []
-        : Array.from(
-            new Set(
-              (bestMatch.table || [])
-                .filter((row) =>
-                  row.matched &&
-                  originalMatch.table?.some(
-                    (baselineRow) =>
-                      baselineRow.skill === row.skill && !baselineRow.matched
-                  )
-                )
-                .map((row) => row.skill)
-                .concat(geminiAddedSkills)
-            )
-          );
-
-      const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
-        jobSkills,
-        resumeSkills: extractResumeSkills(combinedProfile),
-        jobText: jobDescription,
-      });
-      const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
-
-      await dynamo.send(
-        new UpdateItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
-          UpdateExpression:
-            'SET #status = :status, cv1Url = :cv1, cv2Url = :cv2, coverLetter1Url = :cl1, coverLetter2Url = :cl2, analysisCompletedAt = :completedAt, missingSkills = :missingSkills, addedSkills = :addedSkills, enhancedScore = :enhancedScore, originalScore = if_not_exists(originalScore, :originalScore)',
-          ExpressionAttributeValues: {
-            ':status': { S: 'completed' },
-            ':cv1': { S: urls.find((u) => u.type === 'version1')?.url || '' },
-            ':cv2': { S: urls.find((u) => u.type === 'version2')?.url || '' },
-            ':cl1': { S: urls.find((u) => u.type === 'cover_letter1')?.url || '' },
-            ':cl2': { S: urls.find((u) => u.type === 'cover_letter2')?.url || '' },
-            ':completedAt': { S: new Date().toISOString() },
-            ':missingSkills': {
-              L: (bestMatch.newSkills || []).map((skill) => ({ S: String(skill) })),
-            },
-            ':addedSkills': {
-              L: addedSkills.map((skill) => ({ S: String(skill) })),
-            },
-            ':enhancedScore': { N: String(bestMatch.score) },
-            ':originalScore': {
-              N: Number.isFinite(originalMatch.score) ? String(originalMatch.score) : '0',
-            },
-            ':jobId': { S: jobId },
-          },
-          ExpressionAttributeNames: { '#status': 'status' },
-          ConditionExpression: 'jobId = :jobId',
-        })
-      );
-
-      await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_metadata_updated' });
-
-      const selectionInsights = buildSelectionInsights({
-        jobTitle: versionsContext.jobTitle,
-        originalTitle: applicantTitle,
-        modifiedTitle: modifiedTitle || applicantTitle,
-        jobDescriptionText: jobDescription,
-        bestMatch,
-        originalMatch,
-        missingSkills: bestMatch.newSkills,
-        addedSkills,
-        scoreBreakdown: finalScoreBreakdown,
-        resumeExperience,
-        linkedinExperience,
-        knownCertificates,
-        certificateSuggestions,
-        manualCertificatesRequired,
-      });
-
-      logStructured('info', 'generation_completed', {
-        ...logContext,
-        enhancedScore: bestMatch.score,
-        outputs: urls.length,
-      });
-
-      return res.json({
-        success: true,
-        requestId,
+      const responseBody = await generateEnhancedDocumentsResponse({
+        res,
+        s3,
+        dynamo,
+        tableName,
+        bucket,
+        logKey,
         jobId,
-        urlExpiresInSeconds: URL_EXPIRATION_SECONDS,
-        urls,
-        applicantName,
-        originalScore: Number.isFinite(originalMatch.score)
-          ? originalMatch.score
-          : bestMatch.score,
-        enhancedScore: bestMatch.score,
-        table: bestMatch.table,
-        addedSkills,
-        missingSkills: bestMatch.newSkills,
-        originalTitle: applicantTitle,
-        modifiedTitle: modifiedTitle || applicantTitle,
-        scoreBreakdown: finalScoreBreakdown,
-        atsSubScores: finalAtsScores,
-        resumeText: combinedProfile,
-        originalResumeText: originalResumeTextInput || resumeText,
-        jobDescriptionText: jobDescription,
+        requestId,
+        logContext,
+        resumeText,
+        originalResumeTextInput,
+        jobDescription,
         jobSkills,
         resumeSkills,
-        certificateInsights: {
-          known: knownCertificates,
-          suggestions: certificateSuggestions,
-          manualEntryRequired: manualCertificatesRequired,
-          credlyStatus,
-        },
+        originalMatch,
+        linkedinProfileUrl,
+        linkedinData,
+        credlyProfileUrl,
+        credlyCertifications,
+        credlyStatus,
         manualCertificates,
-        selectionProbability: selectionInsights?.probability ?? null,
-        selectionInsights,
-        templateContext: {
-          template1,
-          template2,
-          coverTemplate1,
-          coverTemplate2,
-        },
+        templateContextInput,
+        templateParamConfig,
+        applicantName,
+        sanitizedName,
+        anonymizedLinkedIn,
+        originalUploadKey,
+        selection,
+        geminiApiKey,
       });
+
+      if (!responseBody) {
+        return;
+      }
+
+      return res.json(responseBody);
     } catch (err) {
       logStructured('error', 'generation_failed', {
         ...logContext,
@@ -8789,49 +8945,16 @@ app.post(
 
     const originalResumeText = text;
 
-    const urls = [];
-
     const addedSkills = [];
     const missingSkills = Array.isArray(originalMatch.newSkills)
       ? originalMatch.newSkills
       : [];
     const finalScoreBreakdown = scoreBreakdown;
-    const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
 
-    try {
-      const completedAt = new Date().toISOString();
-      const missingSkillList = missingSkills.map((skill) => ({ S: String(skill) }));
-      await dynamo.send(
-        new UpdateItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
-          UpdateExpression:
-            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missingSkills, enhancedScore = :enhancedScore, originalScore = :originalScore',
-          ExpressionAttributeNames: { '#status': 'status' },
-          ExpressionAttributeValues: {
-            ':status': { S: 'scored' },
-            ':completedAt': { S: completedAt },
-            ':missingSkills': { L: missingSkillList },
-            ':enhancedScore': { N: String(originalMatch.score) },
-            ':originalScore': { N: String(originalMatch.score) },
-            ':jobId': { S: jobId },
-          },
-          ConditionExpression: 'jobId = :jobId',
-        })
-      );
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'analysis_completed',
-      });
-    } catch (err) {
-      logStructured('warn', 'dynamo_analysis_update_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-    }
+    const templateContextInput =
+      typeof req.body.templateContext === 'object' && req.body.templateContext
+        ? req.body.templateContext
+        : {};
 
     const selectionInsights = buildSelectionInsights({
       jobTitle,
@@ -8858,47 +8981,58 @@ app.post(
       missingSkills: missingSkills.length,
     });
 
-    return res.json({
-      success: true,
-      requestId,
+    try {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'analysis_completed',
+      });
+    } catch (logErr) {
+      logStructured('error', 's3_log_failure', {
+        ...logContext,
+        error: serializeError(logErr),
+      });
+    }
+
+    const responseBody = await generateEnhancedDocumentsResponse({
+      res,
+      s3,
+      dynamo,
+      tableName,
+      bucket,
+      logKey,
       jobId,
-      urlExpiresInSeconds: URL_EXPIRATION_SECONDS,
-      urls,
-      applicantName,
-      originalScore: Number.isFinite(originalMatch.score)
-        ? originalMatch.score
-        : 0,
-      enhancedScore: Number.isFinite(originalMatch.score)
-        ? originalMatch.score
-        : 0,
-      table: originalMatch.table,
-      addedSkills,
-      missingSkills,
-      originalTitle,
-      modifiedTitle: originalTitle,
-      scoreBreakdown: finalScoreBreakdown,
-      atsSubScores: finalAtsScores,
-      resumeText: originalResumeText,
-      originalResumeText,
-      jobDescriptionText: jobDescription,
+      requestId,
+      logContext,
+      resumeText: text,
+      originalResumeTextInput: originalResumeText,
+      jobDescription,
       jobSkills,
       resumeSkills,
-      certificateInsights: {
-        known: knownCertificates,
-        suggestions: certificateSuggestions,
-        manualEntryRequired: manualCertificatesRequired,
-        credlyStatus,
-      },
+      originalMatch,
+      linkedinProfileUrl,
+      linkedinData,
+      credlyProfileUrl,
+      credlyCertifications,
+      credlyStatus,
       manualCertificates,
-      selectionProbability: selectionInsights?.probability ?? null,
-      selectionInsights,
-      templateContext: {
-        template1,
-        template2,
-        coverTemplate1,
-        coverTemplate2,
-      },
+      templateContextInput,
+      templateParamConfig,
+      applicantName,
+      sanitizedName,
+      anonymizedLinkedIn,
+      originalUploadKey,
+      selection,
+      geminiApiKey: secrets.GEMINI_API_KEY,
     });
+
+    if (!responseBody) {
+      return;
+    }
+
+    return res.json(responseBody);
 
 
   } catch (err) {
