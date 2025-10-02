@@ -3,15 +3,15 @@ function TemplateSelector({ options = [], selectedTemplate, onSelect, disabled =
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-semibold text-purple-700" htmlFor="template-selector">
+      <p className="text-sm font-semibold text-purple-700" id="template-selector-label">
         Template Style
-      </label>
+      </p>
       <div
         id="template-selector"
         role="radiogroup"
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
         data-testid="template-selector"
-        aria-label="Resume template styles"
+        aria-labelledby="template-selector-label"
       >
         {options.map((option) => {
           const isSelected = option.id === selectedTemplate
