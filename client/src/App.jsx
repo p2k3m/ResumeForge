@@ -679,6 +679,7 @@ function App() {
       : !jdValidationComplete
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
+  const improvementBusy = Boolean(activeImprovement)
   const flowSteps = useMemo(() => {
     const improvementsComplete = improvementCount > 0
     const downloadComplete = downloadCount > 0
@@ -1267,7 +1268,6 @@ function App() {
 
   const improvementAvailable =
     improvementsUnlocked && Boolean(resumeText && resumeText.trim()) && Boolean(jobDescriptionText && jobDescriptionText.trim())
-  const improvementBusy = Boolean(activeImprovement)
   const manualJobDescriptionActive =
     manualJobDescriptionRequired || manualJobDescription.trim().length > 0
 
