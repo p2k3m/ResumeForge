@@ -301,7 +301,9 @@ describe('/api/process-cv', () => {
           cmd.key.includes(`${sanitized}/cv/`)
       )
       .map((cmd) => cmd.key);
-    expect(pdfKeys).toHaveLength(5);
+    // Two tailored resume versions plus two cover letters are generated
+    // and uploaded to S3.
+    expect(pdfKeys).toHaveLength(4);
     pdfKeys.forEach((k) => {
       expect(k).toContain(`${sanitized}/cv/`);
     });

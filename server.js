@@ -6592,8 +6592,6 @@ app.post(
   const temporaryPrefix = `${jobId}/incoming/${date}/`;
   let originalUploadKey = `${temporaryPrefix}original${normalizedExt}`;
   let logKey = `${temporaryPrefix}logs/processing.jsonl`;
-  const s3 = s3Client;
-
   try {
     await s3.send(
       new PutObjectCommand({
