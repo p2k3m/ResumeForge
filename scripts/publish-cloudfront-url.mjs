@@ -71,13 +71,17 @@ async function main() {
     }
   }
 
+  const urlChanged = previous?.url && previous.url !== urlOutput.OutputValue
+
   if (
     previous?.distributionId &&
-    previous.distributionId !== distributionId
+    (previous.distributionId !== distributionId || urlChanged)
   ) {
     const callerReference = `resumeforge-${Date.now()}`
     console.log(
-      `Invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
+      urlChanged
+        ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
+        : `Invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
     )
     await cloudFront.send(
       new CreateInvalidationCommand({
