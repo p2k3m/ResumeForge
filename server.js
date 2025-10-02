@@ -7443,6 +7443,60 @@ app.post(
       let versionData = {};
       let parsedVersions = false;
       let lastAiResponse;
+
+      const ensureProjectSummary = async () => {
+        if (projectText) return;
+        projectText = await generateProjectSummary(
+          jobDescription,
+          resumeSkills,
+          jobSkills,
+          generativeModel
+        );
+      };
+
+      const buildSanitizeOptions = () => ({
+        resumeExperience,
+        linkedinExperience,
+        resumeEducation,
+        linkedinEducation,
+        resumeCertifications,
+        linkedinCertifications,
+        credlyCertifications: aggregatedCertifications,
+        credlyProfileUrl,
+        jobTitle: versionsContext.jobTitle,
+        project: projectText,
+        contactLines: contactDetails.contactLines,
+        ...sectionPreservation,
+      });
+
+      const applyVersionFallback = async ({ reason }) => {
+        await ensureProjectSummary();
+        const fallbackResume = sanitizeGeneratedText(combinedProfile, buildSanitizeOptions());
+        if (fallbackResume && fallbackResume.trim()) {
+          if (!versionData.version1 || !versionData.version1.trim()) {
+            versionData.version1 = fallbackResume;
+          }
+          if (!versionData.version2 || !versionData.version2.trim()) {
+            versionData.version2 = fallbackResume;
+          }
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'generation_versions_fallback_used',
+            level: reason === 'parse_failed' ? 'error' : 'warn',
+            message:
+              reason === 'parse_failed'
+                ? 'AI response missing structured resume versions, using sanitized resume copy'
+                : 'Partial AI response, using sanitized resume copy',
+          });
+          logStructured('warn', 'generation_versions_fallback_applied', {
+            ...logContext,
+            reason,
+          });
+        }
+      };
       try {
         logStructured('info', 'generation_versions_requested', logContext);
         const result = await generativeModel.generateContent(versionsPrompt);
@@ -7456,27 +7510,9 @@ app.post(
             ? projectField[0]
             : projectField || projectText;
           if (!projectText) {
-            projectText = await generateProjectSummary(
-              jobDescription,
-              resumeSkills,
-              jobSkills,
-              generativeModel
-            );
+            await ensureProjectSummary();
           }
-          const sanitizeOptions = {
-            resumeExperience,
-            linkedinExperience,
-            resumeEducation,
-            linkedinEducation,
-            resumeCertifications,
-            linkedinCertifications,
-            credlyCertifications: aggregatedCertifications,
-            credlyProfileUrl,
-            jobTitle: versionsContext.jobTitle,
-            project: projectText,
-            contactLines: contactDetails.contactLines,
-            ...sectionPreservation,
-          };
+          const sanitizeOptions = buildSanitizeOptions();
           versionData.version1 = await verifyResume(
             sanitizeGeneratedText(parsed.version1, sanitizeOptions),
             jobDescription,
@@ -7506,46 +7542,21 @@ app.post(
             level: 'error',
             message: 'AI response missing resume versions',
           });
+          await applyVersionFallback({ reason: 'parse_failed' });
         }
       } catch (err) {
         logStructured('error', 'generation_versions_request_failed', {
           ...logContext,
           error: serializeError(err),
         });
+        await applyVersionFallback({ reason: 'request_failed' });
       }
 
-      if (parsedVersions && (!versionData.version1 || !versionData.version2)) {
-        const fallbackOptions = {
-          resumeExperience,
-          linkedinExperience,
-          resumeEducation,
-          linkedinEducation,
-          resumeCertifications,
-          linkedinCertifications,
-          credlyCertifications: aggregatedCertifications,
-          credlyProfileUrl,
-          jobTitle: versionsContext.jobTitle,
-          project: projectText,
-          contactLines: contactDetails.contactLines,
-          ...sectionPreservation,
-        };
-        const fallbackResume = sanitizeGeneratedText(combinedProfile, fallbackOptions);
-        if (fallbackResume && fallbackResume.trim()) {
-          if (!versionData.version1) versionData.version1 = fallbackResume;
-          if (!versionData.version2) versionData.version2 = fallbackResume;
-          await logEvent({
-            s3,
-            bucket,
-            key: logKey,
-            jobId,
-            event: 'generation_versions_fallback_used',
-            level: 'warn',
-            message: 'Partial AI response, using sanitized resume copy',
-          });
-        }
+      if (parsedVersions && (!versionData.version1?.trim() || !versionData.version2?.trim())) {
+        await applyVersionFallback({ reason: 'partial_versions' });
       }
 
-      if (!versionData.version1 || !versionData.version2) {
+      if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
         await logEvent({
           s3,
           bucket,
