@@ -4263,6 +4263,12 @@ function formatQuotedList(items = []) {
 function buildClassifierReason(description = '', matches = []) {
   const docType = stripLeadingArticle(description || 'non-resume document');
   const quoted = formatQuotedList(matches);
+  if (/job description/i.test(docType)) {
+    if (quoted) {
+      return `Detected job-posting keywords such as ${quoted}.`;
+    }
+    return 'Detected patterns typical of a job-posting document.';
+  }
   if (quoted) {
     return `Detected ${docType} keywords such as ${quoted}.`;
   }
