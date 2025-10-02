@@ -180,6 +180,11 @@ npm run publish:cloudfront-url -- <stack-name>
 
 The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment.
 
+Once the metadata is published, the API exposes two helper endpoints:
+
+- `GET /api/published-cloudfront` returns the currently published domain, distribution id, and timestamp so you can broadcast the canonical URL in release notes or chat.
+- `GET /go/cloudfront` (alias `/redirect/latest`) issues a 308 redirect to the published CloudFront domain. Pass an optional `path` query parameter (for example `?path=api/process-cv`) to deep link to a specific route on the new domain, making it easy to update old bookmarks and onboarding docs.
+
 
 ### Accessing the ResumeForge portal
 

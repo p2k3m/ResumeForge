@@ -499,6 +499,80 @@ function parseAllowedOrigins(value) {
   return parsed && parsed.length ? parsed : DEFAULT_ALLOWED_ORIGINS;
 }
 
+function resolvePublishedCloudfrontPath() {
+  const override = readEnvValue('PUBLISHED_CLOUDFRONT_PATH');
+  if (override) {
+    return path.isAbsolute(override)
+      ? override
+      : path.resolve(process.cwd(), override);
+  }
+  return path.resolve(__dirname, 'config', 'published-cloudfront.json');
+}
+
+async function loadPublishedCloudfrontMetadata() {
+  const filePath = resolvePublishedCloudfrontPath();
+  try {
+    const raw = await fs.readFile(filePath, 'utf8');
+    if (!raw.trim()) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    const metadata = {
+      stackName:
+        typeof parsed?.stackName === 'string' && parsed.stackName.trim()
+          ? parsed.stackName.trim()
+          : null,
+      url:
+        typeof parsed?.url === 'string' && parsed.url.trim()
+          ? parsed.url.trim()
+          : null,
+      distributionId:
+        typeof parsed?.distributionId === 'string' && parsed.distributionId.trim()
+          ? parsed.distributionId.trim()
+          : null,
+      updatedAt:
+        typeof parsed?.updatedAt === 'string' && parsed.updatedAt.trim()
+          ? parsed.updatedAt.trim()
+          : null,
+    };
+
+    if (metadata.url) {
+      try {
+        const normalized = new URL(metadata.url);
+        const cleanedPath = normalized.pathname?.replace(/\/$/, '') || '';
+        const normalizedUrl = `${normalized.origin}${cleanedPath}${
+          normalized.search || ''
+        }${normalized.hash || ''}`;
+        metadata.url = normalizedUrl || normalized.toString();
+      } catch (err) {
+        logStructured('warn', 'published_cloudfront_invalid_url', {
+          url: metadata.url,
+          error: serializeError(err),
+        });
+        metadata.url = null;
+      }
+    }
+
+    return metadata;
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return null;
+    }
+    if (err instanceof SyntaxError) {
+      logStructured('error', 'published_cloudfront_invalid_json', {
+        path: filePath,
+        error: serializeError(err),
+      });
+      throw new Error('Published CloudFront metadata is invalid JSON');
+    }
+    logStructured('error', 'published_cloudfront_read_failed', {
+      path: filePath,
+      error: serializeError(err),
+    });
+    throw err;
+  }
+}
+
 function extractMissingConfig(err) {
   if (!err) return [];
   const message = err.message || String(err);
@@ -6615,6 +6689,81 @@ async function handleImprovementRequest(type, req, res) {
     );
   }
 }
+
+app.get('/api/published-cloudfront', async (req, res) => {
+  try {
+    const metadata = await loadPublishedCloudfrontMetadata();
+    if (!metadata?.url) {
+      return sendError(
+        res,
+        404,
+        'PUBLISHED_CLOUDFRONT_UNAVAILABLE',
+        'No CloudFront URL has been published yet. Run npm run publish:cloudfront-url after deploying.'
+      );
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      cloudfront: metadata,
+    });
+  } catch (err) {
+    logStructured('error', 'published_cloudfront_lookup_failed', {
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'PUBLISHED_CLOUDFRONT_LOOKUP_FAILED',
+      'Unable to load the published CloudFront metadata.'
+    );
+  }
+});
+
+app.get(['/redirect/latest', '/go/cloudfront'], async (req, res) => {
+  try {
+    const metadata = await loadPublishedCloudfrontMetadata();
+    if (!metadata?.url) {
+      return sendError(
+        res,
+        404,
+        'PUBLISHED_CLOUDFRONT_UNAVAILABLE',
+        'No CloudFront URL has been published yet. Run npm run publish:cloudfront-url after deploying.'
+      );
+    }
+
+    let location = metadata.url;
+    const rawPath = typeof req.query.path === 'string' ? req.query.path.trim() : '';
+    if (rawPath) {
+      try {
+        if (/^https?:\/\//i.test(rawPath)) {
+          location = rawPath;
+        } else {
+          const normalizedTarget = rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
+          const base = new URL(metadata.url);
+          location = new URL(normalizedTarget, base).toString();
+        }
+      } catch (err) {
+        logStructured('warn', 'published_cloudfront_redirect_path_invalid', {
+          path: rawPath,
+          error: serializeError(err),
+        });
+      }
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.redirect(308, location);
+  } catch (err) {
+    logStructured('error', 'published_cloudfront_redirect_failed', {
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'PUBLISHED_CLOUDFRONT_LOOKUP_FAILED',
+      'Unable to load the published CloudFront metadata.'
+    );
+  }
+});
 
 app.get('/', async (req, res) => {
   try {
