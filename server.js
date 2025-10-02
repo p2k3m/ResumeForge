@@ -4241,6 +4241,34 @@ async function extractText(file) {
   throw new Error('Unsupported resume format encountered. Only PDF, DOC, or DOCX files are processed.');
 }
 
+function stripLeadingArticle(text = '') {
+  if (!text) return '';
+  return text.replace(/^(?:an?|the)\s+/i, '').trim();
+}
+
+function formatQuotedList(items = []) {
+  const limited = items.filter(Boolean).slice(0, 3).map((item) => `"${item}"`);
+  if (!limited.length) {
+    return '';
+  }
+  if (limited.length === 1) {
+    return limited[0];
+  }
+  if (limited.length === 2) {
+    return `${limited[0]} and ${limited[1]}`;
+  }
+  return `${limited.slice(0, -1).join(', ')}, and ${limited[limited.length - 1]}`;
+}
+
+function buildClassifierReason(description = '', matches = []) {
+  const docType = stripLeadingArticle(description || 'non-resume document');
+  const quoted = formatQuotedList(matches);
+  if (quoted) {
+    return `Detected ${docType} keywords such as ${quoted}.`;
+  }
+  return `Detected patterns typical of ${docType}.`;
+}
+
 const DOCUMENT_CLASSIFIERS = [
   {
     description: 'a job description document',
@@ -4332,34 +4360,52 @@ const JOB_POSTING_REQUIREMENT_KEYWORDS = [
 
 function runDocumentClassifiers(normalized) {
   for (const classifier of DOCUMENT_CLASSIFIERS) {
-    const count = classifier.keywords.reduce(
-      (acc, keyword) => (normalized.includes(keyword) ? acc + 1 : acc),
-      0
-    );
-    if (count >= classifier.threshold) {
-      return { isResume: false, description: classifier.description, confidence: 0.4 };
+    const matches = classifier.keywords.filter((keyword) => normalized.includes(keyword));
+    if (matches.length >= classifier.threshold) {
+      return {
+        isResume: false,
+        description: classifier.description,
+        confidence: 0.4,
+        reason: buildClassifierReason(classifier.description, matches),
+      };
     }
   }
   return null;
 }
 
 function detectJobPostingDocument(normalized) {
-  const phraseHits = JOB_POSTING_PHRASES.reduce(
-    (acc, phrase) => (normalized.includes(phrase) ? acc + 1 : acc),
-    0
-  );
+  const phraseMatches = JOB_POSTING_PHRASES.filter((phrase) => normalized.includes(phrase));
 
-  if (!phraseHits) {
+  if (!phraseMatches.length) {
     return null;
   }
 
-  const requirementHits = JOB_POSTING_REQUIREMENT_KEYWORDS.reduce(
-    (acc, keyword) => (normalized.includes(keyword) ? acc + 1 : acc),
-    0
+  const requirementMatches = JOB_POSTING_REQUIREMENT_KEYWORDS.filter((keyword) =>
+    normalized.includes(keyword)
   );
 
-  if (phraseHits >= 3 || (phraseHits >= 2 && requirementHits >= 2)) {
-    return { isResume: false, description: 'a job description document', confidence: 0.35 };
+  if (
+    phraseMatches.length >= 3 ||
+    (phraseMatches.length >= 2 && requirementMatches.length >= 2)
+  ) {
+    const clauses = [];
+    const phraseReason = formatQuotedList(phraseMatches);
+    if (phraseReason) {
+      clauses.push(`phrases like ${phraseReason}`);
+    }
+    const requirementReason = formatQuotedList(requirementMatches);
+    if (requirementReason) {
+      clauses.push(`sections such as ${requirementReason}`);
+    }
+    const joinedReason = clauses.length
+      ? `${clauses.slice(0, -1).join(', ')}${clauses.length > 1 ? ' and ' : ''}${clauses[clauses.length - 1]}`
+      : 'language typical of job postings';
+    return {
+      isResume: false,
+      description: 'a job description document',
+      confidence: 0.35,
+      reason: `Detected job-posting ${joinedReason}.`,
+    };
   }
 
   return null;
@@ -4372,7 +4418,12 @@ function getNonResumeClassification(normalized) {
 async function classifyDocument(text = '') {
   const trimmed = text.trim();
   if (!trimmed) {
-    return { isResume: false, description: 'an empty document', confidence: 0 };
+    return {
+      isResume: false,
+      description: 'an empty document',
+      confidence: 0,
+      reason: 'The uploaded file does not contain any text to evaluate.',
+    };
   }
 
   const normalized = trimmed.toLowerCase();
@@ -4405,11 +4456,16 @@ async function classifyDocument(text = '') {
         if (isResume && nonResumeClassification) {
           return nonResumeClassification;
         }
+        const parsedReason =
+          typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
+        const fallbackReason = isResume
+          ? ''
+          : `The document content aligns with ${stripLeadingArticle(description)} rather than a CV.`;
         return {
           isResume,
           description,
           confidence,
-          reason: parsed.reason || '',
+          reason: parsedReason || fallbackReason || undefined,
         };
       }
     }
@@ -4486,6 +4542,8 @@ async function classifyDocument(text = '') {
       ? `a document starting with "${snippet}${lines[0].length > 60 ? '…' : ''}"`
       : 'a non-resume document',
     confidence: 0.3,
+    reason:
+      'The text lacks resume-defining sections such as Experience, Education, or Skills.',
   };
 }
 
@@ -6504,7 +6562,15 @@ app.post(
       : /^[aeiou]/i.test(shortDescriptor)
         ? `an ${shortDescriptor}`
         : `a ${shortDescriptor}`;
-    const validationMessage = `You have uploaded ${descriptorWithArticle}, please upload a correct CV.`;
+    const reasonText =
+      typeof classification.reason === 'string' ? classification.reason.trim() : '';
+    const fallbackReason =
+      'The document content does not include the sections typically required in a CV.';
+    const detailReason = reasonText || fallbackReason;
+    const reasonSentence = detailReason.endsWith('.')
+      ? detailReason
+      : `${detailReason}.`;
+    const validationMessage = `You have uploaded ${descriptorWithArticle}. ${reasonSentence} Please upload a correct CV.`;
     return sendError(
       res,
       400,
@@ -6513,7 +6579,7 @@ app.post(
       {
         description: classification.description,
         confidence: classification.confidence,
-        reason: classification.reason,
+        reason: detailReason,
       }
     );
   }

@@ -934,15 +934,18 @@ describe('/api/process-cv', () => {
       success: false,
       error: expect.objectContaining({
         code: 'INVALID_RESUME_CONTENT',
-        message: expect.stringContaining('please upload a correct CV'),
+        message: expect.stringContaining('You have uploaded an invoice document.'),
         requestId: expect.any(String),
         jobId: expect.any(String),
         details: expect.objectContaining({
           description: 'an invoice document',
           confidence: expect.any(Number),
+          reason: expect.stringMatching(/invoice/i),
         }),
       }),
     });
+    expect(res.body.error.message).toMatch(/Detected invoice/i);
+    expect(res.body.error.message).toMatch(/please upload a correct CV/i);
   });
 
   test('missing job description URL', async () => {
@@ -993,6 +996,7 @@ describe('classifyDocument', () => {
     expect(result.isResume).toBe(false);
     expect(result.description).toContain('cover');
     expect(result.confidence).toBeGreaterThanOrEqual(0);
+    expect(result.reason).toMatch(/cover letter/i);
   });
 
   test('rejects job descriptions that mimic resume sections', async () => {
@@ -1014,6 +1018,7 @@ describe('classifyDocument', () => {
     const result = await classifyDocument(text);
     expect(result.isResume).toBe(false);
     expect(result.description).toContain('job description');
+    expect(result.reason).toMatch(/job-posting/i);
   });
 });
 
