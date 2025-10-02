@@ -7431,8 +7431,8 @@ app.post(
         '',
         'INPUT_CONTEXT:',
         JSON.stringify(versionsContext, null, 2),
-      ].join('
-');
+      ].join('\n');
+
 
       logStructured('info', 'generation_versions_prompt_created', {
         ...logContext,
