@@ -948,7 +948,19 @@ function App() {
       } else if (data.type === 'OFFLINE_UPLOAD_FAILED') {
         setQueuedMessage('')
         setIsProcessing(false)
-        setError(data.message || 'Failed to process queued upload. Please try again.')
+        const payloadError = data?.payload?.error
+        if (
+          payloadError?.details?.manualInputRequired ||
+          payloadError?.code === 'JOB_DESCRIPTION_FETCH_FAILED' ||
+          (typeof data?.message === 'string' && /unable to fetch jd/i.test(data.message))
+        ) {
+          setManualJobDescriptionRequired(true)
+        }
+        const failureMessage =
+          (typeof data?.message === 'string' && data.message.trim()) ||
+          (typeof payloadError?.message === 'string' && payloadError.message.trim()) ||
+          'Failed to process queued upload. Please try again.'
+        setError(failureMessage)
       }
     }
 
