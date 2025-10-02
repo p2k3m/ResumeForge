@@ -2,7 +2,7 @@ import request from 'supertest';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
 describe('end-to-end CV processing', () => {
-  test('returns signed URLs and scoring insights', async () => {
+  test('returns scoring insights without generating downloads', async () => {
     const { app } = await setupTestServer();
     await primeSuccessfulAi();
 
@@ -15,55 +15,22 @@ describe('end-to-end CV processing', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual(
-      expect.objectContaining({
-        success: true,
-        urlExpiresInSeconds: 3600,
-        urls: expect.any(Array),
-        applicantName: expect.any(String),
-        originalScore: expect.any(Number),
-        enhancedScore: expect.any(Number),
-        addedSkills: expect.any(Array),
-        missingSkills: expect.any(Array),
-        scoreBreakdown: expect.any(Object),
-        selectionProbability: expect.any(Number),
-        selectionInsights: expect.objectContaining({
-          probability: expect.any(Number),
-          flags: expect.any(Array),
-        }),
-      })
+    expect(response.body.success).toBe(true);
+    expect(response.body.urlExpiresInSeconds).toBe(0);
+    expect(Array.isArray(response.body.urls)).toBe(true);
+    expect(response.body.urls).toHaveLength(0);
+    expect(typeof response.body.applicantName).toBe('string');
+    expect(typeof response.body.originalScore).toBe('number');
+    expect(typeof response.body.enhancedScore).toBe('number');
+    expect(Array.isArray(response.body.addedSkills)).toBe(true);
+    expect(Array.isArray(response.body.missingSkills)).toBe(true);
+    expect(typeof response.body.scoreBreakdown).toBe('object');
+    expect(Array.isArray(response.body.atsSubScores)).toBe(true);
+    expect(response.body.selectionInsights).toEqual(
+      expect.objectContaining({ flags: expect.any(Array) })
     );
-
-    const { urls, applicantName } = response.body;
-    expect(urls).toHaveLength(5);
-    expect(urls.map((item) => item.type).sort()).toEqual([
-      'cover_letter1',
-      'cover_letter2',
-      'original_upload',
-      'version1',
-      'version2'
-    ]);
-    urls.forEach(({ type, url, expiresAt }) => {
-      expect(url).toMatch(/https:\/\/example.com\//);
-      expect(url).toMatch(/expires=3600/);
-      expect(() => new Date(expiresAt)).not.toThrow();
-      if (type === 'original_upload') {
-        expect(url).not.toContain('/generated/');
-      }
-    });
-
-    const sanitized = applicantName
-      .trim()
-      .split(/\s+/)
-      .slice(0, 2)
-      .join('_')
-      .toLowerCase();
-    urls.forEach(({ url, type }) => {
-      expect(url).toContain(`/${sanitized}/cv/`);
-      if (type !== 'original_upload') {
-        expect(url).toContain('/generated/');
-      }
-    });
+    const probability = response.body.selectionInsights.probability;
+    expect(probability === null || typeof probability === 'number').toBe(true);
   });
 
   test('rejects uploads that are classified as job descriptions', async () => {
