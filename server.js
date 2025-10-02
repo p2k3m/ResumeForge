@@ -2428,6 +2428,8 @@ async function runTargetedImprovement(type, context = {}) {
     manualCertificates,
   };
 
+  const sectionContext = buildSectionPreservationContext(resumeText);
+
   const scopeContext = {
     jobTitle: context.jobTitle || '',
     currentTitle: context.currentTitle || '',
@@ -2441,7 +2443,10 @@ async function runTargetedImprovement(type, context = {}) {
       const response = await model.generateContent(prompt);
       const parsed = parseAiJson(response?.response?.text?.());
       if (parsed && typeof parsed === 'object') {
-        const updated = sanitizeGeneratedText(parsed.updatedResume || parsed.resume || resumeText, {});
+        const updated = sanitizeGeneratedText(
+          parsed.updatedResume || parsed.resume || resumeText,
+          { ...sectionContext }
+        );
         const beforeExcerpt = (parsed.beforeExcerpt || '').trim();
         const afterExcerpt = (parsed.afterExcerpt || '').trim();
         const explanation = parsed.explanation || `Applied improvement: ${config.title}`;
@@ -6144,6 +6149,31 @@ function reparseAndStringify(text, options = {}) {
   return lines.join('\n');
 }
 
+function buildSectionPreservationContext(text = '') {
+  if (!text) {
+    return { sectionOrder: [], sectionFallbacks: [] };
+  }
+  const parsed = parseContent(text, { skipRequiredSections: true });
+  const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+  const seenOrder = new Set();
+  const sectionOrder = [];
+  sections.forEach((sec) => {
+    const heading = normalizeHeading(sec.heading || '');
+    const key = heading.toLowerCase();
+    if (key && key !== 'contact' && !seenOrder.has(key)) {
+      seenOrder.add(key);
+      sectionOrder.push(heading);
+    }
+  });
+  const sectionFallbacks = sections.map((sec) => ({
+    heading: normalizeHeading(sec.heading || ''),
+    items: (sec.items || []).map((tokens) =>
+      (tokens || []).map((token) => ({ ...token }))
+    ),
+  }));
+  return { sectionOrder, sectionFallbacks };
+}
+
 function sanitizeGeneratedText(text, options = {}) {
   if (!text) return text;
   const cleaned = removeGuidanceLines(text);
@@ -6152,7 +6182,7 @@ function sanitizeGeneratedText(text, options = {}) {
   const data = parseContent(reparsed, { ...options, skipRequiredSections: true });
   const merged = mergeDuplicateSections(data.sections);
   const pruned = pruneEmptySections(merged);
-  const sections = [...pruned];
+  let sections = [...pruned];
   const contactLines = Array.isArray(options.contactLines)
     ? options.contactLines
         .map((line) => String(line || '').trim())
@@ -6170,6 +6200,113 @@ function sanitizeGeneratedText(text, options = {}) {
         return tokens;
       })
     });
+  }
+  let contactSection = null;
+  if (sections.length) {
+    const first = sections[0];
+    if (normalizeHeading(first.heading || '').toLowerCase() === 'contact') {
+      contactSection = {
+        heading: normalizeHeading(first.heading || ''),
+        items: (first.items || []).map((tokens) =>
+          (tokens || []).map((token) => ({ ...token }))
+        ),
+      };
+      sections = sections.slice(1);
+    }
+  }
+
+  const orderSeen = new Set();
+  const normalizedOrder = [];
+  if (Array.isArray(options.sectionOrder)) {
+    options.sectionOrder.forEach((heading) => {
+      const normalized = normalizeHeading(heading || '');
+      const key = normalized.toLowerCase();
+      if (key && key !== 'contact' && !orderSeen.has(key)) {
+        orderSeen.add(key);
+        normalizedOrder.push(normalized);
+      }
+    });
+  }
+
+  const cloneSection = (sec = {}) => ({
+    heading: normalizeHeading(sec.heading || ''),
+    items: (sec.items || []).map((tokens) =>
+      (tokens || []).map((token) => ({ ...token }))
+    ),
+  });
+
+  const fallbackMap = new Map();
+  if (Array.isArray(options.sectionFallbacks)) {
+    options.sectionFallbacks.forEach((sec) => {
+      const fallback = cloneSection(sec);
+      const key = fallback.heading.toLowerCase();
+      if (key && key !== 'contact' && !fallbackMap.has(key)) {
+        fallbackMap.set(key, fallback);
+      }
+    });
+  }
+
+  const sectionLookup = new Map();
+  sections.forEach((sec) => {
+    const cloned = cloneSection(sec);
+    const key = cloned.heading.toLowerCase();
+    if (!key) return;
+    if (!sectionLookup.has(key)) {
+      sectionLookup.set(key, cloned);
+    } else {
+      const existing = sectionLookup.get(key);
+      existing.items.push(...cloned.items);
+    }
+  });
+
+  const orderedSections = [];
+  const seenKeys = new Set();
+  const appendSection = (source) => {
+    if (!source) return;
+    const normalizedHeading = normalizeHeading(source.heading || '');
+    const key = normalizedHeading.toLowerCase();
+    if (!key || seenKeys.has(key)) return;
+    const clonedItems = (source.items || []).map((tokens) =>
+      (tokens || []).map((token) => ({ ...token }))
+    );
+    if (!clonedItems.length) return;
+    orderedSections.push({ heading: normalizedHeading, items: clonedItems });
+    seenKeys.add(key);
+  };
+
+  normalizedOrder.forEach((heading) => {
+    const key = heading.toLowerCase();
+    const section = sectionLookup.get(key);
+    if (section && section.items.length) {
+      appendSection(section);
+    } else {
+      const fallback = fallbackMap.get(key);
+      if (fallback) appendSection(fallback);
+    }
+  });
+
+  sections.forEach((sec) => {
+    const normalizedHeading = normalizeHeading(sec.heading || '');
+    const key = normalizedHeading.toLowerCase();
+    if (seenKeys.has(key)) return;
+    const section = sectionLookup.get(key);
+    if (section && section.items.length) {
+      appendSection(section);
+    } else {
+      const fallback = fallbackMap.get(key);
+      if (fallback) appendSection(fallback);
+    }
+  });
+
+  fallbackMap.forEach((fallback, key) => {
+    if (!seenKeys.has(key)) {
+      appendSection(fallback);
+    }
+  });
+
+  sections = orderedSections;
+  if (contactSection) {
+    sections.unshift(contactSection);
   }
   const lines = [data.name];
   sections.forEach((sec) => {
@@ -7314,6 +7451,7 @@ app.post(
       resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
 
     const originalResumeText = text;
+    const sectionPreservation = buildSectionPreservationContext(originalResumeText);
     const contactDetails = extractContactDetails(originalResumeText, linkedinProfileUrl);
 
       // Use GEMINI_API_KEY from validated runtime configuration
@@ -7347,6 +7485,7 @@ app.post(
             credlyCertifications: aggregatedCertifications,
             credlyProfileUrl,
             contactLines: contactDetails.contactLines,
+            ...sectionPreservation,
           }
         );
         text = enhanced.text;
@@ -7446,6 +7585,7 @@ app.post(
           jobTitle,
           project: projectText,
           contactLines: contactDetails.contactLines,
+          ...sectionPreservation,
         };
         versionData.version1 = await verifyResume(
           sanitizeGeneratedText(parsed.version1, sanitizeOptions),
