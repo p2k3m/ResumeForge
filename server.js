@@ -7709,6 +7709,8 @@ async function generateEnhancedDocumentsResponse({
     outputs: urls.length,
   });
 
+  await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
+
   return {
     success: true,
     requestId,
