@@ -994,6 +994,27 @@ describe('classifyDocument', () => {
     expect(result.description).toContain('cover');
     expect(result.confidence).toBeGreaterThanOrEqual(0);
   });
+
+  test('rejects job descriptions that mimic resume sections', async () => {
+    const text = [
+      'We are looking for a Senior Product Manager to join our team.',
+      'Responsibilities:',
+      '- You will define product roadmaps and partner with engineering teams.',
+      'Experience',
+      '- 7+ years leading cross-functional initiatives.',
+      'Education',
+      '- Bachelor\'s degree in Business or related field.',
+      'Skills',
+      '- Excellent communication and stakeholder management.',
+      'Benefits',
+      '- Competitive salary and comprehensive health coverage.',
+      'Apply now to become part of a mission-driven company.',
+    ].join('\n');
+
+    const result = await classifyDocument(text);
+    expect(result.isResume).toBe(false);
+    expect(result.description).toContain('job description');
+  });
 });
 
 describe('extractText', () => {
