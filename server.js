@@ -4244,7 +4244,16 @@ async function extractText(file) {
 const DOCUMENT_CLASSIFIERS = [
   {
     description: 'a job description document',
-    keywords: ['responsibilities', 'qualifications', 'job description', 'what you will do'],
+    keywords: [
+      'responsibilities',
+      'qualifications',
+      'job description',
+      'what you will do',
+      'we are looking for',
+      'you will',
+      'apply now',
+      'employment type',
+    ],
     threshold: 2,
   },
   {
@@ -4289,13 +4298,90 @@ const DOCUMENT_CLASSIFIERS = [
   },
 ];
 
+const JOB_POSTING_PHRASES = [
+  'we are looking for',
+  'you will',
+  'you must',
+  'we offer',
+  'apply now',
+  'how to apply',
+  'company overview',
+  'about the role',
+  'about the team',
+  'about the company',
+  'compensation',
+  'salary',
+  'benefits',
+  'job description',
+  'job summary',
+  'employment type',
+  'location:',
+  'equal opportunity employer',
+  'perks',
+];
+
+const JOB_POSTING_REQUIREMENT_KEYWORDS = [
+  'responsibilities',
+  'qualifications',
+  'requirements',
+  'desired skills',
+  'preferred qualifications',
+  'what you will do',
+  'what we are looking for',
+];
+
+function runDocumentClassifiers(normalized) {
+  for (const classifier of DOCUMENT_CLASSIFIERS) {
+    const count = classifier.keywords.reduce(
+      (acc, keyword) => (normalized.includes(keyword) ? acc + 1 : acc),
+      0
+    );
+    if (count >= classifier.threshold) {
+      return { isResume: false, description: classifier.description, confidence: 0.4 };
+    }
+  }
+  return null;
+}
+
+function detectJobPostingDocument(normalized) {
+  const phraseHits = JOB_POSTING_PHRASES.reduce(
+    (acc, phrase) => (normalized.includes(phrase) ? acc + 1 : acc),
+    0
+  );
+
+  if (!phraseHits) {
+    return null;
+  }
+
+  const requirementHits = JOB_POSTING_REQUIREMENT_KEYWORDS.reduce(
+    (acc, keyword) => (normalized.includes(keyword) ? acc + 1 : acc),
+    0
+  );
+
+  if (phraseHits >= 3 || (phraseHits >= 2 && requirementHits >= 2)) {
+    return { isResume: false, description: 'a job description document', confidence: 0.35 };
+  }
+
+  return null;
+}
+
+function getNonResumeClassification(normalized) {
+  return runDocumentClassifiers(normalized) ?? detectJobPostingDocument(normalized);
+}
+
 async function classifyDocument(text = '') {
   const trimmed = text.trim();
   if (!trimmed) {
     return { isResume: false, description: 'an empty document', confidence: 0 };
   }
 
+  const normalized = trimmed.toLowerCase();
+  const nonResumeClassification = getNonResumeClassification(normalized);
+
   if (/professional summary/i.test(trimmed) && /experience/i.test(trimmed)) {
+    if (nonResumeClassification) {
+      return nonResumeClassification;
+    }
     return { isResume: true, description: 'a professional resume', confidence: 0.6 };
   }
 
@@ -4316,6 +4402,9 @@ async function classifyDocument(text = '') {
         const confidence = Number.isFinite(parsed.confidence) ? clamp(parsed.confidence, 0, 1) : isResume ? 0.75 : 0.5;
         const probableType = parsed.probableType || (isResume ? 'a professional resume' : 'a non-resume document');
         const description = isResume ? 'a professional resume' : probableType;
+        if (isResume && nonResumeClassification) {
+          return nonResumeClassification;
+        }
         return {
           isResume,
           description,
@@ -4330,7 +4419,6 @@ async function classifyDocument(text = '') {
     });
   }
 
-  const normalized = trimmed.toLowerCase();
   const words = normalized.split(/\s+/).filter(Boolean);
   const uniqueWords = new Set(words);
   const resumeSignals = [
@@ -4368,17 +4456,14 @@ async function classifyDocument(text = '') {
   }
 
   if (resumeScore >= 3) {
+    if (nonResumeClassification) {
+      return nonResumeClassification;
+    }
     return { isResume: true, description: 'a professional resume', confidence: 0.6 };
   }
 
-  for (const classifier of DOCUMENT_CLASSIFIERS) {
-    const count = classifier.keywords.reduce(
-      (acc, keyword) => (normalized.includes(keyword) ? acc + 1 : acc),
-      0
-    );
-    if (count >= classifier.threshold) {
-      return { isResume: false, description: classifier.description, confidence: 0.4 };
-    }
+  if (nonResumeClassification) {
+    return nonResumeClassification;
   }
 
   const lines = trimmed
