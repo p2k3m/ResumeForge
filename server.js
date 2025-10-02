@@ -2641,10 +2641,37 @@ async function rewriteSectionsWithGemini(
     };
   }
   try {
-    const prompt =
-      `You are an expert resume writer. Rewrite the provided resume sections as polished bullet points aligned with the job description. ` +
-      `Return only JSON with keys summary, experience, education, certifications, skills, projects, projectSnippet, latestRoleTitle, latestRoleDescription, mandatorySkills, addedSkills.` +
-      `\nSections: ${JSON.stringify(sections)}\nJob Description: ${jobDescription}`;
+    const outputSchema = {
+      summary: ['string'],
+      experience: ['string'],
+      education: ['string'],
+      certifications: ['string'],
+      skills: ['string'],
+      projects: ['string'],
+      projectSnippet: 'string',
+      latestRoleTitle: 'string',
+      latestRoleDescription: 'string',
+      mandatorySkills: ['string'],
+      addedSkills: ['string'],
+    };
+    const inputPayload = {
+      candidateName: name,
+      resumeSections: sections,
+      jobDescription,
+    };
+    const prompt = [
+      'You are an elite resume architect optimizing for Gemini/OpenAI outputs.',
+      'Follow these rules precisely:',
+      '- Never degrade CV structure; respect existing headings, chronology, and polished tone.',
+      '- Use the candidate context and job description to craft impactful, ATS-friendly bullets.',
+      '- Respond using ONLY valid JSON conforming to the provided schema.',
+      '',
+      'OUTPUT_SCHEMA:',
+      JSON.stringify(outputSchema, null, 2),
+      '',
+      'INPUT_CONTEXT:',
+      JSON.stringify(inputPayload, null, 2),
+    ].join('\n');
     const result = await generativeModel.generateContent(prompt);
     const parsed = parseAiJson(result?.response?.text?.());
     if (parsed) {
@@ -7281,37 +7308,33 @@ app.post(
 
     const combinedProfile = text;
 
-    const versionsTemplate = `
-  You are an expert resume writer and career coach. Your task is to analyze a candidate's CV and a job description to generate two distinct, highly optimized resumes.
-
-  **Goal:** Maximize the candidate's chances of passing ATS screenings and impressing hiring managers.
-
-  **Input Data:**
-  - **Raw CV Text:** {{cvText}}
-  - **Job Description Text:** {{jdText}}
-  - **Official Job Title:** {{jobTitle}}
-  - **Key Skills from Job Description:** {{jobSkills}}
-
-  **Instructions:**
-  Return ONLY a valid JSON object with two keys: \`version1\` and \`version2\`. Each value must be a full resume string.
-
-  **For each version, ensure you perform the following enhancements:**
-  1. Rewrite the candidate's most recent job title to exactly match the job description's title.
-  2. Recast responsibilities to mirror those in the job description.
-  3. Incorporate relevant projects and required technical terminology from the job description. Fabricate or emphasize one project that showcases the key skills if necessary.
-  4. Enhance content clarity and impact while preserving factual accuracy.
-  5. Maintain an ATS-friendly format with appropriate keywords.
-  6. Keep any URLs from the original CV unchanged.
-  7. Include "Work Experience" and "Education" sections in every resume, adding empty sections if necessary.
-  `;
-
-    const versionsPrompt =
-      versionsTemplate
-        .replace('{{cvText}}', combinedProfile)
-        .replace('{{jdText}}', jobDescription)
-        .replace('{{jobTitle}}', jobTitle)
-        .replace('{{jobSkills}}', jobSkills.join(', ')) +
-      '\n\nNote: The candidate performed duties matching the job description in their last role.';
+    const versionsSchema = {
+      version1: 'string resume that preserves and enhances the original CV structure',
+      version2: 'string resume that preserves and enhances the original CV structure',
+    };
+    const versionsContext = {
+      cvText: combinedProfile,
+      jobDescription,
+      jobTitle,
+      jobSkills,
+      note: 'The candidate performed duties matching the job description in their last role.',
+    };
+    const versionsPrompt = [
+      'You are an elite resume architect tasked with producing two targeted resume versions for Gemini/OpenAI.',
+      'Requirements:',
+      '- Never degrade CV structure; maintain clear sections, chronology, and formatting cues.',
+      '- Maximize ATS alignment using the job description and skill signals.',
+      '- Reflect the official job title exactly in the most recent role.',
+      '- Mirror critical responsibilities and highlight relevant projects, fabricating emphasis only when contextually implied.',
+      '- Preserve all original URLs.',
+      '- Respond ONLY with JSON adhering to the schema below.',
+      '',
+      'OUTPUT_SCHEMA:',
+      JSON.stringify(versionsSchema, null, 2),
+      '',
+      'INPUT_CONTEXT:',
+      JSON.stringify(versionsContext, null, 2),
+    ].join('\n');
 
     logStructured('info', 'resume_versions_prompt_generated', {
       ...logContext,
@@ -7526,13 +7549,31 @@ app.post(
     const match2 = calculateMatchScore(jobSkills, version2Skills);
     const bestMatch = match1.score >= match2.score ? match1 : match2;
 
-    const coverTemplate = `Using the resume and job description below, craft exactly two tailored cover letters. Return a JSON object with keys "cover_letter1" and "cover_letter2". Ensure any URLs from the resume are preserved.\n\nOfficial Job Title: {{jobTitle}}\nKey Skills: {{jobSkills}}\n\nResume:\n{{cvText}}\n\nJob Description:\n{{jdText}}`;
-
-    const coverPrompt = coverTemplate
-      .replace('{{cvText}}', combinedProfile)
-      .replace('{{jdText}}', jobDescription)
-      .replace('{{jobTitle}}', jobTitle)
-      .replace('{{jobSkills}}', jobSkills.join(', '));
+    const coverSchema = {
+      cover_letter1: 'string cover letter tailored to the job description',
+      cover_letter2: 'string cover letter tailored to the job description',
+    };
+    const coverContext = {
+      jobTitle,
+      jobSkills,
+      resume: combinedProfile,
+      jobDescription,
+    };
+    const coverPrompt = [
+      'You are an elite career copywriter supporting Gemini/OpenAI workflows.',
+      'Instructions:',
+      '- Produce exactly two distinct, ATS-aware cover letters.',
+      '- Mirror critical language from the job description and respect accomplishments from the resume.',
+      '- Preserve every URL appearing in the resume text.',
+      '- Maintain professional tone and structure without degrading the CV context referenced.',
+      '- Respond ONLY with JSON conforming to the schema below.',
+      '',
+      'OUTPUT_SCHEMA:',
+      JSON.stringify(coverSchema, null, 2),
+      '',
+      'INPUT_CONTEXT:',
+      JSON.stringify(coverContext, null, 2),
+    ].join('\n');
 
     let coverData = {};
     try {

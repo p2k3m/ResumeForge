@@ -51,10 +51,12 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
 
     expect(generativeModelMock.generateContent).toHaveBeenCalledTimes(1);
     const prompt = promptRecorder[0];
-    expect(prompt).toContain('expert resume writer');
+    expect(prompt).toContain('elite resume architect');
     expect(prompt).toContain('Exciting job description here');
-    expect(prompt).toMatch(/Sections: \{/);
-    expect(prompt).toMatch(/Experienced engineer/);
+    expect(prompt).toContain('Never degrade CV structure');
+    expect(prompt).toContain('OUTPUT_SCHEMA');
+    expect(prompt).toContain('INPUT_CONTEXT');
+    expect(prompt).toMatch(/"resumeSections"/);
     expect(prompt).toMatch(/"summary"/);
     expect(prompt).toMatch(/"experience"/);
     expect(prompt).toMatch(/"projects"/);
