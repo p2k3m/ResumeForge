@@ -120,6 +120,7 @@ jest.unstable_mockModule('mammoth', () => ({
 const serverModule = await import('../server.js');
 const { default: app, extractText, setGeneratePdf, parseContent, classifyDocument } = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
+const mammothMock = (await import('mammoth')).default;
 const axios = (await import('axios')).default;
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
@@ -130,6 +131,12 @@ beforeEach(() => {
   getSignedUrlMock.mockClear();
   getObjectCommandMock.mockClear();
   wordExtractorExtractMock.mockClear();
+  pdfParseMock.mockReset();
+  pdfParseMock.mockResolvedValue({
+    text: 'Professional Summary\nExperience\nEducation\nSkills\nProjects',
+  });
+  mammothMock.extractRawText.mockReset();
+  mammothMock.extractRawText.mockResolvedValue({ value: 'Docx text' });
 });
 
 describe('health check', () => {
@@ -1033,6 +1040,22 @@ describe('extractText', () => {
   test('extracts text from docx', async () => {
     const file = { originalname: 'file.docx', buffer: Buffer.from('docx') };
     await expect(extractText(file)).resolves.toBe('Docx text');
+  });
+
+  test('guides user when pdf parsing fails', async () => {
+    pdfParseMock.mockResolvedValueOnce({ text: '   ' });
+    const file = { originalname: 'file.pdf', buffer: Buffer.from('pdf') };
+    await expect(extractText(file)).rejects.toThrow(
+      "We couldn't read your PDF resume. Please export a new PDF (make sure it is not password protected) and upload it again."
+    );
+  });
+
+  test('guides user when docx parsing fails', async () => {
+    mammothMock.extractRawText.mockRejectedValueOnce(new Error('bad docx'));
+    const file = { originalname: 'file.docx', buffer: Buffer.from('docx') };
+    await expect(extractText(file)).rejects.toThrow(
+      "We couldn't read your DOCX resume. Please download a fresh DOCX copy (or export it to PDF) from your editor and try again."
+    );
   });
 
   test('extracts text from doc', async () => {
