@@ -1732,10 +1732,11 @@ function App() {
             />
             {manualJobDescriptionActive && (
               <div className="md:col-span-2 space-y-2">
-                <label className="text-sm font-semibold text-purple-700">
+                <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
                   Paste Full Job Description
                 </label>
                 <textarea
+                  id="manual-job-description"
                   value={manualJobDescription}
                   onChange={(e) => setManualJobDescription(e.target.value)}
                   placeholder="Paste the entire job post when automatic fetching is blocked."
@@ -1760,8 +1761,11 @@ function App() {
               className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-purple-700">Manual Certificates</label>
+              <label className="text-sm font-semibold text-purple-700" htmlFor="manual-certificates">
+                Manual Certificates
+              </label>
               <textarea
+                id="manual-certificates"
                 value={manualCertificatesInput}
                 onChange={(e) => setManualCertificatesInput(e.target.value)}
                 placeholder="e.g. AWS Certified Solutions Architect - Amazon; PMP by PMI"
