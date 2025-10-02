@@ -1141,12 +1141,22 @@ function App() {
           ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
           : null)
 
+      const enhancedScoreResponse =
+        typeof data.enhancedScore === 'number'
+          ? data.enhancedScore
+          : typeof data.originalScore === 'number'
+            ? data.originalScore
+            : null
+
       const matchPayload = {
-        table: data.table || [],
-        addedSkills: data.addedSkills || [],
-        missingSkills: data.missingSkills || [],
-        originalScore: data.originalScore || 0,
-        enhancedScore: data.enhancedScore || 0,
+        table: Array.isArray(data.table) ? data.table : [],
+        addedSkills: Array.isArray(data.addedSkills) ? data.addedSkills : [],
+        missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
+        originalScore:
+          typeof data.originalScore === 'number'
+            ? data.originalScore
+            : enhancedScoreResponse ?? 0,
+        enhancedScore: enhancedScoreResponse ?? 0,
         originalTitle: data.originalTitle || '',
         modifiedTitle: data.modifiedTitle || '',
         selectionProbability: probabilityValue,
@@ -2188,6 +2198,11 @@ function App() {
                 )
               })}
             </div>
+            {improvementsUnlocked && improvementResults.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+                Review your ATS results, then pick an improvement above to see tailored rewrites before generating downloads.
+              </div>
+            )}
           </section>
         )}
 
