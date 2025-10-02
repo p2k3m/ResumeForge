@@ -18,7 +18,8 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import {
+import * as DynamoDB from '@aws-sdk/client-dynamodb';
+const {
   DynamoDBClient,
   CreateTableCommand,
   DescribeTableCommand,
@@ -27,7 +28,7 @@ import {
   UpdateItemCommand,
   ScanCommand,
   DeleteItemCommand,
-} from '@aws-sdk/client-dynamodb';
+} = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import { logEvent, logErrorTrace } from './logger.js';
