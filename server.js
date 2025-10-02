@@ -4154,12 +4154,61 @@ function normalizeExtractedText(text = '') {
     .replace(/\n{3,}/g, '\n\n');
 }
 
-async function extractDocxText(buffer) {
-  const result = await mammoth.extractRawText({ buffer });
-  if (!result || typeof result.value !== 'string') {
-    throw new Error('Unable to extract text from DOCX resume.');
+const RESUME_EXTRACTION_MESSAGES = {
+  pdf: {
+    intro: "We couldn't read your PDF resume.",
+    guidance:
+      'Please export a new PDF (make sure it is not password protected) and upload it again.'
+  },
+  docx: {
+    intro: "We couldn't read your DOCX resume.",
+    guidance:
+      'Please download a fresh DOCX copy (or export it to PDF) from your editor and try again.'
+  },
+  doc: {
+    intro: "We couldn't read your DOC resume.",
+    guidance:
+      'Please re-save it as a DOC file or export it to PDF before uploading again.'
+  },
+  default: {
+    intro: "We couldn't read your resume.",
+    guidance: 'Please upload a valid PDF or DOCX resume and try again.'
   }
-  return result.value;
+};
+
+function createResumeExtractionError(type, reason, cause) {
+  const key = type && RESUME_EXTRACTION_MESSAGES[type] ? type : 'default';
+  const { intro, guidance } = RESUME_EXTRACTION_MESSAGES[key];
+  const message = `${intro} ${guidance}`.trim();
+  const error = new Error(message);
+  error.resumeType = type || 'unknown';
+  if (reason) {
+    error.reason = reason;
+  }
+  if (cause) {
+    error.cause = cause;
+  }
+  return error;
+}
+
+async function extractDocxText(buffer) {
+  if (!mammoth || typeof mammoth.extractRawText !== 'function') {
+    throw createResumeExtractionError('docx', 'dependency_missing');
+  }
+
+  try {
+    const result = await mammoth.extractRawText({ buffer });
+    const text = result?.value;
+    if (typeof text !== 'string' || !text.trim()) {
+      throw createResumeExtractionError('docx', 'empty_text');
+    }
+    return text;
+  } catch (err) {
+    if (err?.resumeType === 'docx') {
+      throw err;
+    }
+    throw createResumeExtractionError('docx', 'parse_failed', err);
+  }
 }
 
 async function extractDocText(buffer) {
@@ -4172,7 +4221,7 @@ async function extractDocText(buffer) {
     await fs.writeFile(tmpPath, buffer);
     const document = await sharedWordExtractor.extract(tmpPath);
     if (!document) {
-      throw new Error('Unable to read DOC resume.');
+      throw createResumeExtractionError('doc', 'missing_document');
     }
     const sections = [];
     if (typeof document.getBody === 'function') {
@@ -4195,9 +4244,14 @@ async function extractDocText(buffer) {
     }
     const combined = sections.filter(Boolean).join('\n\n');
     if (!combined.trim()) {
-      throw new Error('DOC resume appears to be empty.');
+      throw createResumeExtractionError('doc', 'empty_text');
     }
     return combined;
+  } catch (err) {
+    if (err?.resumeType === 'doc') {
+      throw err;
+    }
+    throw createResumeExtractionError('doc', 'parse_failed', err);
   } finally {
     await fs.rm(tmpPath, { force: true }).catch(() => {});
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
@@ -4224,8 +4278,19 @@ async function extractText(file) {
           : '');
 
   if (normalizedExt === '.pdf') {
-    const data = await pdfParse(buffer);
-    return normalizeExtractedText(data.text);
+    try {
+      const data = await pdfParse(buffer);
+      const text = data?.text;
+      if (typeof text !== 'string' || !text.trim()) {
+        throw createResumeExtractionError('pdf', 'empty_text');
+      }
+      return normalizeExtractedText(text);
+    } catch (err) {
+      if (err?.resumeType === 'pdf') {
+        throw err;
+      }
+      throw createResumeExtractionError('pdf', 'parse_failed', err);
+    }
   }
 
   if (normalizedExt === '.docx') {
