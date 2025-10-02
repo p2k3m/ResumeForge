@@ -76,6 +76,8 @@ export async function setupTestServer({
     DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
     PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' })),
     UpdateItemCommand: jest.fn((input) => ({ input, __type: 'UpdateItemCommand' })),
+    ScanCommand: jest.fn((input) => ({ input, __type: 'ScanCommand' })),
+    DeleteItemCommand: jest.fn((input) => ({ input, __type: 'DeleteItemCommand' })),
   }));
 
   const loggerModulePath = new URL('../../logger.js', import.meta.url).pathname;
