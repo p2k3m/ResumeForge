@@ -263,7 +263,44 @@ async function replayQueuedRequests() {
         })
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
+          const failureDetails = {
+            type: 'OFFLINE_UPLOAD_FAILED',
+            message: `Upload failed (HTTP ${response.status})`,
+            payload: {
+              status: response.status,
+              statusText: response.statusText,
+            },
+          }
+
+          const failureContentType = response.headers.get('content-type') || ''
+          if (failureContentType.includes('application/json')) {
+            try {
+              const data = await response.json()
+              const errorPayload = data?.error || data
+              failureDetails.payload.error = errorPayload
+              const serverMessage =
+                (typeof errorPayload?.message === 'string' && errorPayload.message.trim()) ||
+                (typeof data?.message === 'string' && data.message.trim())
+              if (serverMessage) {
+                failureDetails.message = serverMessage
+              }
+            } catch (parseErr) {
+              failureDetails.payload.parseError = parseErr?.message || String(parseErr || 'Unknown error')
+            }
+          } else {
+            try {
+              const text = await response.text()
+              if (text) {
+                failureDetails.message = text
+                failureDetails.payload.body = text
+              }
+            } catch (textErr) {
+              failureDetails.payload.readError = textErr?.message || String(textErr || 'Unknown error')
+            }
+          }
+
+          await notifyClients(failureDetails)
+          continue
         }
 
         const cloned = response.clone()
@@ -287,6 +324,7 @@ async function replayQueuedRequests() {
           type: 'OFFLINE_UPLOAD_FAILED',
           message:
             error?.message || 'A queued upload could not be processed automatically. Please try submitting again.',
+          payload: error && typeof error === 'object' ? { error: serializeError(error) } : undefined,
         })
       }
     }
@@ -294,8 +332,20 @@ async function replayQueuedRequests() {
     await notifyClients({
       type: 'OFFLINE_UPLOAD_FAILED',
       message: err?.message || 'Unable to process queued uploads.',
+      payload: err && typeof err === 'object' ? { error: serializeError(err) } : undefined,
     })
   }
+}
+
+function serializeError(err) {
+  if (!err || typeof err !== 'object') {
+    return { message: String(err || 'Unknown error') }
+  }
+  const base = {}
+  if (err.name) base.name = err.name
+  if (err.message) base.message = err.message
+  if ('stack' in err) base.stack = err.stack
+  return base
 }
 
 function normalizePayload(payload) {
