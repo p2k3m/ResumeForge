@@ -9063,6 +9063,49 @@ app.post(
       coverTemplate2,
     };
 
+    let scoringMetadataUpdated = false;
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          UpdateExpression:
+            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
+          ExpressionAttributeValues: {
+            ':status': { S: 'scored' },
+            ':completedAt': { S: new Date().toISOString() },
+            ':missing': {
+              L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
+                S: skill,
+              })),
+            },
+            ':added': {
+              L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
+                S: skill,
+              })),
+            },
+            ':score': { N: String(scoringUpdate.normalizedScore) },
+            ':jobId': { S: jobId },
+          },
+          ExpressionAttributeNames: { '#status': 'status' },
+          ConditionExpression: 'jobId = :jobId',
+        })
+      );
+      scoringMetadataUpdated = true;
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'scoring_metadata_updated',
+      });
+    } catch (updateErr) {
+      logStructured('error', 'process_cv_status_update_failed', {
+        ...logContext,
+        error: serializeError(updateErr),
+      });
+    }
+
     const generationResult = await generateEnhancedDocumentsResponse({
       res,
       s3,
@@ -9095,45 +9138,47 @@ app.post(
     });
 
     if (!generationResult) {
-      try {
-        await dynamo.send(
-          new UpdateItemCommand({
-            TableName: tableName,
-            Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
-            UpdateExpression:
-              'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
-            ExpressionAttributeValues: {
-              ':status': { S: 'scored' },
-              ':completedAt': { S: new Date().toISOString() },
-              ':missing': {
-                L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
-                  S: skill,
-                })),
+      if (!scoringMetadataUpdated) {
+        try {
+          await dynamo.send(
+            new UpdateItemCommand({
+              TableName: tableName,
+              Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+              UpdateExpression:
+                'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
+              ExpressionAttributeValues: {
+                ':status': { S: 'scored' },
+                ':completedAt': { S: new Date().toISOString() },
+                ':missing': {
+                  L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
+                    S: skill,
+                  })),
+                },
+                ':added': {
+                  L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
+                    S: skill,
+                  })),
+                },
+                ':score': { N: String(scoringUpdate.normalizedScore) },
+                ':jobId': { S: jobId },
               },
-              ':added': {
-                L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
-                  S: skill,
-                })),
-              },
-              ':score': { N: String(scoringUpdate.normalizedScore) },
-              ':jobId': { S: jobId },
-            },
-            ExpressionAttributeNames: { '#status': 'status' },
-            ConditionExpression: 'jobId = :jobId',
-          })
-        );
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'scoring_metadata_updated',
-        });
-      } catch (updateErr) {
-        logStructured('error', 'process_cv_status_update_failed', {
-          ...logContext,
-          error: serializeError(updateErr),
-        });
+              ExpressionAttributeNames: { '#status': 'status' },
+              ConditionExpression: 'jobId = :jobId',
+            })
+          );
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'scoring_metadata_updated',
+          });
+        } catch (updateErr) {
+          logStructured('error', 'process_cv_status_update_failed', {
+            ...logContext,
+            error: serializeError(updateErr),
+          });
+        }
       }
       return;
     }
