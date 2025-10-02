@@ -7443,6 +7443,7 @@ app.post(
       let versionData = {};
       let parsedVersions = false;
       let lastAiResponse;
+      let sanitizedFallbackUsed = false;
 
       const ensureProjectSummary = async () => {
         if (projectText) return;
@@ -7474,6 +7475,9 @@ app.post(
         const sanitizeOptions = buildSanitizeOptions();
         const sanitized = sanitizeGeneratedText(combinedProfile, sanitizeOptions);
         const useSanitized = Boolean(sanitized && sanitized.trim());
+        if (useSanitized) {
+          sanitizedFallbackUsed = true;
+        }
         const fallbackResume = useSanitized ? sanitized : combinedProfile;
         if (fallbackResume && fallbackResume.trim()) {
           if (!versionData.version1 || !versionData.version1.trim()) {
@@ -7701,7 +7705,7 @@ app.post(
 
         const templateOptions = {
           jobSkills,
-          resumeExperience,
+          resumeExperience: isCvDocument ? resumeExperience : undefined,
           linkedinExperience,
           resumeEducation,
           linkedinEducation,
@@ -7759,18 +7763,22 @@ app.post(
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
 
 
-      const addedSkills = Array.from(
-        new Set(
-          (bestMatch.table || [])
-            .filter((row) =>
-              row.matched && originalMatch.table?.some(
-                (baselineRow) => baselineRow.skill === row.skill && !baselineRow.matched
-              )
+      const addedSkills = sanitizedFallbackUsed
+        ? []
+        : Array.from(
+            new Set(
+              (bestMatch.table || [])
+                .filter((row) =>
+                  row.matched &&
+                  originalMatch.table?.some(
+                    (baselineRow) =>
+                      baselineRow.skill === row.skill && !baselineRow.matched
+                  )
+                )
+                .map((row) => row.skill)
+                .concat(geminiAddedSkills)
             )
-            .map((row) => row.skill)
-            .concat(geminiAddedSkills)
-        )
-      );
+          );
 
       const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
         jobSkills,
@@ -8314,6 +8322,7 @@ app.post(
   const prefix = `${sanitizedName}/cv/${date}/`;
   const finalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
   const finalLogKey = `${prefix}logs/processing.jsonl`;
+  const metadataKey = `${prefix}logs/log.json`;
 
   if (finalUploadKey !== originalUploadKey) {
     try {
@@ -8811,6 +8820,7 @@ app.post(
     let versionData = { version1: '', version2: '' };
     let parsedVersions = false;
     let lastAiResponse;
+    let sanitizedFallbackUsed = false;
 
     const ensureProjectSummary = async ({ allowAi = true } = {}) => {
       if (projectText) return;
@@ -8843,6 +8853,9 @@ app.post(
       const sanitizeOptions = buildSanitizeOptions();
       const sanitized = sanitizeGeneratedText(combinedProfile, sanitizeOptions);
       const useSanitized = Boolean(sanitized && sanitized.trim());
+      if (useSanitized) {
+        sanitizedFallbackUsed = true;
+      }
       const fallbackResume = useSanitized ? sanitized : combinedProfile;
       if (fallbackResume && fallbackResume.trim()) {
         if (!versionData.version1?.trim()) {
@@ -9057,7 +9070,7 @@ app.post(
 
       const templateOptions = {
         jobSkills,
-        resumeExperience,
+        resumeExperience: isCvDocument ? resumeExperience : undefined,
         linkedinExperience,
         resumeEducation,
         linkedinEducation,
@@ -9116,18 +9129,22 @@ app.post(
 
     await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
 
-    const addedSkills = Array.from(
-      new Set(
-        (bestMatch.table || [])
-          .filter((row) =>
-            row.matched && originalMatch.table?.some(
-              (baselineRow) => baselineRow.skill === row.skill && !baselineRow.matched
+      const addedSkills = sanitizedFallbackUsed
+        ? []
+        : Array.from(
+            new Set(
+              (bestMatch.table || [])
+                .filter((row) =>
+                  row.matched &&
+                  originalMatch.table?.some(
+                    (baselineRow) =>
+                      baselineRow.skill === row.skill && !baselineRow.matched
+                  )
+                )
+                .map((row) => row.skill)
+                .concat(geminiAddedSkills)
             )
-          )
-          .map((row) => row.skill)
-          .concat(geminiAddedSkills)
-      )
-    );
+          );
 
     const missingSkills = Array.isArray(bestMatch.newSkills)
       ? bestMatch.newSkills
@@ -9171,6 +9188,58 @@ app.post(
         })
       );
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_metadata_updated' });
+
+      try {
+        const metadataPayload = {
+          jobId,
+          applicantName: anonymizedApplicantName,
+          linkedinProfileUrl: anonymizedLinkedIn,
+          jobDescriptionUrl: jobDescriptionUrlValue,
+          templates: {
+            resume: [template1, template2].filter(Boolean),
+            coverLetters: [coverTemplate1, coverTemplate2].filter(Boolean),
+          },
+          urls,
+          createdAt: new Date().toISOString(),
+        };
+        await s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: metadataKey,
+            Body: JSON.stringify(metadataPayload, null, 2),
+            ContentType: 'application/json',
+          })
+        );
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'uploaded_metadata',
+          message: `Metadata written to ${metadataKey}`,
+        });
+      } catch (err) {
+        logStructured('warn', 'metadata_upload_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+      }
+
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'completed',
+          message: 'Resume and cover letter generation completed',
+        });
+      } catch (err) {
+        logStructured('warn', 'completion_log_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+      }
     } catch (err) {
       logStructured('warn', 'dynamo_partial_update_failed', {
         ...logContext,
