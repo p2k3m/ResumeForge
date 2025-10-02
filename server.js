@@ -23,7 +23,9 @@ import {
   CreateTableCommand,
   DescribeTableCommand,
   PutItemCommand,
-  UpdateItemCommand
+  UpdateItemCommand,
+  ScanCommand,
+  DeleteItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -1054,9 +1056,17 @@ async function purgeExpiredSessions({
   } while (continuationToken);
 
   let deleted = 0;
+  const expiredSessionPrefixes = new Set();
   for (let i = 0; i < keysToDelete.length; i += 1000) {
     const chunk = keysToDelete.slice(i, i + 1000).map((Key) => ({ Key }));
     if (!chunk.length) continue;
+    for (const { Key } of chunk) {
+      if (!Key) continue;
+      const match = Key.match(SESSION_PATH_REGEX);
+      if (match) {
+        expiredSessionPrefixes.add(`${match[1]}/cv/${match[2]}/`);
+      }
+    }
     const result = await s3Client.send(
       new DeleteObjectsCommand({
         Bucket: bucket,
@@ -1066,8 +1076,129 @@ async function purgeExpiredSessions({
     deleted += result?.Deleted?.length ?? chunk.length;
   }
 
+  let metadataDeleted = 0;
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+  const dynamoClient = new DynamoDBClient({ region });
+  const keysForDeletion = new Set();
+  let lastEvaluatedKey;
+  do {
+    try {
+      if (!tableName) {
+        break;
+      }
+      const response = await dynamoClient.send(
+        new ScanCommand({
+          TableName: tableName,
+          ProjectionExpression:
+            '#pk, s3Key, uploadedAt, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url',
+          ExpressionAttributeNames: { '#pk': 'linkedinProfileUrl' },
+          ExclusiveStartKey: lastEvaluatedKey,
+        })
+      );
+      const items = response.Items || [];
+      for (const item of items) {
+        const pk = item?.linkedinProfileUrl?.S;
+        if (!pk) continue;
+        const s3Key = item?.s3Key?.S || '';
+        let shouldDelete = false;
+        let detectedPrefix;
+        if (s3Key) {
+          const match = s3Key.match(SESSION_PATH_REGEX);
+          if (match) {
+            detectedPrefix = `${match[1]}/cv/${match[2]}/`;
+            const sessionDate = new Date(match[2]);
+            if (!Number.isNaN(sessionDate.getTime())) {
+              if (sessionDate.getTime() <= cutoff) {
+                shouldDelete = true;
+                expiredSessionPrefixes.add(detectedPrefix);
+              } else if (expiredSessionPrefixes.has(detectedPrefix)) {
+                shouldDelete = true;
+              }
+            }
+          }
+        }
+
+        if (!shouldDelete) {
+          const uploadedAt = item?.uploadedAt?.S;
+          if (uploadedAt) {
+            const uploadedDate = new Date(uploadedAt);
+            if (!Number.isNaN(uploadedDate.getTime()) && uploadedDate.getTime() <= cutoff) {
+              shouldDelete = true;
+            }
+          }
+        }
+
+        if (!shouldDelete) continue;
+
+        keysForDeletion.add(pk);
+        if (detectedPrefix) {
+          expiredSessionPrefixes.add(detectedPrefix);
+        }
+        const linkedUrls = [
+          item?.cv1Url?.S,
+          item?.cv2Url?.S,
+          item?.coverLetter1Url?.S,
+          item?.coverLetter2Url?.S,
+        ];
+        for (const url of linkedUrls) {
+          if (typeof url !== 'string' || !url) continue;
+          try {
+            const parsed = new URL(url);
+            const derivedKey = decodeURIComponent(
+              parsed.pathname.replace(/^\//, '')
+            );
+            if (!derivedKey) continue;
+            const derivedMatch = derivedKey.match(SESSION_PATH_REGEX);
+            if (derivedMatch) {
+              expiredSessionPrefixes.add(
+                `${derivedMatch[1]}/cv/${derivedMatch[2]}/`
+              );
+            }
+          } catch (err) {
+            logStructured('warn', 'metadata_url_parse_failed', {
+              url,
+              error: serializeError(err),
+            });
+          }
+        }
+      }
+      lastEvaluatedKey = response.LastEvaluatedKey;
+    } catch (err) {
+      if (err?.name === 'ResourceNotFoundException') {
+        logStructured('warn', 'dynamo_table_missing_for_retention', {
+          tableName,
+        });
+        lastEvaluatedKey = undefined;
+        break;
+      }
+      logStructured('error', 'dynamo_scan_failed_for_retention', {
+        tableName,
+        error: serializeError(err),
+      });
+      throw err;
+    }
+  } while (lastEvaluatedKey);
+
+  for (const pk of keysForDeletion) {
+    try {
+      const response = await dynamoClient.send(
+        new DeleteItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: pk } },
+        })
+      );
+      metadataDeleted += 1;
+    } catch (err) {
+      logStructured('error', 'dynamo_metadata_delete_failed', {
+        tableName,
+        key: pk,
+        error: serializeError(err),
+      });
+    }
+  }
+
   // GDPR: scheduled retention removes artefacts that exceed policy windows.
-  return { bucket, scanned, deleted, retentionDays };
+  return { bucket, scanned, deleted, retentionDays, metadataDeleted };
 }
 
 async function handleDataRetentionEvent(event = {}) {

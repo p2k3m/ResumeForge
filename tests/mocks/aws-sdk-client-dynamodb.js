@@ -28,3 +28,17 @@ export class UpdateItemCommand {
     this.__type = 'UpdateItemCommand';
   }
 }
+
+export class ScanCommand {
+  constructor(input) {
+    this.input = input;
+    this.__type = 'ScanCommand';
+  }
+}
+
+export class DeleteItemCommand {
+  constructor(input) {
+    this.input = input;
+    this.__type = 'DeleteItemCommand';
+  }
+}
