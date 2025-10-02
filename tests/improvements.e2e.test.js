@@ -18,6 +18,8 @@ const jobDescription = [
 ].join(' ');
 
 const basePayload = {
+  jobId: 'job-test-1',
+  linkedinProfileUrl: 'https://linkedin.com/in/example',
   resumeText: baseResume,
   jobDescription,
   jobSkills: ['Leadership', 'Cloud Architecture', 'JavaScript'],

@@ -49,6 +49,8 @@ describe('targeted improvement routes', () => {
     });
 
     const response = await request(app).post('/api/improve-summary').send({
+      jobId: 'job-123',
+      linkedinProfileUrl: 'https://linkedin.com/in/example',
       resumeText: baseResume,
       jobDescription,
       jobSkills: ['Leadership', 'JavaScript'],
@@ -84,7 +86,7 @@ describe('targeted improvement routes', () => {
   it('validates required fields for improvement requests', async () => {
     const response = await request(app)
       .post('/api/add-missing-skills')
-      .send({ jobDescription });
+      .send({ jobDescription, jobId: 'job-456', linkedinProfileUrl: 'https://linkedin.com/in/example' });
 
     expect(response.status).toBe(400);
     expect(response.body?.error?.code).toBe('IMPROVEMENT_INPUT_REQUIRED');
