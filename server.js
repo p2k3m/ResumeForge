@@ -1720,9 +1720,20 @@ function applySectionUpdate(originalResume, updatedResume, options = {}) {
   const baseSection = extractSectionContent(originalResume, pattern);
   const updatedSection = extractSectionContent(updatedResume, pattern);
   const baseContent = sanitizeSectionLines(baseSection.content);
-  const newContent = sanitizeSectionLines(
+  let newContent = sanitizeSectionLines(
     updatedSection.content.length ? updatedSection.content : baseContent
   );
+  const precedingLine =
+    updatedSection && typeof updatedSection.start === 'number' && updatedSection.start > 0
+      ? (updatedSection.lines?.[updatedSection.start - 1] || '').trim()
+      : '';
+  if (
+    newContent.length &&
+    precedingLine &&
+    newContent[0].trim().toLowerCase() === precedingLine.toLowerCase()
+  ) {
+    newContent = newContent.slice(1);
+  }
   if (!newContent.length) {
     return {
       updatedResume: originalResume,
@@ -1744,6 +1755,27 @@ function applySectionUpdate(originalResume, updatedResume, options = {}) {
     beforeExcerpt: baseContent.join('\n').trim(),
     afterExcerpt: newContent.join('\n').trim(),
   };
+}
+
+function normalizeSectionExcerpt(updatedResume, pattern, fallback = '') {
+  const section = extractSectionContent(updatedResume, pattern);
+  if (!Array.isArray(section.content) || !section.content.length) {
+    return fallback || '';
+  }
+  let lines = sanitizeSectionLines(section.content);
+  const precedingLine =
+    section && typeof section.start === 'number' && section.start > 0
+      ? (section.lines?.[section.start - 1] || '').trim()
+      : '';
+  if (
+    lines.length &&
+    precedingLine &&
+    lines[0].trim().toLowerCase() === precedingLine.toLowerCase()
+  ) {
+    lines = lines.slice(1);
+  }
+  const joined = lines.join('\n').trim();
+  return joined || fallback || '';
 }
 
 function inferDesignationLine(updatedLines = [], originalLines = [], context = {}) {
@@ -2416,6 +2448,9 @@ async function runTargetedImprovement(type, context = {}) {
         const confidence = Number.isFinite(parsed.confidence)
           ? clamp(parsed.confidence, 0, 1)
           : 0.6;
+        const changeDetails = Array.isArray(parsed.changeDetails)
+          ? parsed.changeDetails
+          : [];
         return enforceTargetedUpdate(
           type,
           resumeText,
@@ -2425,6 +2460,7 @@ async function runTargetedImprovement(type, context = {}) {
             afterExcerpt,
             explanation,
             confidence,
+            changeDetails,
           },
           scopeContext
         );
@@ -6390,6 +6426,18 @@ async function handleImprovementRequest(type, req, res) {
       knownCertificates,
       manualCertificates,
     });
+    const sectionPatterns = {
+      'improve-summary': /^#\s*summary/i,
+      'add-missing-skills': /^#\s*skills/i,
+      'align-experience': /^#\s*(work\s+)?experience/i,
+    };
+    const excerptPattern = sectionPatterns[type];
+    const normalizedBeforeExcerpt = excerptPattern
+      ? normalizeSectionExcerpt(resumeText, excerptPattern, result.beforeExcerpt)
+      : result.beforeExcerpt;
+    const normalizedAfterExcerpt = excerptPattern
+      ? normalizeSectionExcerpt(result.updatedResume, excerptPattern, result.afterExcerpt)
+      : result.afterExcerpt;
     logStructured('info', 'targeted_improvement_completed', {
       ...logContext,
       confidence: result.confidence,
@@ -6399,15 +6447,15 @@ async function handleImprovementRequest(type, req, res) {
       success: true,
       type,
       title: IMPROVEMENT_CONFIG[type]?.title || '',
-      beforeExcerpt: result.beforeExcerpt,
-      afterExcerpt: result.afterExcerpt,
+      beforeExcerpt: normalizedBeforeExcerpt,
+      afterExcerpt: normalizedAfterExcerpt,
       explanation: result.explanation,
       confidence: result.confidence,
       updatedResume: result.updatedResume,
       missingSkills,
       improvementSummary: buildImprovementSummary(
-        result.beforeExcerpt,
-        result.afterExcerpt,
+        normalizedBeforeExcerpt,
+        normalizedAfterExcerpt,
         result.explanation,
         result.changeDetails
       ),
@@ -6745,16 +6793,6 @@ app.post(
       'jobDescriptionUrl required'
     );
   }
-  if (!linkedinProfileUrl) {
-    logStructured('warn', 'linkedin_profile_missing', logContext);
-    return sendError(
-      res,
-      400,
-      'LINKEDIN_PROFILE_URL_REQUIRED',
-      'linkedinProfileUrl required'
-    );
-  }
-
   const ext = (path.extname(req.file.originalname) || '').toLowerCase();
   const normalizedExt = ext || '.pdf';
   const storedFileType =
@@ -6883,6 +6921,15 @@ app.post(
         confidence: classification.confidence,
         reason: detailReason,
       }
+    );
+  }
+  if (!linkedinProfileUrl) {
+    logStructured('warn', 'linkedin_profile_missing', logContext);
+    return sendError(
+      res,
+      400,
+      'LINKEDIN_PROFILE_URL_REQUIRED',
+      'linkedinProfileUrl required'
     );
   }
   const applicantName = extractName(text);
