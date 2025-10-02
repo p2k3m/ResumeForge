@@ -7507,9 +7507,10 @@ async function generateEnhancedDocumentsResponse({
     version1: versionData.version1,
     version2: versionData.version2,
   };
+  const downloadsEnabled = allowedOrigins.length > 0;
   const urls = [];
 
-  if (originalUploadKey) {
+  if (downloadsEnabled && originalUploadKey) {
     try {
       const originalSignedUrl = await getSignedUrl(
         s3,
@@ -7528,98 +7529,105 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  for (const [name, textValue] of Object.entries(outputs)) {
-    if (!textValue) continue;
-    const isCvDocument = name === 'version1' || name === 'version2';
-    const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
-    let fileName;
-    if (name === 'version1') {
-      fileName = sanitizedName;
-    } else if (name === 'version2') {
-      fileName = `${sanitizedName}_2`;
-    } else {
-      fileName = name;
-    }
-    const subdir = isCvDocument
-      ? 'cv/'
-      : isCoverLetter
-        ? 'cover_letter/'
-        : '';
-    const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-    const primaryTemplate = isCvDocument
-      ? name === 'version1'
-        ? template1
-        : template2
-      : isCoverLetter
-        ? name === 'cover_letter1'
-          ? coverTemplate1
-          : coverTemplate2
-        : template1;
+  if (downloadsEnabled) {
+    for (const [name, textValue] of Object.entries(outputs)) {
+      if (!textValue) continue;
+      const isCvDocument = name === 'version1' || name === 'version2';
+      const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
+      let fileName;
+      if (name === 'version1') {
+        fileName = sanitizedName;
+      } else if (name === 'version2') {
+        fileName = `${sanitizedName}_2`;
+      } else {
+        fileName = name;
+      }
+      const subdir = isCvDocument
+        ? 'cv/'
+        : isCoverLetter
+          ? 'cover_letter/'
+          : '';
+      const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
+      const primaryTemplate = isCvDocument
+        ? name === 'version1'
+          ? template1
+          : template2
+        : isCoverLetter
+          ? name === 'cover_letter1'
+            ? coverTemplate1
+            : coverTemplate2
+          : template1;
 
-    const resolvedTemplateParams = resolveTemplateParamsConfig(
-      templateParamsConfig,
-      {
-        resumeExperience,
+      const resolvedTemplateParams = resolveTemplateParamsConfig(
+        templateParamsConfig,
+        {
+          resumeExperience,
+          linkedinExperience,
+          resumeEducation,
+          linkedinEducation,
+          knownCertificates,
+          jobSkills,
+          project: projectText,
+          jobTitle: versionsContext.jobTitle,
+        }
+      );
+
+      const templateOptions = {
+        jobSkills,
         linkedinExperience,
         resumeEducation,
         linkedinEducation,
-        knownCertificates,
-        jobSkills,
-        project: projectText,
+        resumeCertifications,
+        linkedinCertifications,
+        credlyCertifications,
+        credlyProfileUrl,
         jobTitle: versionsContext.jobTitle,
+        project: projectText,
+        contactLines: contactDetails.contactLines,
+        ...sectionPreservation,
+        templateParams: resolvedTemplateParams,
+      };
+
+      if (isCvDocument) {
+        templateOptions.resumeExperience = resumeExperience;
+      } else if (isCoverLetter) {
+        templateOptions.skipRequiredSections = true;
       }
-    );
 
-    const templateOptions = {
-      jobSkills,
-      linkedinExperience,
-      resumeEducation,
-      linkedinEducation,
-      resumeCertifications,
-      linkedinCertifications,
-      credlyCertifications,
-      credlyProfileUrl,
-      jobTitle: versionsContext.jobTitle,
-      project: projectText,
-      contactLines: contactDetails.contactLines,
-      ...sectionPreservation,
-      templateParams: resolvedTemplateParams,
-    };
+      const pdfBuffer = await generatePdf(
+        textValue,
+        primaryTemplate,
+        templateOptions,
+        generativeModel
+      );
 
-    if (isCvDocument) {
-      templateOptions.resumeExperience = resumeExperience;
-    } else if (isCoverLetter) {
-      templateOptions.skipRequiredSections = true;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: pdfBuffer,
+          ContentType: 'application/pdf',
+        })
+      );
+
+      const signedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn: URL_EXPIRATION_SECONDS }
+      );
+      const expiresAt = new Date(
+        Date.now() + URL_EXPIRATION_SECONDS * 1000
+      ).toISOString();
+      urls.push({ type: name, url: signedUrl, expiresAt });
     }
-
-    const pdfBuffer = await generatePdf(
-      textValue,
-      primaryTemplate,
-      templateOptions,
-      generativeModel
-    );
-
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: pdfBuffer,
-        ContentType: 'application/pdf',
-      })
-    );
-
-    const signedUrl = await getSignedUrl(
-      s3,
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-      { expiresIn: URL_EXPIRATION_SECONDS }
-    );
-    const expiresAt = new Date(
-      Date.now() + URL_EXPIRATION_SECONDS * 1000
-    ).toISOString();
-    urls.push({ type: name, url: signedUrl, expiresAt });
+  } else {
+    logStructured('info', 'generation_downloads_skipped', {
+      ...logContext,
+      reason: 'no_allowed_origins',
+    });
   }
 
-  if (urls.length === 0) {
+  if (downloadsEnabled && urls.length === 0) {
     await logEvent({
       s3,
       bucket,
@@ -7688,7 +7696,7 @@ async function generateEnhancedDocumentsResponse({
     success: true,
     requestId,
     jobId,
-    urlExpiresInSeconds: URL_EXPIRATION_SECONDS,
+    urlExpiresInSeconds: urls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
     urls,
     applicantName,
     originalScore: Number.isFinite(originalMatchResult.score)
