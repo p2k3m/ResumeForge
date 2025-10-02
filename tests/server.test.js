@@ -16,6 +16,8 @@ jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   GetObjectCommand: getObjectCommandMock,
   ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
   DeleteObjectsCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectsCommand' })),
+  CopyObjectCommand: jest.fn((input) => ({ input, __type: 'CopyObjectCommand' })),
+  DeleteObjectCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectCommand' })),
 }));
 
 const getSignedUrlMock = jest
@@ -268,9 +270,37 @@ describe('/api/process-cv', () => {
       }
     });
 
-    const pdfKeys = mockS3Send.mock.calls
-      .map((c) => c[0]?.input?.Key)
-      .filter((k) => k && k.endsWith('.pdf'));
+    const s3Commands = mockS3Send.mock.calls.map(([command]) => ({
+      type: command.__type,
+      key: command.input?.Key,
+      copySource: command.input?.CopySource,
+    }));
+
+    const relocationCommand = s3Commands.find(
+      (cmd) =>
+        cmd.type === 'CopyObjectCommand' &&
+        typeof cmd.key === 'string' &&
+        cmd.key.includes(`${sanitized}/cv/`)
+    );
+    expect(relocationCommand).toBeTruthy();
+
+    const tempDelete = s3Commands.find(
+      (cmd) =>
+        cmd.type === 'DeleteObjectCommand' &&
+        typeof cmd.key === 'string' &&
+        cmd.key.includes('/incoming/')
+    );
+    expect(tempDelete).toBeTruthy();
+
+    const pdfKeys = s3Commands
+      .filter(
+        (cmd) =>
+          cmd.type === 'PutObjectCommand' &&
+          typeof cmd.key === 'string' &&
+          cmd.key.endsWith('.pdf') &&
+          cmd.key.includes(`${sanitized}/cv/`)
+      )
+      .map((cmd) => cmd.key);
     expect(pdfKeys).toHaveLength(5);
     pdfKeys.forEach((k) => {
       expect(k).toContain(`${sanitized}/cv/`);

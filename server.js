@@ -14,6 +14,8 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  CopyObjectCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -967,6 +969,11 @@ function anonymizePersonalData(value) {
   }
   // GDPR: store irreversible hashes so DynamoDB never contains raw identifiers.
   return hash.digest('hex');
+}
+
+function buildCopySource(bucket, key) {
+  const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/');
+  return `${bucket}/${encodedKey}`;
 }
 
 function extractLocationMetadata(req = {}) {
@@ -6521,14 +6528,6 @@ app.post(
     linkedinHost: getUrlHost(linkedinProfileUrl),
     credlyHost: getUrlHost(credlyProfileUrl),
   });
-  const ipAddress =
-    (req.headers['x-forwarded-for'] || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)[0] || req.ip;
-  const userAgent = req.headers['user-agent'] || '';
-  const locationMeta = extractLocationMetadata(req);
-  const { browser, os, device } = await parseUserAgent(userAgent);
   const defaultCvTemplate =
     req.body.template || req.query.template || CV_TEMPLATES[0];
   const defaultClTemplate =
@@ -6585,6 +6584,70 @@ app.post(
       'linkedinProfileUrl required'
     );
   }
+
+  const ext = (path.extname(req.file.originalname) || '').toLowerCase();
+  const normalizedExt = ext || '.pdf';
+  const storedFileType =
+    req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
+  const temporaryPrefix = `${jobId}/incoming/${date}/`;
+  let originalUploadKey = `${temporaryPrefix}original${normalizedExt}`;
+  let logKey = `${temporaryPrefix}logs/processing.jsonl`;
+  const s3 = s3Client;
+
+  try {
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: originalUploadKey,
+        Body: req.file.buffer,
+        ContentType: req.file.mimetype
+      })
+    );
+    logStructured('info', 'initial_upload_completed', {
+      ...logContext,
+      bucket,
+      key: originalUploadKey,
+    });
+  } catch (e) {
+    logStructured('error', 'initial_upload_failed', {
+      ...logContext,
+      bucket,
+      error: serializeError(e),
+    });
+    const message = e.message || 'initial S3 upload failed';
+    try {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'initial_upload_failed',
+        level: 'error',
+        message: `Failed to upload to bucket ${bucket}: ${message}`
+      });
+    } catch (logErr) {
+      logStructured('error', 's3_log_failure', {
+        ...logContext,
+        error: serializeError(logErr),
+      });
+    }
+    return sendError(
+      res,
+      500,
+      'INITIAL_UPLOAD_FAILED',
+      `Initial S3 upload to bucket ${bucket} failed: ${message}`,
+      { bucket }
+    );
+  }
+
+  const ipAddress =
+    (req.headers['x-forwarded-for'] || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)[0] || req.ip;
+  const userAgent = req.headers['user-agent'] || '';
+  const locationMeta = extractLocationMetadata(req);
+  const { browser, os, device } = await parseUserAgent(userAgent);
 
   let text;
   try {
@@ -6661,63 +6724,72 @@ app.post(
   const anonymizedIp = anonymizePersonalData(ipAddress);
   const anonymizedUserAgent = anonymizePersonalData(userAgent);
   const anonymizedCredly = anonymizePersonalData(credlyProfileUrl);
-  const ext = (path.extname(req.file.originalname) || '').toLowerCase();
-  const normalizedExt = ext || '.pdf';
   const prefix = `${sanitizedName}/cv/${date}/`;
-  const originalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
-  const logKey = `${prefix}logs/processing.jsonl`;
-  const s3Location = `s3://${bucket}/${originalUploadKey}`;
-  const storedFileType =
-    req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
-  const locationLabel = locationMeta.label || 'Unknown';
+  const finalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
+  const finalLogKey = `${prefix}logs/processing.jsonl`;
 
-  // Store raw file to configured bucket
-  const initialS3 = s3Client;
-  try {
-    await initialS3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: originalUploadKey,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype
-      })
-    );
-    logStructured('info', 'initial_upload_completed', {
-      ...logContext,
-      bucket,
-      key: originalUploadKey,
-    });
-  } catch (e) {
-    logStructured('error', 'initial_upload_failed', {
-      ...logContext,
-      bucket,
-      error: serializeError(e),
-    });
-    const message = e.message || 'initial S3 upload failed';
+  if (finalUploadKey !== originalUploadKey) {
     try {
+      await s3.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          CopySource: buildCopySource(bucket, originalUploadKey),
+          Key: finalUploadKey,
+          MetadataDirective: 'COPY'
+        })
+      );
+      await s3.send(
+        new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey })
+      );
       await logEvent({
         s3,
         bucket,
         key: logKey,
         jobId,
-        event: 'initial_upload_failed',
-        level: 'error',
-        message: `Failed to upload to bucket ${bucket}: ${message}`
+        event: 'raw_upload_relocated',
+        message: `Relocated raw upload from ${originalUploadKey} to ${finalUploadKey}`
       });
-    } catch (logErr) {
-      logStructured('error', 's3_log_failure', {
+      logStructured('info', 'raw_upload_relocated', {
         ...logContext,
-        error: serializeError(logErr),
+        bucket,
+        fromKey: originalUploadKey,
+        toKey: finalUploadKey,
       });
+      originalUploadKey = finalUploadKey;
+    } catch (err) {
+      logStructured('error', 'raw_upload_relocation_failed', {
+        ...logContext,
+        bucket,
+        error: serializeError(err),
+      });
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'raw_upload_relocation_failed',
+          level: 'error',
+          message: err.message || 'Failed to relocate raw upload to final key',
+        });
+      } catch (logErr) {
+        logStructured('error', 's3_log_failure', {
+          ...logContext,
+          error: serializeError(logErr),
+        });
+      }
+      return sendError(
+        res,
+        500,
+        'RAW_UPLOAD_RELOCATION_FAILED',
+        'Uploaded file could not be prepared for processing. Please try again later.'
+      );
     }
-    return sendError(
-      res,
-      500,
-      'INITIAL_UPLOAD_FAILED',
-      `Initial S3 upload to bucket ${bucket} failed: ${message}`,
-      { bucket }
-    );
   }
+
+  logKey = finalLogKey;
+  const s3Location = `s3://${bucket}/${originalUploadKey}`;
+  const locationLabel = locationMeta.label || 'Unknown';
 
   const safeRequestId =
     typeof requestId === 'string' && requestId.trim()

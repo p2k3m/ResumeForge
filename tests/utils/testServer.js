@@ -60,6 +60,8 @@ export async function setupTestServer({
     GetObjectCommand: jest.fn((input) => ({ input, __type: 'GetObjectCommand' })),
     ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
     DeleteObjectsCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectsCommand' })),
+    CopyObjectCommand: jest.fn((input) => ({ input, __type: 'CopyObjectCommand' })),
+    DeleteObjectCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectCommand' })),
   }));
 
   jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
