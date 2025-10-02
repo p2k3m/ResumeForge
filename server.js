@@ -8428,6 +8428,7 @@ app.post(
     req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
   const temporaryPrefix = `${jobId}/incoming/${date}/`;
   let originalUploadKey = `${temporaryPrefix}original${normalizedExt}`;
+  const initialUploadKey = originalUploadKey;
   let logKey = `${temporaryPrefix}logs/processing.jsonl`;
   try {
     await s3.send(
@@ -8691,6 +8692,83 @@ app.post(
       jobId,
       event: 'dynamodb_initial_record_written'
     });
+
+    const metadataPayload = {
+      version: 1,
+      jobId,
+      uploadedAt: timestamp,
+      applicantHash: anonymizedApplicantName,
+      links: {
+        linkedinProfileUrlHash: anonymizedLinkedIn,
+        credlyProfileUrlHash: anonymizedCredly,
+        jobDescriptionUrl: jobDescriptionUrlValue,
+      },
+      client: {
+        ipAddressHash: anonymizedIp,
+        userAgentHash: anonymizedUserAgent,
+        os,
+        browser,
+        device,
+        location: {
+          label: locationLabel,
+          city: locationMeta.city || '',
+          region: locationMeta.region || '',
+          country: locationMeta.country || '',
+        },
+      },
+      storage: {
+        bucket,
+        initialUploadKey,
+        finalUploadKey,
+        logKey,
+        metadataKey,
+        fileType: storedFileType,
+      },
+      requestContext: {
+        requestId: safeRequestId || undefined,
+      },
+      templates: {
+        resume: [template1, template2].filter(Boolean),
+        cover: [coverTemplate1, coverTemplate2].filter(Boolean),
+      },
+    };
+
+    if (!metadataPayload.requestContext.requestId) {
+      delete metadataPayload.requestContext.requestId;
+    }
+    if (!Object.keys(metadataPayload.requestContext).length) {
+      delete metadataPayload.requestContext;
+    }
+
+    try {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: metadataKey,
+          Body: JSON.stringify(metadataPayload, null, 2),
+          ContentType: 'application/json',
+        })
+      );
+      logStructured('info', 'upload_metadata_written', {
+        ...logContext,
+        bucket,
+        key: metadataKey,
+      });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'uploaded_metadata',
+      });
+    } catch (metadataErr) {
+      logStructured('warn', 'upload_metadata_write_failed', {
+        ...logContext,
+        bucket,
+        key: metadataKey,
+        error: serializeError(metadataErr),
+      });
+    }
   } catch (err) {
     logStructured('error', 'dynamo_initial_record_failed', {
       ...logContext,
