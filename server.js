@@ -8801,9 +8801,6 @@ app.post(
         coverTemplate2,
       },
     });
-}
-
-
 
   } catch (err) {
     const failureMessage = describeProcessingFailure(err);
