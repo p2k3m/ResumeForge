@@ -6656,7 +6656,13 @@ function relocateProfileLinks(text) {
 }
 
 function assignJobContext(req, res, next) {
-  const jobId = createIdentifier();
+  const bodyJobId =
+    req && req.body && typeof req.body.jobId === 'string' ? req.body.jobId.trim() : '';
+  const queryJobId =
+    req && req.query && typeof req.query.jobId === 'string' ? req.query.jobId.trim() : '';
+
+  const jobId = bodyJobId || queryJobId || createIdentifier();
+
   req.jobId = jobId;
   res.locals.jobId = jobId;
   next();
@@ -6784,13 +6790,100 @@ function buildImprovementSummary(
 }
 
 async function handleImprovementRequest(type, req, res) {
-  const jobId = req.jobId || createIdentifier();
-  res.locals.jobId = jobId;
+  const payload = req.body || {};
+  const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
+  if (!jobIdInput) {
+    return sendError(
+      res,
+      400,
+      'JOB_ID_REQUIRED',
+      'jobId is required after scoring before requesting improvements.'
+    );
+  }
+
+  const linkedinProfileUrlInput =
+    typeof payload.linkedinProfileUrl === 'string' ? payload.linkedinProfileUrl.trim() : '';
+  if (!linkedinProfileUrlInput) {
+    return sendError(
+      res,
+      400,
+      'LINKEDIN_PROFILE_URL_REQUIRED',
+      'linkedinProfileUrl is required to continue the scored session.'
+    );
+  }
+
+  req.jobId = jobIdInput;
+  res.locals.jobId = jobIdInput;
   captureUserContext(req, res);
   const requestId = res.locals.requestId;
-  const logContext = { requestId, jobId, type };
+  const logContext = { requestId, jobId: jobIdInput, type };
 
-  const payload = req.body || {};
+  const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrlInput);
+  let jobStatus = '';
+
+  if (!isTestEnvironment) {
+    const dynamo = new DynamoDBClient({ region });
+    const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+
+    try {
+      await ensureDynamoTableExists({ dynamo, tableName });
+    } catch (err) {
+      logStructured('error', 'improvement_table_ensure_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+      return sendError(
+        res,
+        500,
+        'DYNAMO_TABLE_UNAVAILABLE',
+        'Unable to verify the upload context for improvements.'
+      );
+    }
+
+    try {
+      const record = await dynamo.send(
+        new GetItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          ProjectionExpression: '#status, jobId',
+          ExpressionAttributeNames: { '#status': 'status' },
+        })
+      );
+      const item = record.Item || {};
+      if (!item.jobId || item.jobId.S !== jobIdInput) {
+        return sendError(
+          res,
+          404,
+          'JOB_CONTEXT_NOT_FOUND',
+          'Upload your resume again to start a new improvement session.'
+        );
+      }
+      jobStatus = item?.status?.S || '';
+    } catch (err) {
+      logStructured('error', 'improvement_job_context_lookup_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+      return sendError(
+        res,
+        500,
+        'JOB_CONTEXT_LOOKUP_FAILED',
+        'Unable to continue without the prior scoring context.'
+      );
+    }
+  } else {
+    jobStatus = 'scored';
+  }
+
+  if (jobStatus && jobStatus !== 'scored' && jobStatus !== 'completed') {
+    return sendError(
+      res,
+      409,
+      'JOB_NOT_READY',
+      'Wait for ATS scoring to finish before requesting improvements.'
+    );
+  }
+
   const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
   const jobDescription = typeof payload.jobDescription === 'string' ? payload.jobDescription : '';
 

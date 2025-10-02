@@ -1388,6 +1388,10 @@ function App() {
       setError('Please wait for the current improvement to finish before requesting another one.')
       return
     }
+    if (!jobId) {
+      setError('Upload your resume and complete scoring before requesting improvements.')
+      return
+    }
     if (!improvementAvailable) {
       setError(
         improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
@@ -1400,6 +1404,8 @@ function App() {
     try {
       const requestUrl = buildApiUrl(API_BASE_URL, `/api/${type}`)
       const payload = {
+        jobId,
+        linkedinProfileUrl: profileUrl.trim(),
         resumeText,
         jobDescription: jobDescriptionText,
         jobTitle: match?.modifiedTitle || match?.originalTitle || '',
@@ -1617,7 +1623,7 @@ function App() {
         jobDescriptionText,
         jobSkills,
         resumeSkills,
-        linkedinProfileUrl: profileUrl,
+        linkedinProfileUrl: profileUrl.trim(),
         credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
         templateContext: templateContext || { template1: selectedTemplate },
@@ -2309,7 +2315,21 @@ function App() {
           </section>
         )}
 
-        {outputFiles.length === 0 && improvementsUnlocked && (
+        {outputFiles.length === 0 && improvementsUnlocked && !hasAcceptedImprovement && (
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-bold text-purple-900">Review Improvements First</h2>
+              <p className="text-sm text-purple-700/80">
+                Apply at least one AI-generated improvement to unlock the enhanced CV and cover letter downloads.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+              Explore the targeted fixes above, accept the ones you like, and then return here to generate the upgraded documents.
+            </div>
+          </section>
+        )}
+
+        {outputFiles.length === 0 && improvementsUnlocked && hasAcceptedImprovement && (
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
@@ -2321,21 +2341,11 @@ function App() {
               <button
                 type="button"
                 onClick={handleGenerateEnhancedDocs}
-                disabled={
-                  isProcessing ||
-                  improvementBusy ||
-                  isGeneratingDocs ||
-                  !hasAcceptedImprovement
-                }
+                disabled={isProcessing || improvementBusy || isGeneratingDocs}
                 className="inline-flex items-center justify-center rounded-full bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-purple-300"
               >
                 {isGeneratingDocs ? 'Generating enhanced documents…' : 'Generate enhanced CV & cover letters'}
               </button>
-              {!hasAcceptedImprovement && (
-                <p className="text-sm text-purple-600">
-                  Accept at least one improvement to activate the enhanced downloads.
-                </p>
-              )}
             </div>
           </section>
         )}
