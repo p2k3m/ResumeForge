@@ -169,7 +169,7 @@ https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 
 ### Publish the active CloudFront URL
 
-After each deployment, publish the fresh CloudFront domain so the team knows the canonical entry point for candidates. The helper script stores the URL in `config/published-cloudfront.json` and automatically invalidates the previously published distribution so caches stop serving stale assets.
+After each deployment, publish the fresh CloudFront domain so the team knows the canonical entry point for candidates. The helper script stores the URL in `config/published-cloudfront.json` and automatically invalidates the previously published distribution so caches stop serving stale assets. A human-readable snapshot of the latest URL also lives in [`docs/cloudfront-url.md`](docs/cloudfront-url.md) so you can surface the current domain in changelogs or onboarding docs without digging through JSON.
 
 ```bash
 npm run publish:cloudfront-url -- <stack-name>
