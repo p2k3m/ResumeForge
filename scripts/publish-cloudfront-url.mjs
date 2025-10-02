@@ -83,18 +83,28 @@ async function main() {
         ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
         : `Invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
     )
-    await cloudFront.send(
-      new CreateInvalidationCommand({
-        DistributionId: previous.distributionId,
-        InvalidationBatch: {
-          CallerReference: callerReference,
-          Paths: {
-            Quantity: 1,
-            Items: ['/*']
+    try {
+      await cloudFront.send(
+        new CreateInvalidationCommand({
+          DistributionId: previous.distributionId,
+          InvalidationBatch: {
+            CallerReference: callerReference,
+            Paths: {
+              Quantity: 1,
+              Items: ['/*']
+            }
           }
-        }
-      })
-    )
+        })
+      )
+    } catch (err) {
+      if (err?.name === 'NoSuchDistribution' || err?.Code === 'NoSuchDistribution') {
+        console.warn(
+          `Skipping invalidation; distribution ${previous.distributionId} no longer exists.`
+        )
+      } else {
+        throw err
+      }
+    }
   }
 
   await fs.mkdir(path.dirname(publishFile), { recursive: true })
