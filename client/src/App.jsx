@@ -1020,7 +1020,7 @@ function App() {
     setIsGeneratingDocs(false)
   }
 
-  const handleSubmit = async () => {
+  const handleScoreSubmit = async () => {
     if (!cvFile) {
       setError('Please upload a CV before submitting.')
       return
@@ -1884,7 +1884,7 @@ function App() {
     setPreviewSuggestion(null)
   }, [])
 
-  const disabled = !profileUrl || !jobUrl || !cvFile || isProcessing
+  const scoreDisabled = !profileUrl || !jobUrl || !cvFile || isProcessing
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-purple-200 to-purple-300 flex flex-col items-center p-4 md:p-8">
@@ -1927,6 +1927,23 @@ function App() {
             >
               Choose File
             </label>
+          </div>
+
+          <div className="pt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <button
+              onClick={handleScoreSubmit}
+              disabled={scoreDisabled}
+              className={`w-full md:w-auto px-6 py-3 rounded-full text-white font-semibold shadow-lg transition ${
+                scoreDisabled
+                  ? 'bg-purple-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+              }`}
+            >
+              {isProcessing ? 'Scoring…' : 'Score my CV'}
+            </button>
+            <p className="text-sm text-purple-700/90 md:text-right">
+              Evaluate how your CV stacks up against the target JD before generating improvements.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1998,18 +2015,6 @@ function App() {
             onSelect={setSelectedTemplate}
             disabled={isProcessing}
           />
-
-          <button
-            onClick={handleSubmit}
-            disabled={disabled}
-            className={`w-full md:w-auto px-6 py-3 rounded-full text-white font-semibold shadow-lg transition ${
-              disabled
-                ? 'bg-purple-300 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
-            }`}
-          >
-            {isProcessing ? 'Scoring…' : 'Score CV for ATS match'}
-          </button>
 
           {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
           {isProcessing && (
