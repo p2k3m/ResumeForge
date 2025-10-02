@@ -82,4 +82,49 @@ describe('sanitizeGeneratedText', () => {
     expect(ensured.sections[0].heading).toBe('Education');
     expect(ensured.sections[0].items).toHaveLength(2);
   });
+
+  test('restores missing sections and preserves original order', () => {
+    const original = [
+      'Alex Doe',
+      '# Summary',
+      '- Original summary bullet',
+      '# Skills',
+      '- JavaScript',
+      '# Work Experience',
+      '- Original work bullet'
+    ].join('\n');
+
+    const fallback = parseContent(original, { skipRequiredSections: true });
+    const sectionOrder = fallback.sections.map((sec) => sec.heading);
+    const sectionFallbacks = fallback.sections.map((sec) => ({
+      heading: sec.heading,
+      items: sec.items.map((tokens) => tokens.map((token) => ({ ...token })))
+    }));
+
+    const aiOutput = [
+      'Alex Doe',
+      '# Work Experience',
+      '- Updated work bullet',
+      '# Summary',
+      '- New summary bullet'
+    ].join('\n');
+
+    const sanitized = sanitizeGeneratedText(aiOutput, {
+      skipRequiredSections: true,
+      sectionOrder,
+      sectionFallbacks
+    });
+
+    expect(sanitized).toBe(
+      [
+        'Alex Doe',
+        '# Summary',
+        '- New summary bullet',
+        '# Skills',
+        '- JavaScript',
+        '# Work Experience',
+        '- Updated work bullet'
+      ].join('\n')
+    );
+  });
 });
