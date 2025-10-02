@@ -532,12 +532,20 @@ function logStructured(level, message, context = {}) {
       payload.userId = contextMatch.userId;
     }
   }
-  const logFn =
+  const baseLogger =
     level === 'error'
       ? console.error
       : level === 'warn'
       ? console.warn
       : console.log;
+  const logFn =
+    typeof baseLogger === 'function'
+      ? baseLogger.bind(console)
+      : (...args) => {
+          if (typeof console.log === 'function') {
+            console.log(...args);
+          }
+        };
   try {
     const serialised = JSON.stringify(payload, (_, value) => toLoggable(value));
     logFn(serialised);
@@ -8392,6 +8400,7 @@ app.post(
     clTemplates: req.body.coverTemplates || req.query.coverTemplates
   });
   let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
+  const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
   logStructured('info', 'template_selection', {
     ...logContext,
     template1,
@@ -9120,48 +9129,50 @@ app.post(
       );
     }
 
-    const tableRows = Array.isArray(originalMatch?.table)
-      ? originalMatch.table
-      : [];
+    const templateContextInput = {
+      template1,
+      template2,
+      coverTemplate1,
+      coverTemplate2,
+    };
 
-    return res.json({
-      success: true,
+    const generationResult = await generateEnhancedDocumentsResponse({
+      res,
+      s3,
+      dynamo,
+      tableName,
+      bucket,
+      logKey,
       jobId,
       requestId,
-      urlExpiresInSeconds: 0,
-      urls: [],
-      applicantName,
-      originalScore: normalizedScore,
-      enhancedScore: normalizedScore,
-      addedSkills,
-      missingSkills,
-      table: tableRows,
-      scoreBreakdown: finalScoreBreakdown,
-      atsSubScores,
-      selectionProbability:
-        typeof selectionInsights?.probability === 'number'
-          ? selectionInsights.probability
-          : null,
-      selectionInsights,
+      logContext,
       resumeText: text,
-      originalResumeText,
-      jobDescriptionText: jobDescription,
+      originalResumeTextInput: originalResumeText,
+      jobDescription,
       jobSkills,
       resumeSkills,
-      certificateInsights: {
-        known: knownCertificates,
-        suggestions: certificateSuggestions,
-        manualEntryRequired: manualCertificatesRequired,
-        credlyStatus,
-      },
+      originalMatch,
+      linkedinProfileUrl,
+      linkedinData,
+      credlyProfileUrl,
+      credlyCertifications,
+      credlyStatus,
       manualCertificates,
-      templateContext: {
-        template1,
-        template2,
-        coverTemplate1,
-        coverTemplate2,
-      },
+      templateContextInput,
+      templateParamConfig,
+      applicantName,
+      sanitizedName,
+      anonymizedLinkedIn,
+      originalUploadKey,
+      selection: { template1, template2, coverTemplate1, coverTemplate2 },
+      geminiApiKey: secrets.GEMINI_API_KEY,
     });
+
+    if (!generationResult) {
+      return;
+    }
+
+    return res.json(generationResult);
 
 
   } catch (err) {

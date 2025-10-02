@@ -55,28 +55,32 @@ jest.unstable_mockModule('../logger.js', () => ({
 }));
 import { generateContentMock } from './mocks/generateContentMock.js';
 
-generateContentMock
-  .mockResolvedValueOnce({
-    response: {
-      text: () =>
-        JSON.stringify({
-          version1: 'v1',
-          version2: 'v2',
-          project: 'Example project'
-        })
-    }
-  })
-  .mockResolvedValueOnce({ response: { text: () => '' } })
-  .mockResolvedValueOnce({ response: { text: () => '' } })
-  .mockResolvedValue({
-    response: {
-      text: () =>
-        JSON.stringify({
-          cover_letter1: 'cl1',
-          cover_letter2: 'cl2'
-        })
-    }
-  });
+const primeDefaultGeminiResponses = () => {
+  generateContentMock
+    .mockResolvedValueOnce({
+      response: {
+        text: () =>
+          JSON.stringify({
+            version1: 'v1',
+            version2: 'v2',
+            project: 'Example project'
+          })
+      }
+    })
+    .mockResolvedValueOnce({ response: { text: () => '' } })
+    .mockResolvedValueOnce({ response: { text: () => '' } })
+    .mockResolvedValue({
+      response: {
+        text: () =>
+          JSON.stringify({
+            cover_letter1: 'cl1',
+            cover_letter2: 'cl2'
+          })
+      }
+    });
+};
+
+primeDefaultGeminiResponses();
 
 const setupDefaultDynamoMock = () => {
   mockDynamoSend.mockReset();
@@ -193,13 +197,15 @@ describe('/api/process-cv', () => {
       'CreateTableCommand',
       'DescribeTableCommand',
       'PutItemCommand',
+      'UpdateItemCommand',
       'UpdateItemCommand'
     ]);
 
     setupDefaultDynamoMock();
     mockDynamoSend.mockClear();
     mockS3Send.mockClear();
-    generateContentMock.mockClear();
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
 
     const res2 = await request(app)
       .post('/api/process-cv')
@@ -217,8 +223,8 @@ describe('/api/process-cv', () => {
     expect(res2.body.success).toBe(true);
     expect(typeof res2.body.requestId).toBe('string');
     expect(typeof res2.body.jobId).toBe('string');
-    expect(res2.body.urlExpiresInSeconds).toBe(0);
-    expect(res2.body.urls).toHaveLength(0);
+    expect(res2.body.urlExpiresInSeconds).toBe(3600);
+    expect(res2.body.urls).toHaveLength(5);
     expect(typeof res2.body.originalScore).toBe('number');
     expect(typeof res2.body.enhancedScore).toBe('number');
     expect(res2.body.applicantName).toBeTruthy();
@@ -228,7 +234,7 @@ describe('/api/process-cv', () => {
       .slice(0, 2)
       .join('_')
       .toLowerCase();
-    expect(generateContentMock).not.toHaveBeenCalled();
+    expect(generateContentMock).toHaveBeenCalledTimes(4);
 
     const s3Commands = mockS3Send.mock.calls.map(([command]) => ({
       type: command.__type,
@@ -248,7 +254,7 @@ describe('/api/process-cv', () => {
         typeof cmd.key === 'string' &&
         cmd.key.includes('/generated/')
     );
-    expect(generatedPdfKeys).toHaveLength(0);
+    expect(generatedPdfKeys).toHaveLength(4);
 
     const putCall = mockDynamoSend.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
@@ -300,6 +306,7 @@ describe('/api/process-cv', () => {
     expect(types).toEqual([
       'DescribeTableCommand',
       'PutItemCommand',
+      'UpdateItemCommand',
       'UpdateItemCommand'
     ]);
   });
