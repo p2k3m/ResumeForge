@@ -42,3 +42,10 @@ export class DeleteItemCommand {
     this.__type = 'DeleteItemCommand';
   }
 }
+
+export class GetItemCommand {
+  constructor(input) {
+    this.input = input;
+    this.__type = 'GetItemCommand';
+  }
+}
