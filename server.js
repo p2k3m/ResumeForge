@@ -923,6 +923,24 @@ function getRuntimeConfig() {
 
 const runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
 
+function resolveCurrentAllowedOrigins() {
+  const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
+  if (
+    Array.isArray(runtimeConfig?.CLOUDFRONT_ORIGINS) &&
+    runtimeConfig.CLOUDFRONT_ORIGINS.length
+  ) {
+    return runtimeConfig.CLOUDFRONT_ORIGINS;
+  }
+
+  const envOrigins =
+    readEnvValue('CLOUDFRONT_ORIGINS') || readEnvValue('ALLOWED_ORIGINS');
+  if (envOrigins) {
+    return parseAllowedOrigins(envOrigins);
+  }
+
+  return DEFAULT_ALLOWED_ORIGINS;
+}
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -969,8 +987,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const allowedOrigins =
-  runtimeConfigSnapshot?.CLOUDFRONT_ORIGINS ?? DEFAULT_ALLOWED_ORIGINS;
+const allowedOrigins = resolveCurrentAllowedOrigins();
 const corsOptions = {
   origin(origin, callback) {
     if (!origin) {
@@ -7115,6 +7132,7 @@ improvementRoutes.forEach(({ path: routePath, type }) => {
 async function generateEnhancedDocumentsResponse({
   res,
   s3,
+  dynamo,
   tableName,
   bucket,
   logKey,
@@ -7507,8 +7525,10 @@ async function generateEnhancedDocumentsResponse({
     version1: versionData.version1,
     version2: versionData.version2,
   };
-  const downloadsEnabled = allowedOrigins.length > 0;
+  const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
+  const downloadsEnabled = allowedOriginsForDownloads.length > 0;
   const urls = [];
+  const uploadedArtifacts = [];
 
   if (downloadsEnabled && originalUploadKey) {
     try {
@@ -7610,6 +7630,8 @@ async function generateEnhancedDocumentsResponse({
         })
       );
 
+      uploadedArtifacts.push({ type: name, key });
+
       const signedUrl = await getSignedUrl(
         s3,
         new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -7624,6 +7646,7 @@ async function generateEnhancedDocumentsResponse({
     logStructured('info', 'generation_downloads_skipped', {
       ...logContext,
       reason: 'no_allowed_origins',
+      allowedOriginsCount: allowedOriginsForDownloads.length,
     });
   }
 
@@ -7642,6 +7665,61 @@ async function generateEnhancedDocumentsResponse({
   }
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
+
+  if (dynamo) {
+    const findArtifactKey = (type) =>
+      uploadedArtifacts.find((artifact) => artifact.type === type)?.key || '';
+
+    const nowIso = new Date().toISOString();
+    const updateExpressionParts = [
+      '#status = :status',
+      'generatedAt = :generatedAt',
+      'analysisCompletedAt = if_not_exists(analysisCompletedAt, :generatedAt)',
+    ];
+    const expressionAttributeNames = { '#status': 'status' };
+    const expressionAttributeValues = {
+      ':status': { S: 'completed' },
+      ':generatedAt': { S: nowIso },
+      ':jobId': { S: jobId },
+    };
+
+    const assignKey = (field, placeholder, value) => {
+      if (!value) return;
+      updateExpressionParts.push(`${field} = ${placeholder}`);
+      expressionAttributeValues[placeholder] = { S: value };
+    };
+
+    assignKey('cv1Url', ':cv1', findArtifactKey('version1'));
+    assignKey('cv2Url', ':cv2', findArtifactKey('version2'));
+    assignKey('coverLetter1Url', ':cover1', findArtifactKey('cover_letter1'));
+    assignKey('coverLetter2Url', ':cover2', findArtifactKey('cover_letter2'));
+
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ConditionExpression: 'jobId = :jobId',
+        })
+      );
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'generation_record_updated',
+        metadata: { uploadedArtifacts: uploadedArtifacts.length },
+      });
+    } catch (err) {
+      logStructured('warn', 'generation_record_update_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
 
   const addedSkills = sanitizedFallbackUsed
     ? []
@@ -8079,6 +8157,7 @@ app.post(
       const responseBody = await generateEnhancedDocumentsResponse({
         res,
         s3,
+        dynamo,
         tableName,
         bucket,
         logKey,
@@ -8261,9 +8340,11 @@ app.post(
   const s3 = s3Client;
   let bucket;
   let secrets;
+  let geminiApiKey;
   try {
     secrets = getSecrets();
     bucket = secrets.S3_BUCKET;
+    geminiApiKey = secrets.GEMINI_API_KEY;
   } catch (err) {
     const missing = extractMissingConfig(err);
     logStructured('error', 'configuration_load_failed', {
@@ -9069,6 +9150,7 @@ app.post(
       coverTemplate1,
       coverTemplate2,
     };
+    const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
     try {
       await dynamo.send(
@@ -9111,7 +9193,43 @@ app.post(
       });
     }
 
-    const responseBody = {
+    const generationResponse = await generateEnhancedDocumentsResponse({
+      res,
+      s3,
+      dynamo,
+      tableName,
+      bucket,
+      logKey,
+      jobId,
+      requestId,
+      logContext,
+      resumeText: text,
+      originalResumeTextInput: originalResumeText,
+      jobDescription,
+      jobSkills,
+      resumeSkills,
+      originalMatch,
+      linkedinProfileUrl,
+      linkedinData,
+      credlyProfileUrl,
+      credlyCertifications,
+      credlyStatus,
+      manualCertificates,
+      templateContextInput,
+      templateParamConfig,
+      applicantName,
+      sanitizedName,
+      anonymizedLinkedIn,
+      originalUploadKey,
+      selection,
+      geminiApiKey,
+    });
+
+    if (generationResponse) {
+      return res.json(generationResponse);
+    }
+
+    const fallbackResponse = {
       success: true,
       requestId,
       jobId,
@@ -9148,7 +9266,7 @@ app.post(
       templateContext: templateContextInput,
     };
 
-    return res.json(responseBody);
+    return res.json(fallbackResponse);
 
 
   } catch (err) {
