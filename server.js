@@ -7587,8 +7587,7 @@ app.post(
         '',
         'INPUT_CONTEXT:',
         JSON.stringify(coverContext, null, 2),
-      ].join('
-');
+      ].join('\n');
 
       let coverData = {};
       try {
