@@ -656,6 +656,9 @@ function App() {
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
   const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
+  const [jobId, setJobId] = useState('')
+  const [templateContext, setTemplateContext] = useState(null)
+  const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const improvementLockRef = useRef(false)
 
   const hasMatch = Boolean(match)
@@ -1012,6 +1015,9 @@ function App() {
     setImprovementResults([])
     setChangeLog([])
     setInitialAnalysisSnapshot(null)
+    setJobId('')
+    setTemplateContext(null)
+    setIsGeneratingDocs(false)
   }
 
   const handleSubmit = async () => {
@@ -1108,6 +1114,11 @@ function App() {
 
       const outputFilesValue = Array.isArray(data.urls) ? data.urls : []
       setOutputFiles(outputFilesValue)
+      const jobIdValue = typeof data.jobId === 'string' ? data.jobId : ''
+      setJobId(jobIdValue)
+      const templateContextValue =
+        data && typeof data.templateContext === 'object' ? data.templateContext : null
+      setTemplateContext(templateContextValue)
       setManualJobDescriptionRequired(false)
       const probabilityValue =
         typeof data.selectionProbability === 'number'
@@ -1154,6 +1165,8 @@ function App() {
       }))
       setScoreBreakdown(normalizedBreakdown)
       const resumeTextValue = typeof data.resumeText === 'string' ? data.resumeText : ''
+      const originalResumeSnapshot =
+        typeof data.originalResumeText === 'string' ? data.originalResumeText : resumeTextValue
       setResumeText(resumeTextValue)
       const jobDescriptionValue =
         typeof data.jobDescriptionText === 'string' ? data.jobDescriptionText : ''
@@ -1176,6 +1189,7 @@ function App() {
 
       setInitialAnalysisSnapshot({
         resumeText: resumeTextValue,
+        originalResumeText: originalResumeSnapshot,
         jobDescriptionText: jobDescriptionValue,
         jobSkills: cloneData(jobSkillsValue),
         resumeSkills: cloneData(resumeSkillsValue),
@@ -1185,7 +1199,8 @@ function App() {
         selectionInsights: cloneData(selectionInsightsValue),
         match: cloneData(matchPayload),
         scoreBreakdown: cloneData(normalizedBreakdown),
-        outputFiles: cloneData(outputFilesValue)
+        outputFiles: cloneData(outputFilesValue),
+        templateContext: cloneData(templateContextValue)
       })
     } catch (err) {
       console.error('Unable to enhance CV', err)
@@ -1252,6 +1267,12 @@ function App() {
       : []
     setOutputFiles(outputFilesValue)
 
+    const templateContextValue =
+      snapshot.templateContext && typeof snapshot.templateContext === 'object'
+        ? cloneData(snapshot.templateContext)
+        : null
+    setTemplateContext(templateContextValue)
+
     setChangeLog([])
     setImprovementResults((prev) =>
       prev.map((item) => ({
@@ -1268,6 +1289,10 @@ function App() {
 
   const improvementAvailable =
     improvementsUnlocked && Boolean(resumeText && resumeText.trim()) && Boolean(jobDescriptionText && jobDescriptionText.trim())
+  const hasAcceptedImprovement = useMemo(
+    () => improvementResults.some((item) => item.accepted === true),
+    [improvementResults]
+  )
   const manualJobDescriptionActive =
     manualJobDescriptionRequired || manualJobDescription.trim().length > 0
 
@@ -1551,6 +1576,170 @@ function App() {
     },
     [API_BASE_URL, jobDescriptionText, jobSkills]
   )
+
+  const handleGenerateEnhancedDocs = useCallback(async () => {
+    if (!jobId) {
+      setError('Upload your resume and job description before generating downloads.')
+      return
+    }
+    if (!improvementsUnlocked) {
+      setError('Complete the initial scoring and improvement review before generating downloads.')
+      return
+    }
+    if (!hasAcceptedImprovement) {
+      setError('Accept at least one improvement before generating the enhanced documents.')
+      return
+    }
+    if (isGeneratingDocs) {
+      return
+    }
+
+    setIsGeneratingDocs(true)
+    setError('')
+    try {
+      const payload = {
+        jobId,
+        resumeText,
+        originalResumeText:
+          typeof initialAnalysisSnapshot?.originalResumeText === 'string'
+            ? initialAnalysisSnapshot.originalResumeText
+            : initialAnalysisSnapshot?.resumeText || '',
+        jobDescriptionText,
+        jobSkills,
+        resumeSkills,
+        linkedinProfileUrl: profileUrl,
+        credlyProfileUrl: credlyUrl,
+        manualCertificates: manualCertificatesData,
+        templateContext: templateContext || { template1: selectedTemplate },
+        baseline: {
+          table: cloneData(initialAnalysisSnapshot?.match?.table || []),
+          missingSkills: cloneData(initialAnalysisSnapshot?.match?.missingSkills || []),
+          originalScore:
+            initialAnalysisSnapshot?.match?.originalScore ??
+            initialAnalysisSnapshot?.match?.enhancedScore ??
+            null,
+          score: initialAnalysisSnapshot?.match?.originalScore ?? null
+        }
+      }
+
+      const response = await fetch(buildApiUrl(API_BASE_URL, '/api/generate-enhanced-docs'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}))
+        const message =
+          errPayload?.error?.message ||
+          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
+          (typeof errPayload?.error === 'string' ? errPayload.error : undefined) ||
+          CV_GENERATION_ERROR_MESSAGE
+        throw new Error(message)
+      }
+
+      const data = await response.json()
+      const urlsValue = Array.isArray(data.urls) ? data.urls : []
+      setOutputFiles(urlsValue)
+      if (typeof data.jobId === 'string' && data.jobId.trim()) {
+        setJobId(data.jobId.trim())
+      }
+      const templateContextValue =
+        data && typeof data.templateContext === 'object' ? data.templateContext : null
+      setTemplateContext(templateContextValue)
+
+      const probabilityValue =
+        typeof data.selectionProbability === 'number'
+          ? data.selectionProbability
+          : typeof data.selectionInsights?.probability === 'number'
+            ? data.selectionInsights.probability
+            : null
+      const probabilityMeaning =
+        data.selectionInsights?.level ||
+        (typeof probabilityValue === 'number'
+          ? probabilityValue >= 75
+            ? 'High'
+            : probabilityValue >= 55
+              ? 'Medium'
+              : 'Low'
+          : null)
+      const probabilityRationale =
+        data.selectionInsights?.message ||
+        (typeof probabilityValue === 'number' && probabilityMeaning
+          ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
+          : null)
+
+      const updatedMatch = {
+        table: data.table || [],
+        addedSkills: data.addedSkills || [],
+        missingSkills: data.missingSkills || [],
+        originalScore: data.originalScore || 0,
+        enhancedScore: data.enhancedScore || 0,
+        originalTitle: data.originalTitle || '',
+        modifiedTitle: data.modifiedTitle || '',
+        selectionProbability: probabilityValue,
+        selectionProbabilityMeaning: probabilityMeaning,
+        selectionProbabilityRationale: probabilityRationale
+      }
+      setMatch(updatedMatch)
+
+      const breakdownCandidates = Array.isArray(data.atsSubScores)
+        ? data.atsSubScores
+        : Array.isArray(data.scoreBreakdown)
+          ? data.scoreBreakdown
+          : Object.values(data.scoreBreakdown || {})
+      const normalizedBreakdown = orderAtsMetrics(breakdownCandidates).map((metric) => ({
+        ...metric,
+        tip: metric?.tip ?? metric?.tips?.[0] ?? ''
+      }))
+      setScoreBreakdown(normalizedBreakdown)
+
+      const resumeTextValue = typeof data.resumeText === 'string' ? data.resumeText : resumeText
+      setResumeText(resumeTextValue)
+      const jobDescriptionValue =
+        typeof data.jobDescriptionText === 'string' ? data.jobDescriptionText : jobDescriptionText
+      setJobDescriptionText(jobDescriptionValue)
+      const jobSkillsValue = Array.isArray(data.jobSkills) ? data.jobSkills : jobSkills
+      setJobSkills(jobSkillsValue)
+      const resumeSkillsValue = Array.isArray(data.resumeSkills) ? data.resumeSkills : resumeSkills
+      setResumeSkills(resumeSkillsValue)
+      const knownCertificatesValue = (data.certificateInsights?.known || []).map((cert) => ({
+        ...cert,
+        source: cert.source || 'resume'
+      }))
+      setKnownCertificates(knownCertificatesValue)
+      const manualCertificatesValue = data.manualCertificates || manualCertificatesData
+      setManualCertificatesData(manualCertificatesValue)
+      setCertificateInsights(data.certificateInsights || certificateInsights)
+      setSelectionInsights(data.selectionInsights || selectionInsights)
+    } catch (err) {
+      console.error('Enhanced document generation failed', err)
+      const message =
+        (typeof err?.message === 'string' && err.message.trim()) ||
+        CV_GENERATION_ERROR_MESSAGE
+      setError(message)
+    } finally {
+      setIsGeneratingDocs(false)
+    }
+  }, [
+    API_BASE_URL,
+    credlyUrl,
+    hasAcceptedImprovement,
+    improvementsUnlocked,
+    initialAnalysisSnapshot,
+    isGeneratingDocs,
+    jobDescriptionText,
+    jobId,
+    jobSkills,
+    manualCertificatesData,
+    profileUrl,
+    resumeSkills,
+    resumeText,
+    selectionInsights,
+    certificateInsights,
+    templateContext,
+    selectedTemplate
+  ])
 
   const handleAcceptImprovement = async (id) => {
     const suggestion = improvementResults.find((item) => item.id === id)
@@ -2102,6 +2291,37 @@ function App() {
               This preview updates whenever you accept an improvement. You can copy, edit, or export it
               as needed.
             </p>
+          </section>
+        )}
+
+        {outputFiles.length === 0 && improvementsUnlocked && (
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
+              <p className="text-sm text-purple-700/80">
+                Apply the improvements you like, then create polished CV and cover letter downloads tailored to the JD.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <button
+                type="button"
+                onClick={handleGenerateEnhancedDocs}
+                disabled={
+                  isProcessing ||
+                  improvementBusy ||
+                  isGeneratingDocs ||
+                  !hasAcceptedImprovement
+                }
+                className="inline-flex items-center justify-center rounded-full bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-purple-300"
+              >
+                {isGeneratingDocs ? 'Generating enhanced documents…' : 'Generate enhanced CV & cover letters'}
+              </button>
+              {!hasAcceptedImprovement && (
+                <p className="text-sm text-purple-600">
+                  Accept at least one improvement to activate the enhanced downloads.
+                </p>
+              )}
+            </div>
           </section>
         )}
 
