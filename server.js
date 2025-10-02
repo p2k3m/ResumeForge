@@ -7115,7 +7115,6 @@ improvementRoutes.forEach(({ path: routePath, type }) => {
 async function generateEnhancedDocumentsResponse({
   res,
   s3,
-  dynamo,
   tableName,
   bucket,
   logKey,
@@ -7660,40 +7659,6 @@ async function generateEnhancedDocumentsResponse({
   });
   const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
 
-  await dynamo.send(
-    new UpdateItemCommand({
-      TableName: tableName,
-      Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
-      UpdateExpression:
-        'SET #status = :status, cv1Url = :cv1, cv2Url = :cv2, coverLetter1Url = :cl1, coverLetter2Url = :cl2, analysisCompletedAt = :completedAt, missingSkills = :missingSkills, addedSkills = :addedSkills, enhancedScore = :enhancedScore, originalScore = if_not_exists(originalScore, :originalScore)',
-      ExpressionAttributeValues: {
-        ':status': { S: 'completed' },
-        ':cv1': { S: urls.find((u) => u.type === 'version1')?.url || '' },
-        ':cv2': { S: urls.find((u) => u.type === 'version2')?.url || '' },
-        ':cl1': { S: urls.find((u) => u.type === 'cover_letter1')?.url || '' },
-        ':cl2': { S: urls.find((u) => u.type === 'cover_letter2')?.url || '' },
-        ':completedAt': { S: new Date().toISOString() },
-        ':missingSkills': {
-          L: (bestMatch.newSkills || []).map((skill) => ({ S: String(skill) })),
-        },
-        ':addedSkills': {
-          L: addedSkills.map((skill) => ({ S: String(skill) })),
-        },
-        ':enhancedScore': { N: String(bestMatch.score) },
-        ':originalScore': {
-          N: Number.isFinite(originalMatchResult.score)
-            ? String(originalMatchResult.score)
-            : '0',
-        },
-        ':jobId': { S: jobId },
-      },
-      ExpressionAttributeNames: { '#status': 'status' },
-      ConditionExpression: 'jobId = :jobId',
-    })
-  );
-
-  await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_metadata_updated' });
-
   const selectionInsights = buildSelectionInsights({
     jobTitle: versionsContext.jobTitle,
     originalTitle: applicantTitle,
@@ -8106,7 +8071,6 @@ app.post(
       const responseBody = await generateEnhancedDocumentsResponse({
         res,
         s3,
-        dynamo,
         tableName,
         bucket,
         logKey,
@@ -9086,48 +9050,11 @@ app.post(
       ? Number(originalMatch.score)
       : 0;
 
-    try {
-      await dynamo.send(
-        new UpdateItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
-          UpdateExpression:
-            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
-          ExpressionAttributeValues: {
-            ':status': { S: 'scored' },
-            ':completedAt': { S: new Date().toISOString() },
-            ':missing': {
-              L: normalizedMissingSkills.map((skill) => ({ S: skill })),
-            },
-            ':added': {
-              L: normalizedAddedSkills.map((skill) => ({ S: skill })),
-            },
-            ':score': { N: String(normalizedScore) },
-            ':jobId': { S: jobId },
-          },
-          ExpressionAttributeNames: { '#status': 'status' },
-          ConditionExpression: 'jobId = :jobId',
-        })
-      );
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'scoring_metadata_updated',
-      });
-    } catch (updateErr) {
-      logStructured('error', 'process_cv_status_update_failed', {
-        ...logContext,
-        error: serializeError(updateErr),
-      });
-      return sendError(
-        res,
-        500,
-        'SCORING_METADATA_UPDATE_FAILED',
-        'Failed to record ATS scoring results. Please try again later.'
-      );
-    }
+    const scoringUpdate = {
+      normalizedMissingSkills,
+      normalizedAddedSkills,
+      normalizedScore,
+    };
 
     const templateContextInput = {
       template1,
@@ -9139,7 +9066,6 @@ app.post(
     const generationResult = await generateEnhancedDocumentsResponse({
       res,
       s3,
-      dynamo,
       tableName,
       bucket,
       logKey,
@@ -9169,7 +9095,123 @@ app.post(
     });
 
     if (!generationResult) {
+      try {
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: tableName,
+            Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+            UpdateExpression:
+              'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
+            ExpressionAttributeValues: {
+              ':status': { S: 'scored' },
+              ':completedAt': { S: new Date().toISOString() },
+              ':missing': {
+                L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
+                  S: skill,
+                })),
+              },
+              ':added': {
+                L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
+                  S: skill,
+                })),
+              },
+              ':score': { N: String(scoringUpdate.normalizedScore) },
+              ':jobId': { S: jobId },
+            },
+            ExpressionAttributeNames: { '#status': 'status' },
+            ConditionExpression: 'jobId = :jobId',
+          })
+        );
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'scoring_metadata_updated',
+        });
+      } catch (updateErr) {
+        logStructured('error', 'process_cv_status_update_failed', {
+          ...logContext,
+          error: serializeError(updateErr),
+        });
+      }
       return;
+    }
+
+    const urlIndex = new Map(
+      (Array.isArray(generationResult.urls) ? generationResult.urls : [])
+        .filter((item) => item && typeof item.type === 'string')
+        .map((item) => [item.type, typeof item.url === 'string' ? item.url : ''])
+    );
+
+    const completedMissingSkills = Array.isArray(generationResult.missingSkills)
+      ? generationResult.missingSkills.map((skill) => String(skill))
+      : scoringUpdate.normalizedMissingSkills;
+    const completedAddedSkills = Array.isArray(generationResult.addedSkills)
+      ? generationResult.addedSkills.map((skill) => String(skill))
+      : scoringUpdate.normalizedAddedSkills;
+
+    const enhancedScoreForUpdate = Number.isFinite(generationResult.enhancedScore)
+      ? Number(generationResult.enhancedScore)
+      : scoringUpdate.normalizedScore;
+    const originalScoreForUpdate = Number.isFinite(generationResult.originalScore)
+      ? Number(generationResult.originalScore)
+      : enhancedScoreForUpdate;
+
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          UpdateExpression:
+            'SET #status = :status, cv1Url = :cv1, cv2Url = :cv2, coverLetter1Url = :cl1, coverLetter2Url = :cl2, analysisCompletedAt = :completedAt, missingSkills = :missingSkills, addedSkills = :addedSkills, enhancedScore = :enhancedScore, originalScore = if_not_exists(originalScore, :originalScore)',
+          ExpressionAttributeValues: {
+            ':status': { S: 'completed' },
+            ':cv1': { S: urlIndex.get('version1') || '' },
+            ':cv2': { S: urlIndex.get('version2') || '' },
+            ':cl1': { S: urlIndex.get('cover_letter1') || '' },
+            ':cl2': { S: urlIndex.get('cover_letter2') || '' },
+            ':completedAt': { S: new Date().toISOString() },
+            ':missingSkills': {
+              L: completedMissingSkills.map((skill) => ({ S: skill })),
+            },
+            ':addedSkills': {
+              L: completedAddedSkills.map((skill) => ({ S: skill })),
+            },
+            ':enhancedScore': { N: String(enhancedScoreForUpdate) },
+            ':originalScore': { N: String(originalScoreForUpdate) },
+            ':jobId': { S: jobId },
+          },
+          ExpressionAttributeNames: { '#status': 'status' },
+          ConditionExpression: 'jobId = :jobId',
+        })
+      );
+
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'scoring_metadata_updated',
+      });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'generation_metadata_updated',
+      });
+    } catch (updateErr) {
+      logStructured('error', 'process_cv_status_update_failed', {
+        ...logContext,
+        error: serializeError(updateErr),
+      });
+      return sendError(
+        res,
+        500,
+        'SCORING_METADATA_UPDATE_FAILED',
+        'Failed to record ATS scoring results. Please try again later.'
+      );
     }
 
     return res.json(generationResult);
