@@ -45,6 +45,7 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
       'Jane Doe',
       sections,
       'Exciting job description here',
+      ['JavaScript', 'AWS'],
       generativeModelMock,
       { skipRequiredSections: true }
     );
@@ -54,12 +55,14 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
     expect(prompt).toContain('elite resume architect');
     expect(prompt).toContain('Exciting job description here');
     expect(prompt).toContain('Never degrade CV structure');
+    expect(prompt).toContain('Align work experience bullets');
     expect(prompt).toContain('OUTPUT_SCHEMA');
     expect(prompt).toContain('INPUT_CONTEXT');
     expect(prompt).toMatch(/"resumeSections"/);
     expect(prompt).toMatch(/"summary"/);
     expect(prompt).toMatch(/"experience"/);
     expect(prompt).toMatch(/"projects"/);
+    expect(prompt).toMatch(/"jobSkills"/);
   });
 
   test('falls back gracefully when no generative model is provided', async () => {
@@ -70,6 +73,7 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
       'Jane Doe',
       sections,
       'Job description',
+      [],
       null,
       { skipRequiredSections: true }
     );

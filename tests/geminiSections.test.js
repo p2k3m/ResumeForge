@@ -40,6 +40,7 @@ describe('rewriteSectionsWithGemini', () => {
       'John Doe',
       sections,
       'JD text',
+      ['Leadership', 'Skill C'],
       generativeModel,
       { skipRequiredSections: true }
     );
@@ -71,6 +72,7 @@ describe('rewriteSectionsWithGemini', () => {
       'Jane Doe',
       sections,
       'Job description text',
+      ['Communication'],
       generativeModel,
       options
     );

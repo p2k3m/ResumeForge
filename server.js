@@ -2628,6 +2628,7 @@ async function rewriteSectionsWithGemini(
   name,
   sections,
   jobDescription,
+  jobSkills = [],
   generativeModel,
   sanitizeOptions = {}
 ) {
@@ -2658,12 +2659,15 @@ async function rewriteSectionsWithGemini(
       candidateName: name,
       resumeSections: sections,
       jobDescription,
+      jobSkills,
     };
     const prompt = [
       'You are an elite resume architect optimizing for Gemini/OpenAI outputs.',
       'Follow these rules precisely:',
       '- Never degrade CV structure; respect existing headings, chronology, and polished tone.',
-      '- Use the candidate context and job description to craft impactful, ATS-friendly bullets.',
+      '- Align work experience bullets, summary lines, and highlights directly with the job description responsibilities using evidence from the candidate history.',
+      '- Blend JD-critical skills into the skills section only when the candidate context proves them—avoid isolated keyword stuffing.',
+      '- Emphasise measurable impact and outcomes that demonstrate the candidate already performs what the JD requires; do not fabricate new roles or tools.',
       '- Respond using ONLY valid JSON conforming to the provided schema.',
       '',
       'OUTPUT_SCHEMA:',
@@ -6153,10 +6157,18 @@ async function verifyResume(
 ) {
   if (!text || !generativeModel?.generateContent) return text;
   try {
-    const prompt =
-      `You are an expert resume editor. Improve the style and structure of the ` +
-      `resume below so it aligns with the job description. Return only the ` +
-      `full revised resume text.\n\nResume:\n${text}\n\nJob Description:\n${jobDescription}`;
+    const prompt = [
+      'You are an expert resume editor.',
+      'Rework the resume so every experience bullet, skills entry, and highlight or summary line clearly reflects the job description without inventing new history.',
+      'Keep the structure polished while emphasising measurable achievements that prove the candidate already covers the JD responsibilities.',
+      'Blend relevant keywords naturally; do not dump disconnected keyword lists.',
+      '',
+      'Resume:',
+      text,
+      '',
+      'Job Description:',
+      jobDescription,
+    ].join('\n');
     const result = await generativeModel.generateContent(prompt);
     const improved = result?.response?.text?.();
     if (improved) {
@@ -7276,6 +7288,7 @@ app.post(
           applicantName,
           sectionTexts,
           jobDescription,
+          jobSkills,
           generativeModel,
           {
             resumeExperience,
