@@ -44,7 +44,9 @@ jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
   CreateTableCommand: jest.fn((input) => ({ input, __type: 'CreateTableCommand' })),
   DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
   PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' })),
-  UpdateItemCommand: jest.fn((input) => ({ input, __type: 'UpdateItemCommand' }))
+  UpdateItemCommand: jest.fn((input) => ({ input, __type: 'UpdateItemCommand' })),
+  ScanCommand: jest.fn((input) => ({ input, __type: 'ScanCommand' })),
+  DeleteItemCommand: jest.fn((input) => ({ input, __type: 'DeleteItemCommand' }))
 }));
 
 jest.unstable_mockModule('../logger.js', () => ({
@@ -659,7 +661,7 @@ describe('/api/process-cv', () => {
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const prompt = generateContentMock.mock.calls[0][0];
-    expect(prompt).toMatch(/fabricate or emphasize one project/i);
+    expect(prompt).toMatch(/fabricating emphasis only when contextually implied/i);
   });
 
   test('inserts project into resume text', async () => {
