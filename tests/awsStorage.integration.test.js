@@ -19,21 +19,42 @@ describe('AWS integrations for /api/process-cv', () => {
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
 
-    const putCalls = mocks.mockS3Send.mock.calls
-      .map(([command]) => command.__type)
-      .filter(Boolean);
-    expect(putCalls).toContain('PutObjectCommand');
-
-    const uploadedKeys = mocks.mockS3Send.mock.calls
-      .map(([command]) => command.input?.Key)
-      .filter(Boolean);
-    const rawUploadKey = uploadedKeys.find(
-      (key) => key.endsWith('.pdf') && !key.includes('/generated/')
+    const commandSummaries = mocks.mockS3Send.mock.calls.map(([command]) => ({
+      type: command.__type,
+      key: command.input?.Key,
+      copySource: command.input?.CopySource,
+    }));
+    const initialUpload = commandSummaries.find(
+      (command) =>
+        command.type === 'PutObjectCommand' &&
+        typeof command.key === 'string' &&
+        command.key.includes('/incoming/')
     );
-    expect(rawUploadKey).toBeTruthy();
+    expect(initialUpload).toBeTruthy();
+
+    const relocatedUpload = commandSummaries.find(
+      (command) =>
+        command.type === 'CopyObjectCommand' &&
+        typeof command.key === 'string' &&
+        command.key.includes('/cv/')
+    );
+    expect(relocatedUpload).toBeTruthy();
+
+    const tempDelete = commandSummaries.find(
+      (command) =>
+        command.type === 'DeleteObjectCommand' &&
+        typeof command.key === 'string' &&
+        initialUpload &&
+        command.key === initialUpload.key
+    );
+    expect(tempDelete).toBeTruthy();
+
+    const rawUploadKey = relocatedUpload.key;
     expect(rawUploadKey).toContain('/cv/');
 
-    const metadataCall = uploadedKeys.find((key) => key.endsWith('log.json'));
+    const metadataCall = commandSummaries.find((command) =>
+      typeof command.key === 'string' && command.key.endsWith('log.json')
+    );
     expect(metadataCall).toBeTruthy();
 
     const dynamoPut = mocks.mockDynamoSend.mock.calls.find(
