@@ -799,6 +799,45 @@ describe('/api/process-cv', () => {
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
 
+  test('uses sanitized resume fallback when AI returns plain text for versions', async () => {
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: { text: () => 'Here is your revised resume text without JSON formatting.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({ cover_letter1: 'Cover letter A', cover_letter2: 'Cover letter B' }),
+        },
+      });
+
+    const pdfCalls = [];
+    const pdfMock = jest.fn((text, template, options) => {
+      pdfCalls.push({ text, template, options });
+      return Promise.resolve(Buffer.from('pdf'));
+    });
+    setGeneratePdf(pdfMock);
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('jobDescriptionUrl', 'http://example.com')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(200);
+    expect(generateContentMock).toHaveBeenCalledTimes(2);
+
+    const cvCalls = pdfCalls.filter(({ options }) => !options || !options.skipRequiredSections);
+    expect(cvCalls).toHaveLength(2);
+    expect(cvCalls[0].text).toBe(cvCalls[1].text);
+    expect(cvCalls[0].text.trim().length).toBeGreaterThan(0);
+    expect(res.body.modifiedTitle).toBe('');
+    expect(res.body.addedSkills).toEqual([]);
+
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
   test('final CV includes updated title, project, and skills', async () => {
     process.env.NODE_ENV = 'development';
     generateContentMock.mockReset();
