@@ -477,3 +477,32 @@ jobs:
           fi
 
           echo "Health check response: $response"
+
+      - name: Publish CloudFront URL
+        if: success()
+        shell: bash
+        env:
+          STACK_NAME: ${{ env.STACK_NAME }}
+        run: |
+          set -euo pipefail
+
+          npm run publish:cloudfront-url -- "$STACK_NAME"
+
+          summary_path="${GITHUB_STEP_SUMMARY:-}"
+          if [ -n "$summary_path" ]; then
+            {
+              printf '\n## Published CloudFront Distribution\n\n'
+              printf 'The active distribution details have been written to `config/published-cloudfront.json`.\n\n'
+              printf '```json\n'
+              cat config/published-cloudfront.json
+              printf '```\n'
+            } >>"$summary_path"
+          fi
+
+      - name: Upload published CloudFront metadata
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-cloudfront
+          path: config/published-cloudfront.json
+          if-no-files-found: error
