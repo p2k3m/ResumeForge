@@ -66,14 +66,25 @@ describe('AWS integrations for /api/process-cv', () => {
     );
     expect(dynamoPut[0].input.Item.status.S).toBe('uploaded');
 
-    const dynamoUpdate = mocks.mockDynamoSend.mock.calls.find(
+    const dynamoUpdates = mocks.mockDynamoSend.mock.calls.filter(
       ([command]) => command.__type === 'UpdateItemCommand'
     );
-    expect(dynamoUpdate).toBeTruthy();
-    expect(dynamoUpdate[0].input.ExpressionAttributeValues[':status'].S).toBe(
+    expect(dynamoUpdates.length).toBeGreaterThan(0);
+
+    const finalUpdate = dynamoUpdates[dynamoUpdates.length - 1];
+    expect(finalUpdate[0].input.ExpressionAttributeValues[':status'].S).toBe(
       'completed'
     );
-    expect(dynamoUpdate[0].input.UpdateExpression).toContain('analysisCompletedAt');
+    expect(finalUpdate[0].input.UpdateExpression).toContain(
+      'analysisCompletedAt'
+    );
+
+    const intermediateStatuses = dynamoUpdates
+      .slice(0, -1)
+      .map((update) => update[0].input.ExpressionAttributeValues[':status'].S);
+    if (intermediateStatuses.length) {
+      expect(intermediateStatuses).toContain('scored');
+    }
 
     expect(mocks.logEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'uploaded_metadata' })
@@ -134,6 +145,7 @@ describe('AWS integrations for /api/process-cv', () => {
       'CreateTableCommand',
       'DescribeTableCommand',
       'PutItemCommand',
+      'UpdateItemCommand',
       'UpdateItemCommand',
     ]);
   });
