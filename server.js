@@ -7471,7 +7471,10 @@ app.post(
 
       const applyVersionFallback = async ({ reason }) => {
         await ensureProjectSummary();
-        const fallbackResume = sanitizeGeneratedText(combinedProfile, buildSanitizeOptions());
+        const sanitizeOptions = buildSanitizeOptions();
+        const sanitized = sanitizeGeneratedText(combinedProfile, sanitizeOptions);
+        const useSanitized = Boolean(sanitized && sanitized.trim());
+        const fallbackResume = useSanitized ? sanitized : combinedProfile;
         if (fallbackResume && fallbackResume.trim()) {
           if (!versionData.version1 || !versionData.version1.trim()) {
             versionData.version1 = fallbackResume;
@@ -7479,6 +7482,9 @@ app.post(
           if (!versionData.version2 || !versionData.version2.trim()) {
             versionData.version2 = fallbackResume;
           }
+          const fallbackMessage = useSanitized
+            ? 'AI response missing structured resume versions, using sanitized resume copy'
+            : 'AI response missing structured resume versions, using original resume text';
           await logEvent({
             s3,
             bucket,
@@ -7488,12 +7494,15 @@ app.post(
             level: reason === 'parse_failed' ? 'error' : 'warn',
             message:
               reason === 'parse_failed'
-                ? 'AI response missing structured resume versions, using sanitized resume copy'
-                : 'Partial AI response, using sanitized resume copy',
+                ? fallbackMessage
+                : useSanitized
+                  ? 'Partial AI response, using sanitized resume copy'
+                  : 'Partial AI response, using original resume text',
           });
           logStructured('warn', 'generation_versions_fallback_applied', {
             ...logContext,
             reason,
+            fallback: useSanitized ? 'sanitized' : 'original',
           });
         }
       };
