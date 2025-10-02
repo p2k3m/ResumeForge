@@ -1177,7 +1177,7 @@ function App() {
       const resumeTextValue = typeof data.resumeText === 'string' ? data.resumeText : ''
       const originalResumeSnapshot =
         typeof data.originalResumeText === 'string' ? data.originalResumeText : resumeTextValue
-      setResumeText(resumeTextValue)
+      setResumeText(originalResumeSnapshot)
       const jobDescriptionValue =
         typeof data.jobDescriptionText === 'string' ? data.jobDescriptionText : ''
       setJobDescriptionText(jobDescriptionValue)
@@ -1198,8 +1198,9 @@ function App() {
       setSelectionInsights(selectionInsightsValue)
 
       setInitialAnalysisSnapshot({
-        resumeText: resumeTextValue,
+        resumeText: originalResumeSnapshot,
         originalResumeText: originalResumeSnapshot,
+        enhancedResumeText: resumeTextValue,
         jobDescriptionText: jobDescriptionValue,
         jobSkills: cloneData(jobSkillsValue),
         resumeSkills: cloneData(resumeSkillsValue),
@@ -1228,17 +1229,25 @@ function App() {
     [improvementResults]
   )
 
+  const baselineResumeText =
+    typeof initialAnalysisSnapshot?.originalResumeText === 'string'
+      ? initialAnalysisSnapshot.originalResumeText
+      : initialAnalysisSnapshot?.resumeText ?? ''
+
   const resetAvailable =
     Boolean(initialAnalysisSnapshot) &&
-    ((initialAnalysisSnapshot?.resumeText ?? '') !== resumeText ||
-      changeLog.length > 0 ||
-      hasAcceptedImprovements)
+    (baselineResumeText !== resumeText || changeLog.length > 0 || hasAcceptedImprovements)
 
   const handleResetToOriginal = useCallback(() => {
     if (!initialAnalysisSnapshot) return
 
     const snapshot = initialAnalysisSnapshot
-    const resumeValue = typeof snapshot.resumeText === 'string' ? snapshot.resumeText : ''
+    const resumeValue =
+      typeof snapshot.originalResumeText === 'string'
+        ? snapshot.originalResumeText
+        : typeof snapshot.resumeText === 'string'
+          ? snapshot.resumeText
+          : ''
     setResumeText(resumeValue)
     const jobDescriptionValue =
       typeof snapshot.jobDescriptionText === 'string' ? snapshot.jobDescriptionText : ''
@@ -1999,7 +2008,7 @@ function App() {
                 : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
             }`}
           >
-            {isProcessing ? 'Processing…' : 'Enhance CV Now'}
+            {isProcessing ? 'Scoring…' : 'Score CV for ATS match'}
           </button>
 
           {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
@@ -2286,7 +2295,12 @@ function App() {
         {resumeText && (
           <section className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <h2 className="text-xl font-semibold text-purple-900">Latest Resume Preview</h2>
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold text-purple-900">Original CV Preview</h2>
+                <p className="text-xs font-medium text-purple-600">
+                  This is the exact text parsed from your upload. Review it, then run ATS improvements only if needed.
+                </p>
+              </div>
               {initialAnalysisSnapshot && (
                 <button
                   type="button"
@@ -2309,8 +2323,7 @@ function App() {
               className="w-full h-64 p-4 rounded-2xl border border-purple-200 bg-white/80 text-sm text-purple-900"
             />
             <p className="text-xs text-purple-600">
-              This preview updates whenever you accept an improvement. You can copy, edit, or export it
-              as needed.
+              Accepting improvements updates this preview so you can compare every change against the original upload.
             </p>
           </section>
         )}
