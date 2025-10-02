@@ -1,6 +1,4 @@
-import { useState } from 'react'
-
-let tooltipInstanceCounter = 0
+import { useMemo, useState } from 'react'
 
 const variantThemes = {
   dark: {
@@ -17,6 +15,23 @@ const variantThemes = {
   },
 }
 
+function slugify(value) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function hashString(value) {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value.charCodeAt(index)
+    hash = (hash << 5) - hash + char
+    hash |= 0
+  }
+  return Math.abs(hash).toString(36)
+}
+
 function InfoTooltip({
   label = 'Show explanation',
   content,
@@ -26,17 +41,25 @@ function InfoTooltip({
   maxWidthClass = 'w-64',
 }) {
   const [open, setOpen] = useState(false)
-  const [tooltipId] = useState(() => {
-    tooltipInstanceCounter += 1
-    return `rf-tooltip-${tooltipInstanceCounter}`
-  })
+  const tooltipId = useMemo(() => {
+    const baseLabel = typeof label === 'string' ? label.trim() : ''
+    const labelSlug = baseLabel ? slugify(baseLabel) : 'tooltip'
+    const contentKey =
+      typeof content === 'string' && content.trim().length > 0
+        ? hashString(content.trim())
+        : ''
+    return `rf-tooltip-${labelSlug}${contentKey ? `-${contentKey}` : ''}`
+  }, [label, content])
   const theme = variantThemes[variant] || variantThemes.dark
 
   const show = () => setOpen(true)
   const hide = () => setOpen(false)
 
   return (
-    <div className={`relative inline-flex ${className}`} onMouseLeave={hide}>
+    <div
+      className={`relative inline-flex${className ? ` ${className}` : ''}`}
+      onMouseLeave={hide}
+    >
       <button
         type="button"
         aria-label={label}
@@ -52,7 +75,7 @@ function InfoTooltip({
         id={tooltipId}
         role="tooltip"
         aria-hidden={!open}
-        className={`pointer-events-none absolute z-40 mt-2 ${align === 'left' ? 'left-0' : 'right-0'} top-full origin-top ${maxWidthClass} rounded-xl px-4 py-3 text-left text-xs font-medium leading-relaxed opacity-0 backdrop-blur transition-all duration-150 ${theme.bubble} ${open ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0'}`}
+        className={`pointer-events-none absolute z-40 mt-2 ${align === 'left' ? 'left-0' : 'right-0'} top-full origin-top ${maxWidthClass} rounded-xl px-4 py-3 text-left text-xs font-medium leading-relaxed backdrop-blur transition-all duration-150 ${theme.bubble} ${open ? 'translate-y-0 opacity-100' : '-translate-y-1 opacity-0'}`}
       >
         {content}
       </div>
