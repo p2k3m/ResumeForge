@@ -8391,12 +8391,6 @@ app.post(
     cvTemplates: req.body.templates || req.query.templates,
     clTemplates: req.body.coverTemplates || req.query.coverTemplates
   });
-  const templateParamConfig = parseTemplateParamsConfig(
-    req.body.templateParams ||
-      req.query.templateParams ||
-      req.body.templateParam ||
-      req.query.templateParam
-  );
   let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
   logStructured('info', 'template_selection', {
     ...logContext,
@@ -9031,11 +9025,6 @@ app.post(
       : [];
     const finalScoreBreakdown = scoreBreakdown;
 
-    const templateContextInput =
-      typeof req.body.templateContext === 'object' && req.body.templateContext
-        ? req.body.templateContext
-        : {};
-
     const selectionInsights = buildSelectionInsights({
       jobTitle,
       originalTitle,
@@ -9076,43 +9065,103 @@ app.post(
       });
     }
 
-    const responseBody = await generateEnhancedDocumentsResponse({
-      res,
-      s3,
-      dynamo,
-      tableName,
-      bucket,
-      logKey,
-      jobId,
-      requestId,
-      logContext,
-      resumeText: text,
-      originalResumeTextInput: originalResumeText,
-      jobDescription,
-      jobSkills,
-      resumeSkills,
-      originalMatch,
-      linkedinProfileUrl,
-      linkedinData,
-      credlyProfileUrl,
-      credlyCertifications,
-      credlyStatus,
-      manualCertificates,
-      templateContextInput,
-      templateParamConfig,
-      applicantName,
-      sanitizedName,
-      anonymizedLinkedIn,
-      originalUploadKey,
-      selection,
-      geminiApiKey: secrets.GEMINI_API_KEY,
-    });
+    const atsSubScores = scoreBreakdownToArray(finalScoreBreakdown);
 
-    if (!responseBody) {
-      return;
+    const normalizedMissingSkills = Array.isArray(missingSkills)
+      ? missingSkills.map((skill) => String(skill))
+      : [];
+    const normalizedAddedSkills = Array.isArray(addedSkills)
+      ? addedSkills.map((skill) => String(skill))
+      : [];
+    const normalizedScore = Number.isFinite(originalMatch?.score)
+      ? Number(originalMatch.score)
+      : 0;
+
+    try {
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          UpdateExpression:
+            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
+          ExpressionAttributeValues: {
+            ':status': { S: 'scored' },
+            ':completedAt': { S: new Date().toISOString() },
+            ':missing': {
+              L: normalizedMissingSkills.map((skill) => ({ S: skill })),
+            },
+            ':added': {
+              L: normalizedAddedSkills.map((skill) => ({ S: skill })),
+            },
+            ':score': { N: String(normalizedScore) },
+            ':jobId': { S: jobId },
+          },
+          ExpressionAttributeNames: { '#status': 'status' },
+          ConditionExpression: 'jobId = :jobId',
+        })
+      );
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'scoring_metadata_updated',
+      });
+    } catch (updateErr) {
+      logStructured('error', 'process_cv_status_update_failed', {
+        ...logContext,
+        error: serializeError(updateErr),
+      });
+      return sendError(
+        res,
+        500,
+        'SCORING_METADATA_UPDATE_FAILED',
+        'Failed to record ATS scoring results. Please try again later.'
+      );
     }
 
-    return res.json(responseBody);
+    const tableRows = Array.isArray(originalMatch?.table)
+      ? originalMatch.table
+      : [];
+
+    return res.json({
+      success: true,
+      jobId,
+      requestId,
+      urlExpiresInSeconds: 0,
+      urls: [],
+      applicantName,
+      originalScore: normalizedScore,
+      enhancedScore: normalizedScore,
+      addedSkills,
+      missingSkills,
+      table: tableRows,
+      scoreBreakdown: finalScoreBreakdown,
+      atsSubScores,
+      selectionProbability:
+        typeof selectionInsights?.probability === 'number'
+          ? selectionInsights.probability
+          : null,
+      selectionInsights,
+      resumeText: text,
+      originalResumeText,
+      jobDescriptionText: jobDescription,
+      jobSkills,
+      resumeSkills,
+      certificateInsights: {
+        known: knownCertificates,
+        suggestions: certificateSuggestions,
+        manualEntryRequired: manualCertificatesRequired,
+        credlyStatus,
+      },
+      manualCertificates,
+      templateContext: {
+        template1,
+        template2,
+        coverTemplate1,
+        coverTemplate2,
+      },
+    });
 
 
   } catch (err) {

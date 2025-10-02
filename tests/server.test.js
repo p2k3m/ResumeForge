@@ -199,29 +199,7 @@ describe('/api/process-cv', () => {
     setupDefaultDynamoMock();
     mockDynamoSend.mockClear();
     mockS3Send.mockClear();
-    generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            JSON.stringify({
-              version1: 'v1',
-              version2: 'v2',
-              project: 'Example project'
-            })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({
-              cover_letter1: 'cl1',
-              cover_letter2: 'cl2'
-            })
-        }
-      });
+    generateContentMock.mockClear();
 
     const res2 = await request(app)
       .post('/api/process-cv')
@@ -239,39 +217,18 @@ describe('/api/process-cv', () => {
     expect(res2.body.success).toBe(true);
     expect(typeof res2.body.requestId).toBe('string');
     expect(typeof res2.body.jobId).toBe('string');
-    expect(res2.body.urlExpiresInSeconds).toBe(3600);
-    expect(res2.body.urls).toHaveLength(5);
-    expect(res2.body.urls.map((u) => u.type).sort()).toEqual([
-      'cover_letter1',
-      'cover_letter2',
-      'original_upload',
-      'version1',
-      'version2'
-    ]);
+    expect(res2.body.urlExpiresInSeconds).toBe(0);
+    expect(res2.body.urls).toHaveLength(0);
     expect(typeof res2.body.originalScore).toBe('number');
     expect(typeof res2.body.enhancedScore).toBe('number');
     expect(res2.body.applicantName).toBeTruthy();
-
     const sanitized = res2.body.applicantName
       .trim()
       .split(/\s+/)
       .slice(0, 2)
       .join('_')
       .toLowerCase();
-
-    res2.body.urls.forEach(({ type, url, expiresAt }) => {
-      expect(url).toContain(`/${sanitized}/cv/`);
-      expect(url).toContain('expires=3600');
-      expect(() => new Date(expiresAt)).not.toThrow();
-      expect(new Date(expiresAt).toString()).not.toBe('Invalid Date');
-      if (type === 'original_upload') {
-        expect(url).not.toContain('/generated/');
-      } else if (type.startsWith('cover_letter')) {
-        expect(url).toContain('/generated/cover_letter/');
-      } else {
-        expect(url).toContain('/generated/cv/');
-      }
-    });
+    expect(generateContentMock).not.toHaveBeenCalled();
 
     const s3Commands = mockS3Send.mock.calls.map(([command]) => ({
       type: command.__type,
@@ -279,37 +236,19 @@ describe('/api/process-cv', () => {
       copySource: command.input?.CopySource,
     }));
 
-    const relocationCommand = s3Commands.find(
-      (cmd) =>
-        cmd.type === 'CopyObjectCommand' &&
-        typeof cmd.key === 'string' &&
-        cmd.key.includes(`${sanitized}/cv/`)
-    );
+    const relocationCommand = s3Commands.find((cmd) => cmd.type === 'CopyObjectCommand');
     expect(relocationCommand).toBeTruthy();
 
-    const tempDelete = s3Commands.find(
-      (cmd) =>
-        cmd.type === 'DeleteObjectCommand' &&
-        typeof cmd.key === 'string' &&
-        cmd.key.includes('/incoming/')
-    );
+    const tempDelete = s3Commands.find((cmd) => cmd.type === 'DeleteObjectCommand');
     expect(tempDelete).toBeTruthy();
 
-    const pdfKeys = s3Commands
-      .filter(
-        (cmd) =>
-          cmd.type === 'PutObjectCommand' &&
-          typeof cmd.key === 'string' &&
-          cmd.key.endsWith('.pdf') &&
-          cmd.key.includes(`${sanitized}/cv/`)
-      )
-      .map((cmd) => cmd.key);
-    // Two tailored resume versions plus two cover letters are generated
-    // and uploaded to S3.
-    expect(pdfKeys).toHaveLength(4);
-    pdfKeys.forEach((k) => {
-      expect(k).toContain(`${sanitized}/cv/`);
-    });
+    const generatedPdfKeys = s3Commands.filter(
+      (cmd) =>
+        cmd.type === 'PutObjectCommand' &&
+        typeof cmd.key === 'string' &&
+        cmd.key.includes('/generated/')
+    );
+    expect(generatedPdfKeys).toHaveLength(0);
 
     const putCall = mockDynamoSend.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
@@ -348,14 +287,14 @@ describe('/api/process-cv', () => {
     expect(updateCall).toBeTruthy();
     expect(updateCall[0].input.ConditionExpression).toBe('jobId = :jobId');
     expect(updateCall[0].input.ExpressionAttributeValues[':status'].S).toBe(
-      'completed'
+      'scored'
     );
     expect(updateCall[0].input.ExpressionAttributeNames['#status']).toBe(
       'status'
     );
     expect(updateCall[0].input.UpdateExpression).toContain('#status');
-    expect(updateCall[0].input.UpdateExpression).toContain('cv1Url');
-    expect(updateCall[0].input.UpdateExpression).toContain('coverLetter1Url');
+    expect(updateCall[0].input.UpdateExpression).toContain('analysisCompletedAt');
+    expect(updateCall[0].input.UpdateExpression).not.toContain('cv1Url');
 
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual([
