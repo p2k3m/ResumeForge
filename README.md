@@ -176,7 +176,7 @@ npm run publish:cloudfront-url -- <stack-name>
 ```
 
 - **`config/published-cloudfront.json`** is regenerated with the latest domain, distribution id, and timestamp. Commit this file (or surface it through your release notes) to broadcast the production URL.
-- If the script detects that the previously published distribution differs from the new one, it issues a `/*` invalidation so the retired distribution immediately stops caching portal assets.
+- If the script detects that the previously published distribution differs from the new one—or that the domain itself changed—it issues a `/*` invalidation so the retired distribution immediately stops caching portal assets.
 
 The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment.
 
