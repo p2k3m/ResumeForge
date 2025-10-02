@@ -65,4 +65,29 @@ describe('end-to-end CV processing', () => {
       }
     });
   });
+
+  test('rejects uploads that are classified as job descriptions', async () => {
+    const { app } = await setupTestServer({
+      pdfText: [
+        'Senior Product Manager',
+        'Responsibilities:',
+        '- Define the product roadmap and lead execution.',
+        'Qualifications:',
+        '- 7+ years of product leadership experience.',
+        'Benefits include comprehensive healthcare.',
+      ].join('\n'),
+    });
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
+      .set('X-Forwarded-For', '198.51.100.24')
+      .field('jobDescriptionUrl', 'https://example.com/job')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(400);
+    expect(response.body?.error?.code).toBe('INVALID_RESUME_CONTENT');
+    expect(response.body?.error?.details?.description).toContain('job description');
+    expect(response.body?.message).toMatch(/Please upload a correct CV/i);
+  });
 });
