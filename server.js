@@ -29,7 +29,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import { logEvent } from './logger.js';
+import { logEvent, logErrorTrace } from './logger.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
@@ -343,6 +343,123 @@ function toLoggable(value) {
   return value;
 }
 
+const requestContextStore = new Map();
+let errorLogS3Client;
+let errorLogBucket;
+const ERROR_LOG_PREFIX = 'logs/errors/';
+
+function ensureRequestContext(requestId) {
+  if (!requestId) {
+    return undefined;
+  }
+  let context = requestContextStore.get(requestId);
+  if (!context) {
+    context = {};
+    requestContextStore.set(requestId, context);
+  }
+  return context;
+}
+
+function getRequestContext(requestId) {
+  if (!requestId) return undefined;
+  return requestContextStore.get(requestId);
+}
+
+function updateRequestContext(requestId, updates = {}) {
+  if (!requestId || !updates || typeof updates !== 'object') {
+    return;
+  }
+  const context = ensureRequestContext(requestId);
+  if (!context) return;
+  Object.assign(context, updates);
+}
+
+function clearRequestContext(requestId) {
+  if (!requestId) return;
+  requestContextStore.delete(requestId);
+}
+
+function normaliseUserId(value) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') {
+    const normalised = String(value).trim();
+    return normalised || undefined;
+  }
+  if (typeof value === 'object') {
+    if ('id' in value) {
+      return normaliseUserId(value.id);
+    }
+    if ('userId' in value) {
+      return normaliseUserId(value.userId);
+    }
+  }
+  return undefined;
+}
+
+function extractUserIdFromRequest(req = {}) {
+  const { body, headers = {}, query } = req;
+  const candidates = [
+    body && typeof body === 'object' ? body.userId : undefined,
+    body && typeof body === 'object' ? body.user?.id : undefined,
+    body && typeof body === 'object' ? body.user?.userId : undefined,
+    body && typeof body === 'object' ? body.user : undefined,
+    query?.userId,
+    headers['x-user-id'],
+    headers['x-userid'],
+    headers['x-user'],
+  ];
+  for (const candidate of candidates) {
+    const userId = normaliseUserId(candidate);
+    if (userId) {
+      return userId;
+    }
+  }
+  return undefined;
+}
+
+function captureUserContext(req, res) {
+  const userId = extractUserIdFromRequest(req);
+  if (userId) {
+    res.locals.userId = userId;
+    updateRequestContext(req.requestId || res.locals.requestId, { userId });
+  }
+  return userId;
+}
+
+const scheduleTask =
+  typeof queueMicrotask === 'function'
+    ? queueMicrotask
+    : (fn) => setTimeout(fn, 0);
+
+function scheduleErrorLog(entry) {
+  if (!entry || !errorLogS3Client || !errorLogBucket) {
+    return;
+  }
+  const payload = { ...entry };
+  scheduleTask(() => {
+    logErrorTrace({
+      s3: errorLogS3Client,
+      bucket: errorLogBucket,
+      prefix: ERROR_LOG_PREFIX,
+      entry: payload,
+    }).catch((err) => {
+      const fallback = {
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        message: 's3_error_log_failed',
+        error: serializeError(err),
+      };
+      try {
+        console.error(JSON.stringify(fallback));
+      } catch {
+        console.error('Failed to persist error log', err);
+      }
+    });
+  });
+}
+
 function logStructured(level, message, context = {}) {
   const payload = {
     timestamp: new Date().toISOString(),
@@ -350,6 +467,12 @@ function logStructured(level, message, context = {}) {
     message,
     ...context,
   };
+  if (payload.requestId && payload.userId === undefined) {
+    const contextMatch = getRequestContext(payload.requestId);
+    if (contextMatch?.userId) {
+      payload.userId = contextMatch.userId;
+    }
+  }
   const logFn =
     level === 'error'
       ? console.error
@@ -357,7 +480,12 @@ function logStructured(level, message, context = {}) {
       ? console.warn
       : console.log;
   try {
-    logFn(JSON.stringify(payload, (_, value) => toLoggable(value)));
+    const serialised = JSON.stringify(payload, (_, value) => toLoggable(value));
+    logFn(serialised);
+    if (level === 'error') {
+      const safePayload = JSON.parse(serialised);
+      scheduleErrorLog(safePayload);
+    }
   } catch (err) {
     const fallback = {
       timestamp: new Date().toISOString(),
@@ -452,10 +580,12 @@ function sendError(res, status, code, message, details) {
   if (res.locals.jobId) {
     error.jobId = res.locals.jobId;
   }
+  const userId = res.locals.userId;
   const payload = { success: false, error };
   logStructured(status >= 500 ? 'error' : 'warn', 'api_error_response', {
     requestId: res.locals.requestId,
     jobId: res.locals.jobId,
+    ...(userId ? { userId } : {}),
     status,
     error,
   });
@@ -733,6 +863,13 @@ app.use((req, res, next) => {
     req.requestId = createIdentifier();
   }
   res.locals.requestId = req.requestId;
+  ensureRequestContext(req.requestId);
+  captureUserContext(req, res);
+  const cleanup = () => {
+    clearRequestContext(req.requestId);
+  };
+  res.once('finish', cleanup);
+  res.once('close', cleanup);
   next();
 });
 
@@ -837,6 +974,10 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use((req, res, next) => {
+  captureUserContext(req, res);
+  next();
+});
 
 if (clientAssetsAvailable()) {
   app.use(express.static(clientDistDir, { index: false, fallthrough: true }));
@@ -1022,6 +1163,11 @@ process.env.AWS_REGION = configuredRegion;
 
 const region = configuredRegion;
 const s3Client = new S3Client({ region });
+errorLogS3Client = s3Client;
+errorLogBucket =
+  runtimeConfigSnapshot?.S3_BUCKET ||
+  process.env.S3_BUCKET ||
+  readEnvValue('S3_BUCKET');
 const piiHashSecret =
   runtimeConfigSnapshot?.PII_HASH_SECRET || process.env.PII_HASH_SECRET || '';
 
@@ -6581,6 +6727,7 @@ function buildImprovementSummary(
 async function handleImprovementRequest(type, req, res) {
   const jobId = req.jobId || createIdentifier();
   res.locals.jobId = jobId;
+  captureUserContext(req, res);
   const requestId = res.locals.requestId;
   const logContext = { requestId, jobId, type };
 
@@ -6930,8 +7077,11 @@ app.post(
   async (req, res) => {
   const jobId = req.jobId || createIdentifier();
   res.locals.jobId = jobId;
+  captureUserContext(req, res);
   const requestId = res.locals.requestId;
-  const logContext = { requestId, jobId };
+  const logContext = res.locals.userId
+    ? { requestId, jobId, userId: res.locals.userId }
+    : { requestId, jobId };
   const date = new Date().toISOString().slice(0, 10);
   const s3 = s3Client;
   let bucket;

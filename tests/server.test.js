@@ -50,7 +50,8 @@ jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
 }));
 
 jest.unstable_mockModule('../logger.js', () => ({
-  logEvent: jest.fn().mockResolvedValue(undefined)
+  logEvent: jest.fn().mockResolvedValue(undefined),
+  logErrorTrace: jest.fn().mockResolvedValue(undefined),
 }));
 import { generateContentMock } from './mocks/generateContentMock.js';
 

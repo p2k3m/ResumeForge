@@ -53,6 +53,7 @@ export async function setupTestServer({
   }
 
   const logEventMock = jest.fn().mockResolvedValue(undefined);
+  const logErrorTraceMock = jest.fn().mockResolvedValue(undefined);
 
   jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
     S3Client: jest.fn(() => ({ send: mockS3Send })),
@@ -83,6 +84,7 @@ export async function setupTestServer({
   const loggerModulePath = new URL('../../logger.js', import.meta.url).pathname;
   jest.unstable_mockModule(loggerModulePath, () => ({
     logEvent: logEventMock,
+    logErrorTrace: logErrorTraceMock,
   }));
 
   jest.unstable_mockModule('axios', () => ({
@@ -124,6 +126,7 @@ export async function setupTestServer({
       mockS3Send,
       mockDynamoSend,
       logEventMock,
+      logErrorTraceMock,
     },
     serverModule,
   };
