@@ -8947,7 +8947,14 @@ function createResumeVariants({
       : {}),
   });
 
-  return { version1: version1Text, version2: version2Text, placeholders: placeholderMap };
+  const version1Tokenized = injectEnhancementTokens(version1Text, placeholderMap);
+  const version2Tokenized = injectEnhancementTokens(version2Text, placeholderMap);
+
+  return {
+    version1: version1Tokenized,
+    version2: version2Tokenized,
+    placeholders: placeholderMap,
+  };
 }
 
 async function verifyResume(
