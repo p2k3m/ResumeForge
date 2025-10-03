@@ -3221,6 +3221,75 @@ async function rewriteSectionsWithGemini(
   };
 }
 
+function buildUcmoGeminiLayoutPrompt({
+  name = '',
+  sections = [],
+  contact = {},
+  contactLines = [],
+} = {}) {
+  const normalizedSections = Array.isArray(sections)
+    ? sections
+        .map((sec) => {
+          const heading = normalizeHeading(sec.heading || '');
+          const items = Array.isArray(sec.items)
+            ? sec.items
+                .map((tokens) => stringifyTokens(tokens || []).trim())
+                .filter(Boolean)
+            : [];
+          return {
+            heading,
+            items,
+          };
+        })
+        .filter((sec) => sec.heading || sec.items.length)
+    : [];
+
+  const normalizedContact = {};
+  if (contact && typeof contact === 'object') {
+    Object.entries(contact).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) {
+          normalizedContact[key] = trimmed;
+        }
+      }
+    });
+  }
+
+  const lines = Array.isArray(contactLines)
+    ? contactLines
+        .map((line) => (typeof line === 'string' ? line.trim() : ''))
+        .filter(Boolean)
+    : [];
+
+  const context = {
+    university: 'University of Central Missouri',
+    name: name || '',
+    contact: normalizedContact,
+    contactLines: lines,
+    sections: normalizedSections,
+  };
+
+  return [
+    'You are a front-end developer for the University of Central Missouri Career Services team.',
+    'Design a printable résumé layout that mirrors their signature styling using crimson (#990000) accents and serif typography.',
+    'Return ONLY fully self-contained HTML markup (no Markdown) that includes a <html> root element.',
+    'Layout requirements:',
+    '- Create a top bar using a <table> with id="top" that places contact information on the left and the university logo image (https://resumeforge.s3.amazonaws.com/ucmo-logo.png) on the right.',
+    '- Feature the candidate name prominently beneath the top bar.',
+    '- Render each provided section heading as an uppercase heading with its items beneath it.',
+    '- Preserve the wording of every bullet/item exactly as provided.',
+    '',
+    'CANDIDATE DATA:',
+    JSON.stringify(context, null, 2),
+  ].join('\n');
+}
+
+function sanitizeUcmoGeminiMarkup(markup) {
+  if (!markup) return '';
+  return String(markup).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+}
+
 async function generateProjectSummary(
   jobDescription = '',
   resumeSkills = [],
@@ -4364,6 +4433,42 @@ let generatePdf = async function (
     }
   }
   let html;
+  if (templateId === 'ucmo' && generativeModel?.generateContent) {
+    try {
+      const prompt = buildUcmoGeminiLayoutPrompt({
+        name: data.name,
+        sections: data.sections,
+        contact: templateParams,
+        contactLines: options?.contactLines,
+      });
+      logStructured('debug', 'pdf_ucmo_gemini_layout_prompt', {
+        requestedTemplateId,
+        templateId,
+        promptLength: prompt.length,
+      });
+      const result = await generativeModel.generateContent(prompt);
+      const markup = sanitizeUcmoGeminiMarkup(result?.response?.text?.());
+      if (markup && /<html/i.test(markup)) {
+        html = markup;
+        logStructured('info', 'pdf_ucmo_gemini_layout_applied', {
+          requestedTemplateId,
+          templateId,
+          markupLength: markup.length,
+        });
+      } else {
+        logStructured('warn', 'pdf_ucmo_gemini_layout_empty', {
+          requestedTemplateId,
+          templateId,
+        });
+      }
+    } catch (err) {
+      logStructured('warn', 'pdf_ucmo_gemini_layout_failed', {
+        requestedTemplateId,
+        templateId,
+        error: serializeError(err),
+      });
+    }
+  }
   if (!html) {
     const templatePath = path.resolve('templates', `${templateId}.html`);
     logStructured('debug', 'pdf_template_loading', {
