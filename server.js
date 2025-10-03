@@ -7728,6 +7728,178 @@ function sanitizeGeneratedText(text, options = {}) {
   return lines.join('\n');
 }
 
+function cloneResumeData(data = {}) {
+  return {
+    name: data?.name || 'Resume',
+    sections: Array.isArray(data?.sections)
+      ? data.sections.map((sec) => ({
+          heading: sec?.heading || '',
+          items: Array.isArray(sec?.items)
+            ? sec.items.map((tokens) =>
+                Array.isArray(tokens)
+                  ? tokens.map((token) => ({ ...token }))
+                  : []
+              )
+            : [],
+        }))
+      : [],
+  };
+}
+
+function resumeDataToText(data = {}) {
+  const lines = [];
+  const name = data?.name && String(data.name).trim();
+  lines.push(name || 'Resume');
+  (Array.isArray(data?.sections) ? data.sections : []).forEach((sec) => {
+    const heading = normalizeHeading(sec?.heading || '');
+    if (!heading) return;
+    lines.push(`# ${heading}`);
+    (Array.isArray(sec?.items) ? sec.items : []).forEach((tokens) => {
+      const line = stringifyTokens(tokens);
+      if (line) {
+        lines.push(line);
+      }
+    });
+  });
+  return lines.join('\n');
+}
+
+function ensureProjectInResumeData(data = {}, projectText = '', options = {}) {
+  const project = typeof projectText === 'string' ? projectText.trim() : '';
+  if (!project) return;
+  data.sections = Array.isArray(data.sections) ? data.sections : [];
+  const parseLineOptions = options?.preserveLinkText
+    ? { preserveLinkText: true }
+    : undefined;
+  const tokens = parseLine(`- ${project}`, parseLineOptions);
+  if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+  const normalize = (sec) => normalizeHeading(sec?.heading || '').toLowerCase();
+  let section = data.sections.find((sec) => normalize(sec) === 'projects');
+  if (!section) {
+    section = { heading: 'Projects', items: [] };
+    data.sections.push(section);
+  }
+  section.items = Array.isArray(section.items) ? section.items : [];
+  const existing = new Set(
+    section.items.map((item) => stringifyTokens(item || []).toLowerCase())
+  );
+  const newText = stringifyTokens(tokens).toLowerCase();
+  if (!existing.has(newText)) {
+    section.items.push(tokens);
+  }
+}
+
+function ensureSkillsInResumeData(data = {}, skills = [], options = {}) {
+  if (!Array.isArray(skills) || !skills.length) return;
+  const normalizedSkills = skills
+    .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+    .filter(Boolean);
+  if (!normalizedSkills.length) return;
+  data.sections = Array.isArray(data.sections) ? data.sections : [];
+  const parseLineOptions = options?.preserveLinkText
+    ? { preserveLinkText: true }
+    : undefined;
+  const normalize = (sec) => normalizeHeading(sec?.heading || '').toLowerCase();
+  let section = data.sections.find((sec) => normalize(sec) === 'skills');
+  if (!section) {
+    section = { heading: 'Skills', items: [] };
+    data.sections.push(section);
+  }
+  section.items = Array.isArray(section.items) ? section.items : [];
+  const existingSkillSet = new Set();
+  section.items.forEach((item) => {
+    const text = stringifyTokens(item || '');
+    text
+      .split(/[,•·|\/;]+/)
+      .map((part) => part.replace(/^[-*\s]+/, '').trim())
+      .filter(Boolean)
+      .forEach((part) => existingSkillSet.add(part.toLowerCase()));
+  });
+  normalizedSkills.forEach((skill) => {
+    const lower = skill.toLowerCase();
+    if (existingSkillSet.has(lower)) return;
+    const tokens = parseLine(`- ${skill}`, parseLineOptions);
+    if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+    section.items.push(tokens);
+    existingSkillSet.add(lower);
+  });
+}
+
+function ensureLatestTitleInExperience(data = {}, title = '', options = {}) {
+  const normalizedTitle = typeof title === 'string' ? title.trim() : '';
+  if (!normalizedTitle) return;
+  data.sections = Array.isArray(data.sections) ? data.sections : [];
+  const parseLineOptions = options?.preserveLinkText
+    ? { preserveLinkText: true }
+    : undefined;
+  const experienceSection = data.sections.find((sec) => {
+    const key = normalizeHeading(sec?.heading || '').toLowerCase();
+    return key === 'work experience' || key.includes('experience');
+  });
+  if (!experienceSection) return;
+  experienceSection.items = Array.isArray(experienceSection.items)
+    ? experienceSection.items
+    : [];
+  if (!experienceSection.items.length) {
+    experienceSection.items.push(parseLine(`- ${normalizedTitle}`, parseLineOptions));
+    return;
+  }
+  const firstTokens = experienceSection.items[0] || [];
+  const firstText = stringifyTokens(firstTokens).trim();
+  if (!firstText) {
+    experienceSection.items[0] = parseLine(`- ${normalizedTitle}`, parseLineOptions);
+    return;
+  }
+  if (firstText.toLowerCase().includes(normalizedTitle.toLowerCase())) {
+    return;
+  }
+  let company = '';
+  const atMatch = firstText.match(/\bat\s+([^:]+)(?::|$)/i);
+  if (atMatch) {
+    company = atMatch[1].trim();
+  }
+  let rest = '';
+  const colonIndex = firstText.indexOf(':');
+  if (colonIndex !== -1) {
+    rest = firstText.slice(colonIndex + 1).trim();
+  }
+  const parts = [`${normalizedTitle}${company ? ` at ${company}` : ''}`];
+  if (rest) {
+    parts.push(rest);
+  }
+  const updatedLine = `- ${parts.join(': ')}`.trim();
+  experienceSection.items[0] = parseLine(updatedLine, parseLineOptions);
+}
+
+function createResumeVariants({
+  baseText = '',
+  projectText = '',
+  modifiedTitle = '',
+  skillsToInclude = [],
+  sanitizeOptions = {},
+} = {}) {
+  const sanitizedBase = sanitizeGeneratedText(baseText, sanitizeOptions);
+  const resumeData = parseContent(sanitizedBase, {
+    ...sanitizeOptions,
+    skipRequiredSections: true,
+  });
+  ensureProjectInResumeData(resumeData, projectText, sanitizeOptions);
+  ensureLatestTitleInExperience(resumeData, modifiedTitle, sanitizeOptions);
+  const version1Text = sanitizeGeneratedText(
+    resumeDataToText(resumeData),
+    sanitizeOptions
+  );
+
+  const version2Data = cloneResumeData(resumeData);
+  ensureSkillsInResumeData(version2Data, skillsToInclude, sanitizeOptions);
+  const version2Text = sanitizeGeneratedText(
+    resumeDataToText(version2Data),
+    sanitizeOptions
+  );
+
+  return { version1: version1Text, version2: version2Text };
+}
+
 async function verifyResume(
   text = '',
   jobDescription = '',
@@ -8941,10 +9113,6 @@ async function generateEnhancedDocumentsResponse({
 
   const combinedProfile = text;
 
-  const versionsSchema = {
-    version1: 'string resume that preserves and enhances the original CV structure',
-    version2: 'string resume that preserves and enhances the original CV structure',
-  };
   const versionsContext = {
     cvText: combinedProfile,
     jobDescription,
@@ -8952,32 +9120,8 @@ async function generateEnhancedDocumentsResponse({
     jobSkills,
     note: 'The candidate performed duties matching the job description in their last role.',
   };
-  const versionsPrompt = [
-    'You are an elite resume architect tasked with producing two targeted resume versions for Gemini/OpenAI.',
-    'Requirements:',
-    '- Never degrade CV structure; maintain clear sections, chronology, and formatting cues.',
-    '- Maximize ATS alignment using the job description and skill signals.',
-    '- Reflect the official job title exactly in the most recent role.',
-    '- Mirror critical responsibilities and highlight relevant projects, fabricating emphasis only when contextually implied.',
-    '- Preserve all original URLs.',
-    '- Respond ONLY with JSON adhering to the schema below.',
-    '',
-    'OUTPUT_SCHEMA:',
-    JSON.stringify(versionsSchema, null, 2),
-    '',
-    'INPUT_CONTEXT:',
-    JSON.stringify(versionsContext, null, 2),
-  ].join('\n');
-
-  logStructured('info', 'generation_versions_prompt_created', {
-    ...logContext,
-    jobSkillsCount: jobSkills.length,
-  });
 
   let versionData = {};
-  let parsedVersions = false;
-  let lastAiResponse;
-  let sanitizedFallbackUsed = false;
 
   const ensureProjectSummary = async () => {
     if (projectText) return;
@@ -9004,105 +9148,30 @@ async function generateEnhancedDocumentsResponse({
     ...sectionPreservation,
   });
 
-  const applyVersionFallback = async ({ reason }) => {
-    await ensureProjectSummary();
-    const sanitizeOptions = buildSanitizeOptions();
-    const sanitized = sanitizeGeneratedText(combinedProfile, sanitizeOptions);
-    const useSanitized = Boolean(sanitized && sanitized.trim());
-    if (useSanitized) {
-      sanitizedFallbackUsed = true;
-    }
-    const fallbackResume = useSanitized ? sanitized : combinedProfile;
-    if (fallbackResume && fallbackResume.trim()) {
-      if (!versionData.version1 || !versionData.version1.trim()) {
-        versionData.version1 = fallbackResume;
-      }
-      if (!versionData.version2 || !versionData.version2.trim()) {
-        versionData.version2 = fallbackResume;
-      }
-      const fallbackMessage = useSanitized
-        ? 'AI response missing structured resume versions, using sanitized resume copy'
-        : 'AI response missing structured resume versions, using original resume text';
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'generation_versions_fallback_used',
-        level: reason === 'parse_failed' ? 'error' : 'warn',
-        message:
-          reason === 'parse_failed'
-            ? fallbackMessage
-            : useSanitized
-              ? 'Partial AI response, using sanitized resume copy'
-              : 'Partial AI response, using original resume text',
-      });
-      logStructured('warn', 'generation_versions_fallback_applied', {
-        ...logContext,
-        reason,
-        fallback: useSanitized ? 'sanitized' : 'original',
-      });
-    }
-  };
+  await ensureProjectSummary();
 
-  try {
-    logStructured('info', 'generation_versions_requested', logContext);
-    const result = await generativeModel.generateContent(versionsPrompt);
-    const responseText = result?.response?.text?.();
-    lastAiResponse = responseText;
-    const parsed = parseAiJson(responseText);
-    if (parsed && typeof parsed.version1 === 'string' && typeof parsed.version2 === 'string') {
-      parsedVersions = true;
-      const projectField = parsed.project || parsed.projects || parsed.Projects;
-      projectText = Array.isArray(projectField)
-        ? projectField[0]
-        : projectField || projectText;
-      if (!projectText) {
-        await ensureProjectSummary();
-      }
-      const sanitizeOptions = buildSanitizeOptions();
-      versionData.version1 = await verifyResume(
-        sanitizeGeneratedText(parsed.version1, sanitizeOptions),
-        jobDescription,
-        generativeModel,
-        sanitizeOptions
-      );
-      versionData.version2 = await verifyResume(
-        sanitizeGeneratedText(parsed.version2, sanitizeOptions),
-        jobDescription,
-        generativeModel,
-        sanitizeOptions
-      );
-    } else {
-      logStructured('error', 'generation_versions_parse_failed', {
-        ...logContext,
-        responsePreview:
-          typeof lastAiResponse === 'string'
-            ? lastAiResponse.slice(0, 200)
-            : undefined,
-      });
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'generation_versions_parse_failed',
-        level: 'error',
-        message: 'AI response missing resume versions',
-      });
-      await applyVersionFallback({ reason: 'parse_failed' });
-    }
-  } catch (err) {
-    logStructured('error', 'generation_versions_request_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
-    await applyVersionFallback({ reason: 'request_failed' });
-  }
+  const sanitizeOptions = buildSanitizeOptions();
+  const baseResumeText =
+    sanitizeGeneratedText(text, sanitizeOptions) ||
+    sanitizeGeneratedText(combinedProfile, sanitizeOptions) ||
+    combinedProfile;
 
-  if (parsedVersions && (!versionData.version1?.trim() || !versionData.version2?.trim())) {
-    await applyVersionFallback({ reason: 'partial_versions' });
-  }
+  const skillsToHighlight = Array.from(
+    new Set([
+      ...(Array.isArray(geminiAddedSkills) ? geminiAddedSkills : []),
+      ...(Array.isArray(originalMatchResult?.newSkills)
+        ? originalMatchResult.newSkills
+        : []),
+    ])
+  ).filter(Boolean);
+
+  versionData = createResumeVariants({
+    baseText: baseResumeText,
+    projectText,
+    modifiedTitle: versionsContext.jobTitle,
+    skillsToInclude: skillsToHighlight,
+    sanitizeOptions,
+  });
 
   if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
     await logEvent({
@@ -9112,7 +9181,7 @@ async function generateEnhancedDocumentsResponse({
       jobId,
       event: 'generation_versions_missing',
       level: 'error',
-      message: 'AI response invalid',
+      message: 'Unable to construct resume variants from extracted content',
     });
     sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
     return null;

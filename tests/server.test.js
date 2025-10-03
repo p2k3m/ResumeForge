@@ -56,28 +56,15 @@ jest.unstable_mockModule('../logger.js', () => ({
 import { generateContentMock } from './mocks/generateContentMock.js';
 
 const primeDefaultGeminiResponses = () => {
-  generateContentMock
-    .mockResolvedValueOnce({
-      response: {
-        text: () =>
-          JSON.stringify({
-            version1: 'v1',
-            version2: 'v2',
-            project: 'Example project'
-          })
-      }
-    })
-    .mockResolvedValueOnce({ response: { text: () => '' } })
-    .mockResolvedValueOnce({ response: { text: () => '' } })
-    .mockResolvedValue({
-      response: {
-        text: () =>
-          JSON.stringify({
-            cover_letter1: 'cl1',
-            cover_letter2: 'cl2'
-          })
-      }
-    });
+  generateContentMock.mockResolvedValue({
+    response: {
+      text: () =>
+        JSON.stringify({
+          cover_letter1: 'cl1',
+          cover_letter2: 'cl2'
+        })
+    }
+  });
 };
 
 primeDefaultGeminiResponses();
@@ -453,21 +440,12 @@ describe('/api/process-cv', () => {
 
   test('handles code-fenced JSON with extra text', async () => {
     generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            '```json\n{"version1":"v1","version2":"v2"}\n``` trailing'
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            '```json\n{"cover_letter1":"cl1","cover_letter2":"cl2"}\n``` noise'
-        }
-      });
+    generateContentMock.mockResolvedValueOnce({
+      response: {
+        text: () =>
+          '```json\n{"cover_letter1":"cl1","cover_letter2":"cl2"}\n``` noise'
+      }
+    });
 
     const res = await request(app)
       .post('/api/process-cv')
@@ -486,21 +464,12 @@ describe('/api/process-cv', () => {
 
   test('handles JSON surrounded by text', async () => {
     generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            'start {"version1":"v1","version2":"v2"} end'
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            'prefix {"cover_letter1":"cl1","cover_letter2":"cl2"} suffix'
-        }
-      });
+    generateContentMock.mockResolvedValueOnce({
+      response: {
+        text: () =>
+          'prefix {"cover_letter1":"cl1","cover_letter2":"cl2"} suffix'
+      }
+    });
 
     const res = await request(app)
       .post('/api/process-cv')
@@ -519,17 +488,9 @@ describe('/api/process-cv', () => {
 
   test('uses provided template and ucmo', async () => {
     generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
-      });
+    generateContentMock.mockResolvedValue({
+      response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
+    });
     serverModule.generatePdf.mockClear();
 
     await request(app)
@@ -548,17 +509,9 @@ describe('/api/process-cv', () => {
 
   test('uses templates array', async () => {
     generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
-      });
+    generateContentMock.mockResolvedValue({
+      response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
+    });
     serverModule.generatePdf.mockClear();
 
     await request(app)
@@ -575,98 +528,151 @@ describe('/api/process-cv', () => {
   });
 
   test('filters AI guidance lines', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
         response: {
           text: () =>
             JSON.stringify({
-              version1:
-                'Line1\nConsolidate relevant experience into bullet points.\nLine2',
-              version2:
-                'Start\nCONSOLIDATE RELEVANT EXPERIENCE IN A SECTION\nEnd'
+              summary: [
+                'Line1',
+                'Consolidate relevant experience into bullet points.',
+              ],
+              experience: [
+                'Start',
+                'CONSOLIDATE RELEVANT EXPERIENCE IN A SECTION',
+              ],
+              education: [],
+              certifications: [],
+              skills: ['Skill A'],
+              projects: [],
+              projectSnippet: '',
+              latestRoleTitle: 'Lead Engineer',
+              latestRoleDescription: 'Delivered impact',
+              mandatorySkills: ['Skill A'],
+              addedSkills: [],
             })
         }
       })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Led a project to modernise platforms.' }
+      })
       .mockResolvedValue({
         response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+          text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
         }
       });
     serverModule.generatePdf.mockClear();
 
-    const res = await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    try {
+      const res = await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    expect(res.status).toBe(200);
+      expect(res.status).toBe(200);
 
-    const resumeCalls = serverModule.generatePdf.mock.calls.filter(
-      ([, , opts]) => opts && opts.resumeExperience
-    );
-    expect(resumeCalls).toHaveLength(2);
-    resumeCalls.forEach(([text]) => {
-      const parsed = parseContent(text);
-      const all = parsed.sections
-        .flatMap((s) =>
-          s.items.map((tokens) => tokens.map((t) => t.text || '').join(''))
-        )
-        .join('\n');
-      expect(all).not.toMatch(/consolidate relevant experience/i);
-    });
+      const resumeCalls = serverModule.generatePdf.mock.calls.filter(
+        ([, , opts]) => opts && opts.resumeExperience
+      );
+      expect(resumeCalls).toHaveLength(2);
+      resumeCalls.forEach(([text]) => {
+        const parsed = parseContent(text);
+        const all = parsed.sections
+          .flatMap((s) =>
+            s.items.map((tokens) => tokens.map((t) => t.text || '').join(''))
+          )
+          .join('\n');
+        expect(all).not.toMatch(/consolidate relevant experience/i);
+      });
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   test('resume prompt asks for a project matching job skills', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    const prompts = [];
     generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
+    generateContentMock.mockImplementationOnce((prompt) => {
+      prompts.push(prompt);
+      return Promise.resolve({
         response: {
           text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+            JSON.stringify({
+              summary: [],
+              experience: [],
+              education: [],
+              certifications: [],
+              skills: [],
+              projects: [],
+              projectSnippet: '',
+              latestRoleTitle: '',
+              latestRoleDescription: '',
+              mandatorySkills: [],
+              addedSkills: [],
+            })
+        }
+      });
+    });
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: { text: () => 'Led a project to automate deployment pipelines.' }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
         }
       });
 
-    await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    try {
+      await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    const prompt = generateContentMock.mock.calls[0][0];
-    expect(prompt).toMatch(/fabricating emphasis only when contextually implied/i);
+      const prompt = prompts[0];
+      expect(prompt).toMatch(/projectSnippet/i);
+      expect(prompt).toMatch(/jobSkills/i);
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   test('inserts project into resume text', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
         response: {
           text: () =>
             JSON.stringify({
-              version1: 'Name',
-              version2: 'Name',
-              project: 'Built a portfolio site using React'
+              summary: ['Name'],
+              experience: [],
+              education: [],
+              certifications: [],
+              skills: [],
+              projects: [],
+              projectSnippet: '',
+              latestRoleTitle: 'Name',
+              latestRoleDescription: '',
+              mandatorySkills: [],
+              addedSkills: [],
             })
         }
       })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Built a portfolio site using React' }
+      })
       .mockResolvedValue({
         response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+          text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
         }
       });
 
@@ -678,33 +684,49 @@ describe('/api/process-cv', () => {
       })
     );
 
-    await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    try {
+      await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    expect(texts.some((t) => /Built a portfolio site using React/.test(t))).toBe(
-      true
-    );
-
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      expect(texts.some((t) => /Built a portfolio site using React/i.test(t))).toBe(true);
+    } finally {
+      setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   test('adds project section when job description provided', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
         response: {
-          text: () => JSON.stringify({ version1: 'Name', version2: 'Name' })
+          text: () =>
+            JSON.stringify({
+              summary: ['Name'],
+              experience: [],
+              education: [],
+              certifications: [],
+              skills: [],
+              projects: [],
+              projectSnippet: '',
+              latestRoleTitle: 'Name',
+              latestRoleDescription: '',
+              mandatorySkills: [],
+              addedSkills: [],
+            })
         }
       })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Built a cross-functional platform overhaul' }
+      })
       .mockResolvedValue({
         response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+          text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
         }
       });
 
@@ -716,41 +738,33 @@ describe('/api/process-cv', () => {
       })
     );
 
-    await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    try {
+      await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    const resumeText = texts.find((t) => /# Projects/.test(t));
-    expect(resumeText).toBeTruthy();
-    const parsed = parseContent(resumeText);
-    const projectSection = parsed.sections.find(
-      (s) => s.heading === 'Projects'
-    );
-    expect(projectSection).toBeTruthy();
-    expect(projectSection.items.length).toBeGreaterThan(0);
-    expect(projectSection.items.length).toBeLessThanOrEqual(2);
-
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      const resumeText = texts.find((t) => /# Projects/.test(t));
+      expect(resumeText).toBeTruthy();
+      const parsed = parseContent(resumeText);
+      const projectSection = parsed.sections.find((s) => s.heading === 'Projects');
+      expect(projectSection).toBeTruthy();
+      expect(projectSection.items.length).toBeGreaterThan(0);
+      expect(projectSection.items.length).toBeLessThanOrEqual(2);
+    } finally {
+      setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   test('cover letters omit placeholder sections', async () => {
     generateContentMock.mockReset();
-    generateContentMock
-      .mockResolvedValueOnce({
-        response: {
-          text: () => JSON.stringify({ version1: 'v1', version2: 'v2', project: 'Example project' })
-        }
-      })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValue({
-        response: {
-          text: () =>
-            JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
-        }
-      });
+    generateContentMock.mockResolvedValue({
+      response: {
+        text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' })
+      }
+    });
 
     setGeneratePdf(
       jest.fn((text, tpl, options) => {
@@ -784,10 +798,15 @@ describe('/api/process-cv', () => {
   });
 
   test('uses sanitized resume fallback when AI returns plain text for versions', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
     generateContentMock.mockReset();
     generateContentMock
       .mockResolvedValueOnce({
         response: { text: () => 'Here is your revised resume text without JSON formatting.' },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Led a project to streamline onboarding.' }
       })
       .mockResolvedValue({
         response: {
@@ -803,26 +822,30 @@ describe('/api/process-cv', () => {
     });
     setGeneratePdf(pdfMock);
 
-    const res = await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    try {
+      const res = await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    expect(res.status).toBe(200);
-    expect(generateContentMock).toHaveBeenCalledTimes(2);
+      expect(res.status).toBe(200);
+      expect(generateContentMock).toHaveBeenCalledTimes(3);
 
-    const cvCalls = pdfCalls.filter(({ options }) => !options || !options.skipRequiredSections);
-    expect(cvCalls).toHaveLength(2);
-    expect(cvCalls[0].text).toBe(cvCalls[1].text);
-    expect(cvCalls[0].text.trim().length).toBeGreaterThan(0);
-    expect(res.body.modifiedTitle).toBe('');
-    expect(res.body.addedSkills).toEqual([]);
-
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      const cvCalls = pdfCalls.filter(({ options }) => !options || !options.skipRequiredSections);
+      expect(cvCalls).toHaveLength(2);
+      expect(cvCalls[0].text.trim().length).toBeGreaterThan(0);
+      expect(cvCalls[1].text.trim().length).toBeGreaterThan(0);
+      expect(res.body.modifiedTitle).toBe('');
+      expect(res.body.addedSkills).toEqual([]);
+    } finally {
+      setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      process.env.NODE_ENV = originalEnv;
+    }
   });
 
   test('final CV includes updated title, project, and skills', async () => {
+    const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     generateContentMock.mockReset();
     generateContentMock
@@ -845,18 +868,8 @@ describe('/api/process-cv', () => {
         },
       })
       .mockResolvedValueOnce({
-        response: {
-          text: () =>
-            JSON.stringify({
-              version1:
-                'Revised Title\n# Projects\n- Project bullet.\n# Skills\n- Skill A\n- Skill B',
-              version2: 'v2',
-              project: 'Project bullet.',
-            }),
-        },
+        response: { text: () => 'Project bullet.' }
       })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
-      .mockResolvedValueOnce({ response: { text: () => '' } })
       .mockResolvedValue({
         response: {
           text: () =>
@@ -872,96 +885,99 @@ describe('/api/process-cv', () => {
       })
     );
 
-    const res = await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+    try {
+      const res = await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    expect(res.status).toBe(200);
-    const resumeText = pdfTexts.find((t) => t.includes('Revised Title')) || '';
-    expect(resumeText).toContain('Revised Title');
-    expect(resumeText).toContain('Project bullet.');
-    expect(resumeText).toContain('Skill B');
-    expect(res.body.addedSkills).toContain('Skill B');
-    expect(res.body.modifiedTitle).toBe('Revised Title');
-    expect(typeof res.body.scoreBreakdown).toBe('object');
-    expect(res.body.scoreBreakdown).toEqual(
-      expect.objectContaining({
-        layoutSearchability: expect.objectContaining({
-          category: 'Layout & Searchability',
-          score: expect.any(Number),
-          rating: expect.any(String),
-          ratingLabel: expect.any(String),
-          tips: expect.any(Array),
-        }),
-        atsReadability: expect.objectContaining({
-          category: 'ATS Readability',
-          score: expect.any(Number),
-          rating: expect.any(String),
-          ratingLabel: expect.any(String),
-          tips: expect.any(Array),
-        }),
-        impact: expect.objectContaining({
-          category: 'Impact',
-          score: expect.any(Number),
-          rating: expect.any(String),
-          ratingLabel: expect.any(String),
-          tips: expect.any(Array),
-        }),
-        crispness: expect.objectContaining({
-          category: 'Crispness',
-          score: expect.any(Number),
-          rating: expect.any(String),
-          ratingLabel: expect.any(String),
-          tips: expect.any(Array),
-        }),
-        otherQuality: expect.objectContaining({
-          category: 'Other Quality Metrics',
-          score: expect.any(Number),
-          rating: expect.any(String),
-          ratingLabel: expect.any(String),
-          tips: expect.any(Array),
-        }),
-      })
-    );
-    expect(res.body.atsSubScores).toEqual([
-      expect.objectContaining({ category: 'Layout & Searchability', score: expect.any(Number) }),
-      expect.objectContaining({ category: 'ATS Readability', score: expect.any(Number) }),
-      expect.objectContaining({ category: 'Impact', score: expect.any(Number) }),
-      expect.objectContaining({ category: 'Crispness', score: expect.any(Number) }),
-      expect.objectContaining({ category: 'Other Quality Metrics', score: expect.any(Number) }),
-    ]);
-    expect(typeof res.body.selectionProbability).toBe('number');
-    expect(typeof res.body.selectionProbabilityBefore).toBe('number');
-    expect(res.body.selectionInsights).toEqual(
-      expect.objectContaining({
-        probability: expect.any(Number),
-        level: expect.any(String),
-        message: expect.any(String),
-        rationale: expect.any(String),
-        before: expect.objectContaining({
+      expect(res.status).toBe(200);
+      const resumeText = pdfTexts.find((t) => t.includes('Revised Title')) || '';
+      expect(resumeText).toContain('Revised Title');
+      expect(resumeText).toContain('Project bullet.');
+      expect(resumeText).toContain('Skill B');
+      expect(res.body.addedSkills).toContain('Skill B');
+      expect(res.body.modifiedTitle).toBe('Revised Title');
+      expect(typeof res.body.scoreBreakdown).toBe('object');
+      expect(res.body.scoreBreakdown).toEqual(
+        expect.objectContaining({
+          layoutSearchability: expect.objectContaining({
+            category: 'Layout & Searchability',
+            score: expect.any(Number),
+            rating: expect.any(String),
+            ratingLabel: expect.any(String),
+            tips: expect.any(Array),
+          }),
+          atsReadability: expect.objectContaining({
+            category: 'ATS Readability',
+            score: expect.any(Number),
+            rating: expect.any(String),
+            ratingLabel: expect.any(String),
+            tips: expect.any(Array),
+          }),
+          impact: expect.objectContaining({
+            category: 'Impact',
+            score: expect.any(Number),
+            rating: expect.any(String),
+            ratingLabel: expect.any(String),
+            tips: expect.any(Array),
+          }),
+          crispness: expect.objectContaining({
+            category: 'Crispness',
+            score: expect.any(Number),
+            rating: expect.any(String),
+            ratingLabel: expect.any(String),
+            tips: expect.any(Array),
+          }),
+          otherQuality: expect.objectContaining({
+            category: 'Other Quality Metrics',
+            score: expect.any(Number),
+            rating: expect.any(String),
+            ratingLabel: expect.any(String),
+            tips: expect.any(Array),
+          }),
+        })
+      );
+      expect(res.body.atsSubScores).toEqual([
+        expect.objectContaining({ category: 'Layout & Searchability', score: expect.any(Number) }),
+        expect.objectContaining({ category: 'ATS Readability', score: expect.any(Number) }),
+        expect.objectContaining({ category: 'Impact', score: expect.any(Number) }),
+        expect.objectContaining({ category: 'Crispness', score: expect.any(Number) }),
+        expect.objectContaining({ category: 'Other Quality Metrics', score: expect.any(Number) }),
+      ]);
+      expect(typeof res.body.selectionProbability).toBe('number');
+      expect(typeof res.body.selectionProbabilityBefore).toBe('number');
+      expect(res.body.selectionInsights).toEqual(
+        expect.objectContaining({
           probability: expect.any(Number),
           level: expect.any(String),
           message: expect.any(String),
           rationale: expect.any(String),
-        }),
-        after: expect.objectContaining({
-          probability: expect.any(Number),
-          level: expect.any(String),
-          message: expect.any(String),
-          rationale: expect.any(String),
-        }),
-        flags: expect.any(Array),
-        jobFitAverage: expect.any(Number),
-        jobFitScores: expect.arrayContaining([
-          expect.objectContaining({ key: 'designation', score: expect.any(Number) }),
-          expect.objectContaining({ key: 'skills', score: expect.any(Number) }),
-        ]),
-      })
-    );
-    process.env.NODE_ENV = 'test';
-    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+          before: expect.objectContaining({
+            probability: expect.any(Number),
+            level: expect.any(String),
+            message: expect.any(String),
+            rationale: expect.any(String),
+          }),
+          after: expect.objectContaining({
+            probability: expect.any(Number),
+            level: expect.any(String),
+            message: expect.any(String),
+            rationale: expect.any(String),
+          }),
+          flags: expect.any(Array),
+          jobFitAverage: expect.any(Number),
+          jobFitScores: expect.arrayContaining([
+            expect.objectContaining({ key: 'designation', score: expect.any(Number) }),
+            expect.objectContaining({ key: 'skills', score: expect.any(Number) }),
+          ]),
+        })
+      );
+    } finally {
+      process.env.NODE_ENV = originalEnv;
+      setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+    }
   });
 
   test('missing file', async () => {
