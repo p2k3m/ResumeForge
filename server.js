@@ -9211,6 +9211,74 @@ function normalizeChangeLogItemizedChange(change = {}) {
   };
 }
 
+function parseHistoryContextSource(value) {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+      return null;
+    } catch (err) {
+      return null;
+    }
+  }
+  if (typeof value === 'object') {
+    return value;
+  }
+  return null;
+}
+
+function normalizeChangeLogHistoryContext(input) {
+  const source = parseHistoryContextSource(input);
+  if (!source) {
+    return null;
+  }
+
+  const context = {};
+
+  if (source.matchBefore && typeof source.matchBefore === 'object') {
+    try {
+      context.matchBefore = JSON.parse(JSON.stringify(source.matchBefore));
+    } catch (err) {
+      context.matchBefore = source.matchBefore;
+    }
+  }
+
+  if (Array.isArray(source.scoreBreakdownBefore)) {
+    try {
+      context.scoreBreakdownBefore = JSON.parse(
+        JSON.stringify(source.scoreBreakdownBefore)
+      );
+    } catch (err) {
+      context.scoreBreakdownBefore = source.scoreBreakdownBefore;
+    }
+  }
+
+  if (Array.isArray(source.resumeSkillsBefore)) {
+    const skills = source.resumeSkillsBefore
+      .map((value) => normalizeChangeLogString(value))
+      .filter((value) => value !== '');
+    context.resumeSkillsBefore = skills;
+  }
+
+  return Object.keys(context).length ? context : null;
+}
+
+function stringifyChangeLogHistoryContext(context) {
+  if (!context || typeof context !== 'object') {
+    return '';
+  }
+  try {
+    return JSON.stringify(context);
+  } catch (err) {
+    return '';
+  }
+}
+
 function normalizeChangeLogEntryInput(entry) {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -9227,6 +9295,12 @@ function normalizeChangeLogEntryInput(entry) {
   const label = normalizeChangeLogString(entry.label);
   const before = normalizeChangeLogString(entry.before);
   const after = normalizeChangeLogString(entry.after);
+  const resumeBeforeText = normalizeChangeLogString(
+    entry.resumeBeforeText || entry.resumeBeforeFull || entry.previousResumeText
+  );
+  const resumeAfterText = normalizeChangeLogString(
+    entry.resumeAfterText || entry.resumeAfterFull || entry.updatedResumeText
+  );
   const addedItems = normalizeChangeLogList(entry.addedItems);
   const removedItems = normalizeChangeLogList(entry.removedItems);
   const summarySegments = Array.isArray(entry.summarySegments)
@@ -9238,6 +9312,9 @@ function normalizeChangeLogEntryInput(entry) {
         .filter(Boolean)
     : [];
   const acceptedAt = normalizeChangeLogString(entry.acceptedAt);
+  const historyContext = normalizeChangeLogHistoryContext(
+    entry.historyContext || entry.resumeHistoryContext || entry.historySnapshot
+  );
 
   let scoreDelta = null;
   const rawDelta = entry.scoreDelta;
@@ -9258,12 +9335,15 @@ function normalizeChangeLogEntryInput(entry) {
     label,
     before,
     after,
+    resumeBeforeText,
+    resumeAfterText,
     summarySegments,
     addedItems,
     removedItems,
     itemizedChanges,
     scoreDelta,
     acceptedAt,
+    historyContext,
   };
 }
 
@@ -9341,12 +9421,17 @@ function parseDynamoChangeLog(attribute) {
     const label = normalizeChangeLogString(map.label?.S);
     const before = normalizeChangeLogString(map.before?.S);
     const after = normalizeChangeLogString(map.after?.S);
+    const resumeBeforeText = normalizeChangeLogString(map.resumeBeforeText?.S);
+    const resumeAfterText = normalizeChangeLogString(map.resumeAfterText?.S);
     const addedItems = parseDynamoStringList(map.addedItems);
     const removedItems = parseDynamoStringList(map.removedItems);
     const summarySegments = parseDynamoSummarySegments(map.summarySegments);
     const itemizedChanges = parseDynamoItemizedChanges(map.itemizedChanges);
     const acceptedAt = normalizeChangeLogString(map.acceptedAt?.S);
     const scoreDelta = map.scoreDelta && map.scoreDelta.N ? Number(map.scoreDelta.N) : null;
+    const historyContext = parseHistoryContextSource(
+      normalizeChangeLogString(map.historyContext?.S)
+    );
 
     return {
       id,
@@ -9356,12 +9441,15 @@ function parseDynamoChangeLog(attribute) {
       label,
       before,
       after,
+      resumeBeforeText,
+      resumeAfterText,
       summarySegments,
       addedItems,
       removedItems,
       itemizedChanges,
       scoreDelta: Number.isFinite(scoreDelta) ? scoreDelta : null,
       acceptedAt,
+      historyContext,
     };
   }).filter(Boolean);
 }
@@ -9475,6 +9563,12 @@ function serializeChangeLogEntries(entries = []) {
       if (normalized.after) {
         map.after = { S: normalized.after };
       }
+      if (normalized.resumeBeforeText) {
+        map.resumeBeforeText = { S: normalized.resumeBeforeText };
+      }
+      if (normalized.resumeAfterText) {
+        map.resumeAfterText = { S: normalized.resumeAfterText };
+      }
       const addedItems = toDynamoStringList(normalized.addedItems);
       if (addedItems) {
         map.addedItems = addedItems;
@@ -9497,6 +9591,12 @@ function serializeChangeLogEntries(entries = []) {
       const acceptedAt = normalizeChangeLogString(normalized.acceptedAt);
       if (acceptedAt) {
         map.acceptedAt = { S: acceptedAt };
+      }
+      const historyContextString = stringifyChangeLogHistoryContext(
+        normalized.historyContext
+      );
+      if (historyContextString) {
+        map.historyContext = { S: historyContextString };
       }
 
       return { M: map };
