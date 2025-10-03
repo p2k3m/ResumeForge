@@ -3548,6 +3548,26 @@ function normalizeGeminiLines(value) {
 
 const ENHANCEMENT_TOKEN_PATTERN = /\{\{RF_ENH_[A-Z0-9_]+\}\}/g;
 
+function expandEnhancementTokenMap(tokenMap = {}) {
+  const expanded = {};
+  if (!tokenMap || typeof tokenMap !== 'object') {
+    return expanded;
+  }
+  Object.entries(tokenMap).forEach(([key, value]) => {
+    if (typeof value !== 'string' || !value.trim()) {
+      return;
+    }
+    expanded[key] = value;
+    if (typeof key === 'string' && key.startsWith('{{RF_ENH_')) {
+      const compact = key
+        .replace('{{RF_ENH_', '{{RFENH')
+        .replace(/_/g, '');
+      expanded[compact] = value;
+    }
+  });
+  return expanded;
+}
+
 function resolveEnhancementTokens(text = '', tokenMap = {}) {
   if (!text || typeof text !== 'string') {
     return text;
@@ -3621,7 +3641,12 @@ function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeO
     const normalized = typeof line === 'string' ? line.trim() : '';
     if (!normalized) return [];
     const placeholder = createPlaceholder(heading);
-    placeholders[placeholder] = normalized;
+    const resolvedValue = normalized;
+    placeholders[placeholder] = resolvedValue;
+    if (typeof placeholder === 'string' && placeholder.startsWith('{{RF_ENH_')) {
+      const compact = placeholder.replace('{{RF_ENH_', '{{RFENH').replace(/_/g, '');
+      placeholders[compact] = resolvedValue;
+    }
     const tokens = parseLine(`- ${placeholder}`, parseLineOptions);
     if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
     return tokens;
@@ -3675,20 +3700,20 @@ function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeO
   return {
     name: name && String(name).trim() ? String(name).trim() : 'Resume',
     sections,
-    placeholders,
+    placeholders: expandEnhancementTokenMap(placeholders),
   };
 }
 
 function mergeResumeDataSections(baseData = {}, updatesData = {}) {
   const result = cloneResumeData(baseData);
-  const placeholderMap = {
+  const placeholderMap = expandEnhancementTokenMap({
     ...(baseData?.placeholders && typeof baseData.placeholders === 'object'
       ? baseData.placeholders
       : {}),
     ...(updatesData?.placeholders && typeof updatesData.placeholders === 'object'
       ? updatesData.placeholders
       : {}),
-  };
+  });
   if (updatesData?.name) {
     const trimmedName = String(updatesData.name).trim();
     if (trimmedName) {
@@ -3771,14 +3796,19 @@ async function rewriteSectionsWithGemini(
   const baseText = resumeDataToText(baseResumeData);
   const sanitizedBaseText = sanitizeGeneratedText(baseText, normalizeOptions);
   baseResumeData = parseContent(sanitizedBaseText, baseParseOptions);
+  const basePlaceholderMap = expandEnhancementTokenMap(
+    baseResumeData?.placeholders && typeof baseResumeData.placeholders === 'object'
+      ? baseResumeData.placeholders
+      : {}
+  );
 
   const fallbackResult = {
-    text: sanitizedBaseText,
+    text: resolveEnhancementTokens(sanitizedBaseText, basePlaceholderMap),
     project: '',
     modifiedTitle: '',
     addedSkills: [],
     sanitizedFallbackUsed: true,
-    placeholders: {},
+    placeholders: basePlaceholderMap,
   };
 
   if (!generativeModel?.generateContent) {
@@ -3830,11 +3860,15 @@ async function rewriteSectionsWithGemini(
       const mergedData = mergeResumeDataSections(baseResumeData, resumeData);
       const mergedText = resumeDataToText(mergedData);
       const cleaned = sanitizeGeneratedText(mergedText, normalizeOptions);
+      const resolvedText = resolveEnhancementTokens(
+        cleaned,
+        mergedData?.placeholders || {}
+      );
       const addedSkills = Array.isArray(parsed.addedSkills)
         ? parsed.addedSkills.filter((skill) => typeof skill === 'string' && skill.trim())
         : [];
       return {
-        text: cleaned,
+        text: resolvedText,
         project: parsed.projectSnippet || parsed.project || '',
         modifiedTitle: parsed.latestRoleTitle || '',
         addedSkills,
