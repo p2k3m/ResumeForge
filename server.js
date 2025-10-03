@@ -4329,11 +4329,10 @@ let generatePdf = async function (
           requestedTemplateId,
           dependency: 'pdf-lib',
         });
-        canonicalTemplateId = 'modern';
-        templateId = 'modern';
         logStructured('info', 'pdf_template_fallback_applied', {
           requestedTemplateId,
           fallbackTemplateId: templateId,
+          strategy: 'html_template_render',
         });
       } else {
         throw err;
@@ -4341,24 +4340,6 @@ let generatePdf = async function (
     }
   }
   let html;
-  if (
-    (templateId === 'classic' || templateId === 'ucmo') &&
-    generativeModel?.generateContent
-  ) {
-    try {
-      const prompt =
-        `Using the resume text below, output complete HTML with inline CSS ` +
-        `that matches the University of Central Missouri sample layout, ` +
-        `including a contact info table at the top with the UCMO logo on the ` +
-        `right, Times New Roman fonts, and similar spacing. Return only ` +
-        `the HTML and CSS.\n\nResume Text:\n${text}`;
-      const result = await generativeModel.generateContent(prompt);
-      const generated = result?.response?.text?.();
-      if (generated) html = generated;
-    } catch {
-      /* ignore */
-    }
-  }
   if (!html) {
     const templatePath = path.resolve('templates', `${templateId}.html`);
     logStructured('debug', 'pdf_template_loading', {
@@ -4486,70 +4467,177 @@ let generatePdf = async function (
     templateId,
     requestedTemplateId,
   });
+  const baseStyle = {
+    font: 'Helvetica',
+    bold: 'Helvetica-Bold',
+    italic: 'Helvetica-Oblique',
+    headingColor: '#1f3c5d',
+    nameColor: '#1f3c5d',
+    textColor: '#333333',
+    bulletColor: '#4a5568',
+    headingFontSize: 14,
+    nameFontSize: 22,
+    bodyFontSize: 12,
+    bullet: '•',
+    eduBullet: '•',
+    bulletIndent: 14,
+    lineGap: 6,
+    paragraphGap: 10,
+    margin: 50
+  };
   const styleMap = {
     modern: {
-      font: 'Helvetica',
-      bold: 'Helvetica-Bold',
-      italic: 'Helvetica-Oblique',
-      headingColor: '#1f3c5d',
-      bullet: '•',
-      eduBullet: '•',
-      bulletColor: '#4a5568',
-      textColor: '#333',
-      lineGap: 6,
-      paragraphGap: 10
+      ...baseStyle,
+      headingColor: '#38bdf8',
+      bulletColor: '#38bdf8',
+      textColor: '#e2e8f0',
+      nameColor: '#ffffff',
+      headingFontSize: 16,
+      nameFontSize: 28,
+      bodyFontSize: 11,
+      backgroundColor: '#0f172a',
+      lineGap: 7,
+      paragraphGap: 12,
+      headingUppercase: true,
+      margin: 56
     },
     professional: {
-      font: 'Helvetica',
-      bold: 'Helvetica-Bold',
-      italic: 'Helvetica-Oblique',
-      headingColor: '#1f3c5d',
-      bullet: '•',
-      eduBullet: '•',
-      bulletColor: '#4a5568',
-      textColor: '#333',
-      lineGap: 6,
-      paragraphGap: 10
+      ...baseStyle,
+      headingColor: '#1d3557',
+      bulletColor: '#1d3557',
+      textColor: '#1f2a37',
+      nameColor: '#1d3557',
+      headingFontSize: 15,
+      nameFontSize: 30,
+      bodyFontSize: 12,
+      margin: 60,
+      lineGap: 7,
+      paragraphGap: 12
     },
-    ucmo: {
+    classic: {
+      ...baseStyle,
       font: 'Times-Roman',
       bold: 'Times-Bold',
       italic: 'Times-Italic',
-      headingColor: '#1f3c5d',
-      bullet: '•',
-      eduBullet: '•',
-      bulletColor: '#4a5568',
-      textColor: '#333',
+      headingColor: '#2d5a9e',
+      bulletColor: '#2d5a9e',
+      textColor: '#1f2933',
+      nameColor: '#1f2933',
+      headingUppercase: true,
+      headingFontSize: 16,
+      nameFontSize: 34,
+      bodyFontSize: 12,
+      margin: 64,
       lineGap: 6,
-      paragraphGap: 10
+      paragraphGap: 12
+    },
+    ucmo: {
+      ...baseStyle,
+      font: 'Times-Roman',
+      bold: 'Times-Bold',
+      italic: 'Times-Italic',
+      headingColor: '#900021',
+      bulletColor: '#900021',
+      textColor: '#2d3748',
+      nameColor: '#900021',
+      headingUppercase: true,
+      headingFontSize: 15,
+      nameFontSize: 30,
+      bodyFontSize: 12,
+      margin: 64,
+      lineGap: 6,
+      paragraphGap: 12
     },
     vibrant: {
-      font: 'Helvetica',
-      bold: 'Helvetica-Bold',
-      italic: 'Helvetica-Oblique',
-      headingColor: '#1f3c5d',
-      bullet: '•',
-      eduBullet: '•',
-      bulletColor: '#4a5568',
-      textColor: '#333',
+      ...baseStyle,
+      headingColor: '#ff6b6b',
+      bulletColor: '#4ecdc4',
+      textColor: '#333333',
+      nameColor: '#ff6b6b',
+      headingFontSize: 18,
+      nameFontSize: 32,
+      bodyFontSize: 12,
+      lineGap: 7,
+      paragraphGap: 12,
+      headingUppercase: true
+    },
+    creative: {
+      ...baseStyle,
+      headingColor: '#2563eb',
+      bulletColor: '#2563eb',
+      textColor: '#1f2937',
+      nameColor: '#2563eb',
+      headingFontSize: 16,
+      nameFontSize: 30,
+      bodyFontSize: 11,
+      lineGap: 7,
+      paragraphGap: 11
+    },
+    portal: {
+      ...baseStyle,
+      headingColor: '#2563eb',
+      bulletColor: '#9333ea',
+      textColor: '#0f172a',
+      nameColor: '#2563eb',
+      headingFontSize: 15,
+      nameFontSize: 30,
+      bodyFontSize: 11,
+      margin: 54,
+      lineGap: 7,
+      paragraphGap: 12
+    },
+    ats: {
+      ...baseStyle,
+      headingColor: '#1f2937',
+      bulletColor: '#1f2937',
+      textColor: '#1f2937',
+      nameColor: '#1f2937',
+      headingFontSize: 14,
+      nameFontSize: 26,
+      bodyFontSize: 11,
       lineGap: 6,
       paragraphGap: 10
     },
     '2025': {
-      font: 'Helvetica',
-      bold: 'Helvetica-Bold',
-      italic: 'Helvetica-Oblique',
+      ...baseStyle,
       headingColor: '#1f3c5d',
-      bullet: '•',
-      eduBullet: '•',
-      bulletColor: '#4a5568',
-      textColor: '#333',
-      lineGap: 6,
-      paragraphGap: 8
+      bulletColor: '#2563eb',
+      textColor: '#111827',
+      nameColor: '#111827',
+      headingFontSize: 16,
+      nameFontSize: 30,
+      bodyFontSize: 11,
+      lineGap: 7,
+      paragraphGap: 10,
+      margin: 56
+    },
+    cover_classic: {
+      ...baseStyle,
+      font: 'Times-Roman',
+      bold: 'Times-Bold',
+      italic: 'Times-Italic',
+      headingColor: '#2d5a9e',
+      textColor: '#1f2933',
+      nameColor: '#1f2933',
+      headingFontSize: 16,
+      nameFontSize: 34,
+      bodyFontSize: 12,
+      margin: 64
+    },
+    cover_modern: {
+      ...baseStyle,
+      headingColor: '#38bdf8',
+      textColor: '#1e293b',
+      nameColor: '#0f172a',
+      headingFontSize: 16,
+      nameFontSize: 30,
+      bodyFontSize: 12,
+      margin: 56
     }
   };
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
+    const style = styleMap[templateId] || styleMap.modern;
+    const doc = new PDFDocument({ margin: style.margin || 50 });
     const buffers = [];
     doc.on('data', (d) => buffers.push(d));
     doc.on('end', () => {
@@ -4590,29 +4678,55 @@ let generatePdf = async function (
       if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
     } catch {}
     if (robotoAvailable) {
-      ['modern', 'vibrant'].forEach((tpl) => {
-        styleMap[tpl].font = 'Roboto';
-        styleMap[tpl].bold = 'Roboto-Bold';
-        styleMap[tpl].italic = 'Roboto-Italic';
+      ['modern', 'vibrant', 'creative', 'portal', 'professional', 'cover_modern'].forEach((tpl) => {
+        if (styleMap[tpl]) {
+          styleMap[tpl].font = 'Roboto';
+          styleMap[tpl].bold = 'Roboto-Bold';
+          styleMap[tpl].italic = 'Roboto-Italic';
+        }
       });
     }
-    const style = styleMap[templateId] || styleMap.modern;
+    const applyPageBackground = () => {
+      if (style.backgroundColor) {
+        doc.save();
+        doc.rect(0, 0, doc.page.width, doc.page.height).fill(style.backgroundColor);
+        doc.restore();
+        doc.fillColor(style.textColor);
+      }
+    };
+    applyPageBackground();
+    doc.on('pageAdded', applyPageBackground);
 
-    doc.font(style.bold)
-      .fillColor(style.headingColor)
-      .fontSize(20)
-      .text(data.name, { paragraphGap: style.paragraphGap, align: 'left', lineGap: style.lineGap })
-      .fillColor(style.textColor);
+    doc
+      .font(style.bold)
+      .fillColor(style.nameColor || style.headingColor)
+      .fontSize(style.nameFontSize || 22)
+      .text(data.name, {
+        paragraphGap: style.paragraphGap,
+        align: 'left',
+        lineGap: style.lineGap,
+        characterSpacing: style.headingUppercase ? 0.3 : undefined,
+      })
+      .fillColor(style.textColor)
+      .font(style.font)
+      .fontSize(style.bodyFontSize || 12);
 
     data.sections.forEach((sec) => {
       doc
         .font(style.bold)
         .fillColor(style.headingColor)
-        .fontSize(14)
-        .text(sec.heading, { paragraphGap: style.paragraphGap, lineGap: style.lineGap });
+        .fontSize(style.headingFontSize || 14)
+        .text(style.headingUppercase ? sec.heading?.toUpperCase() : sec.heading, {
+          paragraphGap: style.paragraphGap,
+          lineGap: style.lineGap,
+        })
+        .fillColor(style.textColor)
+        .font(style.font)
+        .fontSize(style.bodyFontSize || 12);
       (sec.items || []).forEach((tokens) => {
         const startY = doc.y;
-        doc.font(style.font).fontSize(12);
+        doc.font(style.font).fontSize(style.bodyFontSize || 12);
+        const indentSpaces = Math.max(1, Math.floor((style.bulletIndent || 12) / 4));
         tokens.forEach((t, idx) => {
           if (t.type === 'bullet') {
             const glyph =
@@ -4621,8 +4735,11 @@ let generatePdf = async function (
                 : style.bullet;
             doc
               .fillColor(style.bulletColor)
-              .text(`${glyph} `, { continued: true, lineGap: style.lineGap })
-              .text('', { continued: true })
+              .text(`${glyph}`, { continued: true, lineGap: style.lineGap })
+              .text(' '.repeat(indentSpaces), {
+                continued: true,
+                lineGap: style.lineGap,
+              })
               .fillColor(style.textColor);
             return;
           }
@@ -4633,12 +4750,16 @@ let generatePdf = async function (
             const before = doc.y;
             doc.text('', { continued: false, lineGap: style.lineGap });
             if (doc.y === before) doc.moveDown();
-            doc.text('   ', { continued: true, lineGap: style.lineGap });
+            doc.text(' '.repeat(indentSpaces * 2), {
+              continued: true,
+              lineGap: style.lineGap,
+            });
             return;
           }
           const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap };
           if (t.type === 'tab') {
-            doc.text('    ', opts);
+            const tabSize = style.tabSize || 4;
+            doc.text(' '.repeat(tabSize), opts);
             return;
           }
           if (t.type === 'link') {
@@ -4655,7 +4776,6 @@ let generatePdf = async function (
             return;
           }
           if (t.type === 'heading') {
-            // Render heading tokens using the bold font
             doc.font(style.bold);
             doc.text(t.text, opts);
             doc.font(style.font);
