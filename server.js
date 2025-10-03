@@ -3568,6 +3568,41 @@ function expandEnhancementTokenMap(tokenMap = {}) {
   return expanded;
 }
 
+function registerEnhancementPlaceholder(container = {}, heading = '', value = '') {
+  if (!container || typeof container !== 'object') {
+    return null;
+  }
+  const trimmedValue = typeof value === 'string' ? value.trim() : '';
+  if (!trimmedValue) {
+    return null;
+  }
+  if (!container.placeholders || typeof container.placeholders !== 'object') {
+    container.placeholders = {};
+  }
+  const normalizedHeading = normalizeHeading(heading || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'section';
+  const slug = normalizedHeading.toUpperCase();
+  const canonicalPattern = new RegExp(`^\\{\\{RF_ENH_${slug}_(\\d{4})\\}\\}$`);
+  let maxIndex = 0;
+  Object.keys(container.placeholders).forEach((key) => {
+    const match = key.match(canonicalPattern);
+    if (match) {
+      const index = parseInt(match[1], 10);
+      if (!Number.isNaN(index) && index > maxIndex) {
+        maxIndex = index;
+      }
+    }
+  });
+  const nextIndex = maxIndex + 1;
+  const token = `{{RF_ENH_${slug}_${String(nextIndex).padStart(4, '0')}}}`;
+  container.placeholders[token] = trimmedValue;
+  const compact = token.replace('{{RF_ENH_', '{{RFENH').replace(/_/g, '');
+  container.placeholders[compact] = trimmedValue;
+  return token;
+}
+
 function resolveEnhancementTokens(text = '', tokenMap = {}) {
   if (!text || typeof text !== 'string') {
     return text;
@@ -8691,6 +8726,9 @@ function ensureProjectInResumeData(data = {}, projectText = '', options = {}) {
   const project = typeof projectText === 'string' ? projectText.trim() : '';
   if (!project) return;
   data.sections = Array.isArray(data.sections) ? data.sections : [];
+  if (!data.placeholders || typeof data.placeholders !== 'object') {
+    data.placeholders = {};
+  }
   const parseLineOptions = options?.preserveLinkText
     ? { preserveLinkText: true }
     : undefined;
@@ -8704,7 +8742,7 @@ function ensureProjectInResumeData(data = {}, projectText = '', options = {}) {
   section.items = Array.isArray(section.items) ? section.items : [];
 
   const normalizeKey = (tokens) =>
-    stringifyTokens(tokens || [])
+    resolveEnhancementTokens(stringifyTokens(tokens || []), data.placeholders || {})
       .toLowerCase()
       .replace(/\s+/g, ' ')
       .trim();
@@ -8733,7 +8771,15 @@ function ensureProjectInResumeData(data = {}, projectText = '', options = {}) {
 
   for (const sentence of sentences) {
     if (section.items.length >= maxItems) break;
-    const tokens = parseLine(sentence, parseLineOptions);
+    const normalized = sentence.toLowerCase().replace(/\s+/g, ' ').trim();
+    if (!normalized || seen.has(normalized)) continue;
+    const placeholder = registerEnhancementPlaceholder(
+      data,
+      section.heading || 'Projects',
+      sentence
+    );
+    if (!placeholder) continue;
+    const tokens = parseLine(`- ${placeholder}`, parseLineOptions);
     if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
     const key = normalizeKey(tokens);
     if (!key || seen.has(key)) continue;
@@ -8753,6 +8799,9 @@ function ensureSkillsInResumeData(data = {}, skills = [], options = {}) {
     .filter(Boolean);
   if (!normalizedSkills.length) return;
   data.sections = Array.isArray(data.sections) ? data.sections : [];
+  if (!data.placeholders || typeof data.placeholders !== 'object') {
+    data.placeholders = {};
+  }
   const parseLineOptions = options?.preserveLinkText
     ? { preserveLinkText: true }
     : undefined;
@@ -8765,7 +8814,10 @@ function ensureSkillsInResumeData(data = {}, skills = [], options = {}) {
   section.items = Array.isArray(section.items) ? section.items : [];
   const existingSkillSet = new Set();
   section.items.forEach((item) => {
-    const text = stringifyTokens(item || '');
+    const text = resolveEnhancementTokens(
+      stringifyTokens(item || ''),
+      data.placeholders || {}
+    );
     text
       .split(/[,•·|\/;]+/)
       .map((part) => part.replace(/^[-*\s]+/, '').trim())
@@ -8775,7 +8827,13 @@ function ensureSkillsInResumeData(data = {}, skills = [], options = {}) {
   normalizedSkills.forEach((skill) => {
     const lower = skill.toLowerCase();
     if (existingSkillSet.has(lower)) return;
-    const tokens = parseLine(`- ${skill}`, parseLineOptions);
+    const placeholder = registerEnhancementPlaceholder(
+      data,
+      section.heading || 'Skills',
+      skill
+    );
+    if (!placeholder) return;
+    const tokens = parseLine(`- ${placeholder}`, parseLineOptions);
     if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
     section.items.push(tokens);
     existingSkillSet.add(lower);
@@ -8786,6 +8844,9 @@ function ensureLatestTitleInExperience(data = {}, title = '', options = {}) {
   const normalizedTitle = typeof title === 'string' ? title.trim() : '';
   if (!normalizedTitle) return;
   data.sections = Array.isArray(data.sections) ? data.sections : [];
+  if (!data.placeholders || typeof data.placeholders !== 'object') {
+    data.placeholders = {};
+  }
   const parseLineOptions = options?.preserveLinkText
     ? { preserveLinkText: true }
     : undefined;
@@ -8798,13 +8859,28 @@ function ensureLatestTitleInExperience(data = {}, title = '', options = {}) {
     ? experienceSection.items
     : [];
   if (!experienceSection.items.length) {
-    experienceSection.items.push(parseLine(`- ${normalizedTitle}`, parseLineOptions));
+    const placeholder = registerEnhancementPlaceholder(
+      data,
+      experienceSection.heading || 'Work Experience',
+      normalizedTitle
+    );
+    if (!placeholder) return;
+    experienceSection.items.push(parseLine(`- ${placeholder}`, parseLineOptions));
     return;
   }
   const firstTokens = experienceSection.items[0] || [];
-  const firstText = stringifyTokens(firstTokens).trim();
+  const firstText = resolveEnhancementTokens(
+    stringifyTokens(firstTokens).trim(),
+    data.placeholders || {}
+  );
   if (!firstText) {
-    experienceSection.items[0] = parseLine(`- ${normalizedTitle}`, parseLineOptions);
+    const placeholder = registerEnhancementPlaceholder(
+      data,
+      experienceSection.heading || 'Work Experience',
+      normalizedTitle
+    );
+    if (!placeholder) return;
+    experienceSection.items[0] = parseLine(`- ${placeholder}`, parseLineOptions);
     return;
   }
   if (firstText.toLowerCase().includes(normalizedTitle.toLowerCase())) {
@@ -8824,8 +8900,14 @@ function ensureLatestTitleInExperience(data = {}, title = '', options = {}) {
   if (rest) {
     parts.push(rest);
   }
-  const updatedLine = `- ${parts.join(': ')}`.trim();
-  experienceSection.items[0] = parseLine(updatedLine, parseLineOptions);
+  const updatedValue = parts.join(': ');
+  const placeholder = registerEnhancementPlaceholder(
+    data,
+    experienceSection.heading || 'Work Experience',
+    updatedValue
+  );
+  if (!placeholder) return;
+  experienceSection.items[0] = parseLine(`- ${placeholder}`, parseLineOptions);
 }
 
 function createResumeVariants({
@@ -8856,7 +8938,16 @@ function createResumeVariants({
     sanitizeOptions
   );
 
-  return { version1: version1Text, version2: version2Text };
+  const placeholderMap = expandEnhancementTokenMap({
+    ...(resumeData.placeholders && typeof resumeData.placeholders === 'object'
+      ? resumeData.placeholders
+      : {}),
+    ...(version2Data.placeholders && typeof version2Data.placeholders === 'object'
+      ? version2Data.placeholders
+      : {}),
+  });
+
+  return { version1: version1Text, version2: version2Text, placeholders: placeholderMap };
 }
 
 async function verifyResume(
@@ -10193,6 +10284,13 @@ async function generateEnhancedDocumentsResponse({
     baseSkills: Array.isArray(geminiAddedSkills) ? geminiAddedSkills : [],
     sanitizeOptions,
   });
+
+  if (versionData?.placeholders && Object.keys(versionData.placeholders).length) {
+    enhancementTokenMap = {
+      ...enhancementTokenMap,
+      ...versionData.placeholders,
+    };
+  }
 
   if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
     await logEvent({
@@ -12469,6 +12567,7 @@ export {
   injectEnhancementTokens,
   relocateProfileLinks,
   verifyResume,
+  createResumeVariants,
   purgeExpiredSessions,
   handleDataRetentionEvent,
   classifyDocument,
