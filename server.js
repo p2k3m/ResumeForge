@@ -10306,18 +10306,27 @@ async function generateEnhancedDocumentsResponse({
     return null;
   }
 
-  const version1Tokenized = injectEnhancementTokens(
-    versionData.version1,
+  const version1Resolved = resolveEnhancementTokens(
+    typeof versionData.version1 === 'string' ? versionData.version1 : '',
     enhancementTokenMap
   );
-  const version2Tokenized = injectEnhancementTokens(
-    versionData.version2,
+  const version2Resolved = resolveEnhancementTokens(
+    typeof versionData.version2 === 'string' ? versionData.version2 : '',
     enhancementTokenMap
   );
 
-  const version1Skills = extractResumeSkills(versionData.version1);
+  const version1Tokenized = injectEnhancementTokens(
+    version1Resolved,
+    enhancementTokenMap
+  );
+  const version2Tokenized = injectEnhancementTokens(
+    version2Resolved,
+    enhancementTokenMap
+  );
+
+  const version1Skills = extractResumeSkills(version1Resolved);
   const match1 = calculateMatchScore(jobSkills, version1Skills);
-  const version2Skills = extractResumeSkills(versionData.version2);
+  const version2Skills = extractResumeSkills(version2Resolved);
   const match2 = calculateMatchScore(jobSkills, version2Skills);
   const bestMatch = match1.score >= match2.score ? match1 : match2;
 
@@ -10457,12 +10466,14 @@ async function generateEnhancedDocumentsResponse({
         coverLetter2Tokens.tokenizedText || coverData.cover_letter2 || '',
     },
     version1: {
-      text: versionData.version1,
-      templateText: version1Tokenized,
+      text: version1Resolved,
+      templateText: version1Resolved,
+      tokenizedText: version1Tokenized,
     },
     version2: {
-      text: versionData.version2,
-      templateText: version2Tokenized,
+      text: version2Resolved,
+      templateText: version2Resolved,
+      tokenizedText: version2Tokenized,
     },
   };
   const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
