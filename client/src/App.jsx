@@ -223,26 +223,88 @@ const jobFitToneStyles = {
   }
 }
 
-const templateOptions = [
+const TEMPLATE_ALIASES = {
+  ucmo: 'classic',
+  vibrant: 'creative'
+}
+
+const canonicalizeTemplateId = (value) => {
+  if (typeof value !== 'string') return ''
+  const trimmed = value.trim().toLowerCase()
+  if (!trimmed) return ''
+  return TEMPLATE_ALIASES[trimmed] || trimmed
+}
+
+const normalizeTemplateContext = (context) => {
+  if (!context || typeof context !== 'object') return null
+  const normalized = { ...context }
+  const primary = canonicalizeTemplateId(context.template1)
+  const secondary = canonicalizeTemplateId(context.template2)
+  const selected =
+    canonicalizeTemplateId(context.selectedTemplate) || primary || secondary
+  if (primary) normalized.template1 = primary
+  if (secondary) normalized.template2 = secondary
+  if (selected) normalized.selectedTemplate = selected
+  if (Array.isArray(context.templates)) {
+    normalized.templates = Array.from(
+      new Set(
+        context.templates
+          .map((item) => canonicalizeTemplateId(item))
+          .filter(Boolean)
+      )
+    )
+  }
+  const baseTemplates = Array.isArray(normalized.templates)
+    ? normalized.templates
+    : []
+  const enrichedTemplates = Array.from(
+    new Set([primary, selected, secondary, ...baseTemplates].filter(Boolean))
+  )
+  if (enrichedTemplates.length) {
+    normalized.templates = enrichedTemplates
+  }
+  return normalized
+}
+
+const formatTemplateName = (id) => {
+  if (!id) return 'Custom Template'
+  if (id === '2025') return 'Future Vision 2025'
+  return id
+    .split(/[-_]/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+const BASE_TEMPLATE_OPTIONS = [
   {
     id: 'modern',
     name: 'Modern Minimal',
-    description: 'Two-column balance, subtle dividers, ATS-safe typography.'
+    description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.'
   },
   {
     id: 'professional',
-    name: 'Professional Blue',
-    description: 'Classic layout with blue accents and bullet precision.'
+    name: 'Professional Edge',
+    description: 'Refined business styling with signature accents for leadership roles.'
   },
   {
-    id: 'vibrant',
-    name: 'Vibrant Gradient',
-    description: 'Bold gradients with strong section separation.'
+    id: 'classic',
+    name: 'Classic Heritage',
+    description: 'Timeless serif typography with elegant section framing.'
+  },
+  {
+    id: 'creative',
+    name: 'Creative Spotlight',
+    description: 'Gradient-rich storytelling layout with bold highlights.'
+  },
+  {
+    id: 'ats',
+    name: 'ATS Optimized',
+    description: 'Single-column structure engineered for parsing accuracy.'
   },
   {
     id: '2025',
-    name: '2025 Vision',
-    description: 'Latest Inter font styling with responsive grid sections.'
+    name: 'Future Vision 2025',
+    description: 'Futuristic grid layout with crisp typography and subtle neon cues.'
   }
 ]
 
@@ -748,6 +810,73 @@ function App() {
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
   const improvementBusy = Boolean(activeImprovement)
+
+  const availableTemplateOptions = useMemo(() => {
+    const registry = new Map(BASE_TEMPLATE_OPTIONS.map((option) => [option.id, option]))
+    const extras = []
+    const register = (value) => {
+      const canonical = canonicalizeTemplateId(value)
+      if (!canonical || registry.has(canonical)) {
+        return
+      }
+      const option = {
+        id: canonical,
+        name: formatTemplateName(canonical),
+        description: 'Imported resume template from your previous session.'
+      }
+      registry.set(canonical, option)
+      extras.push(option)
+    }
+
+    const templateCandidates = Array.isArray(templateContext?.templates)
+      ? templateContext.templates
+      : []
+    templateCandidates.forEach(register)
+    register(templateContext?.template1)
+    register(templateContext?.template2)
+    register(templateContext?.selectedTemplate)
+    register(selectedTemplate)
+
+    return [
+      ...BASE_TEMPLATE_OPTIONS,
+      ...extras
+    ]
+  }, [templateContext, selectedTemplate])
+
+  useEffect(() => {
+    if (!templateContext) return
+    const canonical = canonicalizeTemplateId(
+      templateContext.selectedTemplate || templateContext.template1
+    )
+    if (canonical && canonical !== selectedTemplate) {
+      setSelectedTemplate(canonical)
+    }
+  }, [templateContext, selectedTemplate])
+
+  const handleTemplateSelect = useCallback(
+    (templateId) => {
+      const canonical = canonicalizeTemplateId(templateId) || 'modern'
+      setSelectedTemplate(canonical)
+      setTemplateContext((prev) => {
+        const base = prev ? { ...prev } : {}
+        base.template1 = canonical
+        base.selectedTemplate = canonical
+        const currentList = Array.isArray(prev?.templates)
+          ? prev.templates
+              .map((item) => canonicalizeTemplateId(item))
+              .filter(Boolean)
+          : []
+        if (!currentList.includes(canonical)) {
+          base.templates = [canonical, ...currentList]
+        } else {
+          const filtered = currentList.filter((item) => item !== canonical)
+          base.templates = [canonical, ...filtered]
+        }
+        return base
+      })
+    },
+    [setTemplateContext]
+  )
   const flowSteps = useMemo(() => {
     const improvementsComplete = improvementCount > 0
     const downloadComplete = downloadCount > 0
@@ -1115,6 +1244,7 @@ function App() {
       }
       if (selectedTemplate) {
         formData.append('template', selectedTemplate)
+        formData.append('templateId', selectedTemplate)
       }
 
       const requestUrl = buildApiUrl(API_BASE_URL, '/api/process-cv')
@@ -1181,8 +1311,9 @@ function App() {
       setOutputFiles(outputFilesValue)
       const jobIdValue = typeof data.jobId === 'string' ? data.jobId : ''
       setJobId(jobIdValue)
-      const templateContextValue =
+      const templateContextValue = normalizeTemplateContext(
         data && typeof data.templateContext === 'object' ? data.templateContext : null
+      )
       setTemplateContext(templateContextValue)
       setManualJobDescriptionRequired(false)
       const probabilityBeforeValue =
@@ -1384,10 +1515,11 @@ function App() {
       : []
     setOutputFiles(outputFilesValue)
 
-    const templateContextValue =
+    const templateContextValue = normalizeTemplateContext(
       snapshot.templateContext && typeof snapshot.templateContext === 'object'
         ? cloneData(snapshot.templateContext)
         : null
+    )
     setTemplateContext(templateContextValue)
 
     setChangeLog([])
@@ -1741,6 +1873,18 @@ function App() {
     setIsGeneratingDocs(true)
     setError('')
     try {
+      const canonicalTemplate = canonicalizeTemplateId(selectedTemplate) || 'modern'
+      const nextTemplateContext = normalizeTemplateContext(
+        templateContext && typeof templateContext === 'object'
+          ? { ...templateContext }
+          : { template1: canonicalTemplate }
+      ) || { template1: canonicalTemplate }
+      if (!nextTemplateContext.template1) {
+        nextTemplateContext.template1 = canonicalTemplate
+      }
+      nextTemplateContext.selectedTemplate =
+        canonicalizeTemplateId(nextTemplateContext.selectedTemplate) || nextTemplateContext.template1
+
       const payload = {
         jobId,
         resumeText,
@@ -1754,7 +1898,9 @@ function App() {
         linkedinProfileUrl: profileUrl.trim(),
         credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
-        templateContext: templateContext || { template1: selectedTemplate },
+        templateContext: nextTemplateContext,
+        templateId: canonicalTemplate,
+        template: canonicalTemplate,
         baseline: {
           table: cloneData(initialAnalysisSnapshot?.match?.table || []),
           missingSkills: cloneData(initialAnalysisSnapshot?.match?.missingSkills || []),
@@ -1788,8 +1934,9 @@ function App() {
       if (typeof data.jobId === 'string' && data.jobId.trim()) {
         setJobId(data.jobId.trim())
       }
-      const templateContextValue =
+      const templateContextValue = normalizeTemplateContext(
         data && typeof data.templateContext === 'object' ? data.templateContext : null
+      )
       setTemplateContext(templateContextValue)
 
       const probabilityValue =
@@ -2129,9 +2276,9 @@ function App() {
           </div>
 
           <TemplateSelector
-            options={templateOptions}
+            options={availableTemplateOptions}
             selectedTemplate={selectedTemplate}
-            onSelect={setSelectedTemplate}
+            onSelect={handleTemplateSelect}
             disabled={isProcessing}
           />
 
