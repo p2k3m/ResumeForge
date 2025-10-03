@@ -274,13 +274,7 @@ jobs:
             # the sequences before normalizing whitespace so detection works even when
             # colors are enabled.
             deploy_err_stripped=$(printf '%s\n' "$deploy_err" | \
-              python <<'PY'
-import re
-import sys
-
-ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
-sys.stdout.write(ansi_escape.sub('', sys.stdin.read()))
-PY
+              python -c "import re, sys; ansi_escape = re.compile(r'\\x1B\\[[0-?]*[ -/]*[@-~]'); sys.stdout.write(ansi_escape.sub('', sys.stdin.read()))"
             )
 
             deploy_err_normalized=$(printf '%s\n' "$deploy_err_stripped" | tr '\r\n' '  ' | tr -s ' ')
