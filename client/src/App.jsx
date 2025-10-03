@@ -9,6 +9,7 @@ import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
 import JobDescriptionPreview from './components/JobDescriptionPreview.jsx'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
+import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Your new CV could not be generated. Please try again or contact support.'
@@ -93,6 +94,29 @@ function formatReadableList(items) {
   if (list.length === 1) return list[0]
   if (list.length === 2) return `${list[0]} and ${list[1]}`
   return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`
+}
+
+const COVER_LETTER_TYPES = new Set(['cover_letter1', 'cover_letter2'])
+
+function isCoverLetterType(type) {
+  return COVER_LETTER_TYPES.has(type)
+}
+
+function deriveCoverLetterStateFromFiles(files) {
+  const drafts = {}
+  const originals = {}
+  if (!Array.isArray(files)) {
+    return { drafts, originals }
+  }
+  files.forEach((file) => {
+    if (!file || typeof file !== 'object') return
+    const type = file.type
+    if (!isCoverLetterType(type)) return
+    const text = typeof file.text === 'string' ? file.text : ''
+    drafts[type] = text
+    originals[type] = text
+  })
+  return { drafts, originals }
 }
 
 function normaliseReasonLines(reason) {
@@ -1090,6 +1114,12 @@ function App() {
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
   const [enhanceAllSummaryText, setEnhanceAllSummaryText] = useState('')
+  const [coverLetterDrafts, setCoverLetterDrafts] = useState({})
+  const [coverLetterOriginals, setCoverLetterOriginals] = useState({})
+  const [coverLetterEditor, setCoverLetterEditor] = useState(null)
+  const [isCoverLetterDownloading, setIsCoverLetterDownloading] = useState(false)
+  const [coverLetterDownloadError, setCoverLetterDownloadError] = useState('')
+  const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
@@ -1335,11 +1365,126 @@ function App() {
     return { resume, cover, other }
   }, [outputFiles])
 
-  const openDownloadPreview = useCallback((file) => {
-    if (!file) return
-    const presentation = file.presentation || getDownloadPresentation(file)
-    setPreviewFile({ ...file, presentation })
+  const handleCoverLetterTextChange = useCallback(
+    (type, value) => {
+      if (!isCoverLetterType(type)) return
+      setCoverLetterDrafts((prev) => ({ ...prev, [type]: value }))
+      setCoverLetterClipboardStatus('')
+      setCoverLetterDownloadError('')
+    },
+    []
+  )
+
+  const resetCoverLetterDraft = useCallback(
+    (type) => {
+      if (!isCoverLetterType(type)) return
+      setCoverLetterDrafts((prev) => ({ ...prev, [type]: coverLetterOriginals[type] ?? '' }))
+      setCoverLetterClipboardStatus('')
+      setCoverLetterDownloadError('')
+    },
+    [coverLetterOriginals]
+  )
+
+  const handleCopyCoverLetter = useCallback(
+    async (type) => {
+      if (!isCoverLetterType(type)) return
+      const text = (coverLetterDrafts[type] ?? '').trim()
+      if (!text) {
+        setCoverLetterClipboardStatus('Add personalised text before copying.')
+        return
+      }
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+          setCoverLetterClipboardStatus('Copied to clipboard!')
+        } else {
+          setCoverLetterClipboardStatus('Copy not supported in this browser.')
+        }
+      } catch (err) {
+        console.error('Copy cover letter failed', err)
+        setCoverLetterClipboardStatus('Copy failed. Select the text and copy manually.')
+      }
+    },
+    [coverLetterDrafts]
+  )
+
+  const handleDownloadEditedCoverLetter = useCallback(async () => {
+    if (!coverLetterEditor || !isCoverLetterType(coverLetterEditor.type)) {
+      return
+    }
+    if (typeof window === 'undefined') {
+      setCoverLetterDownloadError('PDF download is not supported in this environment.')
+      return
+    }
+    const type = coverLetterEditor.type
+    const text = (coverLetterDrafts[type] ?? '').trim()
+    if (!text) {
+      setCoverLetterDownloadError('Add your personalised message before downloading.')
+      return
+    }
+    setIsCoverLetterDownloading(true)
+    setCoverLetterDownloadError('')
+    try {
+      const blob = await createCoverLetterPdf({
+        text,
+        title: coverLetterEditor.label || 'Cover Letter'
+      })
+      const safeLabel = (coverLetterEditor.label || type || 'cover-letter')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+      const fileName = `${safeLabel || 'cover-letter'}-updated.pdf`
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(blobUrl)
+      setCoverLetterClipboardStatus('Updated PDF downloaded.')
+    } catch (err) {
+      console.error('Cover letter PDF generation failed', err)
+      setCoverLetterDownloadError('Unable to create the PDF. Please try again.')
+    } finally {
+      setIsCoverLetterDownloading(false)
+    }
+  }, [coverLetterEditor, coverLetterDrafts])
+
+  const openCoverLetterEditorModal = useCallback(
+    (file) => {
+      if (!file || !isCoverLetterType(file.type)) return
+      const presentation = file.presentation || getDownloadPresentation(file)
+      setCoverLetterEditor({
+        type: file.type,
+        label: presentation.label,
+        presentation,
+        file
+      })
+      setCoverLetterDownloadError('')
+      setCoverLetterClipboardStatus('')
+    },
+    [setCoverLetterEditor, setCoverLetterDownloadError, setCoverLetterClipboardStatus]
+  )
+
+  const closeCoverLetterEditor = useCallback(() => {
+    setCoverLetterEditor(null)
+    setCoverLetterDownloadError('')
+    setCoverLetterClipboardStatus('')
   }, [])
+
+  const openDownloadPreview = useCallback(
+    (file) => {
+      if (!file) return
+      const presentation = file.presentation || getDownloadPresentation(file)
+      if (presentation.category === 'cover' && isCoverLetterType(file.type)) {
+        openCoverLetterEditorModal({ ...file, presentation })
+        return
+      }
+      setPreviewFile({ ...file, presentation })
+    },
+    [openCoverLetterEditorModal]
+  )
 
   const closeDownloadPreview = useCallback(() => {
     setPreviewFile(null)
@@ -1367,6 +1512,12 @@ function App() {
             timeStyle: 'short'
           })
         : null
+    const isCoverLetter = presentation.category === 'cover' && isCoverLetterType(file.type)
+    const coverDraftText = isCoverLetter ? coverLetterDrafts[file.type] ?? '' : ''
+    const coverOriginalText = isCoverLetter
+      ? coverLetterOriginals[file.type] ?? (typeof file.text === 'string' ? file.text : '')
+      : ''
+    const coverEdited = isCoverLetter && coverDraftText && coverDraftText !== coverOriginalText
     return (
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
@@ -1380,10 +1531,12 @@ function App() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <button
               type="button"
-              onClick={() => openDownloadPreview(file)}
+              onClick={() =>
+                isCoverLetter ? openCoverLetterEditorModal(file) : openDownloadPreview(file)
+              }
               className={secondaryButtonClass}
             >
-              Preview
+              {isCoverLetter ? 'Review & Edit' : 'Preview'}
             </button>
             <a
               href={file.url}
@@ -1398,9 +1551,21 @@ function App() {
             <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
           )}
         </div>
+        {isCoverLetter && (
+          <p className={`text-xs ${coverEdited ? 'text-indigo-600 font-semibold' : 'text-purple-500'}`}>
+            {coverEdited
+              ? 'Edits pending — download the updated PDF from the editor.'
+              : 'Open the editor to fine-tune the copy before downloading.'}
+          </p>
+        )}
       </div>
     )
-  }, [openDownloadPreview])
+  }, [
+    openDownloadPreview,
+    openCoverLetterEditorModal,
+    coverLetterDrafts,
+    coverLetterOriginals
+  ])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
@@ -1465,8 +1630,14 @@ function App() {
       .filter(Boolean)
       .sort((a, b) => a.priority - b.priority)
 
-    const nextCandidate = candidates[0]
+    const nextCandidate =
+      candidates.find((entry) => entry.presentation?.category !== 'cover') || candidates[0]
     if (!nextCandidate || !nextCandidate.signature) {
+      return
+    }
+
+    if (nextCandidate.presentation?.category === 'cover') {
+      autoPreviewSignatureRef.current = nextCandidate.signature
       return
     }
 
@@ -1477,6 +1648,16 @@ function App() {
     autoPreviewSignatureRef.current = nextCandidate.signature
     setPreviewFile({ ...nextCandidate.file, presentation: nextCandidate.presentation })
   }, [outputFiles, autoPreviewSignatureRef])
+
+  useEffect(() => {
+    if (!coverLetterEditor) {
+      return
+    }
+    const exists = outputFiles.some((file) => file?.type === coverLetterEditor.type)
+    if (!exists) {
+      setCoverLetterEditor(null)
+    }
+  }, [coverLetterEditor, outputFiles])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1543,7 +1724,11 @@ function App() {
         )
         setIsProcessing(false)
         setError('')
-        setOutputFiles(Array.isArray(payload.urls) ? payload.urls : [])
+        const payloadUrls = Array.isArray(payload.urls) ? payload.urls : []
+        setOutputFiles(payloadUrls)
+        const { drafts, originals } = deriveCoverLetterStateFromFiles(payloadUrls)
+        setCoverLetterDrafts(drafts)
+        setCoverLetterOriginals(originals)
         setMatch(payload.match || null)
       } else if (data.type === 'OFFLINE_UPLOAD_FAILED') {
         setQueuedMessage('')
@@ -1607,6 +1792,11 @@ function App() {
     setJobId('')
     setTemplateContext(null)
     setIsGeneratingDocs(false)
+    setCoverLetterDrafts({})
+    setCoverLetterOriginals({})
+    setCoverLetterEditor(null)
+    setCoverLetterDownloadError('')
+    setCoverLetterClipboardStatus('')
   }
 
   const handleScoreSubmit = async () => {
@@ -1718,6 +1908,10 @@ function App() {
 
       const outputFilesValue = Array.isArray(data.urls) ? data.urls : []
       setOutputFiles(outputFilesValue)
+      const { drafts: analysisCoverLetterDrafts, originals: analysisCoverLetterOriginals } =
+        deriveCoverLetterStateFromFiles(outputFilesValue)
+      setCoverLetterDrafts(analysisCoverLetterDrafts)
+      setCoverLetterOriginals(analysisCoverLetterOriginals)
       const jobIdValue = typeof data.jobId === 'string' ? data.jobId : ''
       setJobId(jobIdValue)
       const templateContextValue = normalizeTemplateContext(
@@ -1853,7 +2047,9 @@ function App() {
         scoreBreakdown: cloneData(normalizedBreakdown),
         outputFiles: cloneData(outputFilesValue),
         templateContext: cloneData(templateContextValue),
-        changeLog: cloneData(changeLogValue)
+        changeLog: cloneData(changeLogValue),
+        coverLetterDrafts: cloneData(analysisCoverLetterDrafts),
+        coverLetterOriginals: cloneData(analysisCoverLetterOriginals)
       })
     } catch (err) {
       console.error('Unable to enhance CV', err)
@@ -1927,6 +2123,20 @@ function App() {
       ? cloneData(snapshot.outputFiles)
       : []
     setOutputFiles(outputFilesValue)
+
+    const snapshotCoverDrafts =
+      snapshot.coverLetterDrafts && typeof snapshot.coverLetterDrafts === 'object'
+        ? cloneData(snapshot.coverLetterDrafts)
+        : deriveCoverLetterStateFromFiles(outputFilesValue).drafts
+    const snapshotCoverOriginals =
+      snapshot.coverLetterOriginals && typeof snapshot.coverLetterOriginals === 'object'
+        ? cloneData(snapshot.coverLetterOriginals)
+        : deriveCoverLetterStateFromFiles(outputFilesValue).originals
+    setCoverLetterDrafts(snapshotCoverDrafts || {})
+    setCoverLetterOriginals(snapshotCoverOriginals || {})
+    setCoverLetterEditor(null)
+    setCoverLetterDownloadError('')
+    setCoverLetterClipboardStatus('')
 
     const templateContextValue = normalizeTemplateContext(
       snapshot.templateContext && typeof snapshot.templateContext === 'object'
@@ -2560,6 +2770,10 @@ function App() {
       const data = await response.json()
       const urlsValue = Array.isArray(data.urls) ? data.urls : []
       setOutputFiles(urlsValue)
+      const { drafts: generatedCoverLetterDrafts, originals: generatedCoverLetterOriginals } =
+        deriveCoverLetterStateFromFiles(urlsValue)
+      setCoverLetterDrafts(generatedCoverLetterDrafts)
+      setCoverLetterOriginals(generatedCoverLetterOriginals)
       if (typeof data.jobId === 'string' && data.jobId.trim()) {
         setJobId(data.jobId.trim())
       }
@@ -3518,6 +3732,118 @@ function App() {
             </div>
           </div>
         )}
+
+        {coverLetterEditor && (() => {
+          const type = coverLetterEditor.type
+          const draftText =
+            coverLetterDrafts[type] ??
+            (typeof coverLetterEditor.file?.text === 'string' ? coverLetterEditor.file.text : '')
+          const originalText =
+            coverLetterOriginals[type] ??
+            (typeof coverLetterEditor.file?.text === 'string' ? coverLetterEditor.file.text : '')
+          const hasChanges = draftText !== originalText
+          const wordCount = draftText.trim()
+            ? draftText
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean).length
+            : 0
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4 py-6"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Edit ${coverLetterEditor.label || 'cover letter'}`}
+              onClick={closeCoverLetterEditor}
+            >
+              <div
+                className="w-full max-w-4xl rounded-3xl bg-white shadow-2xl border border-indigo-200/70 overflow-hidden"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-sky-50 px-6 py-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-indigo-900">
+                      {coverLetterEditor.label || 'Cover letter'}
+                    </h3>
+                    <p className="mt-1 text-sm text-indigo-700/90">
+                      Refine the draft text before downloading your personalised PDF.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeCoverLetterEditor}
+                    className="text-sm font-semibold text-indigo-700 hover:text-indigo-900"
+                  >
+                    Close
+                  </button>
+                </div>
+                <div className="px-6 py-6 space-y-4 text-indigo-900">
+                  <textarea
+                    value={draftText}
+                    onChange={(event) => handleCoverLetterTextChange(type, event.target.value)}
+                    rows={14}
+                    className="w-full rounded-2xl border border-indigo-200 bg-white/90 px-4 py-3 text-sm leading-relaxed shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder="Introduce yourself, highlight the top accomplishments that match the JD, and close with a confident call to action."
+                  />
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-indigo-600/80">
+                        {wordCount} word{wordCount === 1 ? '' : 's'}
+                      </span>
+                      {hasChanges ? (
+                        <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                          Edited
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          Original draft
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => resetCoverLetterDraft(type)}
+                        className="px-4 py-2 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                      >
+                        Reset to original
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCoverLetter(type)}
+                        className="px-4 py-2 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                      >
+                        Copy to clipboard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDownloadEditedCoverLetter}
+                        disabled={isCoverLetterDownloading}
+                        className={`px-4 py-2 rounded-xl font-semibold text-white shadow ${
+                          isCoverLetterDownloading
+                            ? 'bg-indigo-300 cursor-wait'
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
+                      >
+                        {isCoverLetterDownloading ? 'Preparing PDF…' : 'Download updated PDF'}
+                      </button>
+                    </div>
+                  </div>
+                  {coverLetterDownloadError && (
+                    <p className="text-sm font-medium text-rose-600">
+                      {coverLetterDownloadError}
+                    </p>
+                  )}
+                  {coverLetterClipboardStatus && (
+                    <p className="text-sm text-indigo-600/80">
+                      {coverLetterClipboardStatus}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {previewSuggestion && (
           <div
