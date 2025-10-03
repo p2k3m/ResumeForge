@@ -9,8 +9,14 @@ const baseResume = [
   'Original summary line focused on delivery.',
   '# Skills',
   '- JavaScript',
+  '# Projects',
+  '- Delivered analytics dashboard for leadership.',
+  '# Highlights',
+  '- Recognised for 20% adoption growth.',
   '# Experience',
   '- Built scalable services.',
+  '# Certifications',
+  '- AWS Certified Solutions Architect',
 ].join('\n');
 
 const jobDescription = [
@@ -79,6 +85,61 @@ describe('targeted improvement routes', () => {
         added: ['Refined summary that highlights leadership impact.'],
         removed: ['Original summary line focused on delivery.'],
         reason: ['Highlights leadership accomplishments.'],
+      })
+    );
+  });
+
+  it('returns a structured improvement summary for improve-certifications', async () => {
+    generateContentMock.mockResolvedValueOnce({
+      response: {
+        text: () =>
+          JSON.stringify({
+            updatedResume: baseResume.replace(
+              '- AWS Certified Solutions Architect',
+              '- AWS Certified Solutions Architect\n- Azure Administrator Associate'
+            ),
+            beforeExcerpt: '- AWS Certified Solutions Architect',
+            afterExcerpt: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+            explanation: 'Elevated certifications for cloud leadership.',
+            confidence: 0.77,
+            changeDetails: [
+              {
+                section: 'Certifications',
+                before: '- AWS Certified Solutions Architect',
+                after: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+                reasons: ['Elevated certifications for cloud leadership.'],
+              },
+            ],
+          }),
+      },
+    });
+
+    const response = await request(app).post('/api/improve-certifications').send({
+      jobId: 'job-789',
+      linkedinProfileUrl: 'https://linkedin.com/in/example',
+      resumeText: baseResume,
+      jobDescription,
+      knownCertificates: [{ name: 'AWS Certified Solutions Architect' }],
+      manualCertificates: [{ name: 'Azure Administrator Associate' }],
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: true,
+        type: 'improve-certifications',
+        beforeExcerpt: '- AWS Certified Solutions Architect',
+        afterExcerpt: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+        confidence: expect.any(Number),
+      })
+    );
+    expect(Array.isArray(response.body.improvementSummary)).toBe(true);
+    expect(response.body.improvementSummary[0]).toEqual(
+      expect.objectContaining({
+        section: 'Certifications',
+        added: expect.arrayContaining(['Azure Administrator Associate']),
+        removed: expect.arrayContaining([]),
+        reason: ['Elevated certifications for cloud leadership.'],
       })
     );
   });

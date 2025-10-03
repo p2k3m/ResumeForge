@@ -8,8 +8,14 @@ const baseResume = [
   'Original summary line focused on delivery.',
   '# Skills',
   '- JavaScript',
+  '# Projects',
+  '- Delivered analytics dashboard for leadership.',
+  '# Highlights',
+  '- Recognised for 20% adoption growth.',
   '# Experience',
   '- Built scalable services.',
+  '# Certifications',
+  '- AWS Certified Solutions Architect',
 ].join('\n');
 
 const jobDescription = [
@@ -39,72 +45,252 @@ describe('targeted improvement endpoints (integration)', () => {
       {
         route: '/api/improve-summary',
         type: 'improve-summary',
-        expectation: {
-          summary: 'Refined summary spotlighting leadership wins.',
-          section: 'Summary',
-        },
+        section: 'Summary',
+        beforeExcerpt: 'Original summary line focused on delivery.',
+        afterExcerpt: 'Refined summary spotlighting leadership wins.',
+        explanation: 'Refined summary spotlighting leadership wins.',
+        mutations: [
+          {
+            target: 'Original summary line focused on delivery.',
+            value: 'Refined summary spotlighting leadership wins.',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Summary',
+            before: '- Original summary line focused on delivery.',
+            after: '- Refined summary spotlighting leadership wins.',
+            reasons: ['Refined summary spotlighting leadership wins.'],
+          },
+        ],
       },
       {
         route: '/api/add-missing-skills',
         type: 'add-missing-skills',
-        expectation: {
-          summary: 'Added targeted skills including leadership and cloud.',
-          section: 'Skills',
-        },
+        section: 'Skills',
+        beforeExcerpt: '- JavaScript',
+        afterExcerpt: '- JavaScript\n- Leadership',
+        explanation: 'Added targeted skills including leadership and cloud.',
+        mutations: [
+          {
+            target: '- JavaScript',
+            value: '- JavaScript\n- Leadership',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Skills',
+            before: '- JavaScript',
+            after: '- JavaScript\n- Leadership',
+            reasons: ['Added targeted skills including leadership and cloud.'],
+          },
+        ],
       },
       {
         route: '/api/change-designation',
         type: 'change-designation',
-        expectation: {
-          summary: 'Aligned title with target role.',
-          section: 'Designation',
-        },
+        section: 'Designation',
+        beforeExcerpt: 'Senior Software Engineer',
+        afterExcerpt: 'Lead Software Engineer',
+        explanation: 'Aligned title with target role.',
+        mutations: [
+          {
+            target: 'Senior Software Engineer',
+            value: 'Lead Software Engineer',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Designation',
+            before: 'Senior Software Engineer',
+            after: 'Lead Software Engineer',
+            reasons: ['Aligned title with target role.'],
+          },
+        ],
       },
       {
         route: '/api/align-experience',
         type: 'align-experience',
-        expectation: {
-          summary: 'Expanded experience bullets for leadership initiatives.',
-          section: 'Experience',
-        },
+        section: 'Experience',
+        beforeExcerpt: '- Built scalable services.',
+        afterExcerpt: '- Built scalable services.\n- Expanded leadership initiatives.',
+        explanation: 'Expanded experience bullets for leadership initiatives.',
+        mutations: [
+          {
+            target: '- Built scalable services.',
+            value: '- Built scalable services.\n- Expanded leadership initiatives.',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Experience',
+            before: '- Built scalable services.',
+            after: '- Built scalable services.\n- Expanded leadership initiatives.',
+            reasons: ['Expanded experience bullets for leadership initiatives.'],
+          },
+        ],
+      },
+      {
+        route: '/api/improve-certifications',
+        type: 'improve-certifications',
+        section: 'Certifications',
+        beforeExcerpt: '- AWS Certified Solutions Architect',
+        afterExcerpt: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+        explanation: 'Elevated certifications for cloud leadership.',
+        mutations: [
+          {
+            target: '- AWS Certified Solutions Architect',
+            value: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Certifications',
+            before: '- AWS Certified Solutions Architect',
+            after: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+            reasons: ['Elevated certifications for cloud leadership.'],
+          },
+        ],
+      },
+      {
+        route: '/api/improve-projects',
+        type: 'improve-projects',
+        section: 'Projects',
+        beforeExcerpt: '- Delivered analytics dashboard for leadership.',
+        afterExcerpt: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+        explanation: 'Spotlighted projects that match role priorities.',
+        mutations: [
+          {
+            target: '- Delivered analytics dashboard for leadership.',
+            value: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Projects',
+            before: '- Delivered analytics dashboard for leadership.',
+            after: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+            reasons: ['Spotlighted projects that match role priorities.'],
+          },
+        ],
+      },
+      {
+        route: '/api/improve-highlights',
+        type: 'improve-highlights',
+        section: 'Highlights',
+        beforeExcerpt: '- Recognised for 20% adoption growth.',
+        afterExcerpt: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+        explanation: 'Reinforced highlights around JD success metrics.',
+        mutations: [
+          {
+            target: '- Recognised for 20% adoption growth.',
+            value: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Highlights',
+            before: '- Recognised for 20% adoption growth.',
+            after: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+            reasons: ['Reinforced highlights around JD success metrics.'],
+          },
+        ],
       },
       {
         route: '/api/enhance-all',
         type: 'enhance-all',
-        expectation: {
-          summary: 'Applied holistic improvements across resume sections.',
-          section: '',
-        },
+        section: '',
+        beforeExcerpt: 'Original summary line focused on delivery.',
+        afterExcerpt: 'Applied holistic improvements across resume sections.',
+        explanation: 'Applied holistic improvements across resume sections.',
+        mutations: [
+          {
+            target: 'Original summary line focused on delivery.',
+            value: 'Applied holistic improvements across resume sections.',
+          },
+          {
+            target: '- JavaScript',
+            value: '- JavaScript\n- Leadership',
+          },
+          {
+            target: '- Delivered analytics dashboard for leadership.',
+            value: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+          },
+          {
+            target: '- Recognised for 20% adoption growth.',
+            value: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+          },
+          {
+            target: '- Built scalable services.',
+            value: '- Built scalable services.\n- Expanded leadership initiatives.',
+          },
+          {
+            target: '- AWS Certified Solutions Architect',
+            value: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Summary',
+            before: '- Original summary line focused on delivery.',
+            after: '- Applied holistic improvements across resume sections.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Skills',
+            before: '- JavaScript',
+            after: '- JavaScript\n- Leadership',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Projects',
+            before: '- Delivered analytics dashboard for leadership.',
+            after: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Highlights',
+            before: '- Recognised for 20% adoption growth.',
+            after: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Work Experience',
+            before: '- Built scalable services.',
+            after: '- Built scalable services.\n- Expanded leadership initiatives.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Certifications',
+            before: '- AWS Certified Solutions Architect',
+            after: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+        ],
       },
     ];
 
-    aiResponses.forEach(({ expectation }) => {
-      const updated = baseResume
-        .replace('Original summary line focused on delivery.', expectation.summary)
-        .replace('Senior Software Engineer', 'Lead Software Engineer');
+    aiResponses.forEach(({ mutations = [], beforeExcerpt, afterExcerpt, explanation, changeDetails }) => {
+      const replacements = mutations.length
+        ? mutations
+        : [{ target: beforeExcerpt, value: afterExcerpt }];
+      const updated = replacements.reduce((text, mutation) => text.replace(mutation.target, mutation.value), baseResume);
       generateContentMock.mockResolvedValueOnce({
         response: {
           text: () =>
             JSON.stringify({
               updatedResume: updated,
-              beforeExcerpt: 'Original summary line focused on delivery.',
-              afterExcerpt: expectation.summary,
-              explanation: expectation.summary,
+              beforeExcerpt,
+              afterExcerpt,
+              explanation,
               confidence: 0.74,
-              changeDetails: [
-                {
-                  section: expectation.section || 'Summary',
-                  before: '- Original summary line focused on delivery.',
-                  after: `- ${expectation.summary}`,
-                  reasons: [expectation.summary],
-                },
-              ],
+              changeDetails,
             }),
         },
       });
     });
 
-    for (const { route, type, expectation } of aiResponses) {
+    for (const { route, type, section, explanation } of aiResponses) {
       const response = await request(app)
         .post(route)
         .send({
@@ -121,10 +307,12 @@ describe('targeted improvement endpoints (integration)', () => {
       expect(Array.isArray(response.body.improvementSummary)).toBe(true);
       expect(response.body.improvementSummary.length).toBeGreaterThan(0);
       const summaryEntry = response.body.improvementSummary[0];
-      if (expectation.section) {
-        expect(summaryEntry.section).toMatch(new RegExp(expectation.section, 'i'));
+      if (section) {
+        expect(summaryEntry.section).toMatch(new RegExp(section, 'i'));
       }
-      expect(summaryEntry.reason.join(' ')).toContain(expectation.summary.split(' ')[0]);
+      if (explanation) {
+        expect(summaryEntry.reason.join(' ')).toContain(explanation.split(' ')[0]);
+      }
     }
 
     expect(generateContentMock).toHaveBeenCalledTimes(aiResponses.length);
