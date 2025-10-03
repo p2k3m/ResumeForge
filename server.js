@@ -3841,7 +3841,8 @@ function extractContactDetails(text = '', linkedinProfileUrl = '') {
   return result;
 }
 
-function parseLine(text) {
+function parseLine(text, options = {}) {
+  const preserveLinkText = Boolean(options?.preserveLinkText);
   let bullet = false;
   text = text.replace(/^[\-*–]\s+/, () => {
     bullet = true;
@@ -3928,13 +3929,15 @@ function parseLine(text) {
             'credly.com': 'Credly'
           };
           let label = raw;
-          try {
-            const hostname = new URL(href).hostname.replace(/^www\./, '');
-            label = domainMap[hostname] || href;
-          } catch {
-            if (/linkedin\.com/i.test(href)) label = 'LinkedIn';
-            else if (/credly\.com/i.test(href)) label = 'Credly';
-            else label = href;
+          if (!preserveLinkText) {
+            try {
+              const hostname = new URL(href).hostname.replace(/^www\./, '');
+              label = domainMap[hostname] || href;
+            } catch {
+              if (/linkedin\.com/i.test(href)) label = 'LinkedIn';
+              else if (/credly\.com/i.test(href)) label = 'Credly';
+              else label = href;
+            }
           }
           tokens.push({
             type: 'link',
@@ -4587,7 +4590,8 @@ function pruneEmptySections(sections = []) {
 }
 
 function parseContent(text, options = {}) {
-  const { defaultHeading = 'Summary', ...rest } = options;
+  const { defaultHeading = 'Summary', preserveLinkText = false, ...rest } = options;
+  const parseLineOptions = preserveLinkText ? { preserveLinkText: true } : undefined;
   try {
     const data = JSON.parse(text);
     const name = normalizeName(data.name || 'Resume');
@@ -4600,12 +4604,12 @@ function parseContent(text, options = {}) {
       const src = sec.items || sec.content;
       if (Array.isArray(src)) {
         src.forEach((i) => {
-          const tokens = parseLine(String(i));
+          const tokens = parseLine(String(i), parseLineOptions);
           if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
           items.push(tokens);
         });
       } else if (src) {
-        const tokens = parseLine(String(src));
+        const tokens = parseLine(String(src), parseLineOptions);
         if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
         items.push(tokens);
       }
@@ -4698,7 +4702,7 @@ function parseContent(text, options = {}) {
       const bulletMatch = line.match(/^[\-*–]\s+/);
       if (bulletMatch) {
         if (current.length) currentSection.items.push(current);
-        current = parseLine(line);
+        current = parseLine(line, parseLineOptions);
         continue;
       }
       const indentMatch = line.match(/^\s+(.*)/);
@@ -4709,11 +4713,11 @@ function parseContent(text, options = {}) {
           if (ch === '\u0009') current.push({ type: 'tab' });
         }
         // Preserve internal spacing on continuation lines
-        current.push(...parseLine(indentMatch[1]));
+        current.push(...parseLine(indentMatch[1], parseLineOptions));
         continue;
       }
       if (current.length) currentSection.items.push(current);
-      current = parseLine(line.trim());
+      current = parseLine(line.trim(), parseLineOptions);
     }
     if (current.length) currentSection.items.push(current);
     if (
@@ -4792,6 +4796,13 @@ let generatePdf = async function (
     templateId,
     usingRenderer: templateId === '2025',
   });
+  options = options && typeof options === 'object' ? { ...options } : {};
+  if (isCoverCandidate) {
+    if (!('defaultHeading' in options)) {
+      options.defaultHeading = '';
+    }
+    options.preserveLinkText = true;
+  }
   const data = parseContent(text, options);
   data.sections.forEach((sec) => {
     sec.heading = normalizeHeading(sec.heading);
@@ -7515,7 +7526,10 @@ function reparseAndStringify(text, options = {}) {
   const data = parseContent(text, options);
 
   if (options.project) {
-    const projectTokens = parseLine(String(options.project));
+    const parseLineOptions = options?.preserveLinkText
+      ? { preserveLinkText: true }
+      : undefined;
+    const projectTokens = parseLine(String(options.project), parseLineOptions);
     if (!projectTokens.some((t) => t.type === 'bullet'))
       projectTokens.unshift({ type: 'bullet' });
     let section = data.sections.find((s) => /projects/i.test(s.heading));
@@ -7573,6 +7587,9 @@ function sanitizeGeneratedText(text, options = {}) {
   const merged = mergeDuplicateSections(data.sections);
   const pruned = pruneEmptySections(merged);
   let sections = [...pruned];
+  const parseLineOptions = options?.preserveLinkText
+    ? { preserveLinkText: true }
+    : undefined;
   const contactLines = Array.isArray(options.contactLines)
     ? options.contactLines
         .map((line) => String(line || '').trim())
@@ -7585,7 +7602,7 @@ function sanitizeGeneratedText(text, options = {}) {
     sections.unshift({
       heading: normalizeHeading('Contact'),
       items: contactLines.map((line) => {
-        const tokens = parseLine(line);
+        const tokens = parseLine(line, parseLineOptions);
         if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
         return tokens;
       })
