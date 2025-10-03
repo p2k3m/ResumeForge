@@ -1075,8 +1075,9 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = (path.extname(file.originalname) || '').toLowerCase();
-    const mimetype = file.mimetype || '';
+    const mimetype = (file.mimetype || '').toLowerCase();
     const allowedExtensions = new Set(['.pdf', '.doc', '.docx']);
+    const genericTypes = new Set(['application/octet-stream', 'binary/octet-stream', 'application/zip']);
 
     if (!allowedExtensions.has(ext)) {
       return cb(
@@ -1084,22 +1085,24 @@ const upload = multer({
       );
     }
 
+    const isGenericType = !mimetype || genericTypes.has(mimetype);
+
     if (ext === '.pdf') {
-      if (mimetype && mimetype !== 'application/pdf') {
+      if (mimetype && !isGenericType && !/pdf/i.test(mimetype)) {
         return cb(new Error('The uploaded file is not a valid PDF document.'));
       }
       return cb(null, true);
     }
 
     if (ext === '.docx') {
-      if (mimetype && !/wordprocessingml|officedocument|ms-?word/i.test(mimetype)) {
+      if (mimetype && !isGenericType && !/wordprocessingml|officedocument|ms-?word|vnd\.openxmlformats-officedocument\.wordprocessingml\.document/i.test(mimetype)) {
         return cb(new Error('The uploaded file is not a valid DOCX document.'));
       }
       return cb(null, true);
     }
 
     if (ext === '.doc') {
-      if (mimetype && !/ms-?word|officedocument|application\/octet-stream/i.test(mimetype)) {
+      if (mimetype && !isGenericType && !/ms-?word|officedocument|application\/octet-stream/i.test(mimetype)) {
         return cb(new Error('The uploaded file is not a valid DOC document.'));
       }
       return cb(null, true);
@@ -7771,21 +7774,55 @@ function ensureProjectInResumeData(data = {}, projectText = '', options = {}) {
   const parseLineOptions = options?.preserveLinkText
     ? { preserveLinkText: true }
     : undefined;
-  const tokens = parseLine(`- ${project}`, parseLineOptions);
-  if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
   const normalize = (sec) => normalizeHeading(sec?.heading || '').toLowerCase();
   let section = data.sections.find((sec) => normalize(sec) === 'projects');
+  const sectionWasCreated = !section;
   if (!section) {
     section = { heading: 'Projects', items: [] };
     data.sections.push(section);
   }
   section.items = Array.isArray(section.items) ? section.items : [];
-  const existing = new Set(
-    section.items.map((item) => stringifyTokens(item || []).toLowerCase())
-  );
-  const newText = stringifyTokens(tokens).toLowerCase();
-  if (!existing.has(newText)) {
+
+  const normalizeKey = (tokens) =>
+    stringifyTokens(tokens || [])
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const seen = new Set();
+  section.items = section.items.filter((item) => {
+    const key = normalizeKey(item);
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
+  const maxItems = Math.max(Number(options?.maxProjectItems) || 2, 1);
+  if (section.items.length >= maxItems) {
+    return;
+  }
+
+  const sentences = project
+    .replace(/\s+/g, ' ')
+    .split(/[.!?]\s+/)
+    .map((sentence) => sentence.replace(/^[\-•\u2022\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+
+  for (const sentence of sentences) {
+    if (section.items.length >= maxItems) break;
+    const tokens = parseLine(sentence, parseLineOptions);
+    if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
+    const key = normalizeKey(tokens);
+    if (!key || seen.has(key)) continue;
     section.items.push(tokens);
+    seen.add(key);
+  }
+
+  if (sectionWasCreated && section.items.length > maxItems) {
+    section.items = section.items.slice(0, maxItems);
   }
 }
 
