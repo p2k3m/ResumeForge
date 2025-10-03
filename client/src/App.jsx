@@ -21,7 +21,7 @@ import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
-  'Your new CV could not be generated. Please try again or contact support.'
+  'Could not enhance CV; your formatting remained untouched.'
 
 const improvementActions = [
   {

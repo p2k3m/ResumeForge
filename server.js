@@ -127,7 +127,7 @@ axiosResponseInterceptor?.use(
 );
 
 const CV_GENERATION_ERROR_MESSAGE =
-  'Your new CV could not be generated. Please try again or contact support.';
+  'Could not enhance CV; your formatting remained untouched.';
 
 let chromium;
 let puppeteerCore;
@@ -5420,7 +5420,10 @@ let generatePdf = async function (
           strategy: 'html_template_render',
         });
       } else {
-        throw err;
+        const templateError = new Error(CV_GENERATION_ERROR_MESSAGE);
+        templateError.code = 'TEMPLATE_RENDER_FAILED';
+        templateError.cause = err;
+        throw templateError;
       }
     }
   }
@@ -10283,14 +10286,25 @@ async function generateEnhancedDocumentsResponse({
     ])
   ).filter(Boolean);
 
-  versionData = createResumeVariants({
-    baseText: baseResumeText,
-    projectText,
-    modifiedTitle: versionsContext.jobTitle,
-    skillsToInclude: skillsToHighlight,
-    baseSkills: Array.isArray(geminiAddedSkills) ? geminiAddedSkills : [],
-    sanitizeOptions,
-  });
+  try {
+    versionData = createResumeVariants({
+      baseText: baseResumeText,
+      projectText,
+      modifiedTitle: versionsContext.jobTitle,
+      skillsToInclude: skillsToHighlight,
+      baseSkills: Array.isArray(geminiAddedSkills) ? geminiAddedSkills : [],
+      sanitizeOptions,
+    });
+  } catch (err) {
+    logStructured('error', 'generation_variants_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    const enhancementError = new Error(CV_GENERATION_ERROR_MESSAGE);
+    enhancementError.code = 'ENHANCEMENT_VARIANT_FAILED';
+    enhancementError.cause = err;
+    throw enhancementError;
+  }
 
   if (versionData?.placeholders && Object.keys(versionData.placeholders).length) {
     enhancementTokenMap = {
@@ -11198,12 +11212,14 @@ app.post(
         ...logContext,
         error: serializeError(err),
       });
-      return sendError(
-        res,
-        500,
-        'GENERATION_FAILED',
-        err.message || 'Unable to generate the enhanced documents.'
-      );
+      const message =
+        err?.code === 'ENHANCEMENT_VARIANT_FAILED' ||
+        err?.code === 'TEMPLATE_RENDER_FAILED'
+          ? CV_GENERATION_ERROR_MESSAGE
+          : typeof err?.message === 'string' && err.message.trim()
+            ? err.message
+            : CV_GENERATION_ERROR_MESSAGE;
+      return sendError(res, 500, 'GENERATION_FAILED', message);
     }
   }
 );
