@@ -791,6 +791,7 @@ function App() {
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
+  const [previewFile, setPreviewFile] = useState(null)
   const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
   const [jobId, setJobId] = useState('')
   const [templateContext, setTemplateContext] = useState(null)
@@ -1029,6 +1030,16 @@ function App() {
     return { resume, cover, other }
   }, [outputFiles])
 
+  const openDownloadPreview = useCallback((file) => {
+    if (!file) return
+    const presentation = file.presentation || getDownloadPresentation(file)
+    setPreviewFile({ ...file, presentation })
+  }, [])
+
+  const closeDownloadPreview = useCallback(() => {
+    setPreviewFile(null)
+  }, [])
+
   const renderDownloadCard = useCallback((file) => {
     if (!file) return null
     const presentation = file.presentation || getDownloadPresentation(file)
@@ -1041,6 +1052,16 @@ function App() {
     const buttonClass = `inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-offset-2 ${
       presentation.buttonStyle || 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500'
     }`
+    const secondaryButtonClass =
+      'inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold border border-purple-200 text-purple-700 transition hover:text-purple-900 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200 focus:ring-offset-2'
+    const expiryDate = file.expiresAt ? new Date(file.expiresAt) : null
+    const expiryLabel =
+      expiryDate && !Number.isNaN(expiryDate.getTime())
+        ? expiryDate.toLocaleString(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short'
+          })
+        : null
     return (
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
@@ -1051,18 +1072,30 @@ function App() {
           {presentation.badgeText && <span className={badgeClass}>{presentation.badgeText}</span>}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <a
-            href={file.url}
-            className={buttonClass}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {presentation.linkLabel || 'Download'}
-          </a>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <button
+              type="button"
+              onClick={() => openDownloadPreview(file)}
+              className={secondaryButtonClass}
+            >
+              Preview
+            </button>
+            <a
+              href={file.url}
+              className={buttonClass}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {presentation.linkLabel || 'Download'}
+            </a>
+          </div>
+          {expiryLabel && (
+            <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
+          )}
         </div>
       </div>
     )
-  }, [])
+  }, [openDownloadPreview])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
@@ -1085,6 +1118,25 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [previewSuggestion])
+
+  useEffect(() => {
+    if (!previewFile || typeof window === 'undefined') {
+      return undefined
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setPreviewFile(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [previewFile])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -2750,6 +2802,51 @@ function App() {
               )}
             </div>
           </section>
+        )}
+
+        {previewFile && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4 py-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Preview for ${previewFile.presentation?.label || 'generated file'}`}
+            onClick={closeDownloadPreview}
+          >
+            <div
+              className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl border border-purple-200/70 overflow-hidden"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4">
+                <div>
+                  <h3 className="text-xl font-semibold text-purple-900">
+                    {previewFile.presentation?.label || 'Generated document preview'}
+                  </h3>
+                  <p className="text-sm text-purple-700/90">
+                    Review this PDF before downloading to confirm the enhancements look right.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeDownloadPreview}
+                  className="text-sm font-semibold text-purple-700 hover:text-purple-900"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="bg-slate-50 px-6 py-6">
+                <div className="h-[70vh] w-full overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-inner">
+                  <iframe
+                    src={`${previewFile.url}#toolbar=0&navpanes=0`}
+                    title={previewFile.presentation?.label || 'Document preview'}
+                    className="h-full w-full"
+                  />
+                </div>
+                <p className="mt-3 text-xs text-purple-600">
+                  Trouble viewing? Download the PDF instead to open it in your preferred reader.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
 
         {previewSuggestion && (
