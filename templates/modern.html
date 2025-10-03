@@ -61,8 +61,44 @@
       border: 1px solid rgba(148, 163, 184, 0.2);
       box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.12);
       display: grid;
-      gap: 12px;
+      gap: clamp(18px, 2.6vw, 28px);
       text-align: left;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    @media (min-width: 860px) {
+      .hero {
+        grid-template-columns: 1.3fr 1fr;
+        align-items: center;
+      }
+    }
+
+    .hero-copy {
+      display: grid;
+      gap: 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.28);
+      color: #ecfeff;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 600;
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.28);
+    }
+
+    .hero-tag img {
+      width: 18px;
+      height: 18px;
+      display: inline-block;
     }
 
     .hero h1 {
@@ -76,8 +112,69 @@
     .hero p {
       margin: 0;
       color: var(--muted);
-      max-width: 40ch;
-      font-size: 1rem;
+      max-width: 45ch;
+      font-size: 1.02rem;
+    }
+
+    .hero-visual {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+    }
+
+    .hero-avatar {
+      width: clamp(140px, 24vw, 180px);
+      aspect-ratio: 1 / 1;
+      border-radius: 24px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.18), 0 18px 30px rgba(8, 47, 73, 0.4);
+      display: grid;
+      place-items: center;
+    }
+
+    .hero-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 18px;
+      box-shadow: 0 8px 18px rgba(8, 47, 73, 0.35);
+    }
+
+    .hero-qr {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.12);
+    }
+
+    .hero-qr img {
+      width: 74px;
+      height: 74px;
+      border-radius: 12px;
+      box-shadow: 0 10px 22px rgba(8, 47, 73, 0.35);
+    }
+
+    .hero-qr strong {
+      display: block;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero-qr span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
     }
 
     .content-grid {
@@ -147,6 +244,16 @@
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: #f8fafc;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-header .heading-icon {
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      box-shadow: 0 8px 14px rgba(8, 47, 73, 0.28);
     }
 
     .card-header .accent-line {
@@ -210,15 +317,44 @@
 <body>
   <div class="resume-shell">
     <header class="hero">
-      <h1>{{name}}</h1>
-      <p>Crafted with a modern product-design aesthetic for standout first impressions.</p>
+      <div class="hero-copy">
+        <span class="hero-tag">
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOSIgZmlsbD0iIzBmMTcyYSIvPgogIDxwYXRoIGQ9Ik0xMCA5aDEyYTIgMiAwIDAgMSAyIDJ2MTJsLTgtMy04IDNWMTFhMiAyIDAgMCAxIDItMnoiIGZpbGw9IiMzOGJkZjgiLz4KICA8cGF0aCBkPSJNMTMgMTNoNiIgc3Ryb2tlPSIjMGVhNWU5IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0xMyAxN2g2IiBzdHJva2U9IiNiYWU2ZmQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjgiLz4KPC9zdmc+" alt="Digital icon" />
+          Digital ready
+        </span>
+        <h1>{{name}}</h1>
+        <p>Crafted with a modern product-design aesthetic for standout first impressions.</p>
+      </div>
+      <div class="hero-visual">
+        <figure class="hero-avatar">
+          {{#if avatar}}
+          <img src="{{avatar}}" alt="Portrait of {{name}}" />
+          {{else}}
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAlIiBzdG9wLWNvbG9yPSIjMzhiZGY4Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0iIzBlYTVlOSIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3Qgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMjAiIHJ4PSIyOCIgZmlsbD0iIzBmMTcyYSIvPgogIDxjaXJjbGUgY3g9IjYwIiBjeT0iNDgiIHI9IjI2IiBmaWxsPSJ1cmwoI2cpIi8+CiAgPHBhdGggZD0iTTI0IDEwOGM2LTIyIDI4LTM2IDM2LTM2czMwIDE0IDM2IDM2IiBmaWxsPSIjMWUyOTNiIi8+CiAgPHBhdGggZD0iTTI0IDEwOGM2LTIyIDI4LTM2IDM2LTM2czMwIDE0IDM2IDM2IiBmaWxsPSJub25lIiBzdHJva2U9IiMzOGJkZjgiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjQiLz4KPC9zdmc+" alt="Abstract avatar placeholder" />
+          {{/if}}
+        </figure>
+        <div class="hero-qr">
+          {{#if qrCode}}
+          <img src="{{qrCode}}" alt="QR code linking to {{name}}'s professional profile" />
+          {{else}}
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4Ij4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjE4IiBmaWxsPSIjMGYxNzJhIi8+CiAgPGcgZmlsbD0iIzM4YmRmOCI+CiAgICA8cmVjdCB4PSIxNiIgeT0iMTYiIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgcng9IjQiLz4KICAgIDxyZWN0IHg9IjgwIiB5PSIxNiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNCIvPgogICAgPHJlY3QgeD0iMTYiIHk9IjgwIiB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI0Ii8+CiAgICA8cmVjdCB4PSI4MCIgeT0iODAiIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIvPgogICAgPHJlY3QgeD0iOTYiIHk9Ijk2IiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiLz4KICAgIDxyZWN0IHg9IjY0IiB5PSI0OCIgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2Ii8+CiAgICA8cmVjdCB4PSI0OCIgeT0iNjQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIvPgogICAgPHJlY3QgeD0iNjQiIHk9IjgwIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiLz4KICAgIDxyZWN0IHg9IjgwIiB5PSI2NCIgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2Ii8+CiAgICA8cmVjdCB4PSIzMiIgeT0iNDgiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIvPgogICAgPHJlY3QgeD0iNDgiIHk9IjMyIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiLz4KICA8L2c+Cjwvc3ZnPg==" alt="Static QR code placeholder" />
+          {{/if}}
+          <div>
+            <strong>Scan for profile</strong>
+            <span>Instant access to interactive resume details.</span>
+          </div>
+        </div>
+      </div>
     </header>
     <main class="content-grid">
       {{#each sections}}
       <section class="card {{#if @first}}card--spotlight{{/if}}">
         {{#if heading}}
         <div class="card-header">
-          <h2>{{heading}}</h2>
+          <h2>
+            <img class="heading-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+CiAgPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOSIgZmlsbD0iIzBmMTcyYSIvPgogIDxwYXRoIGQ9Ik0xMCA5aDEyYTIgMiAwIDAgMSAyIDJ2MTJsLTgtMy04IDNWMTFhMiAyIDAgMCAxIDItMnoiIGZpbGw9IiMzOGJkZjgiLz4KICA8cGF0aCBkPSJNMTMgMTNoNiIgc3Ryb2tlPSIjMGVhNWU5IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgogIDxwYXRoIGQ9Ik0xMyAxN2g2IiBzdHJva2U9IiNiYWU2ZmQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjgiLz4KPC9zdmc+" alt="Section icon" />
+            {{heading}}
+          </h2>
           <span class="accent-line"></span>
         </div>
         {{/if}}
