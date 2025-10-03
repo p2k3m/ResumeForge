@@ -5187,69 +5187,92 @@ let generatePdf = async function (
     try {
       const input = buffer.toString('latin1');
       const normalized = input.replace(/\[((?:\\.|[^\]])*)\]\s+TJ/g, (match, content) => {
-        const tokens = content.match(/\s+|\S+/g) || [];
-        const isNumber = (tok) => /^-?\d+(?:\.\d+)?$/.test(tok);
-        const isWhitespace = (tok) => /^\s+$/.test(tok);
-        const result = [];
-        let needsTrailingSpace = false;
+        const tokens =
+          content.match(/<[^>]*>|\([^)]*\)|-?\d+(?:\.\d+)?|\s+|\S+/g) || [];
+        const textParts = [];
+        let needsTrailingSpace = /\s+$/.test(content);
+
+        const decodeHex = (token) => {
+          const hex = token.slice(1, -1).replace(/\s+/g, '');
+          if (!hex) return '';
+          try {
+            return Buffer.from(hex, 'hex').toString('utf8');
+          } catch {
+            return '';
+          }
+        };
+
+        const decodeLiteral = (token) => {
+          const body = token.slice(1, -1);
+          return body.replace(/\\([0-7]{1,3}|.)/g, (_, escape) => {
+            if (/^[0-7]+$/.test(escape)) {
+              return String.fromCharCode(parseInt(escape, 8));
+            }
+            const map = { n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', '(': '(', ')': ')', '\\': '\\' };
+            return map[escape] ?? escape;
+          });
+        };
+
+        const isWhitespace = (token) => /^\s+$/.test(token);
+        const isNumber = (token) => /^-?\d+(?:\.\d+)?$/.test(token);
+
         for (let i = 0; i < tokens.length; i += 1) {
           const token = tokens[i];
+          if (!token) continue;
           if (isNumber(token)) {
             const hasMoreText = tokens.slice(i + 1).some((candidate) => {
+              if (!candidate) return false;
               if (isNumber(candidate)) return false;
-              if (isWhitespace(candidate)) return false;
-              return true;
+              return !isWhitespace(candidate);
             });
-            if (!hasMoreText) {
-              const prevToken = tokens[i - 1];
-              if (prevToken && isWhitespace(prevToken)) {
-                for (let j = i - 2; j >= 0; j -= 1) {
-                  const candidate = tokens[j];
-                  if (isNumber(candidate) || isWhitespace(candidate)) continue;
-                  needsTrailingSpace = true;
-                  break;
-                }
-              }
+            if (!hasMoreText && tokens.slice(0, i).some((candidate) => !isWhitespace(candidate) && !isNumber(candidate))) {
+              needsTrailingSpace = true;
             }
             continue;
           }
           if (isWhitespace(token)) {
-            const prevToken = tokens[i - 1];
-            if (prevToken && isNumber(prevToken)) continue;
-            const previous = result.length ? result[result.length - 1] : '';
-            let nextIndex = i + 1;
-            let nextToken = null;
-            while (nextIndex < tokens.length) {
-              const candidate = tokens[nextIndex];
-              if (isNumber(candidate) || isWhitespace(candidate)) {
-                nextIndex += 1;
-                continue;
+            if (!textParts.length) continue;
+            const prevNonWhitespace = (() => {
+              for (let j = i - 1; j >= 0; j -= 1) {
+                const candidate = tokens[j];
+                if (!candidate) continue;
+                if (isWhitespace(candidate)) continue;
+                return candidate;
               }
-              nextToken = candidate;
-              break;
-            }
-            if (!nextToken) {
-              needsTrailingSpace = true;
+              return null;
+            })();
+            const nextNonWhitespace = (() => {
+              for (let j = i + 1; j < tokens.length; j += 1) {
+                const candidate = tokens[j];
+                if (!candidate) continue;
+                if (isWhitespace(candidate)) continue;
+                return candidate;
+              }
+              return null;
+            })();
+            if (isNumber(prevNonWhitespace) || isNumber(nextNonWhitespace)) {
               continue;
             }
-            let hasNumberBetween = false;
-            for (let k = i + 1; k < nextIndex; k += 1) {
-              if (isNumber(tokens[k])) {
-                hasNumberBetween = true;
-                break;
-              }
-            }
-            if (hasNumberBetween) continue;
-            const prevChar = previous ? previous[previous.length - 1] : '';
-            const nextChar = nextToken[0];
-            if (prevChar && /\S/.test(prevChar) && nextChar && /\S/.test(nextChar)) {
-              result.push(' ');
+            if (textParts[textParts.length - 1] !== ' ') {
+              textParts.push(' ');
             }
             continue;
           }
-          result.push(token);
+          if (token.startsWith('<') && token.endsWith('>')) {
+            const decoded = decodeHex(token);
+            if (decoded) {
+              textParts.push(decoded);
+            }
+            continue;
+          }
+          if (token.startsWith('(') && token.endsWith(')')) {
+            textParts.push(decodeLiteral(token));
+            continue;
+          }
+          textParts.push(token);
         }
-        let output = result.join('').replace(/\s{2,}/g, ' ');
+
+        let output = textParts.join('').replace(/\s{2,}/g, ' ');
         if (needsTrailingSpace && !output.endsWith(' ')) output += ' ';
         return `[${output}] TJ`;
       });
@@ -5268,7 +5291,7 @@ let generatePdf = async function (
     const lineGap = style.lineGap ?? baseStyle.lineGap ?? 6;
     const bodyFontSize = style.bodyFontSize || baseStyle.bodyFontSize || 12;
     const tabSize = style.tabSize || 4;
-    const doc = new PDFDocument({ margin: style.margin || 50 });
+    const doc = new PDFDocument({ margin: style.margin || 50, compress: false });
     const buffers = [];
     doc.on('data', (d) => buffers.push(d));
     doc.on('end', () => {
@@ -5386,10 +5409,14 @@ let generatePdf = async function (
             const startX = doc.x;
             const baselineY = doc.y;
             const lineHeight = doc.currentLineHeight(true);
+            const linkWidth = Math.max(doc.widthOfString(linkText), 0);
             doc.fillColor('blue');
             doc.text(linkText, { continued: idx < tokens.length - 1, lineGap });
             const endX = doc.x;
-            const width = Math.max(endX - startX, 0);
+            let width = linkWidth;
+            if (idx < tokens.length - 1) {
+              width = Math.max(endX - startX, linkWidth);
+            }
             const top = baselineY - lineHeight;
             if (width > 0) {
               doc.link(startX, top, width, lineHeight, t.href);
