@@ -1111,26 +1111,125 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
-const CV_TEMPLATES = ['modern', 'ucmo', 'professional', 'vibrant', '2025'];
+const CV_TEMPLATE_ALIASES = {
+  ucmo: 'classic',
+  vibrant: 'creative'
+};
+
+const CV_TEMPLATES = ['modern', 'professional', 'classic', 'creative', 'ats', '2025'];
+const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
-const TEMPLATE_IDS = CV_TEMPLATES; // Backwards compatibility
-const ALL_TEMPLATES = [...CV_TEMPLATES, ...CL_TEMPLATES];
+const TEMPLATE_IDS = [...CV_TEMPLATES, ...LEGACY_CV_TEMPLATES]; // Backwards compatibility
+const ALL_TEMPLATES = [...new Set([...TEMPLATE_IDS, ...CL_TEMPLATES])];
 
 // Map each CV template to a style group so we can ensure contrasting picks
 const CV_TEMPLATE_GROUPS = {
   modern: 'modern',
-  ucmo: 'classic',
   professional: 'professional',
-  vibrant: 'creative',
-  2025: 'futuristic'
+  classic: 'classic',
+  creative: 'creative',
+  ats: 'ats',
+  2025: 'futuristic',
+  ucmo: 'classic',
+  vibrant: 'creative'
 };
 
 // Predefined contrasting template pairs used when no explicit templates are provided
 const CONTRASTING_PAIRS = [
-  ['modern', 'vibrant'],
-  ['ucmo', '2025'],
-  ['professional', 'vibrant']
+  ['modern', 'creative'],
+  ['classic', 'ats'],
+  ['professional', '2025']
 ];
+
+const KNOWN_CV_TEMPLATE_SET = new Set(TEMPLATE_IDS);
+
+function canonicalizeCvTemplateId(templateId, fallback = CV_TEMPLATES[0]) {
+  const fallbackCanonical = CV_TEMPLATE_ALIASES[fallback] || fallback || CV_TEMPLATES[0];
+  if (!templateId || typeof templateId !== 'string') {
+    return fallbackCanonical;
+  }
+  const normalized = templateId.trim().toLowerCase();
+  if (!normalized) {
+    return fallbackCanonical;
+  }
+  if (CV_TEMPLATES.includes(normalized)) {
+    return normalized;
+  }
+  if (CV_TEMPLATE_ALIASES[normalized]) {
+    return CV_TEMPLATE_ALIASES[normalized];
+  }
+  if (KNOWN_CV_TEMPLATE_SET.has(normalized)) {
+    const alias = CV_TEMPLATE_ALIASES[normalized];
+    return alias || normalized;
+  }
+  const base = normalized.split(/[-_]/)[0];
+  if (base && base !== normalized) {
+    return canonicalizeCvTemplateId(base, fallbackCanonical);
+  }
+  return fallbackCanonical;
+}
+
+function parseTemplateArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : value.split(',');
+    } catch {
+      return value.split(',');
+    }
+  }
+  return [];
+}
+
+function uniqueValidCvTemplates(list = []) {
+  const seen = new Set();
+  const result = [];
+  list.forEach((item) => {
+    if (!item) return;
+    const canonical = canonicalizeCvTemplateId(item);
+    if (!canonical || seen.has(canonical)) {
+      return;
+    }
+    seen.add(canonical);
+    result.push(canonical);
+  });
+  return result;
+}
+
+function canonicalizeCoverTemplateId(templateId, fallback = CL_TEMPLATES[0]) {
+  if (!templateId || typeof templateId !== 'string') {
+    return fallback;
+  }
+  const normalized = templateId.trim();
+  if (!normalized) {
+    return fallback;
+  }
+  if (CL_TEMPLATES.includes(normalized)) {
+    return normalized;
+  }
+  const base = normalized.split(/[-_]/)[0];
+  if (base && CL_TEMPLATES.includes(base)) {
+    return base;
+  }
+  return fallback;
+}
+
+function uniqueValidCoverTemplates(list = []) {
+  const seen = new Set();
+  const result = [];
+  list.forEach((item) => {
+    if (!item) return;
+    const canonical = canonicalizeCoverTemplateId(item);
+    if (seen.has(canonical)) {
+      return;
+    }
+    seen.add(canonical);
+    result.push(canonical);
+  });
+  return result;
+}
 
 const TECHNICAL_TERMS = [
   'javascript',
@@ -1175,70 +1274,91 @@ function selectTemplates({
   coverTemplate1,
   coverTemplate2,
   cvTemplates,
-  clTemplates
+  clTemplates,
+  preferredTemplate,
 } = {}) {
-  if (typeof cvTemplates === 'string') {
-    try {
-      cvTemplates = JSON.parse(cvTemplates);
-    } catch {
-      cvTemplates = cvTemplates.split(',');
-    }
+  const parsedCvTemplates = uniqueValidCvTemplates([
+    ...parseTemplateArray(cvTemplates),
+    template1,
+    template2,
+    preferredTemplate,
+  ]);
+  const availableCvTemplates = parsedCvTemplates.length
+    ? Array.from(
+        new Set([
+          ...parsedCvTemplates,
+          ...CV_TEMPLATES.filter((tpl) => !parsedCvTemplates.includes(tpl)),
+        ])
+      )
+    : [...CV_TEMPLATES];
+
+  const primaryFallback = canonicalizeCvTemplateId(
+    availableCvTemplates[0] || CV_TEMPLATES[0]
+  );
+  let primaryTemplate = canonicalizeCvTemplateId(
+    template1 || preferredTemplate,
+    primaryFallback
+  );
+  if (!primaryTemplate) {
+    primaryTemplate = primaryFallback;
   }
-  if (typeof clTemplates === 'string') {
-    try {
-      clTemplates = JSON.parse(clTemplates);
-    } catch {
-      clTemplates = clTemplates.split(',');
-    }
-  }
-  if (Array.isArray(cvTemplates)) {
-    if (!template1 && cvTemplates[0]) template1 = cvTemplates[0];
-    if (!template2 && cvTemplates[1]) template2 = cvTemplates[1];
-  }
-  if (Array.isArray(clTemplates)) {
-    if (!coverTemplate1 && clTemplates[0]) coverTemplate1 = clTemplates[0];
-    if (!coverTemplate2 && clTemplates[1]) coverTemplate2 = clTemplates[1];
-  }
-  // Always include 'ucmo' and ensure the other template is from a different group
-  const UCMO_GROUP = CV_TEMPLATE_GROUPS['ucmo'];
-  const pickOther = (exclude = []) => {
-    const candidates = CV_TEMPLATES.filter(
-      (t) =>
-        t !== 'ucmo' &&
-        !exclude.includes(t) &&
-        CV_TEMPLATE_GROUPS[t] !== UCMO_GROUP
+
+  const chooseSecondary = (current, pool) => {
+    const contrasting = pool.find(
+      (tpl) => tpl !== current && CV_TEMPLATE_GROUPS[tpl] !== CV_TEMPLATE_GROUPS[current]
     );
-    return candidates[Math.floor(Math.random() * candidates.length)] || 'modern';
+    if (contrasting) return contrasting;
+    const different = pool.find((tpl) => tpl !== current);
+    return different || current;
   };
 
-  const userOther = [template1, template2].find(
-    (t) => t && t !== 'ucmo' && CV_TEMPLATE_GROUPS[t] !== UCMO_GROUP
+  let secondaryTemplate = canonicalizeCvTemplateId(
+    template2,
+    chooseSecondary(primaryTemplate, availableCvTemplates)
   );
-
-  if (template1 === 'ucmo') {
-    template2 = userOther || pickOther([template1]);
-  } else if (template2 === 'ucmo') {
-    template1 = userOther || pickOther([template2]);
-  } else {
-    template1 = 'ucmo';
-    template2 = userOther || pickOther([template1]);
+  if (secondaryTemplate === primaryTemplate) {
+    const extendedPool = Array.from(
+      new Set([...availableCvTemplates, ...CV_TEMPLATES])
+    );
+    secondaryTemplate = chooseSecondary(primaryTemplate, extendedPool);
   }
 
-  if (template1 === template2) {
-    template2 = pickOther([template1]);
+  let parsedCoverTemplates = uniqueValidCoverTemplates([
+    ...parseTemplateArray(clTemplates),
+    coverTemplate1,
+    coverTemplate2,
+    defaultClTemplate,
+  ]);
+  if (!parsedCoverTemplates.length) {
+    parsedCoverTemplates = [...CL_TEMPLATES];
   }
-
-  if (!coverTemplate1 && !coverTemplate2) {
-    coverTemplate1 = CL_TEMPLATES[0];
-    coverTemplate2 = CL_TEMPLATES.find((t) => t !== coverTemplate1) || CL_TEMPLATES[0];
-  } else {
-    coverTemplate1 = coverTemplate1 || defaultClTemplate;
-    coverTemplate2 = coverTemplate2 || defaultClTemplate;
-  }
+  const coverPrimaryFallback =
+    parsedCoverTemplates[0] || defaultClTemplate || CL_TEMPLATES[0];
+  coverTemplate1 = canonicalizeCoverTemplateId(
+    coverTemplate1 || coverPrimaryFallback,
+    coverPrimaryFallback
+  );
+  const coverSecondaryFallback =
+    parsedCoverTemplates.find((tpl) => tpl !== coverTemplate1) ||
+    CL_TEMPLATES.find((tpl) => tpl !== coverTemplate1) ||
+    coverTemplate1;
+  coverTemplate2 = canonicalizeCoverTemplateId(
+    coverTemplate2 || coverSecondaryFallback,
+    coverSecondaryFallback
+  );
   if (coverTemplate1 === coverTemplate2) {
-    coverTemplate2 = CL_TEMPLATES.find((t) => t !== coverTemplate1) || CL_TEMPLATES[0];
+    coverTemplate2 =
+      CL_TEMPLATES.find((tpl) => tpl !== coverTemplate1) || CL_TEMPLATES[0];
   }
-  return { template1, template2, coverTemplate1, coverTemplate2 };
+
+  return {
+    template1: primaryTemplate,
+    template2: secondaryTemplate,
+    coverTemplate1,
+    coverTemplate2,
+    templates: availableCvTemplates,
+    coverTemplates: parsedCoverTemplates,
+  };
 }
 
 const configuredRegion =
@@ -4153,14 +4273,14 @@ let generatePdf = async function (
   generativeModel
 ) {
   const requestedTemplateId = templateId;
-  let canonicalTemplateId = templateId;
-  if (!ALL_TEMPLATES.includes(templateId)) {
-    const baseCandidate = (templateId || '').split(/[-_]/)[0];
-    if (ALL_TEMPLATES.includes(baseCandidate)) {
-      canonicalTemplateId = baseCandidate;
-    } else {
-      canonicalTemplateId = 'modern';
-    }
+  const isCoverCandidate =
+    typeof templateId === 'string' &&
+    (CL_TEMPLATES.includes(templateId) || templateId.startsWith('cover'));
+  let canonicalTemplateId = isCoverCandidate
+    ? canonicalizeCoverTemplateId(templateId)
+    : canonicalizeCvTemplateId(templateId);
+  if (!ALL_TEMPLATES.includes(canonicalTemplateId)) {
+    canonicalTemplateId = CV_TEMPLATES[0];
   }
   templateId = canonicalTemplateId;
   logStructured('debug', 'pdf_template_resolved', {
@@ -4221,7 +4341,10 @@ let generatePdf = async function (
     }
   }
   let html;
-  if (templateId === 'ucmo' && generativeModel?.generateContent) {
+  if (
+    (templateId === 'classic' || templateId === 'ucmo') &&
+    generativeModel?.generateContent
+  ) {
     try {
       const prompt =
         `Using the resume text below, output complete HTML with inline CSS ` +
@@ -7540,9 +7663,24 @@ async function generateEnhancedDocumentsResponse({
       coverTemplate2: templateContextInput.coverTemplate2,
       cvTemplates: templateContextInput.templates,
       clTemplates: templateContextInput.coverTemplates,
+      preferredTemplate:
+        templateContextInput.selectedTemplate || templateContextInput.template1,
     });
-  let { template1, template2, coverTemplate1, coverTemplate2 } =
-    templateSelection;
+  let {
+    template1,
+    template2,
+    coverTemplate1,
+    coverTemplate2,
+    templates: availableCvTemplates,
+    coverTemplates: availableCoverTemplates,
+  } = templateSelection;
+
+  if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
+    availableCvTemplates = [...CV_TEMPLATES];
+  }
+  if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
+    availableCoverTemplates = [...CL_TEMPLATES];
+  }
 
   const templateParamsConfig =
     templateParamConfig ?? parseTemplateParamsConfig(undefined);
@@ -8135,6 +8273,9 @@ async function generateEnhancedDocumentsResponse({
       template2,
       coverTemplate1,
       coverTemplate2,
+      templates: availableCvTemplates,
+      coverTemplates: availableCoverTemplates,
+      selectedTemplate: template1,
     },
   };
 }
@@ -8463,6 +8604,11 @@ app.post(
       const sectionPreservation = buildSectionPreservationContext(resumeText);
       const contactDetails = extractContactDetails(resumeText, linkedinProfileUrl);
 
+      const templateIdInput =
+        typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
+      const legacyTemplateInput =
+        typeof req.body.template === 'string' ? req.body.template.trim() : '';
+
       const templateContextInput =
         typeof req.body.templateContext === 'object' && req.body.templateContext
           ? req.body.templateContext
@@ -8476,8 +8622,27 @@ app.post(
         coverTemplate2: templateContextInput.coverTemplate2,
         cvTemplates: templateContextInput.templates,
         clTemplates: templateContextInput.coverTemplates,
+        preferredTemplate:
+          templateIdInput ||
+          legacyTemplateInput ||
+          templateContextInput.selectedTemplate ||
+          templateContextInput.template1,
       });
-      let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
+      let {
+        template1,
+        template2,
+        coverTemplate1,
+        coverTemplate2,
+        templates: availableCvTemplates,
+        coverTemplates: availableCoverTemplates,
+      } = selection;
+
+      if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
+        availableCvTemplates = [...CV_TEMPLATES];
+      }
+      if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
+        availableCoverTemplates = [...CL_TEMPLATES];
+      }
 
       const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
@@ -8766,8 +8931,18 @@ app.post(
     linkedinHost: getUrlHost(linkedinProfileUrl),
     credlyHost: getUrlHost(credlyProfileUrl),
   });
+  const bodyTemplate =
+    typeof req.body.template === 'string' ? req.body.template.trim() : '';
+  const queryTemplate =
+    typeof req.query?.template === 'string' ? req.query.template.trim() : '';
+  const bodyTemplateId =
+    typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
+  const queryTemplateId =
+    typeof req.query?.templateId === 'string' ? req.query.templateId.trim() : '';
+  const preferredTemplateInput =
+    bodyTemplateId || queryTemplateId || bodyTemplate || queryTemplate;
   const defaultCvTemplate =
-    req.body.template || req.query.template || CV_TEMPLATES[0];
+    preferredTemplateInput || CV_TEMPLATES[0];
   const defaultClTemplate =
     req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
   const selection = selectTemplates({
@@ -8778,15 +8953,31 @@ app.post(
     coverTemplate1: req.body.coverTemplate1 || req.query.coverTemplate1,
     coverTemplate2: req.body.coverTemplate2 || req.query.coverTemplate2,
     cvTemplates: req.body.templates || req.query.templates,
-    clTemplates: req.body.coverTemplates || req.query.coverTemplates
+    clTemplates: req.body.coverTemplates || req.query.coverTemplates,
+    preferredTemplate: preferredTemplateInput,
   });
-  let { template1, template2, coverTemplate1, coverTemplate2 } = selection;
+  let {
+    template1,
+    template2,
+    coverTemplate1,
+    coverTemplate2,
+    templates: availableCvTemplates,
+    coverTemplates: availableCoverTemplates,
+  } = selection;
+  if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
+    availableCvTemplates = [...CV_TEMPLATES];
+  }
+  if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
+    availableCoverTemplates = [...CL_TEMPLATES];
+  }
   logStructured('info', 'template_selection', {
     ...logContext,
     template1,
     template2,
     coverTemplate1,
     coverTemplate2,
+    availableCvTemplates,
+    availableCoverTemplates,
   });
   if (!req.file) {
     logStructured('warn', 'resume_missing', logContext);
@@ -9477,6 +9668,9 @@ app.post(
       template2,
       coverTemplate1,
       coverTemplate2,
+      templates: availableCvTemplates,
+      coverTemplates: availableCoverTemplates,
+      selectedTemplate: template1,
     };
     const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
