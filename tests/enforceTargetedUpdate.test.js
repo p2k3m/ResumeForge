@@ -66,7 +66,15 @@ describe('enforceTargetedUpdate', () => {
     expect(Array.isArray(result.changeDetails)).toBe(true);
     const sections = result.changeDetails.map((detail) => detail.section || detail.label);
     expect(sections).toEqual(
-      expect.arrayContaining(['Summary', 'Skills', 'Work Experience', 'Headline'])
+      expect.arrayContaining([
+        'Summary',
+        'Skills',
+        'Work Experience',
+        'Certifications',
+        'Projects',
+        'Highlights',
+        'Headline',
+      ])
     );
     result.changeDetails.forEach((detail) => {
       expect(Array.isArray(detail.reasons)).toBe(true);

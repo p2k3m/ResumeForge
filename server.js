@@ -2099,6 +2099,16 @@ function extractSectionContent(resumeText = '', headingPattern) {
   };
 }
 
+const SUMMARY_SECTION_PATTERN = /^#\s*summary/i;
+const SKILLS_SECTION_PATTERN = /^#\s*skills/i;
+const EXPERIENCE_SECTION_PATTERN = /^#\s*(work\s+)?experience/i;
+const CERTIFICATIONS_SECTION_PATTERN =
+  /^#\s*(certifications?|licenses?\s*(?:&|and)\s*certifications?)/i;
+const PROJECTS_SECTION_PATTERN =
+  /^#\s*(projects?|key\s+projects|selected\s+projects|project\s+highlights)/i;
+const HIGHLIGHTS_SECTION_PATTERN =
+  /^#\s*(highlights?|career\s+highlights|key\s+highlights|professional\s+highlights)/i;
+
 function replaceSectionContent(
   resumeText = '',
   headingPattern,
@@ -2341,6 +2351,15 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       designation: targetJobTitle
         ? `Headline now states ${targetJobTitle} to remove designation mismatch.`
         : 'Headline now reflects the target job title for ATS clarity.',
+      certifications: targetJobTitle
+        ? `Certifications foreground credentials recruiters expect for ${targetJobTitle}.`
+        : 'Certifications foreground credentials recruiters expect for this role.',
+      projects: targetJobTitle
+        ? `Projects spotlight initiatives that mirror ${targetJobTitle} responsibilities.`
+        : 'Projects spotlight initiatives that mirror the job description priorities.',
+      highlights: targetJobTitle
+        ? `Highlights now emphasise wins tied to ${targetJobTitle} success metrics.`
+        : 'Highlights now emphasise wins tied to the job description success metrics.',
     };
 
     const trackChange = (key, label, sectionResult = {}, reasons, options = {}) => {
@@ -2379,7 +2398,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       'summary',
       'Summary',
       applySectionUpdate(workingResume, baseResult.updatedResume, {
-        pattern: /^#\s*summary/i,
+        pattern: SUMMARY_SECTION_PATTERN,
         defaultLabel: 'Summary',
         insertIndex: 1,
       }),
@@ -2390,7 +2409,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       'skills',
       'Skills',
       applySectionUpdate(workingResume, baseResult.updatedResume, {
-        pattern: /^#\s*skills/i,
+        pattern: SKILLS_SECTION_PATTERN,
         defaultLabel: 'Skills',
         insertIndex: 2,
       }),
@@ -2401,10 +2420,43 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       'experience',
       'Work Experience',
       applySectionUpdate(workingResume, baseResult.updatedResume, {
-        pattern: /^#\s*(work\s+)?experience/i,
+        pattern: EXPERIENCE_SECTION_PATTERN,
         defaultLabel: 'Work Experience',
       }),
       defaultReasons.experience
+    );
+
+    trackChange(
+      'certifications',
+      'Certifications',
+      applySectionUpdate(workingResume, baseResult.updatedResume, {
+        pattern: CERTIFICATIONS_SECTION_PATTERN,
+        defaultLabel: 'Certifications',
+        insertIndex: 3,
+      }),
+      defaultReasons.certifications
+    );
+
+    trackChange(
+      'projects',
+      'Projects',
+      applySectionUpdate(workingResume, baseResult.updatedResume, {
+        pattern: PROJECTS_SECTION_PATTERN,
+        defaultLabel: 'Projects',
+        insertIndex: 3,
+      }),
+      defaultReasons.projects
+    );
+
+    trackChange(
+      'highlights',
+      'Highlights',
+      applySectionUpdate(workingResume, baseResult.updatedResume, {
+        pattern: HIGHLIGHTS_SECTION_PATTERN,
+        defaultLabel: 'Highlights',
+        insertIndex: 2,
+      }),
+      defaultReasons.highlights
     );
 
     trackChange(
@@ -2448,7 +2500,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
 
   if (type === 'improve-summary') {
     const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
-      pattern: /^#\s*summary/i,
+      pattern: SUMMARY_SECTION_PATTERN,
       defaultLabel: 'Summary',
       insertIndex: 1,
     });
@@ -2462,7 +2514,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
 
   if (type === 'add-missing-skills') {
     const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
-      pattern: /^#\s*skills/i,
+      pattern: SKILLS_SECTION_PATTERN,
       defaultLabel: 'Skills',
       insertIndex: 2,
     });
@@ -2476,8 +2528,50 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
 
   if (type === 'align-experience') {
     const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
-      pattern: /^#\s*(work\s+)?experience/i,
+      pattern: EXPERIENCE_SECTION_PATTERN,
       defaultLabel: 'Work Experience',
+    });
+    return {
+      ...baseResult,
+      ...sectionResult,
+      beforeExcerpt: sectionResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: sectionResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  if (type === 'improve-certifications') {
+    const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
+      pattern: CERTIFICATIONS_SECTION_PATTERN,
+      defaultLabel: 'Certifications',
+      insertIndex: 3,
+    });
+    return {
+      ...baseResult,
+      ...sectionResult,
+      beforeExcerpt: sectionResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: sectionResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  if (type === 'improve-projects') {
+    const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
+      pattern: PROJECTS_SECTION_PATTERN,
+      defaultLabel: 'Projects',
+      insertIndex: 3,
+    });
+    return {
+      ...baseResult,
+      ...sectionResult,
+      beforeExcerpt: sectionResult.beforeExcerpt || baseResult.beforeExcerpt,
+      afterExcerpt: sectionResult.afterExcerpt || baseResult.afterExcerpt,
+    };
+  }
+
+  if (type === 'improve-highlights') {
+    const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
+      pattern: HIGHLIGHTS_SECTION_PATTERN,
+      defaultLabel: 'Highlights',
+      insertIndex: 2,
     });
     return {
       ...baseResult,
@@ -2514,7 +2608,7 @@ const IMPROVEMENT_CONFIG = {
     ],
   },
   'add-missing-skills': {
-    title: 'Add Missing Skills',
+    title: 'Improve Skills',
     focus: [
       'Blend the missing or underrepresented skills into both the Skills list and relevant experience bullets.',
       'Revise existing bullets so each new skill is backed by duties already present in the resume.',
@@ -2522,7 +2616,7 @@ const IMPROVEMENT_CONFIG = {
     ],
   },
   'change-designation': {
-    title: 'Change Designation',
+    title: 'Improve Designation',
     focus: [
       'Update the headline or latest role title to match the target job title while keeping chronology intact.',
       'Adjust surrounding bullets so they evidence the updated title with truthful scope and impact.',
@@ -2530,17 +2624,41 @@ const IMPROVEMENT_CONFIG = {
     ],
   },
   'align-experience': {
-    title: 'Align Experience',
+    title: 'Improve Experience',
     focus: [
       'Rewrite the most relevant experience bullets so they mirror the job description’s responsibilities and metrics.',
       'Highlight missing keywords or responsibilities from the JD using facts already in the resume.',
       'Keep bullet formatting, tense, and chronology consistent throughout the section.',
     ],
   },
+  'improve-certifications': {
+    title: 'Improve Certifications',
+    focus: [
+      'Prioritise certifications that validate the JD’s compliance or technical requirements.',
+      'Clarify issuer names and relevance without inventing new credentials.',
+      'Keep existing credential dates and order intact while surfacing the most role-aligned items first.',
+    ],
+  },
+  'improve-projects': {
+    title: 'Improve Projects',
+    focus: [
+      'Refocus project bullets on outcomes and responsibilities that match the job description.',
+      'Weave in JD keywords using project details already present in the resume.',
+      'Avoid adding new projects—revise the wording of existing ones to emphasise fit.',
+    ],
+  },
+  'improve-highlights': {
+    title: 'Improve Highlights',
+    focus: [
+      'Elevate the top-line wins so they mirror the target role’s success metrics.',
+      'Tie each highlight back to measurable impact already evidenced in the resume.',
+      'Retain the existing highlight count and ordering while tightening phrasing.',
+    ],
+  },
   'enhance-all': {
     title: 'Enhance All',
     focus: [
-      'Deliver the summary, skills, designation, and experience improvements in one cohesive pass.',
+      'Deliver the summary, skills, experience, designation, certifications, projects, and highlights improvements in one cohesive pass.',
       'Address missing skills and JD priorities everywhere they fit naturally in the resume.',
       'Ensure the final resume remains ATS-safe, truthful, and consistent in tone and formatting.',
     ],
@@ -2704,12 +2822,12 @@ function fallbackImprovement(type, context) {
   }
 
   if (type === 'improve-summary') {
-    const section = extractSectionContent(resumeText, /^#\s*summary/i);
+    const section = extractSectionContent(resumeText, SUMMARY_SECTION_PATTERN);
     const before = section.content.join('\n').trim();
     const summaryLine = `Forward-looking ${jobTitle || 'professional'} with strengths in ${
       fallbackSkillText || 'delivering measurable outcomes'
     } and a record of translating goals into results.`;
-    const updatedResume = replaceSectionContent(resumeText, /^#\s*summary/i, [summaryLine], {
+    const updatedResume = replaceSectionContent(resumeText, SUMMARY_SECTION_PATTERN, [summaryLine], {
       headingLabel: 'Summary',
       insertIndex: 1,
     });
@@ -2729,7 +2847,7 @@ function fallbackImprovement(type, context) {
         explanation: 'No missing skills detected—resume already covers the job keywords.',
       };
     }
-    const section = extractSectionContent(resumeText, /^#\s*skills/i);
+    const section = extractSectionContent(resumeText, SKILLS_SECTION_PATTERN);
     const before = section.content.join('\n').trim();
     const bullet = `- ${fallbackSkills.join(', ')}`;
     const existing = section.content.some((line) =>
@@ -2740,7 +2858,7 @@ function fallbackImprovement(type, context) {
       : [...section.content.filter(Boolean), bullet];
     const updatedResume = replaceSectionContent(
       resumeText,
-      /^#\s*skills/i,
+      SKILLS_SECTION_PATTERN,
       newContent,
       { headingLabel: 'Skills', insertIndex: 2 }
     );
@@ -2793,7 +2911,7 @@ function fallbackImprovement(type, context) {
   }
 
   if (type === 'align-experience') {
-    const section = extractSectionContent(resumeText, /^#\s*(work\s+)?experience/i);
+    const section = extractSectionContent(resumeText, EXPERIENCE_SECTION_PATTERN);
     const headingLabel = section.heading.replace(/^#\s*/, '') || 'Work Experience';
     const before = section.content.join('\n').trim();
     const focusPhrase = fallbackSkillText
@@ -2803,7 +2921,7 @@ function fallbackImprovement(type, context) {
     const newContent = [...section.content, bullet];
     const updatedResume = replaceSectionContent(
       resumeText,
-      /^#\s*(work\s+)?experience/i,
+      EXPERIENCE_SECTION_PATTERN,
       newContent,
       { headingLabel }
     );
@@ -2813,6 +2931,114 @@ function fallbackImprovement(type, context) {
       afterExcerpt: bullet,
       explanation: 'Added an accomplishment bullet that mirrors the job description focus.',
       confidence: 0.32,
+    };
+  }
+
+  if (type === 'improve-certifications') {
+    const certificationCandidates = dedupeCertificates([
+      ...(context.knownCertificates || []),
+      ...(context.manualCertificates || []),
+    ]);
+    if (!certificationCandidates.length) {
+      return {
+        ...baseResult,
+        explanation: 'No certifications supplied to reinforce for this role.',
+      };
+    }
+
+    const targetCertificate = certificationCandidates[0];
+    const certificateLabelParts = [targetCertificate.name].filter(Boolean);
+    if (targetCertificate.provider) {
+      certificateLabelParts.push(targetCertificate.provider);
+    }
+    const certificateLine = `- ${certificateLabelParts.join(' — ')}`;
+    const section = extractSectionContent(resumeText, CERTIFICATIONS_SECTION_PATTERN);
+    const headingLabel = deriveHeadingLabel(section.heading, 'Certifications');
+    const before = section.content.join('\n').trim();
+    const alreadyPresent = section.content.some((line) =>
+      targetCertificate.name && line.toLowerCase().includes(targetCertificate.name.toLowerCase())
+    );
+    const baseContent = section.content.filter((line) => typeof line === 'string');
+    const newContent = alreadyPresent
+      ? baseContent
+      : [...baseContent.filter(Boolean), certificateLine];
+    const sanitizedContent = newContent.length ? sanitizeSectionLines(newContent) : [];
+    const updatedResume = replaceSectionContent(
+      resumeText,
+      CERTIFICATIONS_SECTION_PATTERN,
+      sanitizedContent.length ? sanitizedContent : [certificateLine],
+      { headingLabel, insertIndex: 3 }
+    );
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: alreadyPresent ? before : certificateLine,
+      explanation: alreadyPresent
+        ? 'Certifications section already lists the supplied credential.'
+        : `Highlighted ${targetCertificate.name} so the credential is prominent for screeners.`,
+      confidence: alreadyPresent ? 0.26 : 0.32,
+    };
+  }
+
+  if (type === 'improve-projects') {
+    const section = extractSectionContent(resumeText, PROJECTS_SECTION_PATTERN);
+    const headingLabel = deriveHeadingLabel(section.heading, 'Projects');
+    const before = section.content.join('\n').trim();
+    const focusText = fallbackSkillText || jobTitle || 'role priorities';
+    const addition = `- Spotlighted projects that prove ${focusText} impact.`;
+    const alreadyPresent = section.content.some((line) =>
+      line.trim().toLowerCase() === addition.toLowerCase()
+    );
+    const baseContent = section.content.filter((line) => typeof line === 'string');
+    const newContent = alreadyPresent
+      ? baseContent
+      : [...baseContent.filter(Boolean), addition];
+    const sanitizedContent = newContent.length ? sanitizeSectionLines(newContent) : [];
+    const updatedResume = replaceSectionContent(
+      resumeText,
+      PROJECTS_SECTION_PATTERN,
+      sanitizedContent.length ? sanitizedContent : [addition],
+      { headingLabel, insertIndex: 3 }
+    );
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: alreadyPresent ? before : addition,
+      explanation: alreadyPresent
+        ? 'Projects section already emphasises the job-aligned initiatives.'
+        : 'Elevated project bullets to mirror the job description priorities.',
+      confidence: alreadyPresent ? 0.25 : 0.31,
+    };
+  }
+
+  if (type === 'improve-highlights') {
+    const section = extractSectionContent(resumeText, HIGHLIGHTS_SECTION_PATTERN);
+    const headingLabel = deriveHeadingLabel(section.heading, 'Highlights');
+    const before = section.content.join('\n').trim();
+    const focusText = fallbackSkillText || jobTitle || 'target role';
+    const addition = `- Highlighted wins that reinforce ${focusText} outcomes.`;
+    const alreadyPresent = section.content.some((line) =>
+      line.trim().toLowerCase() === addition.toLowerCase()
+    );
+    const baseContent = section.content.filter((line) => typeof line === 'string');
+    const newContent = alreadyPresent
+      ? baseContent
+      : [...baseContent.filter(Boolean), addition];
+    const sanitizedContent = newContent.length ? sanitizeSectionLines(newContent) : [];
+    const updatedResume = replaceSectionContent(
+      resumeText,
+      HIGHLIGHTS_SECTION_PATTERN,
+      sanitizedContent.length ? sanitizedContent : [addition],
+      { headingLabel, insertIndex: 2 }
+    );
+    return {
+      updatedResume,
+      beforeExcerpt: before,
+      afterExcerpt: alreadyPresent ? before : addition,
+      explanation: alreadyPresent
+        ? 'Highlights already underscore the job-aligned achievements.'
+        : 'Reinforced highlights so top wins echo the job metrics.',
+      confidence: alreadyPresent ? 0.25 : 0.31,
     };
   }
 
@@ -2826,13 +3052,26 @@ function fallbackImprovement(type, context) {
       ...context,
       resumeText: interim.updatedResume,
     });
-    const finalResult = fallbackImprovement('align-experience', {
+    interim = fallbackImprovement('align-experience', {
+      ...context,
+      resumeText: interim.updatedResume,
+    });
+    interim = fallbackImprovement('improve-certifications', {
+      ...context,
+      resumeText: interim.updatedResume,
+    });
+    interim = fallbackImprovement('improve-projects', {
+      ...context,
+      resumeText: interim.updatedResume,
+    });
+    const finalResult = fallbackImprovement('improve-highlights', {
       ...context,
       resumeText: interim.updatedResume,
     });
     return {
       ...finalResult,
-      explanation: 'Applied deterministic improvements for summary, skills, designation, and experience.',
+      explanation:
+        'Applied deterministic improvements for summary, skills, designation, experience, certifications, projects, and highlights.',
       confidence: 0.34,
     };
   }
@@ -7713,9 +7952,12 @@ async function handleImprovementRequest(type, req, res) {
       manualCertificates,
     });
     const sectionPatterns = {
-      'improve-summary': /^#\s*summary/i,
-      'add-missing-skills': /^#\s*skills/i,
-      'align-experience': /^#\s*(work\s+)?experience/i,
+      'improve-summary': SUMMARY_SECTION_PATTERN,
+      'add-missing-skills': SKILLS_SECTION_PATTERN,
+      'align-experience': EXPERIENCE_SECTION_PATTERN,
+      'improve-certifications': CERTIFICATIONS_SECTION_PATTERN,
+      'improve-projects': PROJECTS_SECTION_PATTERN,
+      'improve-highlights': HIGHLIGHTS_SECTION_PATTERN,
     };
     const excerptPattern = sectionPatterns[type];
     const normalizedBeforeExcerpt = excerptPattern
@@ -7871,6 +8113,9 @@ const improvementRoutes = [
   { path: '/api/add-missing-skills', type: 'add-missing-skills' },
   { path: '/api/change-designation', type: 'change-designation' },
   { path: '/api/align-experience', type: 'align-experience' },
+  { path: '/api/improve-certifications', type: 'improve-certifications' },
+  { path: '/api/improve-projects', type: 'improve-projects' },
+  { path: '/api/improve-highlights', type: 'improve-highlights' },
   { path: '/api/enhance-all', type: 'enhance-all' },
 ];
 

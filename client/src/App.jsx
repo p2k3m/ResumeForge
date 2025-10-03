@@ -21,18 +21,33 @@ const improvementActions = [
   },
   {
     key: 'add-missing-skills',
-    label: 'Add Missing Skills',
+    label: 'Improve Skills',
     helper: 'Blend missing keywords into the skills and experience sections.'
   },
   {
+    key: 'align-experience',
+    label: 'Improve Experience',
+    helper: 'Emphasise accomplishments that mirror the job requirements.'
+  },
+  {
     key: 'change-designation',
-    label: 'Change Designation',
+    label: 'Improve Designation',
     helper: 'Align your visible job title with the target role.'
   },
   {
-    key: 'align-experience',
-    label: 'Align Experience',
-    helper: 'Emphasise accomplishments that mirror the job requirements.'
+    key: 'improve-certifications',
+    label: 'Improve Certifications',
+    helper: 'Surface credentials that validate your readiness for this JD.'
+  },
+  {
+    key: 'improve-projects',
+    label: 'Improve Projects',
+    helper: 'Spotlight portfolio wins that map directly to the role priorities.'
+  },
+  {
+    key: 'improve-highlights',
+    label: 'Improve Highlights',
+    helper: 'Refine top achievements so they echo the job’s success metrics.'
   },
   {
     key: 'enhance-all',
@@ -435,7 +450,14 @@ function deriveChangeLabel(suggestion) {
   if (before && after && before !== after) {
     if (type === 'improve-summary') return 'rephrased'
     if (type === 'change-designation') return 'fixed'
-    if (type === 'add-missing-skills' || type === 'align-experience') return 'added'
+    if (
+      type === 'add-missing-skills' ||
+      type === 'align-experience' ||
+      type === 'improve-certifications' ||
+      type === 'improve-projects' ||
+      type === 'improve-highlights'
+    )
+      return 'added'
     if (type === 'enhance-all') return 'fixed'
   }
 
@@ -444,7 +466,11 @@ function deriveChangeLabel(suggestion) {
       ? 'rephrased'
       : type === 'change-designation'
         ? 'fixed'
-        : type === 'add-missing-skills' || type === 'align-experience'
+        : type === 'add-missing-skills' ||
+            type === 'align-experience' ||
+            type === 'improve-certifications' ||
+            type === 'improve-projects' ||
+            type === 'improve-highlights'
           ? 'added'
           : 'fixed'
 
@@ -459,10 +485,16 @@ function buildChangeLogEntry(suggestion) {
       'Reframed your summary so the opener mirrors the job description priorities.',
     'add-missing-skills':
       'Inserted missing keywords so the CV satisfies the role requirements.',
-    'change-designation':
-      'Aligned the visible designation with the target role title.',
     'align-experience':
       'Expanded experience bullets to reflect the selection criteria.',
+    'change-designation':
+      'Aligned the visible designation with the target role title.',
+    'improve-certifications':
+      'Elevated certifications that validate the role’s compliance or technical focus.',
+    'improve-projects':
+      'Reframed project wins to demonstrate alignment with the JD priorities.',
+    'improve-highlights':
+      'Tuned top highlights so they emphasise the outcomes hiring managers expect.',
     'enhance-all':
       'Rolled out combined updates so every section aligns with the JD.'
   }
@@ -476,8 +508,11 @@ function buildChangeLogEntry(suggestion) {
   const selectionNotes = {
     'improve-summary': 'Selection focus: mirrors JD tone and value propositions.',
     'add-missing-skills': 'Selection focus: surfaces keywords recruiters screen for.',
-    'change-designation': 'Selection focus: resolves designation mismatch flagged in ATS scans.',
     'align-experience': 'Selection focus: evidences accomplishments tied to job metrics.',
+    'change-designation': 'Selection focus: resolves designation mismatch flagged in ATS scans.',
+    'improve-certifications': 'Selection focus: spotlights credentials recruiters validate first.',
+    'improve-projects': 'Selection focus: proves project impact mirrors hiring goals.',
+    'improve-highlights': 'Selection focus: amplifies headline wins that catch recruiter attention.',
     'enhance-all': 'Selection focus: synchronises every section with the job criteria.'
   }
 
