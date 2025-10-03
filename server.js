@@ -3345,16 +3345,23 @@ function parseLine(text) {
     }
   }
 
-  const pipeIdx = text.indexOf('|');
-  if (pipeIdx !== -1) {
-    const before = text.slice(0, pipeIdx).trim();
-    const after = text.slice(pipeIdx + 1);
-    processPart(before, true);
-    tokens.push({ type: 'jobsep' });
-    const segments = after.split('|');
-    segments.forEach((seg) => {
-      const trimmed = seg.trim();
-      if (!trimmed) return;
+  const pipeSegments = text.split('|');
+  if (pipeSegments.length > 1) {
+    const [firstSegment, ...restSegments] = pipeSegments;
+    const leading = firstSegment.trim();
+    if (leading) {
+      processPart(leading, true);
+    }
+    restSegments.forEach((segment) => {
+      const trimmed = segment.trim();
+      if (!trimmed) {
+        return;
+      }
+      if (!leading && tokens.length === 0) {
+        processPart(trimmed, true);
+        return;
+      }
+      tokens.push({ type: 'jobsep' });
       tokens.push({ type: 'paragraph', text: ' ' });
       processPart(trimmed, false);
     });
@@ -6690,6 +6697,56 @@ function removeGuidanceLines(text = '') {
     .join('\n');
 }
 
+function stringifyTokens(tokens = []) {
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    return '';
+  }
+
+  let result = '';
+  let bulletSeen = false;
+
+  tokens.forEach((token) => {
+    if (!token) {
+      return;
+    }
+
+    switch (token.type) {
+      case 'bullet':
+        if (!bulletSeen) {
+          result += '- ';
+          bulletSeen = true;
+        }
+        break;
+      case 'newline':
+        result = result.replace(/[ \t]+$/g, '');
+        result += '\n';
+        bulletSeen = false;
+        break;
+      case 'tab':
+        result += '\t';
+        break;
+      case 'jobsep':
+        result = result.replace(/[ \t]+$/g, '');
+        result += ' |';
+        break;
+      case 'link':
+        if (token.text) {
+          result += token.text;
+        } else if (token.href) {
+          result += token.href;
+        }
+        break;
+      default:
+        if (typeof token.text === 'string') {
+          result += token.text;
+        }
+        break;
+    }
+  });
+
+  return result.replace(/[ \t]+$/g, '');
+}
+
 function reparseAndStringify(text, options = {}) {
   const data = parseContent(text, options);
 
@@ -6709,11 +6766,10 @@ function reparseAndStringify(text, options = {}) {
   data.sections.forEach((sec) => {
     lines.push(`# ${sec.heading}`);
     sec.items.forEach((tokens) => {
-      lines.push(
-        tokens
-          .map((t) => (t.type === 'bullet' ? '- ' : t.text || ''))
-          .join('')
-      );
+      const line = stringifyTokens(tokens);
+      if (line) {
+        lines.push(line);
+      }
     });
   });
   return lines.join('\n');
@@ -6882,11 +6938,10 @@ function sanitizeGeneratedText(text, options = {}) {
   sections.forEach((sec) => {
     lines.push(`# ${sec.heading}`);
     sec.items.forEach((tokens) => {
-      lines.push(
-        tokens
-          .map((t) => (t.type === 'bullet' ? '- ' : t.text || ''))
-          .join('')
-      );
+      const line = stringifyTokens(tokens);
+      if (line) {
+        lines.push(line);
+      }
     });
   });
   return lines.join('\n');

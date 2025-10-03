@@ -127,4 +127,27 @@ describe('sanitizeGeneratedText', () => {
       ].join('\n')
     );
   });
+
+  test('preserves multiline bullets and job separators', () => {
+    const input = [
+      'Taylor Doe',
+      '# Work Experience',
+      '- Senior Engineer | Big Co | 2022 - Present',
+      '  Led cross-functional initiatives across 5 teams',
+      '- Built analytics platform',
+      '  Increased NPS by 20%',
+      '# Skills',
+      '- JavaScript',
+      '- Python'
+    ].join('\n');
+
+    const sanitized = sanitizeGeneratedText(input, { skipRequiredSections: true });
+
+    expect(sanitized).toMatch(
+      /Senior Engineer \| Big Co \| 2022 - Present/
+    );
+    expect(sanitized).toMatch(
+      /Built analytics platform\nIncreased NPS by 20%/
+    );
+  });
 });
