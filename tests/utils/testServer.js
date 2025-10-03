@@ -26,12 +26,13 @@ export async function setupTestServer({
   dynamoImpl,
   axiosImpl,
   pdfText = 'John Doe\nProfessional Summary\nExperience\nEducation\nSkills\nProjects',
+  allowedOrigins,
 } = {}) {
   jest.resetModules();
   process.env.S3_BUCKET = 'integration-bucket';
   process.env.GEMINI_API_KEY = 'integration-key';
   process.env.AWS_REGION = 'us-integration-1';
-  process.env.CLOUDFRONT_ORIGINS = '';
+  process.env.CLOUDFRONT_ORIGINS = allowedOrigins ?? '';
 
   const mockS3Send = jest.fn().mockImplementation(() => Promise.resolve({}));
   if (s3Impl) {
