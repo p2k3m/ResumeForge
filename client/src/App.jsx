@@ -1137,6 +1137,7 @@ function App() {
   const [isCoverLetterDownloading, setIsCoverLetterDownloading] = useState(false)
   const [coverLetterDownloadError, setCoverLetterDownloadError] = useState('')
   const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
+  const [resumeHistory, setResumeHistory] = useState([])
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
@@ -1164,6 +1165,18 @@ function App() {
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
   const improvementBusy = Boolean(activeImprovement)
+
+  const resumeHistoryMap = useMemo(() => {
+    if (!Array.isArray(resumeHistory) || resumeHistory.length === 0) {
+      return new Map()
+    }
+    const map = new Map()
+    resumeHistory.forEach((entry) => {
+      if (!entry || !entry.id) return
+      map.set(entry.id, entry)
+    })
+    return map
+  }, [resumeHistory])
 
   const availableTemplateOptions = useMemo(() => {
     const registry = new Map(BASE_TEMPLATE_OPTIONS.map((option) => [option.id, option]))
@@ -1814,6 +1827,7 @@ function App() {
     setCoverLetterEditor(null)
     setCoverLetterDownloadError('')
     setCoverLetterClipboardStatus('')
+    setResumeHistory([])
   }
 
   const handleScoreSubmit = async () => {
@@ -2068,6 +2082,7 @@ function App() {
         coverLetterDrafts: cloneData(analysisCoverLetterDrafts),
         coverLetterOriginals: cloneData(analysisCoverLetterOriginals)
       })
+      setResumeHistory([])
     } catch (err) {
       console.error('Unable to enhance CV', err)
       const errorMessage =
@@ -2175,6 +2190,7 @@ function App() {
         scoreDelta: null
       }))
     )
+    setResumeHistory([])
     setError('')
     setPreviewSuggestion(null)
   }, [initialAnalysisSnapshot])
@@ -2569,6 +2585,25 @@ function App() {
           : null
       const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
       const changeLogEntry = buildChangeLogEntry(suggestion)
+      const historySnapshot = {
+        id: changeLogEntry?.id || id,
+        suggestionId: id,
+        title: suggestion?.title || 'Improvement Applied',
+        type: suggestion?.type || 'custom',
+        timestamp: Date.now(),
+        resumeBefore: resumeText,
+        resumeAfter: updatedResumeDraft,
+        matchBefore: match ? cloneData(match) : null,
+        scoreBreakdownBefore: Array.isArray(scoreBreakdown) ? cloneData(scoreBreakdown) : [],
+        resumeSkillsBefore: Array.isArray(resumeSkills) ? cloneData(resumeSkills) : [],
+        changeLogBefore: Array.isArray(changeLog) ? cloneData(changeLog) : [],
+        detail: changeLogEntry?.detail || '',
+        changeLabel: changeLogEntry?.label || ''
+      }
+      setResumeHistory((prev) => {
+        const filtered = Array.isArray(prev) ? prev.filter((entry) => entry.id !== historySnapshot.id) : []
+        return [historySnapshot, ...filtered]
+      })
 
       let previousChangeLog = null
 
@@ -2660,10 +2695,176 @@ function App() {
       persistChangeLogEntry,
       rescoreAfterImprovement,
       resumeText,
+      scoreBreakdown,
+      resumeSkills,
+      changeLog,
       setChangeLog,
       setError,
       setImprovementResults,
       setResumeText
+    ]
+  )
+
+  const handleDownloadPreviousVersion = useCallback(
+    (changeId) => {
+      if (!changeId) {
+        setError('Unable to download the previous version for this update.')
+        return
+      }
+      const historyEntry = resumeHistoryMap.get(changeId)
+      if (!historyEntry || typeof historyEntry.resumeBefore !== 'string') {
+        setError('Previous version is unavailable for this update.')
+        return
+      }
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        setError('Download is not supported in this environment.')
+        return
+      }
+      const resumeContent = historyEntry.resumeBefore
+      const baseNameSource = historyEntry.title || 'Resume'
+      const safeBase = baseNameSource
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+      const baseName = safeBase || 'resume'
+      const stamp = new Date(historyEntry.timestamp || Date.now())
+        .toISOString()
+        .replace(/[:.]/g, '-')
+      const fileName = `${baseName}-previous-${stamp}.txt`
+      try {
+        const blob = new Blob([resumeContent], { type: 'text/plain;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      } catch (err) {
+        console.error('Unable to download previous resume version', err)
+        setError('Unable to download the previous version. Please try again.')
+      }
+    },
+    [resumeHistoryMap, setError]
+  )
+
+  const handleRevertChange = useCallback(
+    async (changeId) => {
+      if (!changeId) {
+        setError('Unable to revert this update.')
+        return
+      }
+      const historyEntry = resumeHistoryMap.get(changeId)
+      if (!historyEntry) {
+        setError('Previous version is unavailable for this update.')
+        return
+      }
+
+      const revertTimestamp = Date.now()
+      const previousState = {
+        resumeText,
+        match: match ? cloneData(match) : null,
+        scoreBreakdown: Array.isArray(scoreBreakdown) ? cloneData(scoreBreakdown) : [],
+        resumeSkills: Array.isArray(resumeSkills) ? cloneData(resumeSkills) : [],
+        changeLog: Array.isArray(changeLog) ? cloneData(changeLog) : []
+      }
+
+      const baseChangeLog = Array.isArray(historyEntry.changeLogBefore)
+        ? cloneData(historyEntry.changeLogBefore)
+        : []
+      const existingEntry = changeLog.find((entry) => entry?.id === changeId) || null
+      const fallbackEntry = existingEntry || {
+        id: historyEntry.id,
+        title: historyEntry.title || 'Improvement Applied',
+        detail: historyEntry.detail || 'Change reverted to the earlier version.',
+        label: historyEntry.changeLabel || 'fixed',
+        type: historyEntry.type || 'custom'
+      }
+      const revertedEntry = {
+        ...fallbackEntry,
+        reverted: true,
+        revertedAt: revertTimestamp
+      }
+      const nextChangeLog = [
+        revertedEntry,
+        ...baseChangeLog.filter((entry) => entry?.id !== changeId)
+      ]
+
+      setResumeText(typeof historyEntry.resumeBefore === 'string' ? historyEntry.resumeBefore : '')
+      setMatch(historyEntry.matchBefore ? cloneData(historyEntry.matchBefore) : null)
+      setScoreBreakdown(
+        Array.isArray(historyEntry.scoreBreakdownBefore)
+          ? cloneData(historyEntry.scoreBreakdownBefore)
+          : []
+      )
+      setResumeSkills(
+        Array.isArray(historyEntry.resumeSkillsBefore)
+          ? cloneData(historyEntry.resumeSkillsBefore)
+          : []
+      )
+      setChangeLog(nextChangeLog)
+      setResumeHistory((prev) =>
+        prev.map((entry) =>
+          entry.id === changeId ? { ...entry, reverted: true, revertedAt: revertTimestamp } : entry
+        )
+      )
+      setImprovementResults((prev) =>
+        prev.map((item) =>
+          item.id === historyEntry.suggestionId
+            ? {
+                ...item,
+                accepted: false,
+                rescorePending: false,
+                rescoreError: '',
+                scoreDelta: null
+              }
+            : item
+        )
+      )
+
+      if (existingEntry) {
+        try {
+          await persistChangeLogEntry(revertedEntry)
+        } catch (err) {
+          console.error('Unable to persist change log revert', err)
+          setError(
+            err?.message
+              ? err.message
+              : 'Unable to mark the change as reverted. Please try again.'
+          )
+          setResumeText(previousState.resumeText)
+          setMatch(previousState.match ? cloneData(previousState.match) : null)
+          setScoreBreakdown(
+            Array.isArray(previousState.scoreBreakdown)
+              ? cloneData(previousState.scoreBreakdown)
+              : []
+          )
+          setResumeSkills(
+            Array.isArray(previousState.resumeSkills)
+              ? cloneData(previousState.resumeSkills)
+              : []
+          )
+          setChangeLog(previousState.changeLog)
+          setResumeHistory((prev) =>
+            prev.map((entry) =>
+              entry.id === changeId
+                ? { ...entry, reverted: false, revertedAt: undefined }
+                : entry
+            )
+          )
+        }
+      }
+    },
+    [
+      changeLog,
+      match,
+      persistChangeLogEntry,
+      resumeHistoryMap,
+      resumeSkills,
+      resumeText,
+      scoreBreakdown,
+      setError
     ]
   )
 
@@ -3553,41 +3754,76 @@ function App() {
               </span>
             </div>
             <ul className="space-y-3">
-              {changeLog.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="rounded-2xl border border-purple-200 bg-white/85 shadow-sm p-4 space-y-2"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-base font-semibold text-purple-900">{entry.title}</p>
-                      <p className="text-sm text-purple-700/90 leading-relaxed">{entry.detail}</p>
+              {changeLog.map((entry) => {
+                const historyEntry = resumeHistoryMap.get(entry.id)
+                const reverted = Boolean(entry.reverted)
+                const revertedAtLabel = (() => {
+                  if (!reverted) return ''
+                  const timestamp = entry.revertedAt ? new Date(entry.revertedAt) : null
+                  if (!timestamp || Number.isNaN(timestamp.getTime())) {
+                    return 'Reverted'
+                  }
+                  return `Reverted ${timestamp.toLocaleString()}`
+                })()
+                return (
+                  <li
+                    key={entry.id}
+                    className="rounded-2xl border border-purple-200 bg-white/85 shadow-sm p-4 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-base font-semibold text-purple-900">{entry.title}</p>
+                        <p className="text-sm text-purple-700/90 leading-relaxed">{entry.detail}</p>
+                      </div>
+                      <span
+                        className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
+                          changeLabelStyles[entry.label] || changeLabelStyles.fixed
+                        }`}
+                      >
+                        {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
+                      </span>
                     </div>
-                    <span
-                      className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
-                        changeLabelStyles[entry.label] || changeLabelStyles.fixed
-                      }`}
-                    >
-                      {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
-                    </span>
-                  </div>
-                  {(entry.before ||
-                    entry.after ||
-                    (entry.summarySegments && entry.summarySegments.length > 0) ||
-                    (entry.addedItems && entry.addedItems.length > 0) ||
-                    (entry.removedItems && entry.removedItems.length > 0) ||
-                    (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
-                    <ChangeComparisonView
-                      before={entry.before}
-                      after={entry.after}
-                      summarySegments={entry.summarySegments}
-                      addedItems={entry.addedItems}
-                      removedItems={entry.removedItems}
-                      itemizedChanges={entry.itemizedChanges}
-                    />
-                  )}
-                </li>
-              ))}
+                    {historyEntry && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadPreviousVersion(entry.id)}
+                          className="px-3 py-1.5 rounded-full border border-purple-200 text-xs font-semibold text-purple-700 hover:border-purple-300 hover:text-purple-900 transition"
+                        >
+                          Download previous version
+                        </button>
+                        {!reverted && (
+                          <button
+                            type="button"
+                            onClick={() => handleRevertChange(entry.id)}
+                            className="px-3 py-1.5 rounded-full border border-rose-200 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:text-rose-700 transition"
+                          >
+                            Undo change
+                          </button>
+                        )}
+                        {reverted && (
+                          <span className="text-xs font-semibold text-rose-600">{revertedAtLabel}</span>
+                        )}
+                      </div>
+                    )}
+                    {(entry.before ||
+                      entry.after ||
+                      (entry.summarySegments && entry.summarySegments.length > 0) ||
+                      (entry.addedItems && entry.addedItems.length > 0) ||
+                      (entry.removedItems && entry.removedItems.length > 0) ||
+                      (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
+                      <ChangeComparisonView
+                        before={entry.before}
+                        after={entry.after}
+                        summarySegments={entry.summarySegments}
+                        addedItems={entry.addedItems}
+                        removedItems={entry.removedItems}
+                        itemizedChanges={entry.itemizedChanges}
+                      />
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           </section>
         )}
