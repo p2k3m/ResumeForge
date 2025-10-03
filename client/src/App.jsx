@@ -223,10 +223,7 @@ const jobFitToneStyles = {
   }
 }
 
-const TEMPLATE_ALIASES = {
-  ucmo: 'classic',
-  vibrant: 'creative'
-}
+const TEMPLATE_ALIASES = {}
 
 const canonicalizeTemplateId = (value) => {
   if (typeof value !== 'string') return ''
@@ -261,7 +258,10 @@ const normalizeTemplateContext = (context) => {
     new Set([primary, selected, secondary, ...baseTemplates].filter(Boolean))
   )
   if (enrichedTemplates.length) {
-    normalized.templates = enrichedTemplates
+    normalized.templates = [
+      'ucmo',
+      ...enrichedTemplates.filter((tpl) => tpl && tpl !== 'ucmo')
+    ]
   }
   return normalized
 }
@@ -282,6 +282,11 @@ const BASE_TEMPLATE_OPTIONS = [
     description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.'
   },
   {
+    id: 'ucmo',
+    name: 'Crimson Heritage',
+    description: 'Classic serif typography with deep crimson accents inspired by university letterhead design.'
+  },
+  {
     id: 'professional',
     name: 'Professional Edge',
     description: 'Refined business styling with signature accents for leadership roles.'
@@ -295,6 +300,11 @@ const BASE_TEMPLATE_OPTIONS = [
     id: 'creative',
     name: 'Creative Spotlight',
     description: 'Gradient-rich storytelling layout with bold highlights.'
+  },
+  {
+    id: 'vibrant',
+    name: 'Vibrant Fusion',
+    description: 'Playful dual-tone palette with energetic dividers and modern sans-serif headings.'
   },
   {
     id: 'ats',
