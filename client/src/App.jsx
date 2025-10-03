@@ -241,11 +241,91 @@ const jobFitToneStyles = {
 
 const TEMPLATE_ALIASES = {}
 
+const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_classic']
+
+const COVER_TEMPLATE_ALIASES = {
+  modern: 'cover_modern',
+  classic: 'cover_classic',
+  'cover-modern': 'cover_modern',
+  'cover-classic': 'cover_classic',
+  'modern-cover': 'cover_modern',
+  'classic-cover': 'cover_classic',
+  'cover modern': 'cover_modern',
+  'cover classic': 'cover_classic',
+  covermodern: 'cover_modern',
+  coverclassic: 'cover_classic'
+}
+
+const CLASSIC_STYLE_TEMPLATE_IDS = new Set(['classic', 'professional', 'ucmo'])
+
+const DEFAULT_COVER_TEMPLATE = 'cover_modern'
+
 const canonicalizeTemplateId = (value) => {
   if (typeof value !== 'string') return ''
   const trimmed = value.trim().toLowerCase()
   if (!trimmed) return ''
   return TEMPLATE_ALIASES[trimmed] || trimmed
+}
+
+const canonicalizeCoverTemplateId = (value, fallback = '') => {
+  if (typeof value !== 'string') return fallback
+  const trimmed = value.trim()
+  if (!trimmed) return fallback
+  if (COVER_TEMPLATE_IDS.includes(trimmed)) return trimmed
+  const normalized = trimmed.replace(/\s+/g, '_').toLowerCase()
+  if (COVER_TEMPLATE_IDS.includes(normalized)) {
+    return normalized
+  }
+  const alias =
+    COVER_TEMPLATE_ALIASES[normalized] || COVER_TEMPLATE_ALIASES[trimmed.toLowerCase()]
+  if (alias) return alias
+  if (normalized.includes('classic')) return 'cover_classic'
+  if (normalized.includes('modern')) return 'cover_modern'
+  return fallback
+}
+
+const normalizeCoverTemplateList = (list = []) => {
+  if (!Array.isArray(list)) return []
+  return Array.from(
+    new Set(list.map((item) => canonicalizeCoverTemplateId(item)).filter(Boolean))
+  )
+}
+
+const deriveCoverTemplateFromResume = (templateId) => {
+  const canonical = canonicalizeTemplateId(templateId)
+  if (!canonical) return DEFAULT_COVER_TEMPLATE
+  return CLASSIC_STYLE_TEMPLATE_IDS.has(canonical) ? 'cover_classic' : 'cover_modern'
+}
+
+const ensureCoverTemplateContext = (context, templateId) => {
+  const derived = deriveCoverTemplateFromResume(templateId || DEFAULT_COVER_TEMPLATE)
+  const fallback = derived === 'cover_modern' ? 'cover_classic' : 'cover_modern'
+  const base = context ? { ...context } : {}
+  const coverTemplates = normalizeCoverTemplateList(base.coverTemplates)
+  const coverTemplate1 = canonicalizeCoverTemplateId(base.coverTemplate1)
+  const coverTemplate2 = canonicalizeCoverTemplateId(base.coverTemplate2)
+  const mergedTemplates = normalizeCoverTemplateList([
+    derived,
+    coverTemplate1,
+    coverTemplate2,
+    ...coverTemplates
+  ])
+  if (!mergedTemplates.includes(derived)) {
+    mergedTemplates.unshift(derived)
+  }
+  if (!mergedTemplates.includes(fallback)) {
+    mergedTemplates.push(fallback)
+  }
+
+  base.coverTemplates = mergedTemplates
+  base.coverTemplate1 = derived
+  if (!coverTemplate2 || coverTemplate2 === derived) {
+    base.coverTemplate2 = mergedTemplates.find((tpl) => tpl !== derived) || fallback
+  } else {
+    base.coverTemplate2 = coverTemplate2
+  }
+
+  return base
 }
 
 const normalizeTemplateContext = (context) => {
@@ -279,7 +359,8 @@ const normalizeTemplateContext = (context) => {
       ...enrichedTemplates.filter((tpl) => tpl && tpl !== 'ucmo')
     ]
   }
-  return normalized
+  const templateForCover = normalized.selectedTemplate || normalized.template1 || 'modern'
+  return ensureCoverTemplateContext(normalized, templateForCover)
 }
 
 const formatTemplateName = (id) => {
@@ -1107,7 +1188,7 @@ function App() {
           const filtered = currentList.filter((item) => item !== canonical)
           base.templates = [canonical, ...filtered]
         }
-        return base
+        return ensureCoverTemplateContext(base, canonical)
       })
     },
     [setTemplateContext]
@@ -2428,6 +2509,11 @@ function App() {
       nextTemplateContext.selectedTemplate =
         canonicalizeTemplateId(nextTemplateContext.selectedTemplate) || nextTemplateContext.template1
 
+      const coverSyncedContext = ensureCoverTemplateContext(
+        nextTemplateContext,
+        canonicalTemplate
+      )
+
       const payload = {
         jobId,
         resumeText,
@@ -2441,7 +2527,7 @@ function App() {
         linkedinProfileUrl: profileUrl.trim(),
         credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
-        templateContext: nextTemplateContext,
+        templateContext: coverSyncedContext,
         templateId: canonicalTemplate,
         template: canonicalTemplate,
         baseline: {
