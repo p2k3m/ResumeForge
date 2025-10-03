@@ -3834,8 +3834,9 @@ async function rewriteSectionsWithGemini(
     basePlaceholderMap
   );
   const fallbackResult = {
-    text: sanitizedBaseText,
+    text: fallbackResolved,
     resolvedText: fallbackResolved,
+    tokenizedText: sanitizedBaseText,
     project: '',
     modifiedTitle: '',
     addedSkills: [],
@@ -3892,21 +3893,21 @@ async function rewriteSectionsWithGemini(
       const mergedData = mergeResumeDataSections(baseResumeData, resumeData);
       const mergedText = resumeDataToText(mergedData);
       const cleaned = sanitizeGeneratedText(mergedText, normalizeOptions);
-      const resolvedText = resolveEnhancementTokens(
-        cleaned,
-        mergedData?.placeholders || {}
-      );
+      const placeholders = mergedData?.placeholders || {};
+      const resolvedText = resolveEnhancementTokens(cleaned, placeholders);
+      const outputText = resolvedText || cleaned;
       const addedSkills = Array.isArray(parsed.addedSkills)
         ? parsed.addedSkills.filter((skill) => typeof skill === 'string' && skill.trim())
         : [];
       return {
-        text: cleaned,
-        resolvedText,
+        text: outputText,
+        resolvedText: outputText,
+        tokenizedText: cleaned,
         project: parsed.projectSnippet || parsed.project || '',
         modifiedTitle: parsed.latestRoleTitle || '',
         addedSkills,
         sanitizedFallbackUsed: false,
-        placeholders: mergedData.placeholders || {},
+        placeholders,
       };
     }
   } catch {
