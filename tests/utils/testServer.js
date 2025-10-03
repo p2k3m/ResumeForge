@@ -39,12 +39,160 @@ export async function setupTestServer({
     mockS3Send.mockImplementation(s3Impl);
   }
 
-  const mockDynamoSend = jest.fn().mockImplementation(() =>
-    Promise.resolve({ Table: { TableStatus: 'ACTIVE' } })
-  );
-  if (dynamoImpl) {
-    mockDynamoSend.mockImplementation(dynamoImpl);
-  }
+  const dynamoStore = new Map();
+
+  const cloneAttrMap = (value) => JSON.parse(JSON.stringify(value ?? {}));
+
+  const readStringAttr = (attr) => {
+    if (!attr) return '';
+    if (typeof attr.S === 'string') return attr.S;
+    if (typeof attr.N === 'string') return attr.N;
+    return '';
+  };
+
+  const defaultDynamoImpl = async (command = {}) => {
+    const { __type, input = {} } = command;
+
+    switch (__type) {
+      case 'DescribeTableCommand':
+        return { Table: { TableStatus: 'ACTIVE' } };
+      case 'CreateTableCommand':
+        return { TableDescription: { TableStatus: 'ACTIVE' } };
+      case 'PutItemCommand': {
+        const pk = readStringAttr(input?.Item?.linkedinProfileUrl);
+        if (pk) {
+          dynamoStore.set(pk, cloneAttrMap(input.Item));
+        }
+        return {};
+      }
+      case 'GetItemCommand': {
+        const pk = readStringAttr(input?.Key?.linkedinProfileUrl);
+        const item = dynamoStore.get(pk);
+        return item ? { Item: cloneAttrMap(item) } : {};
+      }
+      case 'UpdateItemCommand': {
+        const pk = readStringAttr(input?.Key?.linkedinProfileUrl);
+        const existing = cloneAttrMap(dynamoStore.get(pk));
+
+        const attrNames = input.ExpressionAttributeNames || {};
+        const attrValues = input.ExpressionAttributeValues || {};
+        const resolveName = (token = '') =>
+          token.startsWith('#') ? attrNames[token] || token.slice(1) : token;
+        const resolveValue = (placeholder) => {
+          const value = attrValues[placeholder];
+          return value ? cloneAttrMap(value) : undefined;
+        };
+        const resolveAssignmentValue = (token) => {
+          if (token.startsWith('if_not_exists(')) {
+            const inner = token.slice('if_not_exists('.length, -1);
+            const [, fallback = ''] = inner.split(',').map((part) => part.trim());
+            return resolveValue(fallback);
+          }
+          return resolveValue(token);
+        };
+
+        const ensureCondition = () => {
+          const condition = input.ConditionExpression || '';
+          if (!condition) return;
+
+          const expectedJobId = readStringAttr(attrValues[':jobId']);
+          if (expectedJobId && readStringAttr(existing.jobId) !== expectedJobId) {
+            const err = new Error('ConditionalCheckFailedException');
+            err.name = 'ConditionalCheckFailedException';
+            throw err;
+          }
+
+          const status = readStringAttr(existing.status);
+          if (condition.includes('#status = :statusScored OR #status = :statusCompleted')) {
+            const allowed = [
+              readStringAttr(attrValues[':statusScored']),
+              readStringAttr(attrValues[':statusCompleted']),
+            ];
+            if (!allowed.includes(status)) {
+              const err = new Error('ConditionalCheckFailedException');
+              err.name = 'ConditionalCheckFailedException';
+              throw err;
+            }
+          }
+
+          if (
+            condition.includes(
+              '#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status)'
+            )
+          ) {
+            const allowed = [
+              readStringAttr(attrValues[':statusUploaded']),
+              readStringAttr(attrValues[':status']),
+            ];
+            const attributeMissing = !existing.status;
+            if (!attributeMissing && !allowed.includes(status)) {
+              const err = new Error('ConditionalCheckFailedException');
+              err.name = 'ConditionalCheckFailedException';
+              throw err;
+            }
+          }
+        };
+
+        ensureCondition();
+
+        const updateExpression = input.UpdateExpression || '';
+        const [setClauseRaw = '', removeClauseRaw = ''] = updateExpression
+          .split(' REMOVE ')
+          .map((section) => section.trim());
+
+        if (setClauseRaw.startsWith('SET ')) {
+          const assignments = setClauseRaw
+            .slice(4)
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+
+          assignments.forEach((assignment) => {
+            const [left, right] = assignment.split('=').map((part) => part.trim());
+            if (!left || !right) return;
+            const field = resolveName(left);
+            const value = resolveAssignmentValue(right);
+            if (field && value !== undefined) {
+              existing[field] = value;
+            }
+          });
+        }
+
+        if (removeClauseRaw) {
+          removeClauseRaw
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+            .forEach((token) => {
+              const field = resolveName(token);
+              delete existing[field];
+            });
+        }
+
+        dynamoStore.set(pk, existing);
+        return {};
+      }
+      case 'DeleteItemCommand': {
+        const pk = readStringAttr(input?.Key?.linkedinProfileUrl);
+        dynamoStore.delete(pk);
+        return {};
+      }
+      case 'ScanCommand': {
+        return {
+          Items: Array.from(dynamoStore.values()).map((item) => cloneAttrMap(item)),
+        };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const mockDynamoSend = jest.fn().mockImplementation((command) => {
+    if (dynamoImpl) {
+      return dynamoImpl(command, { store: dynamoStore });
+    }
+    return defaultDynamoImpl(command);
+  });
 
   const axiosGet = jest
     .fn()
