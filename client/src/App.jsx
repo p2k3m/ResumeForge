@@ -353,7 +353,8 @@ function getDownloadPresentation(file = {}) {
         cardAccent: 'bg-gradient-to-br from-slate-50 via-white to-white',
         cardBorder: 'border-slate-200',
         linkLabel: 'Download original file',
-        category: 'resume'
+        category: 'resume',
+        autoPreviewPriority: 4
       }
     case 'version1':
       return {
@@ -365,7 +366,8 @@ function getDownloadPresentation(file = {}) {
         cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
         cardBorder: 'border-emerald-200',
         linkLabel: 'Download PDF',
-        category: 'resume'
+        category: 'resume',
+        autoPreviewPriority: 0
       }
     case 'version2':
       return {
@@ -377,7 +379,8 @@ function getDownloadPresentation(file = {}) {
         cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
         cardBorder: 'border-emerald-200',
         linkLabel: 'Download PDF',
-        category: 'resume'
+        category: 'resume',
+        autoPreviewPriority: 1
       }
     case 'cover_letter1':
       return {
@@ -389,7 +392,8 @@ function getDownloadPresentation(file = {}) {
         cardAccent: 'bg-gradient-to-br from-indigo-50 via-white to-white',
         cardBorder: 'border-indigo-200',
         linkLabel: 'Download PDF',
-        category: 'cover'
+        category: 'cover',
+        autoPreviewPriority: 2
       }
     case 'cover_letter2':
       return {
@@ -401,7 +405,8 @@ function getDownloadPresentation(file = {}) {
         cardAccent: 'bg-gradient-to-br from-indigo-50 via-white to-white',
         cardBorder: 'border-indigo-200',
         linkLabel: 'Download PDF',
-        category: 'cover'
+        category: 'cover',
+        autoPreviewPriority: 3
       }
     default:
       return {
@@ -413,7 +418,8 @@ function getDownloadPresentation(file = {}) {
         cardAccent: 'bg-white/85',
         cardBorder: 'border-purple-200',
         linkLabel: 'Download file',
-        category: 'other'
+        category: 'other',
+        autoPreviewPriority: 10
       }
   }
 }
@@ -797,6 +803,7 @@ function App() {
   const [templateContext, setTemplateContext] = useState(null)
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const improvementLockRef = useRef(false)
+  const autoPreviewSignatureRef = useRef('')
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
@@ -1137,6 +1144,41 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [previewFile])
+
+  useEffect(() => {
+    if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
+      autoPreviewSignatureRef.current = ''
+      return
+    }
+
+    const candidates = outputFiles
+      .map((file) => {
+        if (!file || typeof file !== 'object') {
+          return null
+        }
+        const presentation = file.presentation || getDownloadPresentation(file)
+        const priority =
+          typeof presentation.autoPreviewPriority === 'number'
+            ? presentation.autoPreviewPriority
+            : 50
+        const signature = `${file.type || ''}|${file.url || ''}|${file.updatedAt || ''}`
+        return { file, presentation, priority, signature }
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.priority - b.priority)
+
+    const nextCandidate = candidates[0]
+    if (!nextCandidate || !nextCandidate.signature) {
+      return
+    }
+
+    if (autoPreviewSignatureRef.current === nextCandidate.signature) {
+      return
+    }
+
+    autoPreviewSignatureRef.current = nextCandidate.signature
+    setPreviewFile({ ...nextCandidate.file, presentation: nextCandidate.presentation })
+  }, [outputFiles, autoPreviewSignatureRef])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
