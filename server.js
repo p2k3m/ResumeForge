@@ -3659,7 +3659,8 @@ function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeO
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '') || 'section';
-    const token = `{{RF_ENH_${normalizedHeading}_${String(placeholderIndex).padStart(4, '0')}}}`;
+    const placeholderSlug = normalizedHeading.toUpperCase();
+    const token = `{{RF_ENH_${placeholderSlug}_${String(placeholderIndex).padStart(4, '0')}}}`;
     placeholderIndex += 1;
     return token;
   };
@@ -4515,6 +4516,15 @@ function parseEmphasis(segment) {
   };
 
   while (i < segment.length) {
+    const remaining = segment.slice(i);
+    const enhancementMatch =
+      remaining.match(/^\{\{RF_ENH_[A-Za-z0-9_]+\}\}/) ||
+      remaining.match(/^\{\{RFENH[A-Za-z0-9]+\}\}/);
+    if (enhancementMatch) {
+      buffer += enhancementMatch[0];
+      i += enhancementMatch[0].length;
+      continue;
+    }
     const ch = segment[i];
     if (ch === '*' || ch === '_') {
       let count = 1;
@@ -4551,7 +4561,10 @@ function parseEmphasis(segment) {
     });
   }
   tokens.forEach((t) => {
-    if (t.text) t.text = t.text.replace(/[*_]/g, '');
+    if (!t?.text) return;
+    if (/^\{\{RF_ENH_[A-Za-z0-9_]+\}\}$/.test(t.text)) return;
+    if (/^\{\{RFENH[A-Za-z0-9]+\}\}$/.test(t.text)) return;
+    t.text = t.text.replace(/[*_]/g, '');
   });
   return tokens.filter((t) => t.text);
 }
