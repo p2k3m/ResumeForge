@@ -38,7 +38,7 @@ describe('ATSScoreDashboard', () => {
     }
   ]
 
-  const match = {
+  const baseMatch = {
     originalScore: 48,
     enhancedScore: 76,
     originalTitle: 'Product Manager',
@@ -46,6 +46,11 @@ describe('ATSScoreDashboard', () => {
   }
 
   it('renders each metric card and match comparison', () => {
+    const match = {
+      ...baseMatch,
+      missingSkills: ['SQL', 'Roadmap execution'],
+      addedSkills: ['Stakeholder communication']
+    }
     render(<ATSScoreDashboard metrics={metrics} match={match} />)
 
     const cards = screen.getAllByTestId('ats-score-card')
@@ -58,9 +63,22 @@ describe('ATSScoreDashboard', () => {
     expect(within(chart).getByText('Original')).toBeInTheDocument()
     expect(within(chart).getByText('Enhanced')).toBeInTheDocument()
     expect(screen.getByTestId('dashboard-live-indicator')).toBeInTheDocument()
+    expect(screen.getByTestId('original-match-status')).toHaveTextContent('Mismatch')
+    expect(screen.getByTestId('enhanced-match-status')).toHaveTextContent('Mismatch')
+    expect(screen.getByTestId('original-match-advice')).toHaveTextContent(
+      'You are missing these skills: SQL, Roadmap execution'
+    )
+    expect(screen.getByTestId('enhanced-match-advice')).toHaveTextContent(
+      'Still missing these skills: SQL, Roadmap execution'
+    )
   })
 
   it('updates to reflect new scores immediately when data changes', () => {
+    const match = {
+      ...baseMatch,
+      missingSkills: ['SQL', 'Roadmap execution'],
+      addedSkills: ['Stakeholder communication']
+    }
     const { rerender } = render(<ATSScoreDashboard metrics={metrics} match={match} />)
 
     const updatedMatch = { ...match, enhancedScore: 90 }
@@ -71,6 +89,25 @@ describe('ATSScoreDashboard', () => {
     expect(deltaBadge).toHaveTextContent('+42 pts')
     expect(screen.getByTestId('score-improvement-narrative')).toHaveTextContent(
       'Score moved from 48% to 90%'
+    )
+  })
+
+  it('shows match flags and positive advice when gaps are closed', () => {
+    const match = {
+      ...baseMatch,
+      missingSkills: [],
+      addedSkills: ['Cross-functional leadership', 'Go-to-market strategy']
+    }
+
+    render(<ATSScoreDashboard metrics={metrics} match={match} />)
+
+    expect(screen.getByTestId('original-match-status')).toHaveTextContent('Match')
+    expect(screen.getByTestId('enhanced-match-status')).toHaveTextContent('Match')
+    expect(screen.getByTestId('original-match-advice')).toHaveTextContent(
+      'ResumeForge added: Cross-functional leadership, Go-to-market strategy'
+    )
+    expect(screen.getByTestId('enhanced-match-advice')).toHaveTextContent(
+      'Now highlighting: Cross-functional leadership, Go-to-market strategy'
     )
   })
 
