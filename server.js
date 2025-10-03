@@ -9294,7 +9294,11 @@ async function generateEnhancedDocumentsResponse({
       const expiresAt = new Date(
         Date.now() + URL_EXPIRATION_SECONDS * 1000
       ).toISOString();
-      urls.push({ type: name, url: signedUrl, expiresAt });
+      const urlEntry = { type: name, url: signedUrl, expiresAt };
+      if (isCoverLetter) {
+        urlEntry.text = textValue;
+      }
+      urls.push(urlEntry);
     }
   } else {
     logStructured('info', 'generation_downloads_skipped', {
