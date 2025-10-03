@@ -10756,8 +10756,10 @@ async function generateEnhancedDocumentsResponse({
         Date.now() + URL_EXPIRATION_SECONDS * 1000
       ).toISOString();
       const urlEntry = { type: name, url: signedUrl, expiresAt };
-      if (isCoverLetter) {
-        urlEntry.text = entry?.text || '';
+      if (entry?.text) {
+        urlEntry.text = entry.text;
+      } else if (name !== 'original_upload') {
+        urlEntry.text = '';
       }
       urls.push(urlEntry);
     }
