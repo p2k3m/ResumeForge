@@ -3619,6 +3619,33 @@ function resolveTokenText(value = '', tokenMap = {}) {
   });
 }
 
+function tokenizeCoverLetterText(text = '', { letterIndex = 1 } = {}) {
+  if (typeof text !== 'string') {
+    return { tokenizedText: '', placeholders: {} };
+  }
+
+  const normalized = text.replace(/\r\n/g, '\n');
+  const segments = normalized
+    .split(/\n{2,}/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (!segments.length) {
+    return { tokenizedText: normalized, placeholders: {} };
+  }
+
+  const placeholders = {};
+  const tokens = segments.map((segment, index) => {
+    const token = `{{RF_ENH_COVER${letterIndex}_${String(index + 1).padStart(4, '0')}}}`;
+    placeholders[token] = segment;
+    const compact = token.replace('{{RF_ENH_', '{{RFENH').replace(/_/g, '');
+    placeholders[compact] = segment;
+    return token;
+  });
+
+  return { tokenizedText: tokens.join('\n\n'), placeholders };
+}
+
 function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeOptions = {}) {
   const parseLineOptions = sanitizeOptions?.preserveLinkText
     ? { preserveLinkText: true }
@@ -3802,8 +3829,13 @@ async function rewriteSectionsWithGemini(
       : {}
   );
 
+  const fallbackResolved = resolveEnhancementTokens(
+    sanitizedBaseText,
+    basePlaceholderMap
+  );
   const fallbackResult = {
-    text: resolveEnhancementTokens(sanitizedBaseText, basePlaceholderMap),
+    text: sanitizedBaseText,
+    resolvedText: fallbackResolved,
     project: '',
     modifiedTitle: '',
     addedSkills: [],
@@ -3868,7 +3900,8 @@ async function rewriteSectionsWithGemini(
         ? parsed.addedSkills.filter((skill) => typeof skill === 'string' && skill.trim())
         : [];
       return {
-        text: resolvedText,
+        text: cleaned,
+        resolvedText,
         project: parsed.projectSnippet || parsed.project || '',
         modifiedTitle: parsed.latestRoleTitle || '',
         addedSkills,
@@ -10014,7 +10047,15 @@ async function generateEnhancedDocumentsResponse({
         enhanced.placeholders && typeof enhanced.placeholders === 'object'
           ? enhanced.placeholders
           : {};
-      text = resolveEnhancementTokens(enhanced.text || resumeText, enhancementTokenMap);
+      const tokenizedEnhancedText =
+        typeof enhanced.text === 'string' && enhanced.text.trim()
+          ? enhanced.text
+          : resumeText;
+      const resolvedEnhancedText =
+        typeof enhanced.resolvedText === 'string' && enhanced.resolvedText.trim()
+          ? enhanced.resolvedText
+          : resolveEnhancementTokens(tokenizedEnhancedText, enhancementTokenMap);
+      text = resolvedEnhancedText;
       projectText = enhanced.project;
       modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
       geminiAddedSkills = enhanced.addedSkills || [];
@@ -10256,14 +10297,35 @@ async function generateEnhancedDocumentsResponse({
     ? originalUploadKey.replace(/[^/]+$/, '')
     : `${sanitizedName}/cv/${new Date().toISOString().slice(0, 10)}/`;
   const generatedPrefix = `${prefix}generated/`;
+  const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
+    letterIndex: 1,
+  });
+  const coverLetter2Tokens = tokenizeCoverLetterText(coverData.cover_letter2 || '', {
+    letterIndex: 2,
+  });
+
+  const coverLetterPlaceholderMap = expandEnhancementTokenMap({
+    ...(coverLetter1Tokens.placeholders || {}),
+    ...(coverLetter2Tokens.placeholders || {}),
+  });
+
+  if (Object.keys(coverLetterPlaceholderMap).length) {
+    enhancementTokenMap = {
+      ...enhancementTokenMap,
+      ...coverLetterPlaceholderMap,
+    };
+  }
+
   const outputs = {
     cover_letter1: {
       text: coverData.cover_letter1,
-      templateText: coverData.cover_letter1,
+      templateText:
+        coverLetter1Tokens.tokenizedText || coverData.cover_letter1 || '',
     },
     cover_letter2: {
       text: coverData.cover_letter2,
-      templateText: coverData.cover_letter2,
+      templateText:
+        coverLetter2Tokens.tokenizedText || coverData.cover_letter2 || '',
     },
     version1: {
       text: versionData.version1,
