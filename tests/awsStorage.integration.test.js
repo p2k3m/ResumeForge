@@ -5,6 +5,11 @@ import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
 const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
+const MANUAL_JOB_DESCRIPTION = `
+Join our platform engineering team to build resilient infrastructure and developer tooling.
+Collaborate across functions, automate deployments, and improve service reliability.
+`;
+
 describe('AWS integrations for /api/process-cv', () => {
   test('writes uploads and metadata to S3 and DynamoDB', async () => {
     const { app, mocks } = await setupTestServer();
@@ -12,7 +17,7 @@ describe('AWS integrations for /api/process-cv', () => {
 
     const response = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -106,7 +111,7 @@ describe('AWS integrations for /api/process-cv', () => {
 
     const response = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -133,7 +138,7 @@ describe('AWS integrations for /api/process-cv', () => {
 
     const response = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 

@@ -1,6 +1,11 @@
 import request from 'supertest';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
+const MANUAL_JOB_DESCRIPTION = `
+We are hiring a backend engineer to build APIs, manage cloud infrastructure, and mentor teammates.
+Deliver resilient services, partner with product, and drive continuous improvement.
+`;
+
 describe('end-to-end CV processing', () => {
   test('returns scoring insights without generating downloads', async () => {
     const { app } = await setupTestServer();
@@ -10,7 +15,7 @@ describe('end-to-end CV processing', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
       .set('X-Forwarded-For', '198.51.100.23')
-      .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -59,7 +64,8 @@ describe('end-to-end CV processing', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
       .set('X-Forwarded-For', '198.51.100.24')
-      .field('jobDescriptionUrl', 'https://example.com/job')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(400);

@@ -183,7 +183,7 @@
     <main class="card">
       <h1>Evaluate Your CV</h1>
       <p class="lead">
-        Upload your CV and provide the job description URL to evaluate how well it matches.
+        Upload your CV and paste the full job description to evaluate how well it matches.
       </p>
       <form id="portal-form">
         <label>
@@ -192,13 +192,14 @@
           <span class="hint">Drag &amp; drop supported. Maximum size: 5&nbsp;MB.</span>
         </label>
         <label>
-          Job description URL
-          <input
-            type="url"
-            name="jobDescriptionUrl"
-            placeholder="https://company.com/careers/role"
+          Paste full job description
+          <textarea
+            name="manualJobDescription"
+            placeholder="Paste the entire job post here"
+            rows="6"
             required
-          />
+          ></textarea>
+          <span class="hint">We’ll analyse this text directly—no URL scraping required.</span>
         </label>
         <label>
           LinkedIn profile URL

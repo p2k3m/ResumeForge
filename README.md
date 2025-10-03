@@ -1,14 +1,14 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with a scraped job description. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
+ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with the pasted job description text. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
 
 ## User flow
 
 | Step | User action | System response | Expected user outcome |
 | --- | --- | --- | --- |
 | 1. Upload résumé | Candidate drops a CV (PDF/DOC/DOCX) into the React portal. | File streams directly to S3 at `resume-forge-data/<candidate>/cv/<date>/…`; DynamoDB stores hashed personal data (IP, device, LinkedIn, Credly) and detected file type. Non-CV uploads trigger a validation error with remediation text. | The candidate immediately knows whether the résumé is valid and, if not, how to fix it before continuing. |
-| 2. Provide job description | Candidate pastes or links the job description. | The backend fetches the URL; blocked responses yield `JOB_DESCRIPTION_FETCH_FAILED` and set `manualInputRequired=true`, prompting the UI to request pasted content. Successful fetches attach the cleaned JD to the session record. | The user either sees the JD preview confirm successful capture or receives clear instructions to paste the description manually. |
+| 2. Provide job description | Candidate pastes the full job description text into the portal. | The backend analyses the supplied text directly—no scraping step or external fetch is required. | The user sees the JD captured instantly and can proceed knowing the analysis will use exactly what they pasted. |
 | 3. Run ATS analysis | Candidate clicks **Evaluate me against the JD**. | Lambda analyses the CV + JD, generating ATS scores (Layout & Searchability, Readability, Impact, Crispness, Other Metrics) and alignment data (designation deltas, experience gaps, skill/task matches, certifications, highlights). | The dashboard surfaces quantified fit, missing elements, and probability of selection so the candidate understands current readiness. |
 | 4. Apply improvements | Candidate uses **Improve** on specific sections or **Improve All**. | AI suggestions rewrite summaries, add skills, realign designations, adjust experience narratives, and highlight certifications. Accept/reject toggles persist the chosen edits. | The résumé content evolves in-app with an audit trail explaining each enhancement, keeping the candidate in control. |
 | 5. Download deliverables | Candidate downloads regenerated assets. | The portal exposes enhanced ATS-ready CV PDFs (2025 design), the tailored cover letter, and the change log. Session metadata schedules automatic S3 cleanup after 30 days. | Candidate leaves with ready-to-submit documents and clarity on how the edits improved hiring odds. |
@@ -345,7 +345,7 @@ Assign the IAM user or role attached to the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCE
 - `lambda:*`, `apigateway:*`, and `dynamodb:*` actions required by the SAM template.
 
 Limiting the policy to the specific stack resources is recommended for production environments.
-- **Job description scraping limitations:** The job description is retrieved with a simple HTTP GET request; dynamic or access-restricted pages may return empty or blocked content. When this occurs the API returns `JOB_DESCRIPTION_FETCH_FAILED` with `details.manualInputRequired = true` so the frontend can prompt the candidate to paste the full text manually.
+- **Job description input:** Candidates now paste the vacancy text directly, eliminating fragile scraping flows and authentication blockers. The API validates that non-empty text was supplied before processing the résumé.
 
 ## API Response
 The `/api/process-cv` endpoint returns JSON containing an array of generated files along with match statistics. All presigned d

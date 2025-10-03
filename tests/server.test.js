@@ -135,6 +135,11 @@ setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
+const MANUAL_JOB_DESCRIPTION = `
+We are seeking a Software Engineer to design, build, and ship scalable web services.
+Collaborate with cross-functional teams, implement APIs, and improve developer workflows.
+`;
+
 beforeEach(() => {
   setupDefaultDynamoMock();
   getSignedUrlMock.mockClear();
@@ -184,7 +189,7 @@ describe('/api/process-cv', () => {
       .set('X-Vercel-IP-City', 'Mumbai')
       .set('X-Vercel-IP-Country', 'IN')
       .set('X-Vercel-IP-Country-Region', 'MH')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res1.status).toBe(200);
@@ -216,7 +221,7 @@ describe('/api/process-cv', () => {
       .set('X-Vercel-IP-City', 'Mumbai')
       .set('X-Vercel-IP-Country', 'IN')
       .set('X-Vercel-IP-Country-Region', 'MH')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res2.status).toBe(200);
@@ -311,32 +316,23 @@ describe('/api/process-cv', () => {
     ]);
   });
 
-  test('prompts for manual job description when scraping fails', async () => {
-    axios.get.mockImplementation(() => Promise.reject(new Error('blocked')));
-
+  test('requires manual job description input', async () => {
     const failed = await request(app)
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .field('jobDescriptionUrl', 'http://example.com/protected')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(failed.status).toBe(400);
     expect(failed.body.success).toBe(false);
-    expect(failed.body.error.code).toBe('JOB_DESCRIPTION_FETCH_FAILED');
-    expect(failed.body.error.details.manualInputRequired).toBe(true);
-    expect(failed.body.error.message).toContain('Unable to fetch JD');
-
-    axios.get.mockImplementation(() => {
-      throw new Error('should not fetch when manual description supplied');
-    });
+    expect(failed.body.error.code).toBe('JOB_DESCRIPTION_REQUIRED');
+    expect(failed.body.error.message).toBe('manualJobDescription required');
 
     const manual = await request(app)
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .field('jobDescriptionUrl', 'http://example.com/protected')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('manualJobDescription', 'Manual JD text outlining requirements and responsibilities.')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -344,21 +340,13 @@ describe('/api/process-cv', () => {
     expect(manual.status).toBe(200);
     expect(manual.body.success).toBe(true);
     expect(manual.body.jobDescriptionText).toContain('Manual JD text');
-
-    axios.get.mockReset();
-    axios.get.mockResolvedValue({ data: 'Job description' });
   });
 
   test('sanitizes manual job description input before analysis', async () => {
-    axios.get.mockImplementation(() => {
-      throw new Error('should not fetch when manual description supplied');
-    });
-
     const manual = await request(app)
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .field('jobDescriptionUrl', 'http://example.com/protected')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field(
         'manualJobDescription',
@@ -377,8 +365,6 @@ describe('/api/process-cv', () => {
     expect(jobText).not.toContain('javascript');
     expect(jobText).not.toContain('onclick');
 
-    axios.get.mockReset();
-    axios.get.mockResolvedValue({ data: 'Job description' });
   });
 
   test('malformed AI response', async () => {
@@ -399,7 +385,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -434,7 +420,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
@@ -467,7 +453,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
@@ -497,7 +483,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('template1', 'modern')
       .field('template2', 'professional')
@@ -526,7 +512,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('templates', JSON.stringify(['ucmo', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -563,7 +549,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -603,7 +589,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -643,7 +629,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -681,7 +667,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -734,7 +720,7 @@ describe('/api/process-cv', () => {
 
     await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -768,7 +754,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -837,7 +823,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -930,7 +916,7 @@ describe('/api/process-cv', () => {
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example');
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
@@ -948,7 +934,7 @@ describe('/api/process-cv', () => {
   test('unsupported file type', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
@@ -971,7 +957,7 @@ describe('/api/process-cv', () => {
 
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -994,7 +980,7 @@ describe('/api/process-cv', () => {
     expect(res.body.error.message).toMatch(/please upload a correct CV/i);
   });
 
-  test('missing job description URL', async () => {
+  test('missing job description text', async () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
@@ -1003,10 +989,11 @@ describe('/api/process-cv', () => {
     expect(res.body).toEqual({
       success: false,
       error: {
-        code: 'JOB_DESCRIPTION_URL_REQUIRED',
-        message: 'jobDescriptionUrl required',
+        code: 'JOB_DESCRIPTION_REQUIRED',
+        message: 'manualJobDescription required',
         requestId: expect.any(String),
         jobId: expect.any(String),
+        details: { field: 'manualJobDescription' },
       },
     });
   });
@@ -1014,7 +1001,7 @@ describe('/api/process-cv', () => {
   test('missing linkedin profile URL', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('jobDescriptionUrl', 'http://example.com')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body).toEqual({

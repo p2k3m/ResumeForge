@@ -772,10 +772,8 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
 
 function App() {
   const [profileUrl, setProfileUrl] = useState('')
-  const [jobUrl, setJobUrl] = useState('')
   const [credlyUrl, setCredlyUrl] = useState('')
   const [manualJobDescription, setManualJobDescription] = useState('')
-  const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -818,7 +816,7 @@ function App() {
   const uploadComplete =
     (hasCvFile && (isProcessing || Boolean(queuedText))) || hasAnalysisData || Boolean(queuedText)
   const scoreComplete = scoreMetricCount > 0
-  const jdValidationComplete = Boolean(jobDescriptionText && jobDescriptionText.trim()) && !manualJobDescriptionRequired
+  const jdValidationComplete = Boolean(jobDescriptionText && jobDescriptionText.trim())
   const improvementsUnlocked = uploadComplete && scoreComplete && jdValidationComplete
   const improvementUnlockMessage = !uploadComplete
     ? 'Upload your resume and job description to unlock improvements.'
@@ -1251,13 +1249,6 @@ function App() {
         setQueuedMessage('')
         setIsProcessing(false)
         const payloadError = data?.payload?.error
-        if (
-          payloadError?.details?.manualInputRequired ||
-          payloadError?.code === 'JOB_DESCRIPTION_FETCH_FAILED' ||
-          (typeof data?.message === 'string' && /unable to fetch jd/i.test(data.message))
-        ) {
-          setManualJobDescriptionRequired(true)
-        }
         const failureMessage =
           (typeof data?.message === 'string' && data.message.trim()) ||
           (typeof payloadError?.message === 'string' && payloadError.message.trim()) ||
@@ -1323,7 +1314,7 @@ function App() {
       setError('Please upload a CV before submitting.')
       return
     }
-    if (manualJobDescriptionRequired && !manualJobDescription.trim()) {
+    if (!manualJobDescription.trim()) {
       setError('Please paste the full job description before continuing.')
       return
     }
@@ -1338,7 +1329,6 @@ function App() {
       const formData = new FormData()
       formData.append('resume', cvFile)
       formData.append('linkedinProfileUrl', profileUrl)
-      formData.append('jobDescriptionUrl', jobUrl)
       if (manualJobDescription.trim()) {
         formData.append('manualJobDescription', manualJobDescription.trim())
       }
@@ -1360,7 +1350,6 @@ function App() {
 
       if (!response.ok) {
         let message = response.status >= 500 ? CV_GENERATION_ERROR_MESSAGE : 'Request failed'
-        let manualFallbackTriggered = false
         try {
           const data = await response.json()
           const apiMessage =
@@ -1373,17 +1362,11 @@ function App() {
           if (data?.error?.code && data?.error?.code !== 'PROCESSING_FAILED') {
             message = `${message} (${data.error.code})`
           }
-          if (data?.error?.details?.manualInputRequired) {
-            manualFallbackTriggered = true
-          }
         } catch {
           try {
             const text = await response.text()
             if (text) message = text
           } catch {}
-        }
-        if (manualFallbackTriggered) {
-          setManualJobDescriptionRequired(true)
         }
         console.error('Resume processing request failed', {
           status: response.status,
@@ -1419,7 +1402,6 @@ function App() {
         data && typeof data.templateContext === 'object' ? data.templateContext : null
       )
       setTemplateContext(templateContextValue)
-      setManualJobDescriptionRequired(false)
       const probabilityBeforeValue =
         typeof data.selectionProbabilityBefore === 'number'
           ? data.selectionProbabilityBefore
@@ -1646,9 +1628,6 @@ function App() {
     () => improvementResults.some((item) => item.accepted === true),
     [improvementResults]
   )
-  const manualJobDescriptionActive =
-    manualJobDescriptionRequired || manualJobDescription.trim().length > 0
-
   const analysisHighlights = useMemo(() => {
     const items = []
     if (Array.isArray(match?.missingSkills) && match.missingSkills.length > 0) {
@@ -2382,7 +2361,8 @@ function App() {
     setPreviewSuggestion(null)
   }, [])
 
-  const scoreDisabled = !profileUrl || !jobUrl || !cvFile || isProcessing
+  const scoreDisabled =
+    !profileUrl || !manualJobDescription.trim() || !cvFile || isProcessing
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-purple-200 to-purple-300 flex flex-col items-center p-4 md:p-8">
@@ -2452,36 +2432,22 @@ function App() {
               onChange={(e) => setProfileUrl(e.target.value)}
               className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
-            <input
-              type="url"
-              placeholder="Job Description URL"
-              value={jobUrl}
-              onChange={(e) => setJobUrl(e.target.value)}
-              className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
-            {manualJobDescriptionActive && (
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
-                  Paste Full Job Description
-                </label>
-                <textarea
-                  id="manual-job-description"
-                  value={manualJobDescription}
-                  onChange={(e) => setManualJobDescription(e.target.value)}
-                  placeholder="Paste the entire job post when automatic fetching is blocked."
-                  className="w-full h-32 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                />
-                {manualJobDescriptionRequired ? (
-                  <p className="text-xs font-semibold text-rose-600">
-                    Unable to fetch JD from this URL. Please paste full job description below.
-                  </p>
-                ) : (
-                  <p className="text-xs text-purple-500">
-                    We&apos;ll analyse this text directly instead of scraping the URL.
-                  </p>
-                )}
-              </div>
-            )}
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
+                Paste Full Job Description <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                id="manual-job-description"
+                value={manualJobDescription}
+                onChange={(e) => setManualJobDescription(e.target.value)}
+                placeholder="Paste the entire job post here."
+                className="w-full h-32 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                required
+              />
+              <p className="text-xs text-purple-500">
+                We&apos;ll analyse this text directly—no URL fetching needed.
+              </p>
+            </div>
             <input
               type="url"
               placeholder="Credly Profile URL (optional)"
