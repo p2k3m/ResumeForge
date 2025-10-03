@@ -137,6 +137,7 @@ function isBulletLine(line = '') {
 
 function detectSectionHeading(line = '') {
   if (!line) return null
+  if (isBulletLine(line)) return null
   const trimmed = line.replace(/[\s:;\-–—]+$/g, '').trim()
   if (!trimmed) return null
 
