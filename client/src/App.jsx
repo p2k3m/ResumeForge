@@ -356,6 +356,55 @@ const changeLabelStyles = {
   removed: 'bg-rose-100 text-rose-700 border border-rose-200'
 }
 
+const DEFAULT_ITEM_REASON_BY_CHANGE_TYPE = {
+  added: 'Added to meet JD skill coverage.',
+  replaced: 'Replaced to highlight required for role.',
+  removed: 'Removed to keep the story aligned with the target role.',
+  default: 'Updated to strengthen alignment with the JD.'
+}
+
+const ITEM_REASON_HINTS_BY_SUGGESTION = {
+  'improve-summary': {
+    added: 'Added to mirror JD tone and value focus.',
+    replaced: 'Rephrased to highlight required for role messaging.',
+    removed: 'Removed to keep the opener laser-focused on the JD.'
+  },
+  'add-missing-skills': {
+    added: 'Added to meet JD skill requirement captured in the posting.',
+    removed: 'Removed duplicate skill so ATS highlights the JD keywords.'
+  },
+  'align-experience': {
+    added: 'Added to spotlight accomplishments the JD emphasises.',
+    replaced: 'Reworded to highlight required for role outcomes.',
+    removed: 'Removed lower-impact detail to surface role-critical wins.'
+  },
+  'change-designation': {
+    added: 'Added to match the target job title flagged in the JD.',
+    replaced: 'Updated title to highlight required designation for the role.',
+    removed: 'Removed conflicting title to avoid ATS mismatches.'
+  },
+  'improve-certifications': {
+    added: 'Added to surface certifications the JD calls out.',
+    replaced: 'Reordered credentials to highlight required certification.',
+    removed: 'Removed redundant certification so the must-have stands out.'
+  },
+  'improve-projects': {
+    added: 'Added to prove project impact tied to the JD expectations.',
+    replaced: 'Reframed outcome to highlight required for role success.',
+    removed: 'Removed side project to emphasise the JD-aligned win.'
+  },
+  'improve-highlights': {
+    added: 'Added to highlight wins recruiters look for in this role.',
+    replaced: 'Replaced to spotlight the highlight required for role fit.',
+    removed: 'Removed weaker highlight so JD-aligned result stands out.'
+  },
+  'enhance-all': {
+    added: 'Added to align every section with the JD priorities.',
+    replaced: 'Reworked wording to highlight required for role coverage.',
+    removed: 'Removed mismatched content to keep the CV JD-focused.'
+  }
+}
+
 function getDownloadPresentation(file = {}) {
   const type = file?.type || ''
   switch (type) {
@@ -579,18 +628,139 @@ function buildChangeLogEntry(suggestion) {
   const addedItems = aggregateUnique(summarySegments.flatMap((segment) => segment.added || []))
   const removedItems = aggregateUnique(summarySegments.flatMap((segment) => segment.removed || []))
 
+  const suggestionType = suggestion?.type || ''
+  const reasonHints = ITEM_REASON_HINTS_BY_SUGGESTION[suggestionType] || {}
+  const itemizedMap = new Map()
+  const pairedAddedItems = new Set()
+  const pairedRemovedItems = new Set()
+
+  const normalizeReasonInput = (input) => {
+    if (!input) return []
+    if (Array.isArray(input)) {
+      return input
+        .map((line) => (typeof line === 'string' ? line.trim() : ''))
+        .filter(Boolean)
+    }
+    if (typeof input === 'string') {
+      const trimmed = input.trim()
+      return trimmed ? [trimmed] : []
+    }
+    return []
+  }
+
+  const resolveReasonList = (input, changeType) => {
+    const normalized = normalizeReasonInput(input)
+    if (normalized.length > 0) {
+      return normalized
+    }
+    const typeHint = reasonHints[changeType]
+    if (typeHint) {
+      return [typeHint]
+    }
+    const defaultReason =
+      DEFAULT_ITEM_REASON_BY_CHANGE_TYPE[changeType] || DEFAULT_ITEM_REASON_BY_CHANGE_TYPE.default
+    return defaultReason ? [defaultReason] : []
+  }
+
+  const registerItemizedChange = (item, changeType, reasonInput) => {
+    const text = typeof item === 'string' ? item.trim() : ''
+    if (!text) return
+    const normalizedType = changeType === 'rephrased' ? 'replaced' : changeType
+    if (!normalizedType) return
+    const key = `${normalizedType}::${text.toLowerCase()}`
+    const existing = itemizedMap.get(key) || {
+      item: text,
+      changeType: normalizedType,
+      reasons: new Set()
+    }
+    resolveReasonList(reasonInput, normalizedType).forEach((line) => {
+      if (line) {
+        existing.reasons.add(line)
+      }
+    })
+    itemizedMap.set(key, existing)
+  }
+
+  summarySegments.forEach((segment) => {
+    if (!segment) return
+    const addedList = Array.isArray(segment.added) ? segment.added : []
+    const removedList = Array.isArray(segment.removed) ? segment.removed : []
+    const segmentReason =
+      Array.isArray(segment.reason) && segment.reason.length > 0
+        ? segment.reason
+        : detailText
+    const pairCount = Math.min(addedList.length, removedList.length)
+    for (let index = 0; index < pairCount; index += 1) {
+      const beforeItem = typeof removedList[index] === 'string' ? removedList[index].trim() : ''
+      const afterItem = typeof addedList[index] === 'string' ? addedList[index].trim() : ''
+      if (!beforeItem || !afterItem) {
+        continue
+      }
+      registerItemizedChange(`${beforeItem} → ${afterItem}`, 'replaced', segmentReason)
+      pairedAddedItems.add(afterItem.toLowerCase())
+      pairedRemovedItems.add(beforeItem.toLowerCase())
+    }
+    addedList.slice(pairCount).forEach((item) => {
+      registerItemizedChange(item, 'added', segmentReason)
+    })
+    removedList.slice(pairCount).forEach((item) => {
+      registerItemizedChange(item, 'removed', segmentReason)
+    })
+  })
+
+  addedItems.forEach((item) => {
+    const lower = item.toLowerCase()
+    if (!pairedAddedItems.has(lower)) {
+      registerItemizedChange(item, 'added', detailText)
+    }
+  })
+  removedItems.forEach((item) => {
+    const lower = item.toLowerCase()
+    if (!pairedRemovedItems.has(lower)) {
+      registerItemizedChange(item, 'removed', detailText)
+    }
+  })
+
+  const beforeExcerpt = (suggestion?.beforeExcerpt || '').trim()
+  const afterExcerpt = (suggestion?.afterExcerpt || '').trim()
+
+  if (beforeExcerpt && afterExcerpt && beforeExcerpt !== afterExcerpt) {
+    registerItemizedChange(`${beforeExcerpt} → ${afterExcerpt}`, 'replaced', reason || detailText)
+  } else if (!beforeExcerpt && afterExcerpt) {
+    registerItemizedChange(afterExcerpt, 'added', reason || detailText)
+  } else if (beforeExcerpt && !afterExcerpt) {
+    registerItemizedChange(beforeExcerpt, 'removed', reason || detailText)
+  }
+
+  const changeTypeOrder = { added: 0, replaced: 1, removed: 2 }
+  const itemizedChanges = Array.from(itemizedMap.values())
+    .map((entry) => ({
+      item: entry.item,
+      changeType: entry.changeType,
+      reasons: Array.from(entry.reasons)
+    }))
+    .sort((a, b) => {
+      const orderA = changeTypeOrder[a.changeType] ?? 99
+      const orderB = changeTypeOrder[b.changeType] ?? 99
+      if (orderA !== orderB) {
+        return orderA - orderB
+      }
+      return a.item.localeCompare(b.item, undefined, { sensitivity: 'base' })
+    })
+
   return {
     id: suggestion?.id,
     label,
     title: suggestion?.title || 'Improvement Applied',
     detail: detailText.trim(),
-    before: (suggestion?.beforeExcerpt || '').trim(),
-    after: (suggestion?.afterExcerpt || '').trim(),
+    before: beforeExcerpt,
+    after: afterExcerpt,
     timestamp: Date.now(),
     type: suggestion?.type || 'custom',
     summarySegments,
     addedItems,
     removedItems,
+    itemizedChanges,
     scoreDelta:
       typeof suggestion?.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
         ? suggestion.scoreDelta
@@ -2523,7 +2693,8 @@ function App() {
         baseResume: resumeText,
         summarySegments: previewEntry?.summarySegments || suggestion.improvementSummary || [],
         addedItems: previewEntry?.addedItems || [],
-        removedItems: previewEntry?.removedItems || []
+        removedItems: previewEntry?.removedItems || [],
+        itemizedChanges: previewEntry?.itemizedChanges || []
       })
     },
     [resumeText]
@@ -3000,13 +3171,15 @@ function App() {
                     entry.after ||
                     (entry.summarySegments && entry.summarySegments.length > 0) ||
                     (entry.addedItems && entry.addedItems.length > 0) ||
-                    (entry.removedItems && entry.removedItems.length > 0)) && (
+                    (entry.removedItems && entry.removedItems.length > 0) ||
+                    (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
                     <ChangeComparisonView
                       before={entry.before}
                       after={entry.after}
                       summarySegments={entry.summarySegments}
                       addedItems={entry.addedItems}
                       removedItems={entry.removedItems}
+                      itemizedChanges={entry.itemizedChanges}
                     />
                   )}
                 </li>
@@ -3031,6 +3204,7 @@ function App() {
               summarySegments={resumeComparisonData.summarySegments}
               addedItems={resumeComparisonData.addedItems}
               removedItems={resumeComparisonData.removedItems}
+              itemizedChanges={resumeComparisonData.itemizedChanges}
               className="text-purple-900"
             />
           </section>
@@ -3238,6 +3412,7 @@ function App() {
                   summarySegments={previewSuggestion.summarySegments}
                   addedItems={previewSuggestion.addedItems}
                   removedItems={previewSuggestion.removedItems}
+                  itemizedChanges={previewSuggestion.itemizedChanges}
                   variant="modal"
                   className="text-purple-900"
                 />

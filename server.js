@@ -7860,6 +7860,26 @@ function normalizeChangeLogSegment(segment = {}) {
   };
 }
 
+function normalizeChangeLogItemizedChange(change = {}) {
+  if (!change || typeof change !== 'object') {
+    return null;
+  }
+
+  const item = normalizeChangeLogString(change.item || change.value || change.text);
+  const changeType = normalizeChangeLogString(change.changeType || change.type);
+  const reasons = normalizeChangeLogList(change.reasons || change.reason || change.explanation);
+
+  if (!item || !changeType) {
+    return null;
+  }
+
+  return {
+    item,
+    changeType: changeType.toLowerCase(),
+    reasons,
+  };
+}
+
 function normalizeChangeLogEntryInput(entry) {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -7880,6 +7900,11 @@ function normalizeChangeLogEntryInput(entry) {
   const removedItems = normalizeChangeLogList(entry.removedItems);
   const summarySegments = Array.isArray(entry.summarySegments)
     ? entry.summarySegments.map((segment) => normalizeChangeLogSegment(segment)).filter(Boolean)
+    : [];
+  const itemizedChanges = Array.isArray(entry.itemizedChanges)
+    ? entry.itemizedChanges
+        .map((change) => normalizeChangeLogItemizedChange(change))
+        .filter(Boolean)
     : [];
   const acceptedAt = normalizeChangeLogString(entry.acceptedAt);
 
@@ -7905,6 +7930,7 @@ function normalizeChangeLogEntryInput(entry) {
     summarySegments,
     addedItems,
     removedItems,
+    itemizedChanges,
     scoreDelta,
     acceptedAt,
   };
@@ -7942,6 +7968,29 @@ function parseDynamoSummarySegments(attribute) {
   }).filter(Boolean);
 }
 
+function parseDynamoItemizedChanges(attribute) {
+  if (!attribute || !Array.isArray(attribute.L)) {
+    return [];
+  }
+  return attribute.L.map((item) => {
+    if (!item || !item.M) {
+      return null;
+    }
+    const map = item.M;
+    const itemValue = normalizeChangeLogString(map.item?.S);
+    const changeType = normalizeChangeLogString(map.changeType?.S);
+    const reasons = parseDynamoStringList(map.reasons);
+    if (!itemValue || !changeType) {
+      return null;
+    }
+    return {
+      item: itemValue,
+      changeType: changeType.toLowerCase(),
+      reasons,
+    };
+  }).filter(Boolean);
+}
+
 function parseDynamoChangeLog(attribute) {
   if (!attribute || !Array.isArray(attribute.L)) {
     return [];
@@ -7964,6 +8013,7 @@ function parseDynamoChangeLog(attribute) {
     const addedItems = parseDynamoStringList(map.addedItems);
     const removedItems = parseDynamoStringList(map.removedItems);
     const summarySegments = parseDynamoSummarySegments(map.summarySegments);
+    const itemizedChanges = parseDynamoItemizedChanges(map.itemizedChanges);
     const acceptedAt = normalizeChangeLogString(map.acceptedAt?.S);
     const scoreDelta = map.scoreDelta && map.scoreDelta.N ? Number(map.scoreDelta.N) : null;
 
@@ -7978,6 +8028,7 @@ function parseDynamoChangeLog(attribute) {
       summarySegments,
       addedItems,
       removedItems,
+      itemizedChanges,
       scoreDelta: Number.isFinite(scoreDelta) ? scoreDelta : null,
       acceptedAt,
     };
@@ -8024,6 +8075,33 @@ function toDynamoSummarySegments(segments = []) {
       const reason = toDynamoStringList(segment.reason);
       if (reason) {
         map.reason = reason;
+      }
+      return { M: map };
+    }),
+  };
+}
+
+function toDynamoItemizedChanges(changes = []) {
+  if (!Array.isArray(changes) || !changes.length) {
+    return undefined;
+  }
+  const normalized = changes
+    .map((change) => normalizeChangeLogItemizedChange(change))
+    .filter(Boolean);
+  if (!normalized.length) {
+    return undefined;
+  }
+  return {
+    L: normalized.map((change) => {
+      const map = {
+        item: { S: change.item },
+      };
+      if (change.changeType) {
+        map.changeType = { S: change.changeType };
+      }
+      const reasons = toDynamoStringList(change.reasons);
+      if (reasons) {
+        map.reasons = reasons;
       }
       return { M: map };
     }),
@@ -8077,6 +8155,10 @@ function serializeChangeLogEntries(entries = []) {
       const summarySegments = toDynamoSummarySegments(normalized.summarySegments);
       if (summarySegments) {
         map.summarySegments = summarySegments;
+      }
+      const itemizedChanges = toDynamoItemizedChanges(normalized.itemizedChanges);
+      if (itemizedChanges) {
+        map.itemizedChanges = itemizedChanges;
       }
       if (typeof normalized.scoreDelta === 'number' && Number.isFinite(normalized.scoreDelta)) {
         map.scoreDelta = { N: String(normalized.scoreDelta) };
