@@ -9102,6 +9102,7 @@ async function generateEnhancedDocumentsResponse({
 
   const genAI = new GoogleGenerativeAI(geminiApiKey);
   const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
 
   let text = resumeText;
   let projectText = '';
@@ -9109,7 +9110,7 @@ async function generateEnhancedDocumentsResponse({
   let geminiAddedSkills = [];
   let sanitizedFallbackUsed = false;
 
-  if (!isTestEnvironment) {
+  if (canUseGenerativeModel) {
     try {
       const sectionTexts = collectSectionText(
         resumeText,
@@ -9153,7 +9154,7 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  const combinedProfile = text;
+  let combinedProfile = text;
 
   const versionsContext = {
     cvText: combinedProfile,
@@ -9171,7 +9172,7 @@ async function generateEnhancedDocumentsResponse({
       jobDescription,
       resumeSkillsList,
       jobSkills,
-      isTestEnvironment ? null : generativeModel
+      canUseGenerativeModel ? generativeModel : null
     );
   };
 
@@ -9193,10 +9194,37 @@ async function generateEnhancedDocumentsResponse({
   await ensureProjectSummary();
 
   const sanitizeOptions = buildSanitizeOptions();
-  const baseResumeText =
+  let baseResumeText =
     sanitizeGeneratedText(text, sanitizeOptions) ||
     sanitizeGeneratedText(combinedProfile, sanitizeOptions) ||
     combinedProfile;
+
+  if (!sanitizedFallbackUsed && canUseGenerativeModel) {
+    try {
+      const verified = await verifyResume(
+        baseResumeText,
+        jobDescription,
+        generativeModel,
+        sanitizeOptions
+      );
+      const sanitizedVerified = sanitizeGeneratedText(verified, sanitizeOptions);
+      if (sanitizedVerified?.trim()) {
+        baseResumeText = sanitizedVerified;
+        combinedProfile = sanitizedVerified;
+        versionsContext.cvText = sanitizedVerified;
+        logStructured('info', 'generation_resume_verified', {
+          ...logContext,
+        });
+      }
+    } catch (err) {
+      logStructured('warn', 'generation_resume_verification_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
+
+  resumeSkillsList = extractResumeSkills(baseResumeText);
 
   const skillsToHighlight = Array.from(
     new Set([
@@ -9262,21 +9290,44 @@ async function generateEnhancedDocumentsResponse({
   ].join('\n');
 
   let coverData = {};
-  try {
-    const coverResult = await generativeModel.generateContent(coverPrompt);
-    const coverText = coverResult.response.text();
-    const parsed = parseAiJson(coverText);
-    if (parsed) coverData = parsed;
-    logStructured('info', 'generation_cover_letters_completed', {
-      ...logContext,
-      variants: Object.keys(coverData).length,
-    });
-  } catch (err) {
-    logStructured('warn', 'generation_cover_letters_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
+  if (canUseGenerativeModel) {
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const coverResult = await generativeModel.generateContent(coverPrompt);
+        const coverText = coverResult?.response?.text?.();
+        const parsed = parseAiJson(coverText);
+        if (parsed && typeof parsed === 'object') {
+          coverData = parsed;
+          break;
+        }
+        logStructured('warn', 'generation_cover_letters_invalid', {
+          ...logContext,
+          attempt,
+          sample:
+            typeof coverText === 'string' ? coverText.slice(0, 200) : undefined,
+        });
+      } catch (err) {
+        if (attempt >= maxAttempts) {
+          logStructured('warn', 'generation_cover_letters_failed', {
+            ...logContext,
+            error: serializeError(err),
+          });
+        } else {
+          logStructured('warn', 'generation_cover_letters_retry', {
+            ...logContext,
+            attempt,
+            error: serializeError(err),
+          });
+        }
+      }
+    }
   }
+
+  logStructured('info', 'generation_cover_letters_completed', {
+    ...logContext,
+    variants: Object.keys(coverData).length,
+  });
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
 
