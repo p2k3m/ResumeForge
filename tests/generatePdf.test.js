@@ -662,6 +662,33 @@ describe('generatePdf and parsing', () => {
     setChromiumLauncher(null);
   });
 
+  test('ucmo template auto-populates extracted contact fields', async () => {
+    const input = [
+      'Jane Candidate',
+      'Email: jane@example.com',
+      'Phone: 555-123-4567',
+      'Springfield, MO',
+      'LinkedIn: linkedin.com/in/jane',
+      '# Experience',
+      '- Led initiatives',
+      '# Education',
+      '- BSc, Computer Science'
+    ].join('\n');
+    const setContent = jest.fn();
+    const pdf = jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4'));
+    const close = jest.fn();
+    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
+    setChromiumLauncher(async () => ({ newPage, close }));
+    await generatePdf(input, 'ucmo');
+    setChromiumLauncher(null);
+    expect(setContent).toHaveBeenCalled();
+    const html = setContent.mock.calls[0][0];
+    expect(html).toContain('555-123-4567');
+    expect(html).toContain('jane@example.com');
+    expect(html).toContain('Springfield, MO');
+    expect(html).toContain('linkedin.com/in/jane');
+  });
+
   test('PDFKit fallback produces consistent line spacing for bullet lists', async () => {
     const input = 'Jane Doe\n- First line\n- Second line';
     const fallbackPdf = await generatePdf(input, 'modern');

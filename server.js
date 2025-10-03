@@ -3932,11 +3932,35 @@ function normalizeUrl(url = '') {
   return trimmed;
 }
 
+function detectLikelyLocation(text = '') {
+  if (!text) return '';
+  const lines = String(text)
+    .split(/\r?\n/)
+    .slice(0, 8)
+    .map((line) => line.replace(/[\u2022•*-]+\s*/, '').trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    if (/^(?:email|phone|linkedin|github|portfolio|website)/i.test(line)) {
+      continue;
+    }
+    const normalized = line.replace(/\s+/g, ' ');
+    const cityStateMatch = normalized.match(
+      /\b([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+)*)\s*,\s*([A-Z]{2}(?:\s+\d{5}(?:-\d{4})?)?|[A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+)*)\b/
+    );
+    if (cityStateMatch) {
+      const value = cityStateMatch[0].replace(/\s{2,}/g, ' ').trim();
+      if (value && value.length <= 60) return value;
+    }
+  }
+  return '';
+}
+
 function extractContactDetails(text = '', linkedinProfileUrl = '') {
   const result = {
     email: '',
     phone: '',
     linkedin: '',
+    cityState: '',
     contactLines: [],
   };
 
@@ -3957,6 +3981,11 @@ function extractContactDetails(text = '', linkedinProfileUrl = '') {
     result.linkedin = normalizedLinkedIn;
   }
 
+  const location = detectLikelyLocation(text);
+  if (location) {
+    result.cityState = location;
+  }
+
   const seen = new Set();
   const pushLine = (label, value) => {
     if (!value) return;
@@ -3971,8 +4000,139 @@ function extractContactDetails(text = '', linkedinProfileUrl = '') {
   pushLine('Email', result.email);
   pushLine('Phone', result.phone);
   pushLine('LinkedIn', result.linkedin);
+  pushLine('Location', result.cityState);
 
   return result;
+}
+
+function parseContactLine(line) {
+  if (!line) return null;
+  const trimmed = String(line).replace(/^[\s\u2022•*-]+/, '').trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^([^:]+):\s*(.+)$/);
+  if (match) {
+    return { label: match[1].trim(), value: match[2].trim() };
+  }
+  return { label: '', value: trimmed };
+}
+
+function dedupeContactLines(lines = []) {
+  const seen = new Set();
+  const result = [];
+  for (const line of lines || []) {
+    if (!line) continue;
+    const trimmed = String(line).trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+function buildTemplateContactContext({ text = '', options = {}, templateParams = {} } = {}) {
+  const explicitContactDetails =
+    options && typeof options.contactDetails === 'object'
+      ? options.contactDetails
+      : null;
+  const templateContact =
+    templateParams && typeof templateParams.contact === 'object'
+      ? templateParams.contact
+      : {};
+  const linkedinHint =
+    options?.linkedinProfileUrl ||
+    templateParams?.linkedin ||
+    templateContact?.linkedin ||
+    explicitContactDetails?.linkedin ||
+    '';
+
+  const contactDetails =
+    explicitContactDetails && typeof explicitContactDetails === 'object'
+      ? {
+          email: explicitContactDetails.email || '',
+          phone: explicitContactDetails.phone || '',
+          linkedin: explicitContactDetails.linkedin || '',
+          cityState: explicitContactDetails.cityState || '',
+          contactLines: Array.isArray(explicitContactDetails.contactLines)
+            ? [...explicitContactDetails.contactLines]
+            : [],
+        }
+      : extractContactDetails(text, linkedinHint);
+
+  const contactLines = dedupeContactLines([
+    ...(Array.isArray(options?.contactLines) ? options.contactLines : []),
+    ...(Array.isArray(contactDetails.contactLines) ? contactDetails.contactLines : []),
+  ]);
+
+  const fieldValues = {
+    email: contactDetails.email || '',
+    phone: contactDetails.phone || '',
+    linkedin: contactDetails.linkedin || linkedinHint || '',
+    cityState: contactDetails.cityState || '',
+  };
+
+  const applyOverride = (key, value, { normalizeLinkedIn = false } = {}) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (!fieldValues[key]) {
+      fieldValues[key] = normalizeLinkedIn ? normalizeUrl(trimmed) || trimmed : trimmed;
+    }
+  };
+
+  applyOverride('email', templateContact.email);
+  applyOverride('phone', templateContact.phone);
+  applyOverride('linkedin', templateContact.linkedin, { normalizeLinkedIn: true });
+  applyOverride('cityState', templateContact.cityState);
+
+  applyOverride('email', templateParams.email);
+  applyOverride('phone', templateParams.phone);
+  applyOverride('linkedin', templateParams.linkedin, { normalizeLinkedIn: true });
+  applyOverride('cityState', templateParams.cityState);
+
+  applyOverride('email', options?.email);
+  applyOverride('phone', options?.phone);
+  applyOverride('linkedin', options?.linkedinProfileUrl, { normalizeLinkedIn: true });
+  applyOverride('linkedin', options?.linkedin, { normalizeLinkedIn: true });
+  applyOverride('cityState', options?.cityState);
+
+  for (const line of contactLines) {
+    const parsed = parseContactLine(line);
+    if (!parsed) continue;
+    const label = parsed.label.toLowerCase();
+    if (/mail/.test(label)) applyOverride('email', parsed.value);
+    else if (/(phone|mobile|tel|contact)/.test(label)) applyOverride('phone', parsed.value);
+    else if (/linkedin/.test(label))
+      applyOverride('linkedin', parsed.value, { normalizeLinkedIn: true });
+    else if (/(city|location|based|address)/.test(label)) applyOverride('cityState', parsed.value);
+    else if (!parsed.label) {
+      const inferredLocation = detectLikelyLocation(parsed.value);
+      if (inferredLocation) applyOverride('cityState', inferredLocation);
+    }
+  }
+
+  if (!fieldValues.cityState) {
+    const inferredFromLines = contactLines
+      .map((line) => detectLikelyLocation(line))
+      .find((value) => value);
+    if (inferredFromLines) fieldValues.cityState = inferredFromLines;
+  }
+
+  if (!fieldValues.cityState) {
+    const fallbackLocation = detectLikelyLocation(text);
+    if (fallbackLocation) fieldValues.cityState = fallbackLocation;
+  }
+
+  const normalizedLines = dedupeContactLines([
+    ...contactLines,
+    fieldValues.email ? `Email: ${fieldValues.email}` : null,
+    fieldValues.phone ? `Phone: ${fieldValues.phone}` : null,
+    fieldValues.linkedin ? `LinkedIn: ${fieldValues.linkedin}` : null,
+    fieldValues.cityState ? `Location: ${fieldValues.cityState}` : null,
+  ]);
+
+  return { fieldValues, contactLines: normalizedLines };
 }
 
 function parseLine(text, options = {}) {
@@ -4937,15 +5097,47 @@ let generatePdf = async function (
     }
     options.preserveLinkText = true;
   }
-  const data = parseContent(text, options);
-  data.sections.forEach((sec) => {
-    sec.heading = normalizeHeading(sec.heading);
-  });
-  data.sections = mergeDuplicateSections(data.sections);
   const templateParams =
     options && typeof options.templateParams === 'object'
       ? { ...options.templateParams }
       : {};
+
+  const contactContext = buildTemplateContactContext({
+    text,
+    options,
+    templateParams,
+  });
+
+  options.contactLines = contactContext.contactLines;
+  ['email', 'phone', 'linkedin', 'cityState'].forEach((key) => {
+    if (!options[key] && contactContext.fieldValues[key]) {
+      options[key] = contactContext.fieldValues[key];
+    }
+  });
+  if (!options.linkedinProfileUrl && contactContext.fieldValues.linkedin) {
+    options.linkedinProfileUrl = contactContext.fieldValues.linkedin;
+  }
+
+  const data = parseContent(text, {
+    ...options,
+    contactLines: contactContext.contactLines,
+  });
+  data.sections.forEach((sec) => {
+    sec.heading = normalizeHeading(sec.heading);
+  });
+  data.sections = mergeDuplicateSections(data.sections);
+  Object.entries(contactContext.fieldValues).forEach(([key, value]) => {
+    if (!templateParams[key] && value) {
+      templateParams[key] = value;
+    }
+  });
+  templateParams.contact = {
+    ...(contactContext.fieldValues || {}),
+    ...(templateParams.contact && typeof templateParams.contact === 'object'
+      ? templateParams.contact
+      : {}),
+  };
+  templateParams.contactLines = contactContext.contactLines;
   if (templateId === '2025') {
     logStructured('debug', 'pdf_renderer_invoked', {
       templateId,
@@ -5055,6 +5247,9 @@ let generatePdf = async function (
       // Convert token-based data to HTML for Handlebars templates
       const htmlData = {
         ...data,
+        ...contactContext.fieldValues,
+        contactLines: contactContext.contactLines,
+        templateParams,
         sections: data.sections.map((sec) => ({
           ...sec,
           items: sec.items.map((tokens) =>
@@ -9948,21 +10143,26 @@ async function generateEnhancedDocumentsResponse({
         }
       );
 
-      const templateOptions = {
-        jobSkills,
-        linkedinExperience,
-        resumeEducation,
-        linkedinEducation,
-        resumeCertifications,
-        linkedinCertifications,
-        credlyCertifications,
-        credlyProfileUrl,
-        jobTitle: versionsContext.jobTitle,
-        project: projectText,
-        contactLines: contactDetails.contactLines,
-        ...sectionPreservation,
-        templateParams: resolvedTemplateParams,
-      };
+  const templateOptions = {
+    jobSkills,
+    linkedinExperience,
+    resumeEducation,
+    linkedinEducation,
+    resumeCertifications,
+    linkedinCertifications,
+    credlyCertifications,
+    credlyProfileUrl,
+    jobTitle: versionsContext.jobTitle,
+    project: projectText,
+    contactLines: contactDetails.contactLines,
+    contactDetails,
+    email: contactDetails.email,
+    phone: contactDetails.phone,
+    cityState: contactDetails.cityState,
+    linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
+    ...sectionPreservation,
+    templateParams: resolvedTemplateParams,
+  };
 
       if (isCvDocument) {
         templateOptions.resumeExperience = resumeExperience;
@@ -11980,4 +12180,5 @@ export {
   buildScoreBreakdown,
   enforceTargetedUpdate,
   JobDescriptionFetchBlockedError,
+  extractContactDetails,
 };

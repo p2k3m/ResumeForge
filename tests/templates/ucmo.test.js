@@ -1,4 +1,9 @@
-import { parseContent, generatePdf, setChromiumLauncher } from '../../server.js';
+import {
+  parseContent,
+  generatePdf,
+  setChromiumLauncher,
+  extractContactDetails
+} from '../../server.js';
 import Handlebars from '../../lib/handlebars.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -25,15 +30,26 @@ function tokensToHtml(tokens) {
 }
 
 test('ucmo template renders with contact bar and logo', async () => {
-  const input = 'Jane Doe\n# Experience\n- Built things\n# Education\n- BSc Stuff';
-  const data = parseContent(input);
+  const input = [
+    'Jane Doe',
+    'Email: jane@example.com',
+    'Phone: 555-555-5555',
+    'Warrensburg, MO',
+    'LinkedIn: linkedin.com/in/jane',
+    '# Experience',
+    '- Built things',
+    '# Education',
+    '- BSc Stuff'
+  ].join('\n');
+  const contact = extractContactDetails(input);
+  const data = parseContent(input, { contactLines: contact.contactLines });
   const tplSrc = await fs.readFile(path.resolve('templates', 'ucmo.html'), 'utf8');
   const htmlData = {
     ...data,
-    phone: '555-555-5555',
-    email: 'jane@example.com',
-    cityState: 'Warrensburg, MO',
-    linkedin: 'linkedin.com/in/jane',
+    phone: contact.phone,
+    email: contact.email,
+    cityState: contact.cityState,
+    linkedin: contact.linkedin,
     sections: data.sections.map((sec) => ({
       ...sec,
       items: sec.items.map(tokensToHtml)
