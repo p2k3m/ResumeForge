@@ -5182,6 +5182,86 @@ let generatePdf = async function (
       margin: 56
     }
   };
+
+  const normalizePdfKitTextOperators = (buffer) => {
+    try {
+      const input = buffer.toString('latin1');
+      const normalized = input.replace(/\[((?:\\.|[^\]])*)\]\s+TJ/g, (match, content) => {
+        const tokens = content.match(/\s+|\S+/g) || [];
+        const isNumber = (tok) => /^-?\d+(?:\.\d+)?$/.test(tok);
+        const isWhitespace = (tok) => /^\s+$/.test(tok);
+        const result = [];
+        let needsTrailingSpace = false;
+        for (let i = 0; i < tokens.length; i += 1) {
+          const token = tokens[i];
+          if (isNumber(token)) {
+            const hasMoreText = tokens.slice(i + 1).some((candidate) => {
+              if (isNumber(candidate)) return false;
+              if (isWhitespace(candidate)) return false;
+              return true;
+            });
+            if (!hasMoreText) {
+              const prevToken = tokens[i - 1];
+              if (prevToken && isWhitespace(prevToken)) {
+                for (let j = i - 2; j >= 0; j -= 1) {
+                  const candidate = tokens[j];
+                  if (isNumber(candidate) || isWhitespace(candidate)) continue;
+                  needsTrailingSpace = true;
+                  break;
+                }
+              }
+            }
+            continue;
+          }
+          if (isWhitespace(token)) {
+            const prevToken = tokens[i - 1];
+            if (prevToken && isNumber(prevToken)) continue;
+            const previous = result.length ? result[result.length - 1] : '';
+            let nextIndex = i + 1;
+            let nextToken = null;
+            while (nextIndex < tokens.length) {
+              const candidate = tokens[nextIndex];
+              if (isNumber(candidate) || isWhitespace(candidate)) {
+                nextIndex += 1;
+                continue;
+              }
+              nextToken = candidate;
+              break;
+            }
+            if (!nextToken) {
+              needsTrailingSpace = true;
+              continue;
+            }
+            let hasNumberBetween = false;
+            for (let k = i + 1; k < nextIndex; k += 1) {
+              if (isNumber(tokens[k])) {
+                hasNumberBetween = true;
+                break;
+              }
+            }
+            if (hasNumberBetween) continue;
+            const prevChar = previous ? previous[previous.length - 1] : '';
+            const nextChar = nextToken[0];
+            if (prevChar && /\S/.test(prevChar) && nextChar && /\S/.test(nextChar)) {
+              result.push(' ');
+            }
+            continue;
+          }
+          result.push(token);
+        }
+        let output = result.join('').replace(/\s{2,}/g, ' ');
+        if (needsTrailingSpace && !output.endsWith(' ')) output += ' ';
+        return `[${output}] TJ`;
+      });
+      return Buffer.from(normalized, 'latin1');
+    } catch (err) {
+      logStructured('warn', 'pdf_pdfkit_text_normalize_failed', {
+        error: serializeError(err),
+      });
+      return buffer;
+    }
+  };
+
   return new Promise((resolve, reject) => {
     const style = styleMap[templateId] || styleMap.modern;
     const paragraphGap = style.paragraphGap ?? baseStyle.paragraphGap ?? 8;
@@ -5193,12 +5273,13 @@ let generatePdf = async function (
     doc.on('data', (d) => buffers.push(d));
     doc.on('end', () => {
       const result = Buffer.concat(buffers);
+      const normalized = normalizePdfKitTextOperators(result);
       logStructured('debug', 'pdf_pdfkit_fallback_complete', {
         templateId,
         requestedTemplateId,
-        bytes: result.length,
+        bytes: normalized.length,
       });
-      resolve(result);
+      resolve(normalized);
     });
     doc.on('error', (err) => {
       logStructured('error', 'pdf_pdfkit_fallback_failed', {
@@ -5301,15 +5382,19 @@ let generatePdf = async function (
             return;
           }
           if (t.type === 'link') {
+            const linkText = t.text || t.href || '';
+            const startX = doc.x;
+            const baselineY = doc.y;
+            const lineHeight = doc.currentLineHeight(true);
             doc.fillColor('blue');
-            doc.text(t.text, {
-              lineGap,
-              link: t.href,
-              underline: true,
-              continued: false
-            });
-            if (idx < tokens.length - 1)
-              doc.text('', { continued: true, lineGap });
+            doc.text(linkText, { continued: idx < tokens.length - 1, lineGap });
+            const endX = doc.x;
+            const width = Math.max(endX - startX, 0);
+            const top = baselineY - lineHeight;
+            if (width > 0) {
+              doc.link(startX, top, width, lineHeight, t.href);
+              doc.underline(startX, top, width, lineHeight, { color: 'blue' });
+            }
             doc.fillColor(style.textColor);
             return;
           }
