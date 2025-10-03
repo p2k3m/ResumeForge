@@ -8296,6 +8296,9 @@ function extractCertifications(source) {
 }
 
 function extractJsonBlock(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
   const fenced = text.match(/```json[\s\S]*?```/i);
   if (fenced) {
     text = fenced[0].replace(/```json|```/gi, '');
