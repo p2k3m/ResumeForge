@@ -1737,6 +1737,134 @@ function App() {
     [match, changeLog, certificateInsights, manualCertificatesData, jobSkills, resumeSkills]
   )
 
+  const resumeComparisonData = useMemo(() => {
+    const baselineRaw = typeof baselineResumeText === 'string' ? baselineResumeText : ''
+    const improvedRaw = typeof resumeText === 'string' ? resumeText : ''
+    const baselineTrimmed = baselineRaw.trim()
+    const improvedTrimmed = improvedRaw.trim()
+
+    if (!baselineTrimmed || !improvedTrimmed || baselineTrimmed === improvedTrimmed) {
+      return null
+    }
+
+    const normaliseText = (value) => {
+      if (typeof value === 'string') {
+        return value.trim()
+      }
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return String(value)
+      }
+      return ''
+    }
+
+    const toList = (value) => {
+      if (Array.isArray(value)) {
+        return value.map(normaliseText).filter(Boolean)
+      }
+      const text = normaliseText(value)
+      return text ? [text] : []
+    }
+
+    const addItemsToSet = (targetSet, values) => {
+      toList(values).forEach((item) => targetSet.add(item))
+    }
+
+    let segmentCounter = 0
+    const segmentMap = new Map()
+
+    const ensureSegmentBucket = ({ section, fallbackLabel = '', keyHint = '' }) => {
+      const sectionLabel = normaliseText(section) || normaliseText(fallbackLabel) || 'Updated Section'
+      let mapKey = normaliseText(keyHint) || sectionLabel.toLowerCase()
+      if (!mapKey) {
+        mapKey = `segment-${segmentCounter++}`
+      }
+
+      if (!segmentMap.has(mapKey)) {
+        segmentMap.set(mapKey, {
+          section: sectionLabel,
+          added: new Set(),
+          removed: new Set(),
+          reason: new Set()
+        })
+      }
+
+      const bucket = segmentMap.get(mapKey)
+      if (!bucket.section && sectionLabel) {
+        bucket.section = sectionLabel
+      }
+      return bucket
+    }
+
+    const pushReasons = (bucket, reasons, fallbackDetail = '') => {
+      const lines = toList(reasons)
+      if (lines.length === 0 && fallbackDetail) {
+        lines.push(...toList(fallbackDetail))
+      }
+      lines.forEach((line) => bucket.reason.add(line))
+    }
+
+    const aggregatedAdded = new Set()
+    const aggregatedRemoved = new Set()
+    const changeLogEntries = Array.isArray(changeLog) ? changeLog : []
+
+    changeLogEntries.forEach((entry) => {
+      const entryAdded = toList(entry?.addedItems)
+      const entryRemoved = toList(entry?.removedItems)
+
+      addItemsToSet(aggregatedAdded, entryAdded)
+      addItemsToSet(aggregatedRemoved, entryRemoved)
+
+      const segments = Array.isArray(entry?.summarySegments) ? entry.summarySegments : []
+
+      if (segments.length > 0) {
+        segments.forEach((segment) => {
+          addItemsToSet(aggregatedAdded, segment?.added)
+          addItemsToSet(aggregatedRemoved, segment?.removed)
+
+          const bucket = ensureSegmentBucket({
+            section: segment?.section,
+            fallbackLabel: entry?.title,
+            keyHint: segment?.section || entry?.id || entry?.title
+          })
+
+          addItemsToSet(bucket.added, segment?.added)
+          addItemsToSet(bucket.removed, segment?.removed)
+          pushReasons(bucket, segment?.reason, entry?.detail)
+        })
+      } else if (entryAdded.length > 0 || entryRemoved.length > 0) {
+        const bucket = ensureSegmentBucket({
+          section: entry?.title,
+          fallbackLabel: entry?.label,
+          keyHint: entry?.id || entry?.title || entry?.label
+        })
+
+        addItemsToSet(bucket.added, entryAdded)
+        addItemsToSet(bucket.removed, entryRemoved)
+        pushReasons(bucket, [], entry?.detail)
+      }
+    })
+
+    const summarySegments = Array.from(segmentMap.values())
+      .map((segment) => ({
+        section: segment.section,
+        added: Array.from(segment.added),
+        removed: Array.from(segment.removed),
+        reason: Array.from(segment.reason)
+      }))
+      .filter(
+        (segment) =>
+          segment.section || segment.added.length > 0 || segment.removed.length > 0 || segment.reason.length > 0
+      )
+
+    return {
+      before: baselineRaw,
+      after: improvedRaw,
+      summarySegments,
+      addedItems: Array.from(aggregatedAdded),
+      removedItems: Array.from(aggregatedRemoved)
+    }
+  }, [baselineResumeText, resumeText, changeLog])
+
   const showDeltaSummary = Boolean(
     match ||
       (certificateInsights &&
@@ -2722,6 +2850,27 @@ function App() {
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {resumeComparisonData && (
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-2xl font-bold text-purple-900">Original vs Enhanced CV</h2>
+              <p className="text-sm text-purple-700/80">
+                Review the baseline upload alongside the improved version. Highlights call out key additions and removals.
+              </p>
+            </div>
+            <ChangeComparisonView
+              before={resumeComparisonData.before}
+              after={resumeComparisonData.after}
+              beforeLabel="Original CV"
+              afterLabel="Enhanced CV"
+              summarySegments={resumeComparisonData.summarySegments}
+              addedItems={resumeComparisonData.addedItems}
+              removedItems={resumeComparisonData.removedItems}
+              className="text-purple-900"
+            />
           </section>
         )}
 
