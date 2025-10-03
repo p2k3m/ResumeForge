@@ -1167,16 +1167,100 @@ function App() {
   const improvementBusy = Boolean(activeImprovement)
 
   const resumeHistoryMap = useMemo(() => {
-    if (!Array.isArray(resumeHistory) || resumeHistory.length === 0) {
-      return new Map()
-    }
     const map = new Map()
-    resumeHistory.forEach((entry) => {
-      if (!entry || !entry.id) return
-      map.set(entry.id, entry)
-    })
+    if (Array.isArray(resumeHistory)) {
+      resumeHistory.forEach((entry) => {
+        if (!entry || !entry.id) return
+        map.set(entry.id, entry)
+      })
+    }
+
+    if (Array.isArray(changeLog)) {
+      changeLog.forEach((entry) => {
+        if (!entry || !entry.id) {
+          return
+        }
+        const existing = map.get(entry.id) || {}
+        const nextEntry = { ...existing }
+
+        if (!nextEntry.id) {
+          nextEntry.id = entry.id
+        }
+        if (!nextEntry.suggestionId) {
+          nextEntry.suggestionId = entry.id
+        }
+        if (!nextEntry.title && entry.title) {
+          nextEntry.title = entry.title
+        }
+        if (!nextEntry.type && entry.type) {
+          nextEntry.type = entry.type
+        }
+        if (!nextEntry.detail && entry.detail) {
+          nextEntry.detail = entry.detail
+        }
+        if (!nextEntry.changeLabel && entry.label) {
+          nextEntry.changeLabel = entry.label
+        }
+
+        const beforeText =
+          typeof nextEntry.resumeBefore === 'string' && nextEntry.resumeBefore
+            ? nextEntry.resumeBefore
+            : typeof entry.resumeBeforeText === 'string'
+              ? entry.resumeBeforeText
+              : ''
+        if (!nextEntry.resumeBefore && beforeText) {
+          nextEntry.resumeBefore = beforeText
+        }
+
+        const afterText =
+          typeof nextEntry.resumeAfter === 'string' && nextEntry.resumeAfter
+            ? nextEntry.resumeAfter
+            : typeof entry.resumeAfterText === 'string'
+              ? entry.resumeAfterText
+              : ''
+        if (!nextEntry.resumeAfter && afterText) {
+          nextEntry.resumeAfter = afterText
+        }
+
+        if (!nextEntry.timestamp) {
+          if (entry.acceptedAt) {
+            const acceptedDate = new Date(entry.acceptedAt)
+            nextEntry.timestamp = Number.isNaN(acceptedDate.getTime())
+              ? Date.now()
+              : acceptedDate.getTime()
+          } else if (entry.timestamp) {
+            nextEntry.timestamp = entry.timestamp
+          }
+        }
+
+        const historyContext =
+          entry && entry.historyContext && typeof entry.historyContext === 'object'
+            ? entry.historyContext
+            : null
+
+        if (historyContext) {
+          if (!nextEntry.matchBefore && historyContext.matchBefore) {
+            nextEntry.matchBefore = cloneData(historyContext.matchBefore)
+          }
+          if (!nextEntry.scoreBreakdownBefore && historyContext.scoreBreakdownBefore) {
+            nextEntry.scoreBreakdownBefore = cloneData(historyContext.scoreBreakdownBefore)
+          }
+          if (
+            !nextEntry.resumeSkillsBefore &&
+            Array.isArray(historyContext.resumeSkillsBefore)
+          ) {
+            nextEntry.resumeSkillsBefore = historyContext.resumeSkillsBefore
+              .map((item) => (typeof item === 'string' ? item.trim() : ''))
+              .filter(Boolean)
+          }
+        }
+
+        map.set(entry.id, nextEntry)
+      })
+    }
+
     return map
-  }, [resumeHistory])
+  }, [resumeHistory, changeLog])
 
   const availableTemplateOptions = useMemo(() => {
     const registry = new Map(BASE_TEMPLATE_OPTIONS.map((option) => [option.id, option]))
@@ -2619,8 +2703,33 @@ function App() {
         setResumeText(updatedResumeDraft)
       }
 
+      let persistedEntryPayload = null
       if (changeLogEntry) {
         const entryPayload = { ...changeLogEntry }
+        if (typeof historySnapshot.resumeBefore === 'string') {
+          entryPayload.resumeBeforeText = historySnapshot.resumeBefore
+        }
+        if (typeof historySnapshot.resumeAfter === 'string') {
+          entryPayload.resumeAfterText = historySnapshot.resumeAfter
+        }
+        const historyContextPayload = {}
+        if (historySnapshot.matchBefore && typeof historySnapshot.matchBefore === 'object') {
+          historyContextPayload.matchBefore = cloneData(historySnapshot.matchBefore)
+        }
+        if (Array.isArray(historySnapshot.scoreBreakdownBefore)) {
+          historyContextPayload.scoreBreakdownBefore = cloneData(
+            historySnapshot.scoreBreakdownBefore
+          )
+        }
+        if (Array.isArray(historySnapshot.resumeSkillsBefore)) {
+          historyContextPayload.resumeSkillsBefore = historySnapshot.resumeSkillsBefore
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean)
+        }
+        if (Object.keys(historyContextPayload).length > 0) {
+          entryPayload.historyContext = historyContextPayload
+        }
+        persistedEntryPayload = entryPayload
         setChangeLog((prev) => {
           previousChangeLog = prev
           if (prev.some((entry) => entry.id === entryPayload.id)) {
@@ -2653,7 +2762,10 @@ function App() {
             )
           )
           try {
-            await persistChangeLogEntry({ ...changeLogEntry, scoreDelta: deltaValue })
+            const payloadWithDelta = persistedEntryPayload
+              ? { ...persistedEntryPayload, scoreDelta: deltaValue }
+              : { ...changeLogEntry, scoreDelta: deltaValue }
+            await persistChangeLogEntry(payloadWithDelta)
           } catch (err) {
             console.error('Updating change log entry failed', err)
             setError(err.message || 'Unable to update the change log entry.')
@@ -2711,7 +2823,17 @@ function App() {
         setError('Unable to download the previous version for this update.')
         return
       }
-      const historyEntry = resumeHistoryMap.get(changeId)
+      let historyEntry = resumeHistoryMap.get(changeId)
+      if (!historyEntry) {
+        const changeEntry = changeLog.find((entry) => entry?.id === changeId)
+        if (changeEntry && typeof changeEntry.resumeBeforeText === 'string') {
+          historyEntry = {
+            id: changeEntry.id,
+            title: changeEntry.title || 'Improvement Applied',
+            resumeBefore: changeEntry.resumeBeforeText
+          }
+        }
+      }
       if (!historyEntry || typeof historyEntry.resumeBefore !== 'string') {
         setError('Previous version is unavailable for this update.')
         return
@@ -2746,7 +2868,7 @@ function App() {
         setError('Unable to download the previous version. Please try again.')
       }
     },
-    [resumeHistoryMap, setError]
+    [changeLog, resumeHistoryMap, setError]
   )
 
   const handleRevertChange = useCallback(
@@ -2755,8 +2877,40 @@ function App() {
         setError('Unable to revert this update.')
         return
       }
-      const historyEntry = resumeHistoryMap.get(changeId)
+      let historyEntry = resumeHistoryMap.get(changeId)
       if (!historyEntry) {
+        const changeEntry = changeLog.find((entry) => entry?.id === changeId)
+        if (changeEntry && typeof changeEntry.resumeBeforeText === 'string') {
+          historyEntry = {
+            id: changeEntry.id,
+            title: changeEntry.title || 'Improvement Applied',
+            type: changeEntry.type || 'custom',
+            detail: changeEntry.detail || '',
+            changeLabel: changeEntry.label || '',
+            resumeBefore: changeEntry.resumeBeforeText,
+            resumeAfter: changeEntry.resumeAfterText,
+            timestamp: changeEntry.acceptedAt
+              ? new Date(changeEntry.acceptedAt).getTime()
+              : Date.now(),
+            matchBefore: changeEntry.historyContext?.matchBefore || null,
+            scoreBreakdownBefore:
+              changeEntry.historyContext?.scoreBreakdownBefore || [],
+            resumeSkillsBefore: changeEntry.historyContext?.resumeSkillsBefore || []
+          }
+        }
+      }
+      if (!historyEntry) {
+        setError('Previous version is unavailable for this update.')
+        return
+      }
+
+      const previousResumeText =
+        typeof historyEntry.resumeBefore === 'string'
+          ? historyEntry.resumeBefore
+          : typeof historyEntry.resumeBeforeText === 'string'
+            ? historyEntry.resumeBeforeText
+            : ''
+      if (!previousResumeText) {
         setError('Previous version is unavailable for this update.')
         return
       }
@@ -2772,7 +2926,9 @@ function App() {
 
       const baseChangeLog = Array.isArray(historyEntry.changeLogBefore)
         ? cloneData(historyEntry.changeLogBefore)
-        : []
+        : Array.isArray(changeLog)
+          ? cloneData(changeLog)
+          : []
       const existingEntry = changeLog.find((entry) => entry?.id === changeId) || null
       const fallbackEntry = existingEntry || {
         id: historyEntry.id,
@@ -2791,7 +2947,7 @@ function App() {
         ...baseChangeLog.filter((entry) => entry?.id !== changeId)
       ]
 
-      setResumeText(typeof historyEntry.resumeBefore === 'string' ? historyEntry.resumeBefore : '')
+      setResumeText(previousResumeText)
       setMatch(historyEntry.matchBefore ? cloneData(historyEntry.matchBefore) : null)
       setScoreBreakdown(
         Array.isArray(historyEntry.scoreBreakdownBefore)
