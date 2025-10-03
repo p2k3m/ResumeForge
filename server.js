@@ -7804,6 +7804,280 @@ function buildImprovementSummary(
   ];
 }
 
+function normalizeChangeLogString(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : '';
+  }
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value || '').trim();
+}
+
+function normalizeChangeLogList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeChangeLogString(item))
+      .filter(Boolean);
+  }
+  const text = normalizeChangeLogString(value);
+  return text ? [text] : [];
+}
+
+function normalizeChangeLogSegment(segment = {}) {
+  if (!segment || typeof segment !== 'object') {
+    return null;
+  }
+
+  const section = normalizeChangeLogString(segment.section || segment.label || segment.key);
+  const added = normalizeChangeLogList(segment.added);
+  const removed = normalizeChangeLogList(segment.removed);
+  const reason = normalizeChangeLogList(segment.reason);
+
+  if (!section && !added.length && !removed.length && !reason.length) {
+    return null;
+  }
+
+  return {
+    section,
+    added,
+    removed,
+    reason,
+  };
+}
+
+function normalizeChangeLogEntryInput(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const id = normalizeChangeLogString(entry.id);
+  if (!id) {
+    return null;
+  }
+
+  const type = normalizeChangeLogString(entry.type);
+  const title = normalizeChangeLogString(entry.title);
+  const detail = normalizeChangeLogString(entry.detail || entry.explanation);
+  const label = normalizeChangeLogString(entry.label);
+  const before = normalizeChangeLogString(entry.before);
+  const after = normalizeChangeLogString(entry.after);
+  const addedItems = normalizeChangeLogList(entry.addedItems);
+  const removedItems = normalizeChangeLogList(entry.removedItems);
+  const summarySegments = Array.isArray(entry.summarySegments)
+    ? entry.summarySegments.map((segment) => normalizeChangeLogSegment(segment)).filter(Boolean)
+    : [];
+  const acceptedAt = normalizeChangeLogString(entry.acceptedAt);
+
+  let scoreDelta = null;
+  const rawDelta = entry.scoreDelta;
+  if (typeof rawDelta === 'number' && Number.isFinite(rawDelta)) {
+    scoreDelta = rawDelta;
+  } else if (typeof rawDelta === 'string') {
+    const parsed = Number.parseFloat(rawDelta);
+    if (Number.isFinite(parsed)) {
+      scoreDelta = parsed;
+    }
+  }
+
+  return {
+    id,
+    type,
+    title,
+    detail,
+    label,
+    before,
+    after,
+    summarySegments,
+    addedItems,
+    removedItems,
+    scoreDelta,
+    acceptedAt,
+  };
+}
+
+function parseDynamoStringList(attribute) {
+  if (!attribute || !Array.isArray(attribute.L)) {
+    return [];
+  }
+  return attribute.L.map((item) => normalizeChangeLogString(item?.S)).filter(Boolean);
+}
+
+function parseDynamoSummarySegments(attribute) {
+  if (!attribute || !Array.isArray(attribute.L)) {
+    return [];
+  }
+  return attribute.L.map((item) => {
+    if (!item || !item.M) {
+      return null;
+    }
+    const map = item.M;
+    const section = normalizeChangeLogString(map.section?.S);
+    const added = parseDynamoStringList(map.added);
+    const removed = parseDynamoStringList(map.removed);
+    const reason = parseDynamoStringList(map.reason);
+    if (!section && !added.length && !removed.length && !reason.length) {
+      return null;
+    }
+    return {
+      section,
+      added,
+      removed,
+      reason,
+    };
+  }).filter(Boolean);
+}
+
+function parseDynamoChangeLog(attribute) {
+  if (!attribute || !Array.isArray(attribute.L)) {
+    return [];
+  }
+  return attribute.L.map((item) => {
+    if (!item || !item.M) {
+      return null;
+    }
+    const map = item.M;
+    const id = normalizeChangeLogString(map.id?.S);
+    if (!id) {
+      return null;
+    }
+    const type = normalizeChangeLogString(map.type?.S);
+    const title = normalizeChangeLogString(map.title?.S);
+    const detail = normalizeChangeLogString(map.detail?.S);
+    const label = normalizeChangeLogString(map.label?.S);
+    const before = normalizeChangeLogString(map.before?.S);
+    const after = normalizeChangeLogString(map.after?.S);
+    const addedItems = parseDynamoStringList(map.addedItems);
+    const removedItems = parseDynamoStringList(map.removedItems);
+    const summarySegments = parseDynamoSummarySegments(map.summarySegments);
+    const acceptedAt = normalizeChangeLogString(map.acceptedAt?.S);
+    const scoreDelta = map.scoreDelta && map.scoreDelta.N ? Number(map.scoreDelta.N) : null;
+
+    return {
+      id,
+      type,
+      title,
+      detail,
+      label,
+      before,
+      after,
+      summarySegments,
+      addedItems,
+      removedItems,
+      scoreDelta: Number.isFinite(scoreDelta) ? scoreDelta : null,
+      acceptedAt,
+    };
+  }).filter(Boolean);
+}
+
+function toDynamoStringList(values = []) {
+  if (!Array.isArray(values) || !values.length) {
+    return undefined;
+  }
+  const normalized = values
+    .map((value) => normalizeChangeLogString(value))
+    .filter(Boolean);
+  if (!normalized.length) {
+    return undefined;
+  }
+  return { L: normalized.map((value) => ({ S: value })) };
+}
+
+function toDynamoSummarySegments(segments = []) {
+  if (!Array.isArray(segments) || !segments.length) {
+    return undefined;
+  }
+  const normalized = segments
+    .map((segment) => normalizeChangeLogSegment(segment))
+    .filter(Boolean);
+  if (!normalized.length) {
+    return undefined;
+  }
+  return {
+    L: normalized.map((segment) => {
+      const map = {};
+      if (segment.section) {
+        map.section = { S: segment.section };
+      }
+      const added = toDynamoStringList(segment.added);
+      if (added) {
+        map.added = added;
+      }
+      const removed = toDynamoStringList(segment.removed);
+      if (removed) {
+        map.removed = removed;
+      }
+      const reason = toDynamoStringList(segment.reason);
+      if (reason) {
+        map.reason = reason;
+      }
+      return { M: map };
+    }),
+  };
+}
+
+function serializeChangeLogEntries(entries = []) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return [];
+  }
+
+  return entries
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const normalized = normalizeChangeLogEntryInput(entry);
+      if (!normalized) {
+        return null;
+      }
+
+      const map = {
+        id: { S: normalized.id },
+      };
+      if (normalized.type) {
+        map.type = { S: normalized.type };
+      }
+      if (normalized.title) {
+        map.title = { S: normalized.title };
+      }
+      if (normalized.detail) {
+        map.detail = { S: normalized.detail };
+      }
+      if (normalized.label) {
+        map.label = { S: normalized.label };
+      }
+      if (normalized.before) {
+        map.before = { S: normalized.before };
+      }
+      if (normalized.after) {
+        map.after = { S: normalized.after };
+      }
+      const addedItems = toDynamoStringList(normalized.addedItems);
+      if (addedItems) {
+        map.addedItems = addedItems;
+      }
+      const removedItems = toDynamoStringList(normalized.removedItems);
+      if (removedItems) {
+        map.removedItems = removedItems;
+      }
+      const summarySegments = toDynamoSummarySegments(normalized.summarySegments);
+      if (summarySegments) {
+        map.summarySegments = summarySegments;
+      }
+      if (typeof normalized.scoreDelta === 'number' && Number.isFinite(normalized.scoreDelta)) {
+        map.scoreDelta = { N: String(normalized.scoreDelta) };
+      }
+      const acceptedAt = normalizeChangeLogString(normalized.acceptedAt);
+      if (acceptedAt) {
+        map.acceptedAt = { S: acceptedAt };
+      }
+
+      return { M: map };
+    })
+    .filter(Boolean);
+}
+
 async function handleImprovementRequest(type, req, res) {
   const payload = req.body || {};
   const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
@@ -8160,6 +8434,7 @@ async function generateEnhancedDocumentsResponse({
   originalUploadKey,
   selection,
   geminiApiKey,
+  changeLogEntries = [],
 }) {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (!bucket) {
@@ -8172,6 +8447,10 @@ async function generateEnhancedDocumentsResponse({
     );
     return null;
   }
+
+  const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
+    ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
+    : [];
 
   const resumeExperience = extractExperience(resumeText);
   const linkedinExperience = extractExperience(linkedinData.experience || []);
@@ -8820,6 +9099,7 @@ async function generateEnhancedDocumentsResponse({
     selectionProbability: selectionInsights?.probability ?? null,
     selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
     selectionInsights,
+    changeLog: normalizedChangeLogEntries,
     templateContext: {
       template1,
       template2,
@@ -8991,6 +9271,7 @@ app.post(
 
       let originalUploadKey = '';
       let storedBucket = '';
+      let existingChangeLog = [];
       try {
         const record = await dynamo.send(
           new GetItemCommand({
@@ -9012,6 +9293,7 @@ app.post(
         if (!bucket && storedBucket) {
           bucket = storedBucket;
         }
+        existingChangeLog = parseDynamoChangeLog(item.changeLog);
       } catch (err) {
         logStructured('error', 'generation_job_context_lookup_failed', {
           ...logContext,
@@ -9229,6 +9511,7 @@ app.post(
         originalUploadKey,
         selection,
         geminiApiKey,
+        changeLogEntries: existingChangeLog,
       });
 
       if (!responseBody) {
@@ -9346,6 +9629,181 @@ app.post('/api/rescore-improvement', assignJobContext, async (req, res) => {
       err.message || 'Unable to recalculate scores after applying the improvement.'
     );
   }
+});
+
+app.post('/api/change-log', assignJobContext, async (req, res) => {
+  const jobId = typeof req.body.jobId === 'string' ? req.body.jobId.trim() : '';
+  if (!jobId) {
+    return sendError(
+      res,
+      400,
+      'JOB_ID_REQUIRED',
+      'jobId is required to update the change log.'
+    );
+  }
+
+  const linkedinProfileUrl =
+    typeof req.body.linkedinProfileUrl === 'string' ? req.body.linkedinProfileUrl.trim() : '';
+  if (!linkedinProfileUrl) {
+    return sendError(
+      res,
+      400,
+      'LINKEDIN_PROFILE_URL_REQUIRED',
+      'linkedinProfileUrl is required to update the change log.'
+    );
+  }
+
+  const requestId = res.locals.requestId;
+  const logContext = { requestId, jobId, route: 'change-log' };
+
+  captureUserContext(req, res);
+
+  const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
+  const dynamo = new DynamoDBClient({ region });
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+
+  try {
+    await ensureDynamoTableExists({ dynamo, tableName });
+  } catch (err) {
+    logStructured('error', 'change_log_table_ensure_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'DYNAMO_TABLE_UNAVAILABLE',
+      'Unable to prepare storage for the change log.'
+    );
+  }
+
+  let existingChangeLog = [];
+  try {
+    const record = await dynamo.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+        ProjectionExpression: 'jobId, changeLog',
+      })
+    );
+    const item = record.Item || {};
+    if (!item.jobId || item.jobId.S !== jobId) {
+      return sendError(
+        res,
+        404,
+        'JOB_CONTEXT_NOT_FOUND',
+        'The upload context could not be located to update the change log.'
+      );
+    }
+    existingChangeLog = parseDynamoChangeLog(item.changeLog);
+  } catch (err) {
+    logStructured('error', 'change_log_context_lookup_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'JOB_CONTEXT_LOOKUP_FAILED',
+      'Unable to load the session context for change log updates.'
+    );
+  }
+
+  const removeEntry = Boolean(req.body.remove) || req.body.action === 'remove';
+  const nowIso = new Date().toISOString();
+  let updatedChangeLog = [...existingChangeLog];
+
+  if (removeEntry) {
+    const entryId = normalizeChangeLogString(
+      req.body.entryId || req.body.id || req.body.entry?.id
+    );
+    if (!entryId) {
+      return sendError(
+        res,
+        400,
+        'CHANGE_LOG_ENTRY_ID_REQUIRED',
+        'entryId is required to remove a change log entry.'
+      );
+    }
+    updatedChangeLog = existingChangeLog.filter((entry) => entry.id !== entryId);
+  } else {
+    const normalizedEntry = normalizeChangeLogEntryInput(req.body.entry);
+    if (!normalizedEntry) {
+      return sendError(
+        res,
+        400,
+        'CHANGE_LOG_ENTRY_INVALID',
+        'A valid change log entry is required.'
+      );
+    }
+    const existingIndex = existingChangeLog.findIndex((entry) => entry.id === normalizedEntry.id);
+    const baseEntry = existingIndex >= 0 ? existingChangeLog[existingIndex] : null;
+    const mergedEntry = {
+      ...baseEntry,
+      ...normalizedEntry,
+    };
+    if (!mergedEntry.acceptedAt) {
+      mergedEntry.acceptedAt = baseEntry?.acceptedAt || nowIso;
+    }
+    if (existingIndex >= 0) {
+      updatedChangeLog = existingChangeLog.map((entry) =>
+        entry.id === mergedEntry.id ? mergedEntry : entry
+      );
+    } else {
+      updatedChangeLog = [mergedEntry, ...existingChangeLog];
+    }
+  }
+
+  const serializedChangeLog = serializeChangeLogEntries(updatedChangeLog);
+
+  const expressionAttributeValues = {
+    ':jobId': { S: jobId },
+    ':updatedAt': { S: nowIso },
+  };
+  let updateExpression = '';
+
+  if (serializedChangeLog.length) {
+    expressionAttributeValues[':changeLog'] = { L: serializedChangeLog };
+    updateExpression = 'SET changeLog = :changeLog, changeLogUpdatedAt = :updatedAt';
+  } else {
+    updateExpression = 'SET changeLogUpdatedAt = :updatedAt REMOVE changeLog';
+  }
+
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ConditionExpression: 'jobId = :jobId',
+      })
+    );
+    logStructured('info', 'change_log_updated', {
+      ...logContext,
+      entries: updatedChangeLog.length,
+      action: removeEntry ? 'remove' : 'upsert',
+    });
+  } catch (err) {
+    logStructured('error', 'change_log_update_failed', {
+      ...logContext,
+      error: serializeError(err),
+      entries: updatedChangeLog.length,
+      action: removeEntry ? 'remove' : 'upsert',
+    });
+    return sendError(
+      res,
+      500,
+      'CHANGE_LOG_UPDATE_FAILED',
+      err.message || 'Unable to persist the change log.'
+    );
+  }
+
+  const responseChangeLog = updatedChangeLog
+    .map((entry) => normalizeChangeLogEntryInput(entry))
+    .filter(Boolean);
+
+  return res.json({ success: true, changeLog: responseChangeLog });
 });
 
 app.post(
