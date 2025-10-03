@@ -68,22 +68,51 @@ function ATSScoreDashboard({ metrics = [], match }) {
     originalScoreValue !== null && enhancedScoreValue !== null
       ? formatDelta(originalScoreValue, enhancedScoreValue)
       : formatDelta(match?.originalScore, match?.enhancedScore)
-  const selectionProbabilityValue =
-    typeof match?.selectionProbability === 'number' ? match.selectionProbability : null
-  const selectionProbabilityMeaning =
-    match?.selectionProbabilityMeaning ||
-    (typeof selectionProbabilityValue === 'number'
-      ? selectionProbabilityValue >= 75
+  const selectionProbabilityBeforeValue =
+    typeof match?.selectionProbabilityBefore === 'number'
+      ? match.selectionProbabilityBefore
+      : null
+  const selectionProbabilityBeforeMeaning =
+    match?.selectionProbabilityBeforeMeaning ||
+    (typeof selectionProbabilityBeforeValue === 'number'
+      ? selectionProbabilityBeforeValue >= 75
         ? 'High'
-        : selectionProbabilityValue >= 55
+        : selectionProbabilityBeforeValue >= 55
           ? 'Medium'
           : 'Low'
       : null)
-  const selectionProbabilityRationale = match?.selectionProbabilityRationale ||
-    (selectionProbabilityMeaning && typeof selectionProbabilityValue === 'number'
-      ? `Projected ${selectionProbabilityMeaning.toLowerCase()} probability (${selectionProbabilityValue}%) that this resume will be shortlisted for the JD.`
+  const selectionProbabilityBeforeRationale = match?.selectionProbabilityBeforeRationale ||
+    (selectionProbabilityBeforeMeaning && typeof selectionProbabilityBeforeValue === 'number'
+      ? `Projected ${selectionProbabilityBeforeMeaning.toLowerCase()} probability (${selectionProbabilityBeforeValue}%) that this resume will be shortlisted for the JD.`
       : null)
-  const hasSelectionProbability = typeof selectionProbabilityValue === 'number'
+  const selectionProbabilityAfterValue =
+    typeof match?.selectionProbabilityAfter === 'number'
+      ? match.selectionProbabilityAfter
+      : typeof match?.selectionProbability === 'number'
+        ? match.selectionProbability
+        : null
+  const selectionProbabilityAfterMeaning =
+    match?.selectionProbabilityAfterMeaning ||
+    match?.selectionProbabilityMeaning ||
+    (typeof selectionProbabilityAfterValue === 'number'
+      ? selectionProbabilityAfterValue >= 75
+        ? 'High'
+        : selectionProbabilityAfterValue >= 55
+          ? 'Medium'
+          : 'Low'
+      : null)
+  const selectionProbabilityAfterRationale =
+    match?.selectionProbabilityAfterRationale ||
+    match?.selectionProbabilityRationale ||
+    (selectionProbabilityAfterMeaning && typeof selectionProbabilityAfterValue === 'number'
+      ? `Projected ${selectionProbabilityAfterMeaning.toLowerCase()} probability (${selectionProbabilityAfterValue}%) that this resume will be shortlisted for the JD.`
+      : null)
+  const hasSelectionProbability =
+    typeof selectionProbabilityBeforeValue === 'number' || typeof selectionProbabilityAfterValue === 'number'
+  const selectionProbabilityDelta =
+    typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
+      ? formatDelta(selectionProbabilityBeforeValue, selectionProbabilityAfterValue)
+      : null
   const hasComparableScores =
     typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number'
   const improvementNarrative =
@@ -118,7 +147,7 @@ function ATSScoreDashboard({ metrics = [], match }) {
   const scoreComparisonDescription =
     'Illustrates how the enhanced resume closes gaps versus ATS benchmarks by comparing both scores side-by-side.'
   const selectionProbabilityDescription =
-    'Combines ATS scores, keyword coverage, and credential alignment to estimate how likely you are to be shortlisted.'
+    'Compares shortlist odds before and after enhancements using ATS scores, keyword coverage, and credential alignment.'
 
   const missingSkills = normalizeSkills(match?.missingSkills)
   const addedSkills = normalizeSkills(match?.addedSkills)
@@ -308,18 +337,51 @@ function ATSScoreDashboard({ metrics = [], match }) {
                   content={selectionProbabilityDescription}
                 />
               </div>
-              <div className="mt-3 flex items-baseline gap-3">
-                <p className="text-5xl font-black text-emerald-700">{selectionProbabilityValue}%</p>
-                {selectionProbabilityMeaning && (
-                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
-                    {selectionProbabilityMeaning} Outlook
-                  </span>
+              <div className="mt-4 space-y-4">
+                {typeof selectionProbabilityBeforeValue === 'number' && (
+                  <div className="rounded-2xl border border-indigo-200/60 bg-white/80 p-4 shadow-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Before Enhancement</p>
+                        <div className="mt-2 flex items-baseline gap-3">
+                          <p className="text-4xl font-black text-indigo-700">{selectionProbabilityBeforeValue}%</p>
+                          {selectionProbabilityBeforeMeaning && (
+                            <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-indigo-700">
+                              {selectionProbabilityBeforeMeaning} Outlook
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {selectionProbabilityDelta && (
+                        <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                          {selectionProbabilityDelta}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm text-indigo-700/90">
+                      {selectionProbabilityBeforeRationale ||
+                        'Baseline estimate derived from your uploaded resume before enhancements.'}
+                    </p>
+                  </div>
+                )}
+                {typeof selectionProbabilityAfterValue === 'number' && (
+                  <div className="rounded-2xl border border-emerald-300 bg-emerald-100/60 p-4 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">After Enhancement</p>
+                    <div className="mt-2 flex items-baseline gap-3">
+                      <p className="text-4xl font-black text-emerald-700">{selectionProbabilityAfterValue}%</p>
+                      {selectionProbabilityAfterMeaning && (
+                        <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                          {selectionProbabilityAfterMeaning} Outlook
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm text-emerald-700/90">
+                      {selectionProbabilityAfterRationale ||
+                        'Enhanced estimate reflecting ATS, keyword, and credential gains from the accepted changes.'}
+                    </p>
+                  </div>
                 )}
               </div>
-              <p className="mt-2 text-sm text-emerald-700/90">
-                {selectionProbabilityRationale ||
-                  'Likelihood estimate synthesised from ATS scores, role alignment, and credential coverage.'}
-              </p>
             </div>
           )}
         </div>

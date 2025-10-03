@@ -40,6 +40,18 @@ describe('buildSelectionInsights', () => {
     const jobFitDesignation = insights.jobFitScores.find((metric) => metric.key === 'designation')
     expect(jobFitDesignation).toEqual(expect.objectContaining({ score: expect.any(Number) }))
     expect(typeof insights.jobFitAverage).toBe('number')
+    expect(insights.before).toEqual(
+      expect.objectContaining({
+        probability: expect.any(Number),
+        message: expect.any(String),
+      })
+    )
+    expect(insights.after).toEqual(
+      expect.objectContaining({
+        probability: expect.any(Number),
+        message: expect.any(String),
+      })
+    )
   })
 
   test('rewards aligned designation and strong metrics', () => {
@@ -73,5 +85,7 @@ describe('buildSelectionInsights', () => {
     expect(insights.probability).toBeGreaterThanOrEqual(75)
     const jobFitSkills = insights.jobFitScores.find((metric) => metric.key === 'skills')
     expect(jobFitSkills?.score).toBeGreaterThanOrEqual(80)
+    expect(insights.before.level).toBeDefined()
+    expect(insights.after.level).toBe('High')
   })
 })

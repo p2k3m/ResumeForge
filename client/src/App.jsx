@@ -1185,13 +1185,37 @@ function App() {
         data && typeof data.templateContext === 'object' ? data.templateContext : null
       setTemplateContext(templateContextValue)
       setManualJobDescriptionRequired(false)
+      const probabilityBeforeValue =
+        typeof data.selectionProbabilityBefore === 'number'
+          ? data.selectionProbabilityBefore
+          : typeof data.selectionInsights?.before?.probability === 'number'
+            ? data.selectionInsights.before.probability
+            : null
+      const probabilityBeforeMeaning =
+        data.selectionInsights?.before?.level ||
+        (typeof probabilityBeforeValue === 'number'
+          ? probabilityBeforeValue >= 75
+            ? 'High'
+            : probabilityBeforeValue >= 55
+              ? 'Medium'
+              : 'Low'
+          : null)
+      const probabilityBeforeRationale =
+        data.selectionInsights?.before?.message ||
+        data.selectionInsights?.before?.rationale ||
+        (typeof probabilityBeforeValue === 'number' && probabilityBeforeMeaning
+          ? `Projected ${probabilityBeforeMeaning.toLowerCase()} probability (${probabilityBeforeValue}%) that this resume will be shortlisted for the JD.`
+          : null)
       const probabilityValue =
         typeof data.selectionProbability === 'number'
           ? data.selectionProbability
-          : typeof data.selectionInsights?.probability === 'number'
-            ? data.selectionInsights.probability
-            : null
+          : typeof data.selectionInsights?.after?.probability === 'number'
+            ? data.selectionInsights.after.probability
+            : typeof data.selectionInsights?.probability === 'number'
+              ? data.selectionInsights.probability
+              : null
       const probabilityMeaning =
+        data.selectionInsights?.after?.level ||
         data.selectionInsights?.level ||
         (typeof probabilityValue === 'number'
           ? probabilityValue >= 75
@@ -1201,7 +1225,10 @@ function App() {
               : 'Low'
           : null)
       const probabilityRationale =
+        data.selectionInsights?.after?.message ||
+        data.selectionInsights?.after?.rationale ||
         data.selectionInsights?.message ||
+        data.selectionInsights?.rationale ||
         (typeof probabilityValue === 'number' && probabilityMeaning
           ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
           : null)
@@ -1226,7 +1253,13 @@ function App() {
         modifiedTitle: data.modifiedTitle || '',
         selectionProbability: probabilityValue,
         selectionProbabilityMeaning: probabilityMeaning,
-        selectionProbabilityRationale: probabilityRationale
+        selectionProbabilityRationale: probabilityRationale,
+        selectionProbabilityBefore: probabilityBeforeValue,
+        selectionProbabilityBeforeMeaning: probabilityBeforeMeaning,
+        selectionProbabilityBeforeRationale: probabilityBeforeRationale,
+        selectionProbabilityAfter: probabilityValue,
+        selectionProbabilityAfterMeaning: probabilityMeaning,
+        selectionProbabilityAfterRationale: probabilityRationale
       }
       setMatch(matchPayload)
       const breakdownCandidates = Array.isArray(data.atsSubScores)
