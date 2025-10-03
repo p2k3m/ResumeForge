@@ -3,9 +3,14 @@ function TemplateSelector({ options = [], selectedTemplate, onSelect, disabled =
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-semibold text-purple-700" id="template-selector-label">
-        Template Style
-      </p>
+      <div>
+        <p className="text-sm font-semibold text-purple-700" id="template-selector-label">
+          Template Style
+        </p>
+        <p className="text-xs text-purple-600">
+          Enhanced CVs and tailored cover letters will follow this selected design.
+        </p>
+      </div>
       <div
         id="template-selector"
         role="radiogroup"
