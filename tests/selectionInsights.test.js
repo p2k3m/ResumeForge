@@ -36,6 +36,10 @@ describe('buildSelectionInsights', () => {
     expect(designationFlag?.type).toBe('warning')
     expect(insights.experience.requiredYears).toBe(5)
     expect(insights.experience.candidateYears).toBeGreaterThan(5)
+    expect(Array.isArray(insights.jobFitScores)).toBe(true)
+    const jobFitDesignation = insights.jobFitScores.find((metric) => metric.key === 'designation')
+    expect(jobFitDesignation).toEqual(expect.objectContaining({ score: expect.any(Number) }))
+    expect(typeof insights.jobFitAverage).toBe('number')
   })
 
   test('rewards aligned designation and strong metrics', () => {
@@ -67,5 +71,7 @@ describe('buildSelectionInsights', () => {
     expect(insights.flags.length).toBeGreaterThan(0)
     expect(insights.flags.every((flag) => flag.type === 'success' || flag.type === 'info')).toBe(true)
     expect(insights.probability).toBeGreaterThanOrEqual(75)
+    const jobFitSkills = insights.jobFitScores.find((metric) => metric.key === 'skills')
+    expect(jobFitSkills?.score).toBeGreaterThanOrEqual(80)
   })
 })

@@ -902,6 +902,11 @@ describe('/api/process-cv', () => {
         level: expect.any(String),
         message: expect.any(String),
         flags: expect.any(Array),
+        jobFitAverage: expect.any(Number),
+        jobFitScores: expect.arrayContaining([
+          expect.objectContaining({ key: 'designation', score: expect.any(Number) }),
+          expect.objectContaining({ key: 'skills', score: expect.any(Number) }),
+        ]),
       })
     );
     process.env.NODE_ENV = 'test';

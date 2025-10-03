@@ -27,7 +27,10 @@ describe('end-to-end CV processing', () => {
     expect(typeof response.body.scoreBreakdown).toBe('object');
     expect(Array.isArray(response.body.atsSubScores)).toBe(true);
     expect(response.body.selectionInsights).toEqual(
-      expect.objectContaining({ flags: expect.any(Array) })
+      expect.objectContaining({
+        flags: expect.any(Array),
+        jobFitScores: expect.any(Array),
+      })
     );
     const probability = response.body.selectionInsights.probability;
     expect(probability === null || typeof probability === 'number').toBe(true);

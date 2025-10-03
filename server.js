@@ -5389,6 +5389,91 @@ function buildSelectionInsights(context = {}) {
         ? 72
         : 60;
 
+  const normalizeFitScore = (value) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return 0;
+    }
+    return Math.round(clamp(value, 0, 100));
+  };
+
+  const tasksScore = tasksStatus === 'unknown' ? impactScore : Math.max(Math.min(impactScore, 95), tasksStatus === 'match' ? 80 : tasksStatus === 'partial' ? 55 : 35);
+  const jobFitScores = [
+    {
+      key: 'designation',
+      label: 'Designation Alignment',
+      score: normalizeFitScore(designationScore),
+      status: designationStatus,
+      message: designationMessage,
+      detail: {
+        currentTitle: visibleTitle,
+        targetTitle,
+      },
+    },
+    {
+      key: 'skills',
+      label: 'Skill Coverage',
+      score: normalizeFitScore(skillCoverage),
+      status: skillsStatus,
+      message: skillsMessage,
+      detail: {
+        coverage: skillCoverage,
+        missingCount: missing.length,
+        addedCount: added.length,
+      },
+    },
+    {
+      key: 'experience',
+      label: 'Experience Match',
+      score: normalizeFitScore(experienceScore),
+      status: experienceStatus,
+      message: experienceMessage,
+      detail: {
+        candidateYears,
+        requiredMin,
+        requiredMax,
+      },
+    },
+    {
+      key: 'tasks',
+      label: 'Task Alignment',
+      score: normalizeFitScore(tasksScore),
+      status: tasksStatus,
+      message: tasksMessage,
+      detail: {
+        impactScore: Math.round(clamp(impactScore, 0, 100)),
+      },
+    },
+    {
+      key: 'highlights',
+      label: 'Highlights Strength',
+      score: normalizeFitScore(highlightScore),
+      status: highlightsStatus,
+      message: highlightsMessage,
+      detail: {
+        crispnessScore,
+        otherScore,
+      },
+    },
+    {
+      key: 'certifications',
+      label: 'Certification Match',
+      score: normalizeFitScore(certificationScore),
+      status: certificationStatus,
+      message: certificationMessage,
+      detail: {
+        known: knownNames,
+        suggestions,
+      },
+    },
+  ];
+
+  const jobFitAverage = jobFitScores.length
+    ? Math.round(
+        jobFitScores.reduce((total, metric) => total + (typeof metric.score === 'number' ? metric.score : 0), 0) /
+          jobFitScores.length,
+      )
+    : 0;
+
   let probability =
     metricAverage * 0.3 +
     skillCoverage * 0.25 +
@@ -5463,6 +5548,8 @@ function buildSelectionInsights(context = {}) {
     level,
     message: probabilityMessage,
     summary,
+    jobFitAverage,
+    jobFitScores,
     designation: {
       status: designationStatus,
       message: designationMessage,
