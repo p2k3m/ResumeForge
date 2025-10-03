@@ -2109,6 +2109,88 @@ const PROJECTS_SECTION_PATTERN =
 const HIGHLIGHTS_SECTION_PATTERN =
   /^#\s*(highlights?|career\s+highlights|key\s+highlights|professional\s+highlights)/i;
 
+function extractDesignationLine(resumeText = '') {
+  const lines = String(resumeText || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim());
+  const filtered = lines.filter(Boolean);
+  if (!filtered.length) {
+    return '';
+  }
+
+  const isLikelyHeading = (value) => /^#\s+/.test(value);
+  const isLikelyBullet = (value) => /^[-•*]/.test(value);
+  const isContactLine = (value) =>
+    /@/.test(value) || /https?:\/\//i.test(value) || /\b\d{3}[)\s.-]?\d{3}[\s.-]?\d{4}\b/.test(value);
+
+  for (let i = 1; i < Math.min(filtered.length, 6); i += 1) {
+    const candidate = filtered[i];
+    if (!candidate) continue;
+    if (isLikelyHeading(candidate) || isLikelyBullet(candidate) || isContactLine(candidate)) {
+      continue;
+    }
+    if (candidate.length > 80) {
+      continue;
+    }
+    return candidate;
+  }
+
+  return '';
+}
+
+const IMPROVEMENT_SECTION_CONFIG = {
+  'improve-summary': { key: 'summary', label: 'Summary', pattern: SUMMARY_SECTION_PATTERN },
+  'add-missing-skills': { key: 'skills', label: 'Skills', pattern: SKILLS_SECTION_PATTERN },
+  'align-experience': { key: 'experience', label: 'Work Experience', pattern: EXPERIENCE_SECTION_PATTERN },
+  'improve-certifications': {
+    key: 'certifications',
+    label: 'Certifications',
+    pattern: CERTIFICATIONS_SECTION_PATTERN,
+  },
+  'improve-projects': { key: 'projects', label: 'Projects', pattern: PROJECTS_SECTION_PATTERN },
+  'improve-highlights': { key: 'highlights', label: 'Highlights', pattern: HIGHLIGHTS_SECTION_PATTERN },
+  'change-designation': { key: 'designation', label: 'Designation' },
+  'enhance-all': { key: 'resume', label: 'Entire Resume' },
+};
+
+function resolveImprovementSectionContext(type, resumeText, updatedResume) {
+  const config = IMPROVEMENT_SECTION_CONFIG[type] || IMPROVEMENT_SECTION_CONFIG['enhance-all'];
+
+  if (config.pattern) {
+    const beforeSection = extractSectionContent(resumeText, config.pattern);
+    const afterSection = extractSectionContent(updatedResume, config.pattern);
+    const label = deriveHeadingLabel(afterSection.heading || beforeSection.heading, config.label);
+    const beforeText = Array.isArray(beforeSection.content)
+      ? beforeSection.content.join('\n').trim()
+      : '';
+    const afterText = Array.isArray(afterSection.content)
+      ? afterSection.content.join('\n').trim()
+      : '';
+    return {
+      key: config.key,
+      label,
+      beforeText,
+      afterText,
+    };
+  }
+
+  if (config.key === 'designation') {
+    return {
+      key: config.key,
+      label: config.label,
+      beforeText: extractDesignationLine(resumeText),
+      afterText: extractDesignationLine(updatedResume),
+    };
+  }
+
+  return {
+    key: config.key,
+    label: config.label,
+    beforeText: String(resumeText || ''),
+    afterText: String(updatedResume || ''),
+  };
+}
+
 function replaceSectionContent(
   resumeText = '',
   headingPattern,
@@ -8335,6 +8417,167 @@ async function handleImprovementRequest(type, req, res) {
     const normalizedAfterExcerpt = excerptPattern
       ? normalizeSectionExcerpt(result.updatedResume, excerptPattern, result.afterExcerpt)
       : result.afterExcerpt;
+
+    const updatedResumeText = typeof result.updatedResume === 'string' ? result.updatedResume : resumeText;
+    const baselineResumeSkillsList = extractResumeSkills(resumeText);
+    const updatedResumeSkillsList = extractResumeSkills(updatedResumeText);
+    const overallBeforeMatch = calculateMatchScore(jobSkills, baselineResumeSkillsList);
+    const overallAfterMatch = calculateMatchScore(jobSkills, updatedResumeSkillsList);
+    const overallBeforeBreakdown = buildScoreBreakdown(resumeText, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: baselineResumeSkillsList,
+    });
+    const overallAfterBreakdown = buildScoreBreakdown(updatedResumeText, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: updatedResumeSkillsList,
+    });
+    const atsBefore = scoreBreakdownToArray(overallBeforeBreakdown);
+    const atsAfter = scoreBreakdownToArray(overallAfterBreakdown);
+    const overallScoreDelta = overallAfterMatch.score - overallBeforeMatch.score;
+
+    const sectionContext = resolveImprovementSectionContext(type, resumeText, updatedResumeText);
+    const sectionBeforeSkills = extractResumeSkills(sectionContext.beforeText);
+    const sectionAfterSkills = extractResumeSkills(sectionContext.afterText);
+    const sectionBeforeMatch = calculateMatchScore(jobSkills, sectionBeforeSkills);
+    const sectionAfterMatch = calculateMatchScore(jobSkills, sectionAfterSkills);
+    const sectionScoreDelta = sectionAfterMatch.score - sectionBeforeMatch.score;
+
+    const normalizeSkillSet = (skills = []) =>
+      new Set((Array.isArray(skills) ? skills : []).map((skill) => skill.toLowerCase()).filter(Boolean));
+    const beforeMissingOverall = Array.isArray(overallBeforeMatch.newSkills) ? overallBeforeMatch.newSkills : [];
+    const afterMissingOverall = Array.isArray(overallAfterMatch.newSkills) ? overallAfterMatch.newSkills : [];
+    const afterMissingOverallSet = normalizeSkillSet(afterMissingOverall);
+    const coveredSkillsOverall = beforeMissingOverall.filter(
+      (skill) => !afterMissingOverallSet.has(skill.toLowerCase())
+    );
+
+    const beforeSectionMissing = Array.isArray(sectionBeforeMatch.newSkills) ? sectionBeforeMatch.newSkills : [];
+    const afterSectionMissing = Array.isArray(sectionAfterMatch.newSkills) ? sectionAfterMatch.newSkills : [];
+    const afterSectionMissingSet = normalizeSkillSet(afterSectionMissing);
+    const coveredSkillsSection = beforeSectionMissing.filter(
+      (skill) => !afterSectionMissingSet.has(skill.toLowerCase())
+    );
+
+    const baselineDesignationTitle =
+      typeof payload.currentTitle === 'string' && payload.currentTitle.trim()
+        ? payload.currentTitle.trim()
+        : typeof payload.originalTitle === 'string' && payload.originalTitle.trim()
+          ? payload.originalTitle.trim()
+          : extractDesignationLine(resumeText);
+    const updatedDesignationTitle =
+      type === 'change-designation' || type === 'enhance-all'
+        ? extractDesignationLine(updatedResumeText) || baselineDesignationTitle
+        : sectionContext.key === 'designation' && sectionContext.afterText
+          ? sectionContext.afterText
+          : baselineDesignationTitle;
+
+    let selectionInsights;
+    try {
+      selectionInsights = buildSelectionInsights({
+        jobTitle: payload.jobTitle || payload.targetTitle || '',
+        originalTitle: baselineDesignationTitle,
+        modifiedTitle: updatedDesignationTitle,
+        jobDescriptionText: jobDescription,
+        bestMatch: { ...overallAfterMatch },
+        originalMatch: { ...overallBeforeMatch },
+        missingSkills: afterMissingOverall,
+        addedSkills: coveredSkillsOverall,
+        scoreBreakdown: overallAfterBreakdown,
+        baselineScoreBreakdown: overallBeforeBreakdown,
+        resumeExperience: extractExperience(updatedResumeText),
+        linkedinExperience: [],
+        knownCertificates,
+        certificateSuggestions: manualCertificates.map((cert) => cert?.name).filter(Boolean),
+        manualCertificatesRequired: Boolean(payload.manualCertificatesRequired),
+      });
+    } catch (err) {
+      logStructured('warn', 'targeted_improvement_rescore_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+
+    const selectionProbabilityBefore =
+      typeof selectionInsights?.before?.probability === 'number'
+        ? selectionInsights.before.probability
+        : null;
+    const selectionProbabilityAfter =
+      typeof selectionInsights?.after?.probability === 'number'
+        ? selectionInsights.after.probability
+        : typeof selectionInsights?.probability === 'number'
+          ? selectionInsights.probability
+          : null;
+    const selectionProbabilityDelta =
+      Number.isFinite(selectionProbabilityBefore) && Number.isFinite(selectionProbabilityAfter)
+        ? selectionProbabilityAfter - selectionProbabilityBefore
+        : null;
+
+    const normalizedSelectionProbabilityBefore = Number.isFinite(selectionProbabilityBefore)
+      ? selectionProbabilityBefore
+      : 0;
+    const normalizedSelectionProbabilityAfter = Number.isFinite(selectionProbabilityAfter)
+      ? selectionProbabilityAfter
+      : normalizedSelectionProbabilityBefore;
+    const normalizedSelectionProbabilityDelta = Number.isFinite(selectionProbabilityDelta)
+      ? selectionProbabilityDelta
+      : normalizedSelectionProbabilityAfter - normalizedSelectionProbabilityBefore;
+
+    const rescoreSummary = {
+      section: {
+        key: sectionContext.key,
+        label: sectionContext.label,
+        before: {
+          score: sectionBeforeMatch.score,
+          missingSkills: beforeSectionMissing,
+        },
+        after: {
+          score: sectionAfterMatch.score,
+          missingSkills: afterSectionMissing,
+        },
+        delta: {
+          score: sectionScoreDelta,
+          coveredSkills: coveredSkillsSection,
+        },
+      },
+      overall: {
+        before: {
+          score: overallBeforeMatch.score,
+          missingSkills: beforeMissingOverall,
+          atsSubScores: atsBefore,
+          scoreBreakdown: overallBeforeBreakdown,
+        },
+        after: {
+          score: overallAfterMatch.score,
+          missingSkills: afterMissingOverall,
+          atsSubScores: atsAfter,
+          scoreBreakdown: overallAfterBreakdown,
+        },
+        delta: {
+          score: overallScoreDelta,
+          coveredSkills: coveredSkillsOverall,
+        },
+      },
+      selectionProbability: {
+        before: normalizedSelectionProbabilityBefore,
+        after: normalizedSelectionProbabilityAfter,
+        delta: normalizedSelectionProbabilityDelta,
+        beforeLevel: selectionInsights?.before?.level || null,
+        afterLevel: selectionInsights?.after?.level || selectionInsights?.level || null,
+      },
+    };
+
+    if (selectionInsights) {
+      rescoreSummary.selectionInsights = {
+        probability: selectionInsights.probability,
+        level: selectionInsights.level,
+        message: selectionInsights.message,
+        before: selectionInsights.before,
+        after: selectionInsights.after,
+      };
+    }
+
     logStructured('info', 'targeted_improvement_completed', {
       ...logContext,
       confidence: result.confidence,
@@ -8356,6 +8599,10 @@ async function handleImprovementRequest(type, req, res) {
         result.explanation,
         result.changeDetails
       ),
+      rescore: rescoreSummary,
+      selectionProbabilityBefore: normalizedSelectionProbabilityBefore,
+      selectionProbabilityAfter: normalizedSelectionProbabilityAfter,
+      selectionProbabilityDelta: normalizedSelectionProbabilityDelta,
     });
   } catch (err) {
     logStructured('error', 'targeted_improvement_failed', {

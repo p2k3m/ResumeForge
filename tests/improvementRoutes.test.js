@@ -87,6 +87,36 @@ describe('targeted improvement routes', () => {
         reason: ['Highlights leadership accomplishments.'],
       })
     );
+    expect(response.body.rescore).toEqual(
+      expect.objectContaining({
+        section: expect.objectContaining({
+          key: expect.any(String),
+          label: expect.any(String),
+          before: expect.objectContaining({ score: expect.any(Number) }),
+          after: expect.objectContaining({ score: expect.any(Number) }),
+          delta: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+        overall: expect.objectContaining({
+          before: expect.objectContaining({
+            score: expect.any(Number),
+            atsSubScores: expect.any(Array),
+          }),
+          after: expect.objectContaining({
+            score: expect.any(Number),
+            atsSubScores: expect.any(Array),
+          }),
+          delta: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+        selectionProbability: expect.objectContaining({
+          before: expect.any(Number),
+          after: expect.any(Number),
+          delta: expect.any(Number),
+        }),
+      })
+    );
+    expect(typeof response.body.selectionProbabilityBefore).toBe('number');
+    expect(typeof response.body.selectionProbabilityAfter).toBe('number');
+    expect(typeof response.body.selectionProbabilityDelta).toBe('number');
   });
 
   it('returns a structured improvement summary for improve-certifications', async () => {
@@ -140,6 +170,33 @@ describe('targeted improvement routes', () => {
         added: expect.arrayContaining(['Azure Administrator Associate']),
         removed: expect.arrayContaining([]),
         reason: ['Elevated certifications for cloud leadership.'],
+      })
+    );
+    expect(response.body.rescore).toEqual(
+      expect.objectContaining({
+        section: expect.objectContaining({
+          key: expect.any(String),
+          label: expect.any(String),
+          before: expect.objectContaining({ score: expect.any(Number) }),
+          after: expect.objectContaining({ score: expect.any(Number) }),
+          delta: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+        overall: expect.objectContaining({
+          before: expect.objectContaining({
+            score: expect.any(Number),
+            atsSubScores: expect.any(Array),
+          }),
+          after: expect.objectContaining({
+            score: expect.any(Number),
+            atsSubScores: expect.any(Array),
+          }),
+          delta: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+        selectionProbability: expect.objectContaining({
+          before: expect.any(Number),
+          after: expect.any(Number),
+          delta: expect.any(Number),
+        }),
       })
     );
   });
