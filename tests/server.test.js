@@ -896,11 +896,25 @@ describe('/api/process-cv', () => {
       expect.objectContaining({ category: 'Other Quality Metrics', score: expect.any(Number) }),
     ]);
     expect(typeof res.body.selectionProbability).toBe('number');
+    expect(typeof res.body.selectionProbabilityBefore).toBe('number');
     expect(res.body.selectionInsights).toEqual(
       expect.objectContaining({
         probability: expect.any(Number),
         level: expect.any(String),
         message: expect.any(String),
+        rationale: expect.any(String),
+        before: expect.objectContaining({
+          probability: expect.any(Number),
+          level: expect.any(String),
+          message: expect.any(String),
+          rationale: expect.any(String),
+        }),
+        after: expect.objectContaining({
+          probability: expect.any(Number),
+          level: expect.any(String),
+          message: expect.any(String),
+          rationale: expect.any(String),
+        }),
         flags: expect.any(Array),
         jobFitAverage: expect.any(Number),
         jobFitScores: expect.arrayContaining([

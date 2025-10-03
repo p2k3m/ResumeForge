@@ -5215,6 +5215,82 @@ function summarizeList(values = [], { limit = 3, conjunction = 'and' } = {}) {
   return `${display.slice(0, -1).join(', ')} ${conjunction} ${display.slice(-1)}`;
 }
 
+function combineReasonClauses(reasons = []) {
+  const clauses = reasons.filter(Boolean);
+  if (!clauses.length) {
+    return '';
+  }
+  if (clauses.length === 1) {
+    return clauses[0];
+  }
+  const [first, second] = clauses;
+  if (!second) {
+    return first;
+  }
+  return `${first} and ${second}`;
+}
+
+function buildProbabilityNarrative({
+  probability,
+  level,
+  skillCoverage,
+  skillsStatus,
+  missing,
+  added,
+  designationStatus,
+  experienceStatus,
+  certificationStatus,
+}) {
+  const reasons = [];
+
+  if (skillsStatus === 'gap') {
+    const focus = summarizeList(missing, { limit: 3 });
+    reasons.push(
+      focus
+        ? `it still misses ${focus} from the JD`
+        : 'key JD skills remain uncovered'
+    );
+  } else if (skillsStatus === 'partial') {
+    reasons.push(`it only covers ${skillCoverage}% of the JD skills`);
+  } else if (skillsStatus === 'match') {
+    if (added?.length) {
+      reasons.push(
+        `it now highlights ${summarizeList(added, { limit: 3 })}, covering ${skillCoverage}% of JD skills`
+      );
+    } else {
+      reasons.push(`it covers ${skillCoverage}% of the JD skills`);
+    }
+  }
+
+  if (designationStatus === 'mismatch') {
+    reasons.push('the headline still differs from the JD designation');
+  } else if (designationStatus === 'partial') {
+    reasons.push('the headline needs clearer alignment to the JD title');
+  } else if (designationStatus === 'match') {
+    reasons.push('the headline matches the JD designation');
+  }
+
+  if (experienceStatus === 'gap') {
+    reasons.push('experience appears below the stated requirement');
+  } else if (experienceStatus === 'partial') {
+    reasons.push('experience is close to the required range');
+  } else if (experienceStatus === 'match') {
+    reasons.push('experience meets the requirement');
+  }
+
+  if (certificationStatus === 'gap') {
+    reasons.push('recommended certifications are still missing');
+  } else if (certificationStatus === 'info') {
+    reasons.push('certifications need a manual update to be reflected');
+  } else if (certificationStatus === 'match') {
+    reasons.push('credential coverage aligns with the posting');
+  }
+
+  const because = combineReasonClauses(reasons);
+  const base = `Projected ${level.toLowerCase()} probability (${probability}%) that this resume will be selected for the JD`;
+  return because ? `${base} because ${because}.` : `${base}.`;
+}
+
 function buildSelectionInsights(context = {}) {
   const {
     jobTitle = '',
@@ -5226,6 +5302,7 @@ function buildSelectionInsights(context = {}) {
     missingSkills = [],
     addedSkills = [],
     scoreBreakdown = {},
+    baselineScoreBreakdown = {},
     resumeExperience = [],
     linkedinExperience = [],
     knownCertificates = [],
@@ -5244,7 +5321,6 @@ function buildSelectionInsights(context = {}) {
     : 0;
 
   const targetTitle = String(jobTitle || '').trim();
-  const visibleTitle = String(modifiedTitle || originalTitle || '').trim();
   const normalizeTitle = (value) =>
     value
       .toLowerCase()
@@ -5252,31 +5328,46 @@ function buildSelectionInsights(context = {}) {
       .replace(/\s+/g, ' ')
       .trim();
   const normalizedTarget = normalizeTitle(targetTitle);
-  const normalizedVisible = normalizeTitle(visibleTitle);
+  const computeDesignation = (resumeTitleInput) => {
+    const visibleTitle = String(resumeTitleInput || '').trim();
+    const normalizedVisible = normalizeTitle(visibleTitle);
 
-  let designationStatus = 'unknown';
-  let designationMessage = 'Designation information was not available.';
-  let designationScore = 65;
-  if (normalizedTarget && normalizedVisible) {
-    const matches =
-      normalizedVisible.includes(normalizedTarget) ||
-      normalizedTarget.includes(normalizedVisible);
-    designationStatus = matches ? 'match' : 'mismatch';
-    designationMessage = matches
-      ? 'Current resume title aligns with the job designation.'
-      : `Current resume title (“${visibleTitle || '—'}”) does not match the JD designation (“${targetTitle || '—'}”).`;
-    designationScore = matches ? 92 : 58;
-  } else if (normalizedTarget) {
-    designationStatus = 'partial';
-    designationMessage =
-      'Provide or adjust your current headline so we can confirm designation alignment.';
-    designationScore = 72;
-  } else if (normalizedVisible) {
-    designationStatus = 'partial';
-    designationMessage =
-      'The job post did not include a clear title. Keep your designation focused on the target role.';
-    designationScore = 70;
-  }
+    let designationStatus = 'unknown';
+    let designationMessage = 'Designation information was not available.';
+    let designationScore = 65;
+
+    if (normalizedTarget && normalizedVisible) {
+      const matches =
+        normalizedVisible.includes(normalizedTarget) ||
+        normalizedTarget.includes(normalizedVisible);
+      designationStatus = matches ? 'match' : 'mismatch';
+      designationMessage = matches
+        ? 'Current resume title aligns with the job designation.'
+        : `Current resume title (“${visibleTitle || '—'}”) does not match the JD designation (“${targetTitle || '—'}”).`;
+      designationScore = matches ? 92 : 58;
+    } else if (normalizedTarget) {
+      designationStatus = 'partial';
+      designationMessage =
+        'Provide or adjust your current headline so we can confirm designation alignment.';
+      designationScore = 72;
+    } else if (normalizedVisible) {
+      designationStatus = 'partial';
+      designationMessage =
+        'The job post did not include a clear title. Keep your designation focused on the target role.';
+      designationScore = 70;
+    }
+
+    return { designationStatus, designationMessage, designationScore, visibleTitle };
+  };
+
+  const baselineDesignation = computeDesignation(originalTitle || '');
+  const finalDesignation = computeDesignation(modifiedTitle || originalTitle || '');
+  let {
+    designationStatus,
+    designationMessage,
+    designationScore,
+    visibleTitle,
+  } = finalDesignation;
 
   const combinedExperience = []
     .concat(Array.isArray(resumeExperience) ? resumeExperience : [])
@@ -5474,17 +5565,92 @@ function buildSelectionInsights(context = {}) {
       )
     : 0;
 
-  let probability =
-    metricAverage * 0.3 +
-    skillCoverage * 0.25 +
-    experienceScore * 0.15 +
-    designationScore * 0.1 +
-    (impactScore || metricAverage) * 0.1 +
-    certificationScore * 0.05 +
-    highlightScore * 0.05;
-  probability = clamp(Math.round(probability), 5, 97);
-  const level = probability >= 75 ? 'High' : probability >= 55 ? 'Medium' : 'Low';
-  const probabilityMessage = `Projected ${level.toLowerCase()} probability (${probability}%) that this resume will be selected for the JD.`;
+  const baselineMetrics = Array.isArray(baselineScoreBreakdown)
+    ? baselineScoreBreakdown
+    : scoreBreakdownToArray(baselineScoreBreakdown || {});
+  const baselineMetricScores = baselineMetrics
+    .map((metric) => (typeof metric?.score === 'number' ? metric.score : null))
+    .filter((score) => Number.isFinite(score));
+  const baselineMetricAverage = baselineMetricScores.length
+    ? baselineMetricScores.reduce((sum, value) => sum + value, 0) / baselineMetricScores.length
+    : metricAverage;
+  const baselineImpactScore = Number(baselineScoreBreakdown?.impact?.score) || impactScore;
+  const baselineCrispness = Number(baselineScoreBreakdown?.crispness?.score) || crispnessScore;
+  const baselineOther = Number(baselineScoreBreakdown?.otherQuality?.score) || otherScore;
+  const baselineHighlightScore = Math.round((baselineCrispness + baselineOther) / 2) || highlightScore;
+  const baselineMissing = Array.isArray(originalMatch?.newSkills)
+    ? originalMatch.newSkills.filter(Boolean)
+    : [];
+  const baselineSkillsStatus = baselineMissing.length
+    ? 'gap'
+    : originalCoverage < 70
+      ? 'partial'
+      : 'match';
+
+  const computeProbability = ({
+    average,
+    coverage,
+    experience,
+    designation,
+    impact,
+    highlight,
+    certification,
+  }) => {
+    let probability =
+      average * 0.3 +
+      coverage * 0.25 +
+      experience * 0.15 +
+      designation * 0.1 +
+      (impact || average) * 0.1 +
+      certification * 0.05 +
+      highlight * 0.05;
+    probability = clamp(Math.round(probability), 5, 97);
+    const level = probability >= 75 ? 'High' : probability >= 55 ? 'Medium' : 'Low';
+    return { probability, level };
+  };
+
+  const { probability: baselineProbability, level: baselineLevel } = computeProbability({
+    average: baselineMetricAverage,
+    coverage: originalCoverage,
+    experience: experienceScore,
+    designation: baselineDesignation.designationScore,
+    impact: baselineImpactScore,
+    highlight: baselineHighlightScore,
+    certification: certificationScore,
+  });
+
+  const { probability, level } = computeProbability({
+    average: metricAverage,
+    coverage: skillCoverage,
+    experience: experienceScore,
+    designation: designationScore,
+    impact: impactScore,
+    highlight: highlightScore,
+    certification: certificationScore,
+  });
+
+  const probabilityMessage = buildProbabilityNarrative({
+    probability,
+    level,
+    skillCoverage,
+    skillsStatus,
+    missing,
+    added,
+    designationStatus,
+    experienceStatus,
+    certificationStatus,
+  });
+  const baselineProbabilityMessage = buildProbabilityNarrative({
+    probability: baselineProbability,
+    level: baselineLevel,
+    skillCoverage: originalCoverage,
+    skillsStatus: baselineSkillsStatus,
+    missing: baselineMissing,
+    added: [],
+    designationStatus: baselineDesignation.designationStatus,
+    experienceStatus,
+    certificationStatus,
+  });
   const baseSummary = 'These skills and highlights were added to match the JD. Please prepare for the interview accordingly.';
   const summary = added.length
     ? `${baseSummary} Added focus areas: ${summarizeList(added, { limit: 4 })}.`
@@ -5547,6 +5713,19 @@ function buildSelectionInsights(context = {}) {
     probability,
     level,
     message: probabilityMessage,
+    rationale: probabilityMessage,
+    before: {
+      probability: baselineProbability,
+      level: baselineLevel,
+      message: baselineProbabilityMessage,
+      rationale: baselineProbabilityMessage,
+    },
+    after: {
+      probability,
+      level,
+      message: probabilityMessage,
+      rationale: probabilityMessage,
+    },
     summary,
     jobFitAverage,
     jobFitScores,
@@ -7316,6 +7495,11 @@ async function generateEnhancedDocumentsResponse({
   let resumeSkillsList = Array.isArray(resumeSkills)
     ? resumeSkills
     : extractResumeSkills(resumeText);
+  const baselineScoreBreakdown = buildScoreBreakdown(resumeText, {
+    jobSkills,
+    resumeSkills: resumeSkillsList,
+    jobText: jobDescription,
+  });
   let originalMatchResult = originalMatch;
   if (!originalMatchResult || !Array.isArray(originalMatchResult.table)) {
     originalMatchResult = calculateMatchScore(jobSkills, resumeSkillsList);
@@ -7842,6 +8026,7 @@ async function generateEnhancedDocumentsResponse({
     missingSkills: bestMatch.newSkills,
     addedSkills,
     scoreBreakdown: finalScoreBreakdown,
+    baselineScoreBreakdown,
     resumeExperience,
     linkedinExperience,
     knownCertificates,
@@ -7888,6 +8073,7 @@ async function generateEnhancedDocumentsResponse({
     },
     manualCertificates,
     selectionProbability: selectionInsights?.probability ?? null,
+    selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
     selectionInsights,
     templateContext: {
       template1,
@@ -9349,6 +9535,7 @@ app.post(
       },
       manualCertificates,
       selectionProbability: selectionInsights?.probability ?? null,
+      selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
       selectionInsights,
       templateContext: templateContextInput,
     };

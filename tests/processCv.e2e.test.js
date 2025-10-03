@@ -32,8 +32,15 @@ describe('end-to-end CV processing', () => {
         jobFitScores: expect.any(Array),
       })
     );
+    expect(typeof response.body.selectionProbabilityBefore).toBe('number');
     const probability = response.body.selectionInsights.probability;
     expect(probability === null || typeof probability === 'number').toBe(true);
+    expect(response.body.selectionInsights.before).toEqual(
+      expect.objectContaining({ probability: expect.any(Number), level: expect.any(String) })
+    );
+    expect(response.body.selectionInsights.after).toEqual(
+      expect.objectContaining({ probability: expect.any(Number), level: expect.any(String) })
+    );
   });
 
   test('rejects uploads that are classified as job descriptions', async () => {
