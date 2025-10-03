@@ -159,6 +159,70 @@ const highlightToneStyles = {
   info: 'bg-sky-50 border-sky-200 text-sky-800'
 }
 
+function formatStatusLabel(status) {
+  if (!status) return ''
+  const normalized = String(status).replace(/[-_]/g, ' ').trim()
+  if (!normalized) return ''
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+const jobFitToneStyles = {
+  match: {
+    container: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    bar: 'bg-emerald-500',
+    chip: 'bg-emerald-500/10 text-emerald-700',
+    scoreText: 'text-emerald-700'
+  },
+  success: {
+    container: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    bar: 'bg-emerald-500',
+    chip: 'bg-emerald-500/10 text-emerald-700',
+    scoreText: 'text-emerald-700'
+  },
+  partial: {
+    container: 'bg-amber-50 border-amber-200 text-amber-800',
+    bar: 'bg-amber-500',
+    chip: 'bg-amber-500/10 text-amber-700',
+    scoreText: 'text-amber-700'
+  },
+  info: {
+    container: 'bg-sky-50 border-sky-200 text-sky-800',
+    bar: 'bg-sky-500',
+    chip: 'bg-sky-500/10 text-sky-700',
+    scoreText: 'text-sky-700'
+  },
+  gap: {
+    container: 'bg-amber-50 border-amber-200 text-amber-800',
+    bar: 'bg-amber-500',
+    chip: 'bg-amber-500/10 text-amber-700',
+    scoreText: 'text-amber-700'
+  },
+  warning: {
+    container: 'bg-amber-50 border-amber-200 text-amber-800',
+    bar: 'bg-amber-500',
+    chip: 'bg-amber-500/10 text-amber-700',
+    scoreText: 'text-amber-700'
+  },
+  mismatch: {
+    container: 'bg-amber-50 border-amber-200 text-amber-800',
+    bar: 'bg-amber-500',
+    chip: 'bg-amber-500/10 text-amber-700',
+    scoreText: 'text-amber-700'
+  },
+  unknown: {
+    container: 'bg-slate-50 border-slate-200 text-slate-700',
+    bar: 'bg-slate-400',
+    chip: 'bg-slate-400/20 text-slate-600',
+    scoreText: 'text-slate-700'
+  },
+  default: {
+    container: 'bg-slate-50 border-slate-200 text-slate-700',
+    bar: 'bg-slate-400',
+    chip: 'bg-slate-400/20 text-slate-600',
+    scoreText: 'text-slate-700'
+  }
+}
+
 const templateOptions = [
   {
     id: 'modern',
@@ -1369,6 +1433,27 @@ function App() {
     return items
   }, [match, certificateInsights])
 
+  const jobFitScores = useMemo(() => {
+    if (!Array.isArray(selectionInsights?.jobFitScores)) {
+      return []
+    }
+    return selectionInsights.jobFitScores.map((metric) => {
+      const rawScore = typeof metric?.score === 'number' ? metric.score : 0
+      const safeScore = Number.isFinite(rawScore)
+        ? Math.min(Math.max(Math.round(rawScore), 0), 100)
+        : 0
+      return {
+        ...metric,
+        score: safeScore
+      }
+    })
+  }, [selectionInsights])
+
+  const jobFitAverage =
+    typeof selectionInsights?.jobFitAverage === 'number' && Number.isFinite(selectionInsights.jobFitAverage)
+      ? Math.min(Math.max(Math.round(selectionInsights.jobFitAverage), 0), 100)
+      : null
+
   const deltaSummary = useMemo(
     () =>
       deriveDeltaSummary({
@@ -2056,6 +2141,54 @@ function App() {
               {selectionInsights.summary ||
                 'Your chances of selection have increased. Prepare for the interview and learn these skills!'}
             </p>
+            {jobFitScores.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">
+                    Job Fit Breakdown
+                  </h3>
+                  {typeof jobFitAverage === 'number' && (
+                    <span className="inline-flex items-center justify-center rounded-full bg-emerald-500/10 px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-widest text-emerald-700">
+                      Avg {jobFitAverage}%
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {jobFitScores.map((metric) => {
+                    const tone = jobFitToneStyles[metric.status] || jobFitToneStyles.default
+                    const safeScore = typeof metric.score === 'number' ? metric.score : 0
+                    return (
+                      <div
+                        key={metric.key}
+                        className={`rounded-2xl border px-4 py-3 shadow-sm ${tone.container}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold">{metric.label}</p>
+                            {metric.status && (
+                              <span
+                                className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-widest ${tone.chip}`}
+                              >
+                                {formatStatusLabel(metric.status)}
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-lg font-bold ${tone.scoreText}`}>{safeScore}%</span>
+                        </div>
+                        <div className="mt-3 h-2 w-full rounded-full bg-white/60" role="img" aria-label={`${metric.label} score ${safeScore}%`}>
+                          <div
+                            className={`h-full rounded-full ${tone.bar}`}
+                            style={{ width: `${Math.min(Math.max(safeScore, 0), 100)}%` }}
+                            aria-hidden="true"
+                          />
+                        </div>
+                        <p className="mt-2 text-xs leading-relaxed">{metric.message}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             {selectionInsights.flags?.length > 0 && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {selectionInsights.flags.map((flag) => {
