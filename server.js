@@ -3542,6 +3542,7 @@ async function rewriteSectionsWithGemini(
       project: '',
       modifiedTitle: '',
       addedSkills: [],
+      sanitizedFallbackUsed: true,
     };
   }
   try {
@@ -3621,6 +3622,7 @@ async function rewriteSectionsWithGemini(
         project: parsed.projectSnippet || parsed.project || '',
         modifiedTitle: parsed.latestRoleTitle || '',
         addedSkills: parsed.addedSkills || [],
+        sanitizedFallbackUsed: false,
       };
     }
   } catch {
@@ -3632,6 +3634,7 @@ async function rewriteSectionsWithGemini(
     project: '',
     modifiedTitle: '',
     addedSkills: [],
+    sanitizedFallbackUsed: true,
   };
 }
 
@@ -9104,6 +9107,7 @@ async function generateEnhancedDocumentsResponse({
   let projectText = '';
   let modifiedTitle = '';
   let geminiAddedSkills = [];
+  let sanitizedFallbackUsed = false;
 
   if (!isTestEnvironment) {
     try {
@@ -9135,6 +9139,7 @@ async function generateEnhancedDocumentsResponse({
       projectText = enhanced.project;
       modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
       geminiAddedSkills = enhanced.addedSkills || [];
+      sanitizedFallbackUsed = Boolean(enhanced.sanitizedFallbackUsed);
       logStructured('info', 'generation_section_rewrite_completed', {
         ...logContext,
         modifiedTitle: modifiedTitle || '',
