@@ -3834,7 +3834,7 @@ async function rewriteSectionsWithGemini(
     basePlaceholderMap
   );
   const fallbackResult = {
-    text: fallbackResolved,
+    text: sanitizedBaseText,
     resolvedText: fallbackResolved,
     tokenizedText: sanitizedBaseText,
     project: '',
@@ -3900,7 +3900,7 @@ async function rewriteSectionsWithGemini(
         ? parsed.addedSkills.filter((skill) => typeof skill === 'string' && skill.trim())
         : [];
       return {
-        text: outputText,
+        text: cleaned,
         resolvedText: outputText,
         tokenizedText: cleaned,
         project: parsed.projectSnippet || parsed.project || '',
@@ -10011,6 +10011,7 @@ async function generateEnhancedDocumentsResponse({
   const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
 
   let text = resumeText;
+  let resolvedTextForContext = null;
   let projectText = '';
   let modifiedTitle = '';
   let geminiAddedSkills = [];
@@ -10049,14 +10050,17 @@ async function generateEnhancedDocumentsResponse({
           ? enhanced.placeholders
           : {};
       const tokenizedEnhancedText =
-        typeof enhanced.text === 'string' && enhanced.text.trim()
-          ? enhanced.text
-          : resumeText;
+        typeof enhanced.tokenizedText === 'string' && enhanced.tokenizedText.trim()
+          ? enhanced.tokenizedText
+          : typeof enhanced.text === 'string' && enhanced.text.trim()
+            ? enhanced.text
+            : resumeText;
       const resolvedEnhancedText =
         typeof enhanced.resolvedText === 'string' && enhanced.resolvedText.trim()
           ? enhanced.resolvedText
           : resolveEnhancementTokens(tokenizedEnhancedText, enhancementTokenMap);
-      text = resolvedEnhancedText;
+      text = tokenizedEnhancedText;
+      resolvedTextForContext = resolvedEnhancedText;
       projectText = enhanced.project;
       modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
       geminiAddedSkills = enhanced.addedSkills || [];
@@ -10074,7 +10078,16 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  let combinedProfile = text;
+  const resolvedCombinedProfileCandidate =
+    typeof resolvedTextForContext === 'string' && resolvedTextForContext.trim()
+      ? resolvedTextForContext
+      : resolveEnhancementTokens(text, enhancementTokenMap);
+
+  let combinedProfile =
+    typeof resolvedCombinedProfileCandidate === 'string' &&
+    resolvedCombinedProfileCandidate.trim()
+      ? resolvedCombinedProfileCandidate
+      : resumeText;
 
   const versionsContext = {
     cvText: combinedProfile,
@@ -10114,10 +10127,14 @@ async function generateEnhancedDocumentsResponse({
   await ensureProjectSummary();
 
   const sanitizeOptions = buildSanitizeOptions();
+  const sanitizedResolvedProfile =
+    sanitizeGeneratedText(combinedProfile, sanitizeOptions);
+  const sanitizedTokenizedText = sanitizeGeneratedText(text, sanitizeOptions);
   let baseResumeText =
-    sanitizeGeneratedText(text, sanitizeOptions) ||
-    sanitizeGeneratedText(combinedProfile, sanitizeOptions) ||
-    combinedProfile;
+    sanitizedResolvedProfile ||
+    sanitizedTokenizedText ||
+    combinedProfile ||
+    text;
 
   if (!sanitizedFallbackUsed && canUseGenerativeModel) {
     try {
