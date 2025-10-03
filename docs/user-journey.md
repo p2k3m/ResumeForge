@@ -8,9 +8,9 @@ This guide walks a candidate through ResumeForge end to end so every action has 
 - **Expected result:** If the document passes validation, the upload progress bar completes and the session status changes to **Résumé received**. When the file is rejected the UI surfaces a blocking alert (for example, “This looks like a presentation deck. Please upload a CV.”) and the candidate can try again without losing form progress.
 
 ## 2. Supply the job description
-- **What to do:** Paste the entire job description into the textbox.
-- **Behind the scenes:** The backend accepts the pasted text as the canonical JD—no scraping or external fetch is attempted—so protected or expired postings no longer block the flow.
-- **Expected result:** The candidate sees the pasted JD captured instantly and can move straight to scoring without worrying about URL accessibility.
+- **What to do:** Enter the job post URL or paste the entire job description into the textbox.
+- **Behind the scenes:** The backend fetches the JD when the URL allows it. If the site blocks automated access, the flow immediately surfaces an error, focuses the paste box, and requires the candidate to provide the text manually before continuing.
+- **Expected result:** The candidate either sees the JD captured automatically or receives clear instructions to paste it, ensuring the subsequent scoring always uses the actual job description content.
 
 ## 3. Launch the ATS analysis
 - **What to do:** Press **Evaluate me against the JD**.
@@ -28,6 +28,6 @@ This guide walks a candidate through ResumeForge end to end so every action has 
 - **Expected result:** The candidate receives ATS-optimised résumé PDFs (2025 design), a tailored cover letter, and a summary of the enhancements to reference during interviews. Sessions automatically expire after the retention window to satisfy GDPR requirements.
 
 ## Troubleshooting quick reference
-- **Blocked job description:** Already resolved—the experience now always relies on the pasted text rather than remote fetching.
+- **Blocked job description:** Provide the full JD text manually when prompted. The system halts the flow until the paste box is filled so analysis never runs without the complete description.
 - **Missing configuration error:** Ask an administrator to supply the required environment variables or runtime config file (see README).
 - **Need to restart:** Refreshing the browser restores the latest saved state from DynamoDB so the candidate never loses accepted improvements.

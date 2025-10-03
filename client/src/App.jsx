@@ -774,6 +774,7 @@ function App() {
   const [profileUrl, setProfileUrl] = useState('')
   const [credlyUrl, setCredlyUrl] = useState('')
   const [manualJobDescription, setManualJobDescription] = useState('')
+  const [jobDescriptionUrl, setJobDescriptionUrl] = useState('')
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -800,8 +801,10 @@ function App() {
   const [jobId, setJobId] = useState('')
   const [templateContext, setTemplateContext] = useState(null)
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
+  const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
+  const manualJobDescriptionRef = useRef(null)
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
@@ -1310,12 +1313,21 @@ function App() {
   }
 
   const handleScoreSubmit = async () => {
+    const manualText = manualJobDescription.trim()
+    const jobUrl = jobDescriptionUrl.trim()
+
     if (!cvFile) {
       setError('Please upload a CV before submitting.')
       return
     }
-    if (!manualJobDescription.trim()) {
+    if (manualJobDescriptionRequired && !manualText) {
       setError('Please paste the full job description before continuing.')
+      manualJobDescriptionRef.current?.focus?.()
+      return
+    }
+    if (!manualText && !jobUrl) {
+      setError('Provide a job description URL or paste the full job description before continuing.')
+      manualJobDescriptionRef.current?.focus?.()
       return
     }
 
@@ -1329,8 +1341,11 @@ function App() {
       const formData = new FormData()
       formData.append('resume', cvFile)
       formData.append('linkedinProfileUrl', profileUrl)
-      if (manualJobDescription.trim()) {
-        formData.append('manualJobDescription', manualJobDescription.trim())
+      if (manualText) {
+        formData.append('manualJobDescription', manualText)
+      }
+      if (jobUrl) {
+        formData.append('jobDescriptionUrl', jobUrl)
       }
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       if (manualCertificatesInput.trim()) {
@@ -1361,6 +1376,16 @@ function App() {
           }
           if (data?.error?.code && data?.error?.code !== 'PROCESSING_FAILED') {
             message = `${message} (${data.error.code})`
+          }
+          const manualRequired = data?.error?.details?.manualInputRequired === true
+          const fetchReason = typeof data?.error?.details?.reason === 'string' ? data.error.details.reason : ''
+          if (manualRequired) {
+            setManualJobDescriptionRequired(true)
+            manualJobDescriptionRef.current?.focus?.()
+            if (fetchReason && fetchReason.toUpperCase() === 'FETCH_BLOCKED') {
+              message =
+                'This job post blocks automated access. Paste the full job description to continue.'
+            }
           }
         } catch {
           try {
@@ -1511,6 +1536,8 @@ function App() {
       setCertificateInsights(certificateInsightsValue)
       const selectionInsightsValue = data.selectionInsights || null
       setSelectionInsights(selectionInsightsValue)
+
+      setManualJobDescriptionRequired(false)
 
       setInitialAnalysisSnapshot({
         resumeText: originalResumeSnapshot,
@@ -2361,8 +2388,12 @@ function App() {
     setPreviewSuggestion(null)
   }, [])
 
-  const scoreDisabled =
-    !profileUrl || !manualJobDescription.trim() || !cvFile || isProcessing
+  const hasManualJobDescriptionInput = Boolean(manualJobDescription && manualJobDescription.trim())
+  const hasJobDescriptionUrlInput = Boolean(jobDescriptionUrl && jobDescriptionUrl.trim())
+  const jobDescriptionReady = manualJobDescriptionRequired
+    ? hasManualJobDescriptionInput
+    : hasManualJobDescriptionInput || hasJobDescriptionUrlInput
+  const scoreDisabled = !profileUrl || !cvFile || isProcessing || !jobDescriptionReady
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-purple-200 to-purple-300 flex flex-col items-center p-4 md:p-8">
@@ -2432,9 +2463,17 @@ function App() {
               onChange={(e) => setProfileUrl(e.target.value)}
               className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
             />
+            <input
+              type="url"
+              placeholder="Job Description URL (optional)"
+              value={jobDescriptionUrl}
+              onChange={(e) => setJobDescriptionUrl(e.target.value)}
+              className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+            />
             <div className="md:col-span-2 space-y-2">
               <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
-                Paste Full Job Description <span className="text-rose-600">*</span>
+                Paste Full Job Description{' '}
+                {manualJobDescriptionRequired && <span className="text-rose-600">*</span>}
               </label>
               <textarea
                 id="manual-job-description"
@@ -2442,10 +2481,19 @@ function App() {
                 onChange={(e) => setManualJobDescription(e.target.value)}
                 placeholder="Paste the entire job post here."
                 className="w-full h-32 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                required
+                required={manualJobDescriptionRequired}
+                ref={manualJobDescriptionRef}
               />
-              <p className="text-xs text-purple-500">
-                We&apos;ll analyse this text directly—no URL fetching needed.
+              <p
+                className={`text-xs ${
+                  manualJobDescriptionRequired
+                    ? 'text-rose-600 font-semibold'
+                    : 'text-purple-500'
+                }`}
+              >
+                {manualJobDescriptionRequired
+                  ? 'This job post blocked automatic access. Paste the full JD to continue.'
+                  : 'Paste the JD text here or provide the job post URL above and we will fetch it automatically.'}
               </p>
             </div>
             <input
