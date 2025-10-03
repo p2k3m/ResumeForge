@@ -1572,6 +1572,8 @@ function App() {
       setCertificateInsights(certificateInsightsValue)
       const selectionInsightsValue = data.selectionInsights || null
       setSelectionInsights(selectionInsightsValue)
+      const changeLogValue = Array.isArray(data.changeLog) ? data.changeLog : []
+      setChangeLog(changeLogValue)
 
       setManualJobDescriptionRequired(false)
 
@@ -1589,7 +1591,8 @@ function App() {
         match: cloneData(matchPayload),
         scoreBreakdown: cloneData(normalizedBreakdown),
         outputFiles: cloneData(outputFilesValue),
-        templateContext: cloneData(templateContextValue)
+        templateContext: cloneData(templateContextValue),
+        changeLog: cloneData(changeLogValue)
       })
     } catch (err) {
       console.error('Unable to enhance CV', err)
@@ -1671,7 +1674,10 @@ function App() {
     )
     setTemplateContext(templateContextValue)
 
-    setChangeLog([])
+    const snapshotChangeLog = Array.isArray(snapshot.changeLog)
+      ? cloneData(snapshot.changeLog)
+      : []
+    setChangeLog(snapshotChangeLog || [])
     setImprovementResults((prev) =>
       prev.map((item) => ({
         ...item,
@@ -2127,6 +2133,79 @@ function App() {
     [API_BASE_URL, jobDescriptionText, jobSkills]
   )
 
+  const persistChangeLogEntry = useCallback(
+    async (entry) => {
+      if (!entry || !jobId || !profileUrl || !profileUrl.trim()) {
+        return null
+      }
+
+      const payload = {
+        jobId,
+        linkedinProfileUrl: profileUrl.trim(),
+        entry
+      }
+
+      const response = await fetch(buildApiUrl(API_BASE_URL, '/api/change-log'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}))
+        const message =
+          errPayload?.error?.message ||
+          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
+          (typeof errPayload?.error === 'string' ? errPayload.error : undefined) ||
+          'Unable to store the change log entry.'
+        throw new Error(message)
+      }
+
+      const data = await response.json()
+      const entries = Array.isArray(data.changeLog) ? data.changeLog : []
+      setChangeLog(entries)
+      return entries
+    },
+    [API_BASE_URL, jobId, profileUrl]
+  )
+
+  const removeChangeLogEntry = useCallback(
+    async (entryId) => {
+      if (!entryId || !jobId || !profileUrl || !profileUrl.trim()) {
+        return null
+      }
+
+      const payload = {
+        jobId,
+        linkedinProfileUrl: profileUrl.trim(),
+        remove: true,
+        entryId
+      }
+
+      const response = await fetch(buildApiUrl(API_BASE_URL, '/api/change-log'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}))
+        const message =
+          errPayload?.error?.message ||
+          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
+          (typeof errPayload?.error === 'string' ? errPayload.error : undefined) ||
+          'Unable to remove the change log entry.'
+        throw new Error(message)
+      }
+
+      const data = await response.json()
+      const entries = Array.isArray(data.changeLog) ? data.changeLog : []
+      setChangeLog(entries)
+      return entries
+    },
+    [API_BASE_URL, jobId, profileUrl]
+  )
+
   const handleGenerateEnhancedDocs = useCallback(async () => {
     if (!jobId) {
       setError('Upload your resume and job description before generating downloads.')
@@ -2212,6 +2291,7 @@ function App() {
         data && typeof data.templateContext === 'object' ? data.templateContext : null
       )
       setTemplateContext(templateContextValue)
+      setChangeLog((prev) => (Array.isArray(data.changeLog) ? data.changeLog : prev))
 
       const probabilityValue =
         typeof data.selectionProbability === 'number'
@@ -2321,6 +2401,8 @@ function App() {
     const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
     const changeLogEntry = buildChangeLogEntry(suggestion)
 
+    let previousChangeLog = null
+
     setImprovementResults((prev) =>
       prev.map((item) =>
         item.id === id
@@ -2334,14 +2416,24 @@ function App() {
     }
 
     if (changeLogEntry) {
+      const entryPayload = { ...changeLogEntry }
       setChangeLog((prev) => {
-        if (prev.some((entry) => entry.id === changeLogEntry.id)) {
+        previousChangeLog = prev
+        if (prev.some((entry) => entry.id === entryPayload.id)) {
           return prev.map((entry) =>
-            entry.id === changeLogEntry.id ? { ...entry, ...changeLogEntry } : entry
+            entry.id === entryPayload.id ? { ...entry, ...entryPayload } : entry
           )
         }
-        return [changeLogEntry, ...prev]
+        return [entryPayload, ...prev]
       })
+
+      try {
+        await persistChangeLogEntry(entryPayload)
+      } catch (err) {
+        console.error('Persisting change log entry failed', err)
+        setError(err.message || 'Unable to store the change log entry.')
+        setChangeLog(previousChangeLog || [])
+      }
     }
 
     try {
@@ -2358,6 +2450,12 @@ function App() {
             entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
           )
         )
+        try {
+          await persistChangeLogEntry({ ...changeLogEntry, scoreDelta: deltaValue })
+        } catch (err) {
+          console.error('Updating change log entry failed', err)
+          setError(err.message || 'Unable to update the change log entry.')
+        }
       }
 
       setImprovementResults((prev) =>
@@ -2389,7 +2487,7 @@ function App() {
     }
   }
 
-  const handleRejectImprovement = (id) => {
+  const handleRejectImprovement = async (id) => {
     setImprovementResults((prev) =>
       prev.map((item) =>
         item.id === id
@@ -2397,7 +2495,18 @@ function App() {
           : item
       )
     )
-    setChangeLog((prev) => prev.filter((entry) => entry.id !== id))
+    let previousChangeLog = null
+    setChangeLog((prev) => {
+      previousChangeLog = prev
+      return prev.filter((entry) => entry.id !== id)
+    })
+    try {
+      await removeChangeLogEntry(id)
+    } catch (err) {
+      console.error('Removing change log entry failed', err)
+      setError(err.message || 'Unable to remove the change log entry.')
+      setChangeLog(previousChangeLog || [])
+    }
   }
 
   const handlePreviewImprovement = useCallback(
