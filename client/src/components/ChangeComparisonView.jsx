@@ -5,6 +5,18 @@ const viewOptions = [
   { key: 'stack', label: 'Sequential' }
 ]
 
+const itemizedChangeTypeLabels = {
+  added: 'Added',
+  removed: 'Removed',
+  replaced: 'Replaced'
+}
+
+const itemizedChangeTypeStyles = {
+  added: 'bg-emerald-100 text-emerald-700 border border-emerald-200',
+  removed: 'bg-rose-100 text-rose-700 border border-rose-200',
+  replaced: 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+}
+
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -24,6 +36,44 @@ function normaliseList(items) {
   return output
 }
 
+function normaliseItemizedChanges(changes) {
+  if (!Array.isArray(changes)) return []
+  const map = new Map()
+  changes.forEach((change) => {
+    if (!change || typeof change !== 'object') return
+    const itemText = typeof change.item === 'string' ? change.item.trim() : ''
+    const changeType =
+      typeof change.changeType === 'string' ? change.changeType.trim().toLowerCase() : ''
+    if (!itemText || !changeType) return
+    const key = `${changeType}::${itemText.toLowerCase()}`
+    const entry = map.get(key) || { item: itemText, changeType, reasons: [] }
+    const reasonList = normaliseList(
+      Array.isArray(change.reasons)
+        ? change.reasons
+        : typeof change.reason === 'string'
+          ? [change.reason]
+          : []
+    )
+    reasonList.forEach((reason) => {
+      if (!reason) return
+      const lower = reason.toLowerCase()
+      if (!entry.reasons.some((existing) => existing.toLowerCase() === lower)) {
+        entry.reasons.push(reason)
+      }
+    })
+    map.set(key, entry)
+  })
+  const changeTypeOrder = { added: 0, replaced: 1, removed: 2 }
+  return Array.from(map.values()).sort((a, b) => {
+    const orderA = changeTypeOrder[a.changeType] ?? 99
+    const orderB = changeTypeOrder[b.changeType] ?? 99
+    if (orderA !== orderB) {
+      return orderA - orderB
+    }
+    return a.item.localeCompare(b.item, undefined, { sensitivity: 'base' })
+  })
+}
+
 function ChangeComparisonView({
   before,
   after,
@@ -32,6 +82,7 @@ function ChangeComparisonView({
   summarySegments = [],
   addedItems = [],
   removedItems = [],
+  itemizedChanges = [],
   variant = 'compact',
   className = ''
 }) {
@@ -96,6 +147,13 @@ function ChangeComparisonView({
       (Array.isArray(removedItems) && removedItems.length > 0)
     )
   }, [summarySegments, addedItems, removedItems])
+
+  const normalizedItemizedChanges = useMemo(
+    () => normaliseItemizedChanges(itemizedChanges),
+    [itemizedChanges]
+  )
+
+  const hasItemizedChanges = normalizedItemizedChanges.length > 0
 
   const containerClass = `space-y-4 ${className}`.trim()
   const baseContentClass =
@@ -179,6 +237,47 @@ function ChangeComparisonView({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {hasItemizedChanges && (
+        <div className="space-y-3 rounded-2xl border border-indigo-100 bg-white/75 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
+              Itemised change log
+            </p>
+            <span className="text-xs font-semibold text-indigo-600">
+              {normalizedItemizedChanges.length} item
+              {normalizedItemizedChanges.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <ul className="space-y-3">
+            {normalizedItemizedChanges.map((change) => (
+              <li
+                key={`${change.changeType}-${change.item}`}
+                className="rounded-xl border border-slate-200 bg-white/85 p-3 text-sm text-slate-700"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="font-semibold text-slate-800">{change.item}</p>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                      itemizedChangeTypeStyles[change.changeType] ||
+                      'bg-slate-100 text-slate-600 border border-slate-200'
+                    }`}
+                  >
+                    {itemizedChangeTypeLabels[change.changeType] || 'Updated'}
+                  </span>
+                </div>
+                {change.reasons.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-xs text-slate-600 list-disc pl-5">
+                    {change.reasons.map((reason, index) => (
+                      <li key={`${change.changeType}-${change.item}-reason-${index}`}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
