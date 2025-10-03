@@ -866,7 +866,7 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
     'Indicates how certain ResumeForge is that this change will resonate with ATS scoring and recruiter expectations based on the source analysis.'
   const deltaDescription =
     'Estimated impact on your ATS score if you apply this improvement. Positive values mean a projected lift; negative values signal a potential drop.'
-  const acceptDisabled = Boolean(suggestion.rescorePending)
+  const acceptDisabled = Boolean(suggestion.rescorePending || suggestion.accepted)
   const improvementHints = useMemo(() => {
     if (!Array.isArray(suggestion.improvementSummary)) return []
     return suggestion.improvementSummary.map((segment) => buildActionableHint(segment)).filter(Boolean)
@@ -969,7 +969,7 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
             acceptDisabled ? 'opacity-70 cursor-not-allowed' : ''
           }`}
         >
-          Accept
+          {suggestion.accepted ? 'Applied' : 'Accept'}
         </button>
       </div>
     </div>
@@ -1008,6 +1008,7 @@ function App() {
   const [templateContext, setTemplateContext] = useState(null)
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
+  const [enhanceAllSummaryText, setEnhanceAllSummaryText] = useState('')
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
@@ -1077,6 +1078,15 @@ function App() {
       setSelectedTemplate(canonical)
     }
   }, [templateContext, selectedTemplate])
+
+  useEffect(() => {
+    const hasAcceptedEnhanceAll = improvementResults.some(
+      (item) => item?.type === 'enhance-all' && item?.accepted
+    )
+    if (!hasAcceptedEnhanceAll && enhanceAllSummaryText) {
+      setEnhanceAllSummaryText('')
+    }
+  }, [enhanceAllSummaryText, improvementResults])
 
   const handleTemplateSelect = useCallback(
     (templateId) => {
@@ -2093,109 +2103,6 @@ function App() {
       changeLog.length > 0
   )
 
-  const handleImprovementClick = async (type) => {
-    if (improvementLockRef.current) {
-      setError('Please wait for the current improvement to finish before requesting another one.')
-      return
-    }
-    if (!jobId) {
-      setError('Upload your resume and complete scoring before requesting improvements.')
-      return
-    }
-    if (!improvementAvailable) {
-      setError(
-        improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
-      )
-      return
-    }
-    improvementLockRef.current = true
-    setActiveImprovement(type)
-    setError('')
-    try {
-      const requestUrl = buildApiUrl(API_BASE_URL, `/api/${type}`)
-      const payload = {
-        jobId,
-        linkedinProfileUrl: profileUrl.trim(),
-        resumeText,
-        jobDescription: jobDescriptionText,
-        jobTitle: match?.modifiedTitle || match?.originalTitle || '',
-        currentTitle: match?.modifiedTitle || match?.originalTitle || '',
-        jobSkills,
-        resumeSkills,
-        missingSkills: match?.missingSkills || [],
-        knownCertificates,
-        manualCertificates: manualCertificatesData
-      }
-      if (manualCertificatesInput.trim()) {
-        payload.manualCertificates = manualCertificatesInput.trim()
-      }
-
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errPayload = await response.json().catch(() => ({}))
-        const serverMessage =
-          errPayload?.error?.message ||
-          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
-          (typeof errPayload?.error === 'string' ? errPayload.error : undefined)
-        const message =
-          response.status >= 500
-            ? CV_GENERATION_ERROR_MESSAGE
-            : serverMessage || 'Unable to generate improvement.'
-        throw new Error(message)
-      }
-
-      const data = await response.json()
-      const improvementSummary = Array.isArray(data.improvementSummary)
-        ? data.improvementSummary
-        : []
-      let explanation = (data.explanation || 'Change generated successfully.').trim()
-      if (!explanation) {
-        explanation = 'Change generated successfully.'
-      }
-      if (type === 'enhance-all' && improvementSummary.length) {
-        const combinedSummary = formatEnhanceAllSummary(improvementSummary)
-        if (combinedSummary) {
-          const meaningfulBase =
-            explanation && !/^applied deterministic improvements/i.test(explanation)
-          explanation = meaningfulBase
-            ? `${explanation} ${combinedSummary}`
-            : combinedSummary
-        }
-      }
-      const suggestion = {
-        id: `${type}-${Date.now()}`,
-        type,
-        title:
-          data.title || improvementActions.find((action) => action.key === type)?.label || 'Improvement',
-        beforeExcerpt: data.beforeExcerpt || '',
-        afterExcerpt: data.afterExcerpt || '',
-        explanation,
-        updatedResume: data.updatedResume || resumeText,
-        confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
-        accepted: null,
-        improvementSummary,
-        scoreDelta: null,
-        rescorePending: false,
-        rescoreError: ''
-      }
-      setImprovementResults((prev) => [suggestion, ...prev])
-    } catch (err) {
-      console.error('Improvement request failed', err)
-      const errorMessage =
-        (typeof err?.message === 'string' && err.message.trim()) ||
-        CV_GENERATION_ERROR_MESSAGE
-      setError(errorMessage)
-    } finally {
-      setActiveImprovement('')
-      improvementLockRef.current = false
-    }
-  }
-
   const rescoreAfterImprovement = useCallback(
     async ({ updatedResume, baselineScore, previousMissingSkills }) => {
       const resumeDraft = typeof updatedResume === 'string' ? updatedResume : ''
@@ -2337,6 +2244,119 @@ function App() {
       return entries
     },
     [API_BASE_URL, jobId, profileUrl]
+  )
+
+  const applyImprovementSuggestion = useCallback(
+    async (suggestion) => {
+      if (!suggestion || !suggestion.id) {
+        return false
+      }
+
+      const id = suggestion.id
+      const updatedResumeDraft = suggestion.updatedResume || resumeText
+      const baselineScore = Number.isFinite(match?.enhancedScore)
+        ? match.enhancedScore
+        : Number.isFinite(match?.originalScore)
+          ? match.originalScore
+          : null
+      const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
+      const changeLogEntry = buildChangeLogEntry(suggestion)
+
+      let previousChangeLog = null
+
+      setImprovementResults((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? { ...item, accepted: true, rescorePending: true, rescoreError: '' }
+            : item
+        )
+      )
+
+      if (updatedResumeDraft) {
+        setResumeText(updatedResumeDraft)
+      }
+
+      if (changeLogEntry) {
+        const entryPayload = { ...changeLogEntry }
+        setChangeLog((prev) => {
+          previousChangeLog = prev
+          if (prev.some((entry) => entry.id === entryPayload.id)) {
+            return prev.map((entry) => (entry.id === entryPayload.id ? { ...entry, ...entryPayload } : entry))
+          }
+          return [entryPayload, ...prev]
+        })
+
+        try {
+          await persistChangeLogEntry(entryPayload)
+        } catch (err) {
+          console.error('Persisting change log entry failed', err)
+          setError(err.message || 'Unable to store the change log entry.')
+          setChangeLog(previousChangeLog || [])
+        }
+      }
+
+      try {
+        const result = await rescoreAfterImprovement({
+          updatedResume: updatedResumeDraft,
+          baselineScore,
+          previousMissingSkills
+        })
+        const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
+
+        if (changeLogEntry && Number.isFinite(deltaValue)) {
+          setChangeLog((prev) =>
+            prev.map((entry) =>
+              entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
+            )
+          )
+          try {
+            await persistChangeLogEntry({ ...changeLogEntry, scoreDelta: deltaValue })
+          } catch (err) {
+            console.error('Updating change log entry failed', err)
+            setError(err.message || 'Unable to update the change log entry.')
+          }
+        }
+
+        setImprovementResults((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  rescorePending: false,
+                  scoreDelta: deltaValue,
+                  rescoreError: ''
+                }
+              : item
+          )
+        )
+      } catch (err) {
+        console.error('Improvement rescore failed', err)
+        setError(err.message || 'Unable to update scores after applying improvement.')
+        setImprovementResults((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  rescorePending: false,
+                  rescoreError: err.message || 'Unable to refresh ATS scores.'
+                }
+              : item
+          )
+        )
+      }
+
+      return true
+    },
+    [
+      match,
+      persistChangeLogEntry,
+      rescoreAfterImprovement,
+      resumeText,
+      setChangeLog,
+      setError,
+      setImprovementResults,
+      setResumeText
+    ]
   )
 
   const removeChangeLogEntry = useCallback(
@@ -2556,108 +2576,137 @@ function App() {
     selectedTemplate
   ])
 
-  const handleAcceptImprovement = async (id) => {
-    const suggestion = improvementResults.find((item) => item.id === id)
-    if (!suggestion) {
+  const handleAcceptImprovement = useCallback(
+    async (id) => {
+      const suggestion = improvementResults.find((item) => item.id === id)
+      if (!suggestion) {
+        return
+      }
+
+      await applyImprovementSuggestion(suggestion)
+    },
+    [applyImprovementSuggestion, improvementResults]
+  )
+
+  const handleImprovementClick = async (type) => {
+    if (type !== 'enhance-all') {
+      setEnhanceAllSummaryText('')
+    }
+
+    if (improvementLockRef.current) {
+      setError('Please wait for the current improvement to finish before requesting another one.')
       return
     }
-
-    const updatedResumeDraft = suggestion.updatedResume || resumeText
-    const baselineScore = Number.isFinite(match?.enhancedScore)
-      ? match.enhancedScore
-      : Number.isFinite(match?.originalScore)
-        ? match.originalScore
-        : null
-    const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
-    const changeLogEntry = buildChangeLogEntry(suggestion)
-
-    let previousChangeLog = null
-
-    setImprovementResults((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, accepted: true, rescorePending: true, rescoreError: '' }
-          : item
+    if (!jobId) {
+      setError('Upload your resume and complete scoring before requesting improvements.')
+      return
+    }
+    if (!improvementAvailable) {
+      setError(
+        improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
       )
-    )
-
-    if (updatedResumeDraft) {
-      setResumeText(updatedResumeDraft)
+      return
     }
-
-    if (changeLogEntry) {
-      const entryPayload = { ...changeLogEntry }
-      setChangeLog((prev) => {
-        previousChangeLog = prev
-        if (prev.some((entry) => entry.id === entryPayload.id)) {
-          return prev.map((entry) =>
-            entry.id === entryPayload.id ? { ...entry, ...entryPayload } : entry
-          )
-        }
-        return [entryPayload, ...prev]
-      })
-
-      try {
-        await persistChangeLogEntry(entryPayload)
-      } catch (err) {
-        console.error('Persisting change log entry failed', err)
-        setError(err.message || 'Unable to store the change log entry.')
-        setChangeLog(previousChangeLog || [])
-      }
-    }
-
+    improvementLockRef.current = true
+    setActiveImprovement(type)
+    setError('')
     try {
-      const result = await rescoreAfterImprovement({
-        updatedResume: updatedResumeDraft,
-        baselineScore,
-        previousMissingSkills
-      })
-      const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
-
-      if (changeLogEntry && Number.isFinite(deltaValue)) {
-        setChangeLog((prev) =>
-          prev.map((entry) =>
-            entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
-          )
-        )
-        try {
-          await persistChangeLogEntry({ ...changeLogEntry, scoreDelta: deltaValue })
-        } catch (err) {
-          console.error('Updating change log entry failed', err)
-          setError(err.message || 'Unable to update the change log entry.')
-        }
+      const requestUrl = buildApiUrl(API_BASE_URL, `/api/${type}`)
+      const payload = {
+        jobId,
+        linkedinProfileUrl: profileUrl.trim(),
+        resumeText,
+        jobDescription: jobDescriptionText,
+        jobTitle: match?.modifiedTitle || match?.originalTitle || '',
+        currentTitle: match?.modifiedTitle || match?.originalTitle || '',
+        jobSkills,
+        resumeSkills,
+        missingSkills: match?.missingSkills || [],
+        knownCertificates,
+        manualCertificates: manualCertificatesData
+      }
+      if (manualCertificatesInput.trim()) {
+        payload.manualCertificates = manualCertificatesInput.trim()
       }
 
-      setImprovementResults((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                rescorePending: false,
-                scoreDelta: deltaValue,
-                rescoreError: ''
-              }
-            : item
-        )
-      )
+      const response = await fetch(requestUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        const errPayload = await response.json().catch(() => ({}))
+        const serverMessage =
+          errPayload?.error?.message ||
+          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
+          (typeof errPayload?.error === 'string' ? errPayload.error : undefined)
+        const message =
+          response.status >= 500
+            ? CV_GENERATION_ERROR_MESSAGE
+            : serverMessage || 'Unable to generate improvement.'
+        throw new Error(message)
+      }
+
+      const data = await response.json()
+      const improvementSummary = Array.isArray(data.improvementSummary)
+        ? data.improvementSummary
+        : []
+      const enhanceAllSummary =
+        type === 'enhance-all' && improvementSummary.length
+          ? formatEnhanceAllSummary(improvementSummary)
+          : ''
+      let explanation = (data.explanation || 'Change generated successfully.').trim()
+      if (!explanation) {
+        explanation = 'Change generated successfully.'
+      }
+      if (type === 'enhance-all' && improvementSummary.length && enhanceAllSummary) {
+        const meaningfulBase = explanation && !/^applied deterministic improvements/i.test(explanation)
+        explanation = meaningfulBase ? `${explanation} ${enhanceAllSummary}` : enhanceAllSummary
+      }
+      const suggestion = {
+        id: `${type}-${Date.now()}`,
+        type,
+        title:
+          data.title || improvementActions.find((action) => action.key === type)?.label || 'Improvement',
+        beforeExcerpt: data.beforeExcerpt || '',
+        afterExcerpt: data.afterExcerpt || '',
+        explanation,
+        updatedResume: data.updatedResume || resumeText,
+        confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
+        accepted: null,
+        improvementSummary,
+        scoreDelta: null,
+        rescorePending: false,
+        rescoreError: ''
+      }
+      setImprovementResults((prev) => [suggestion, ...prev])
+
+      if (type === 'enhance-all') {
+        await applyImprovementSuggestion(suggestion)
+        const summaryText = (enhanceAllSummary || explanation).trim()
+        setEnhanceAllSummaryText(summaryText)
+      }
     } catch (err) {
-      console.error('Improvement rescore failed', err)
-      setError(err.message || 'Unable to update scores after applying improvement.')
-      setImprovementResults((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                rescorePending: false,
-                rescoreError: err.message || 'Unable to refresh ATS scores.'
-              }
-            : item
-        )
-      )
+      console.error('Improvement request failed', err)
+      const errorMessage =
+        (typeof err?.message === 'string' && err.message.trim()) ||
+        CV_GENERATION_ERROR_MESSAGE
+      setError(errorMessage)
+      if (type === 'enhance-all') {
+        setEnhanceAllSummaryText('')
+      }
+    } finally {
+      setActiveImprovement('')
+      improvementLockRef.current = false
     }
   }
 
   const handleRejectImprovement = async (id) => {
+    const targetSuggestion = improvementResults.find((item) => item.id === id)
+    if (targetSuggestion?.type === 'enhance-all') {
+      setEnhanceAllSummaryText('')
+    }
     setImprovementResults((prev) =>
       prev.map((item) =>
         item.id === id
@@ -3121,6 +3170,14 @@ function App() {
             <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 p-4 text-sm text-purple-700">
               These skills and highlights were added to match the JD. Please prepare for the interview accordingly.
             </div>
+            {enhanceAllSummaryText && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+                <p className="text-sm font-semibold text-emerald-700">Enhance All applied automatically</p>
+                <p className="mt-1 leading-relaxed">
+                  We rolled out every recommended fix in one pass. Combined updates — {enhanceAllSummaryText}
+                </p>
+              </div>
+            )}
             <div className="space-y-4">
               {improvementResults.map((item) => (
                 <ImprovementCard
