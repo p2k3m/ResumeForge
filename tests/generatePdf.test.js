@@ -45,14 +45,131 @@ function extractStreamChunks(pdfBuffer) {
   return chunks;
 }
 
+const PDF_ESCAPE_MAP = new Map(
+  Object.entries({
+    n: '\n',
+    r: '\r',
+    t: '\t',
+    b: '\b',
+    f: '\f',
+    '(': '(',
+    ')': ')',
+    '\\': '\\'
+  })
+);
+
+function decodePdfEscapes(str = '') {
+  return str
+    .replace(/\\([0-7]{1,3})/g, (_, oct) =>
+      String.fromCharCode(parseInt(oct, 8))
+    )
+    .replace(/\\([nrtbf()\\])/g, (_, esc) => PDF_ESCAPE_MAP.get(esc) ?? esc);
+}
+
+function extractStringsFromArray(content, startIndex) {
+  const parts = [];
+  let i = startIndex;
+  while (i < content.length && content[i] !== ']') {
+    const char = content[i];
+    if (char === '(') {
+      const { text, nextIndex } = extractString(content, i);
+      parts.push(text);
+      i = nextIndex;
+      continue;
+    }
+    if (char === '<') {
+      const { text, nextIndex } = extractHexString(content, i);
+      parts.push(text);
+      i = nextIndex;
+      continue;
+    }
+    i += 1;
+  }
+  return { text: parts.join(''), nextIndex: i + 1 };
+}
+
+function extractHexString(content, startIndex) {
+  let i = startIndex + 1;
+  let hex = '';
+  while (i < content.length && content[i] !== '>') {
+    hex += content[i];
+    i += 1;
+  }
+  if (hex.length % 2 === 1) {
+    hex += '0';
+  }
+  return { text: Buffer.from(hex, 'hex').toString(), nextIndex: i + 1 };
+}
+
+function extractString(content, startIndex) {
+  let i = startIndex + 1;
+  let raw = '';
+  while (i < content.length) {
+    const char = content[i];
+    if (char === ')') {
+      return { text: decodePdfEscapes(raw), nextIndex: i + 1 };
+    }
+    if (char === '\\' && i + 1 < content.length) {
+      const next = content[i + 1];
+      if (/[0-7]/.test(next)) {
+        let digits = next;
+        let offset = 2;
+        while (
+          offset < 4 &&
+          i + offset < content.length &&
+          /[0-7]/.test(content[i + offset])
+        ) {
+          digits += content[i + offset];
+          offset += 1;
+        }
+        raw += `\\${digits}`;
+        i += offset;
+        continue;
+      }
+      raw += `\\${next}`;
+      i += 2;
+      continue;
+    }
+    raw += char;
+    i += 1;
+  }
+  return { text: decodePdfEscapes(raw), nextIndex: i };
+}
+
 function extractRawPdfText(pdfBuffer) {
   return extractStreamChunks(pdfBuffer)
-    .map((chunk) =>
-      chunk.replace(/<([0-9A-Fa-f]+)>/g, (_, hex) =>
-        Buffer.from(hex, 'hex').toString()
-      )
-    )
-    .join('');
+    .map((chunk) => {
+      const content = chunk.toString();
+      let text = '';
+      for (let i = 0; i < content.length; i += 1) {
+        const char = content[i];
+        if (char === '(') {
+          const { text: str, nextIndex } = extractString(content, i);
+          text += str;
+          i = nextIndex - 1;
+          continue;
+        }
+        if (char === '[') {
+          const { text: str, nextIndex } = extractStringsFromArray(content, i + 1);
+          text += str;
+          i = nextIndex - 1;
+          continue;
+        }
+        if (char === '<') {
+          const { text: str, nextIndex } = extractHexString(content, i);
+          text += str;
+          i = nextIndex - 1;
+          continue;
+        }
+        if (char === '\n') {
+          text += '\n';
+        }
+      }
+      return text;
+    })
+    .join('')
+    .replace(/[\r\f]+/g, '')
+    .replace(/\n{3,}/g, '\n\n');
 }
 
 function firstContentStream(pdfBuffer) {
