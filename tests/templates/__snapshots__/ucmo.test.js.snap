@@ -58,6 +58,15 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
     <h1>Jane Doe</h1>
   </header>
   <section>
+    <h2>Summary</h2>
+      <ul>
+          <li>Email: jane@example.com</li>
+          <li>Phone: 555-555-5555</li>
+          <li>Warrensburg, MO</li>
+          <li>LinkedIn: <a href="https://linkedin.com/in/jane">LinkedIn</a></li>
+      </ul>
+  </section>
+  <section>
     <h2>Work Experience</h2>
       <ul>
           <li><span class="bullet">•</span> Built things</li>
@@ -96,6 +105,48 @@ q
 BT
 1 0 0 1 64 665.165 Tm
 /F2 15 Tf
+[<53554d4d41525920>] TJ
+ET
+Q
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 64 631.919 Tm
+/F3 12 Tf
+[<456d61696c3a206a616e65406578616d706c652e636f6d20>] TJ
+ET
+Q
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 64 600.527 Tm
+/F3 12 Tf
+[<50686f6e653a203535352d3535352d3535353520>] TJ
+ET
+Q
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 64 569.135 Tm
+/F3 12 Tf
+[<57617272656e73627572672c204d4f20>] TJ
+ET
+Q
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 64 537.743 Tm
+/F3 12 Tf
+[<4c696e6b6564496e3a204c696e6b6564496e20>] TJ
+ET
+Q
+/DeviceRGB cs
+0.5647058823529412 0 0.12941176470588237 scn
+q
+1 0 0 -1 0 792 cm
+BT
+1 0 0 1 158.08 496.91 Tm
+/F2 15 Tf
 [<574f524b20455850455249454e434520>] TJ
 ET
 Q
@@ -104,7 +155,7 @@ Q
 q
 1 0 0 -1 0 792 cm
 BT
-1 0 0 1 64 631.919 Tm
+1 0 0 1 158.08 463.664 Tm
 /F3 12 Tf
 [<e280a220>] TJ
 ET
@@ -114,7 +165,7 @@ Q
 q
 1 0 0 -1 0 792 cm
 BT
-1 0 0 1 78.4 631.919 Tm
+1 0 0 1 172.48 463.664 Tm
 /F3 12 Tf
 [<4275696c74207468696e677320>] TJ
 ET
@@ -124,7 +175,7 @@ Q
 q
 1 0 0 -1 0 792 cm
 BT
-1 0 0 1 64 585.086 Tm
+1 0 0 1 158.08 416.831 Tm
 /F2 15 Tf
 [<454455434154494f4e20>] TJ
 ET
@@ -134,7 +185,7 @@ Q
 q
 1 0 0 -1 0 792 cm
 BT
-1 0 0 1 64 551.84 Tm
+1 0 0 1 158.08 383.585 Tm
 /F3 12 Tf
 [<e280a220>] TJ
 ET
@@ -144,7 +195,7 @@ Q
 q
 1 0 0 -1 0 792 cm
 BT
-1 0 0 1 78.4 551.84 Tm
+1 0 0 1 172.48 383.585 Tm
 /F3 12 Tf
 [<42536320537475666620>] TJ
 ET

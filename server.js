@@ -4090,6 +4090,48 @@ function extractContactDetails(text = '', linkedinProfileUrl = '') {
     if (phoneMatch) {
       result.phone = phoneMatch[0].replace(/\s+/g, ' ').trim();
     }
+
+    if (!result.linkedin) {
+      const lines = String(text)
+        .split(/\r?\n/)
+        .slice(0, 12);
+      for (const line of lines) {
+        const parsed = parseContactLine(line);
+        const label = parsed?.label || '';
+        const value = parsed?.value || '';
+        if (/linkedin/i.test(label)) {
+          const normalized = normalizeUrl(value);
+          if (normalized) {
+            result.linkedin = normalized;
+            break;
+          }
+        }
+        if (!result.linkedin && value) {
+          const rawMatch = value.match(
+            /((?:https?:\/\/|www\.)?(?:[a-z0-9.-]*\.)?linkedin\.com\/[\w\-/%?#=&.+]+)/i
+          );
+          if (rawMatch) {
+            const normalized = normalizeUrl(rawMatch[1]);
+            if (normalized) {
+              result.linkedin = normalized;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!result.linkedin) {
+      const rawMatch = String(text).match(
+        /((?:https?:\/\/|www\.)?(?:[a-z0-9.-]*\.)?linkedin\.com\/[\w\-/%?#=&.+]+)/i
+      );
+      if (rawMatch) {
+        const normalized = normalizeUrl(rawMatch[1]);
+        if (normalized) {
+          result.linkedin = normalized;
+        }
+      }
+    }
   }
 
   const normalizedLinkedIn = normalizeUrl(linkedinProfileUrl);
@@ -5365,9 +5407,14 @@ let generatePdf = async function (
         });
       }
       // Convert token-based data to HTML for Handlebars templates
+      const linkedinValue = contactContext.fieldValues.linkedin || '';
+      const linkedinDisplay = linkedinValue
+        ? linkedinValue.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '') || linkedinValue
+        : '';
       const htmlData = {
         ...data,
         ...contactContext.fieldValues,
+        linkedinDisplay,
         contactLines: contactContext.contactLines,
         templateParams,
         sections: data.sections.map((sec) => ({

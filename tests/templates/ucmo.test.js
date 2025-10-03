@@ -50,6 +50,9 @@ test('ucmo template renders with contact bar and logo', async () => {
     email: contact.email,
     cityState: contact.cityState,
     linkedin: contact.linkedin,
+    linkedinDisplay: contact.linkedin
+      ? contact.linkedin.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '') || contact.linkedin
+      : '',
     sections: data.sections.map((sec) => ({
       ...sec,
       items: sec.items.map(tokensToHtml)
