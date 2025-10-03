@@ -1,6 +1,7 @@
 import {
   collectSectionText,
   rewriteSectionsWithGemini,
+  resolveEnhancementTokens,
   sanitizeGeneratedText,
 } from '../server.js';
 import { generateContentMock } from './mocks/generateContentMock.js';
@@ -36,7 +37,14 @@ describe('rewriteSectionsWithGemini', () => {
       },
     });
     const generativeModel = { generateContent: generateContentMock };
-    const { text, modifiedTitle, addedSkills, sanitizedFallbackUsed } = await rewriteSectionsWithGemini(
+    const {
+      text,
+      resolvedText,
+      placeholders,
+      modifiedTitle,
+      addedSkills,
+      sanitizedFallbackUsed,
+    } = await rewriteSectionsWithGemini(
       'John Doe',
       sections,
       'JD text',
@@ -46,14 +54,19 @@ describe('rewriteSectionsWithGemini', () => {
       resumeText
     );
     expect(generativeModel.generateContent).toHaveBeenCalled();
-    expect(text).toContain('Polished summary');
-    expect(text).toContain('Did X');
-    expect(text).toContain('Studied Y');
-    expect(text).toContain('Cert A');
-    expect(text).toContain('Skill B');
-    expect(text).toContain('Skill C');
-    expect(text).toContain('Proj C');
-    expect(text).toContain('Updated Title');
+    expect(text).toMatch(/\{\{RF_ENH_[A-Z0-9_]+\}\}/);
+    expect(resolvedText).toContain('Polished summary');
+    expect(resolveEnhancementTokens(text, placeholders)).toContain('Polished summary');
+    const placeholderValues = Object.values(placeholders || {});
+    ['Polished summary', 'Did X', 'Studied Y', 'Cert A', 'Skill B', 'Skill C', 'Proj C', 'Updated Title'].forEach(
+      (expectedValue) => {
+        expect(
+          placeholderValues.some((value) =>
+            typeof value === 'string' ? value.includes(expectedValue) : false
+          )
+        ).toBe(true);
+      }
+    );
     expect(modifiedTitle).toBe('Updated Title');
     expect(addedSkills).toEqual(['Skill C']);
     expect(sanitizedFallbackUsed).toBe(false);
