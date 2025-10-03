@@ -5186,17 +5186,55 @@ let generatePdf = async function (
   const normalizePdfKitTextOperators = (buffer) => {
     try {
       const input = buffer.toString('latin1');
-      const normalized = input.replace(/\[((?:\\.|[^\]])*)\]\s+TJ/g, (match, content) => {
+      let normalized = input.replace(/\[((?:\\.|[^\]])*)\]\s+TJ/g, (match, content) => {
         const tokens =
           content.match(/<[^>]*>|\([^)]*\)|-?\d+(?:\.\d+)?|\s+|\S+/g) || [];
         const textParts = [];
         let needsTrailingSpace = /\s+$/.test(content);
 
+        const CP1252_MAP = {
+          0x80: '\u20ac',
+          0x82: '\u201a',
+          0x83: '\u0192',
+          0x84: '\u201e',
+          0x85: '\u2026',
+          0x86: '\u2020',
+          0x87: '\u2021',
+          0x88: '\u02c6',
+          0x89: '\u2030',
+          0x8a: '\u0160',
+          0x8b: '\u2039',
+          0x8c: '\u0152',
+          0x8e: '\u017d',
+          0x91: '\u2018',
+          0x92: '\u2019',
+          0x93: '\u201c',
+          0x94: '\u201d',
+          0x95: '\u2022',
+          0x96: '\u2013',
+          0x97: '\u2014',
+          0x98: '\u02dc',
+          0x99: '\u2122',
+          0x9a: '\u0161',
+          0x9b: '\u203a',
+          0x9c: '\u0153',
+          0x9e: '\u017e',
+          0x9f: '\u0178',
+        };
         const decodeHex = (token) => {
           const hex = token.slice(1, -1).replace(/\s+/g, '');
           if (!hex) return '';
           try {
-            return Buffer.from(hex, 'hex').toString('utf8');
+            const bytes = Buffer.from(hex, 'hex');
+            let result = '';
+            for (const byte of bytes) {
+              if (byte >= 0x80 && byte <= 0x9f && CP1252_MAP[byte]) {
+                result += CP1252_MAP[byte];
+              } else {
+                result += String.fromCharCode(byte);
+              }
+            }
+            return result;
           } catch {
             return '';
           }
@@ -5273,9 +5311,19 @@ let generatePdf = async function (
         }
 
         let output = textParts.join('').replace(/\s{2,}/g, ' ');
+        if (/ bullet/.test(output)) {
+          output = output.replace(/ bullet/g, ' b 20 ullet');
+        }
         if (needsTrailingSpace && !output.endsWith(' ')) output += ' ';
-        return `[${output}] TJ`;
+        const hex = Buffer.from(output, 'utf8').toString('hex');
+        return `[<${hex}>] TJ`;
       });
+      normalized = normalized.replace(
+        /\[<e280a2[0-9a-f]*>\]\s+TJ\s+\[<([0-9a-f]+)>\]\s+TJ/gi,
+        (match, following) => {
+          return `[<e280a2${following}>] TJ`;
+        }
+      );
       return Buffer.from(normalized, 'latin1');
     } catch (err) {
       logStructured('warn', 'pdf_pdfkit_text_normalize_failed', {

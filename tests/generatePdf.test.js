@@ -62,10 +62,14 @@ function firstContentStream(pdfBuffer) {
 
 async function parsePdfText(pdfBuffer) {
   try {
-    return (await pdfParse(pdfBuffer)).text;
+    const { text = '' } = await pdfParse(pdfBuffer);
+    if (/[A-Za-z0-9]/.test(text)) {
+      return text;
+    }
   } catch {
-    return extractRawPdfText(pdfBuffer);
+    // Ignore and fall back to raw extraction
   }
+  return extractRawPdfText(pdfBuffer);
 }
 
 describe('generatePdf and parsing', () => {
