@@ -7466,6 +7466,124 @@ function parseAiJson(text) {
   }
 }
 
+function summarizeJobFocus(jobDescription = '') {
+  if (typeof jobDescription !== 'string') {
+    return '';
+  }
+  const cleaned = jobDescription.replace(/\s+/g, ' ').trim();
+  if (!cleaned) {
+    return '';
+  }
+  const match = cleaned.match(/[^.!?]+[.!?]?/);
+  return match ? match[0].trim() : cleaned;
+}
+
+function formatSkillList(skills = [], limit = 3) {
+  if (!Array.isArray(skills)) {
+    return '';
+  }
+  const normalized = Array.from(
+    new Set(
+      skills
+        .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+        .filter(Boolean)
+    )
+  );
+  if (!normalized.length) {
+    return '';
+  }
+  const limited = normalized.slice(0, Math.max(limit, 1));
+  if (limited.length === 1) {
+    return limited[0];
+  }
+  if (limited.length === 2) {
+    return `${limited[0]} and ${limited[1]}`;
+  }
+  return `${limited.slice(0, -1).join(', ')}, and ${limited[limited.length - 1]}`;
+}
+
+function buildFallbackCoverLetters({
+  applicantName = '',
+  jobTitle = '',
+  jobDescription = '',
+  jobSkills = [],
+  resumeText = '',
+} = {}) {
+  const safeName = typeof applicantName === 'string' && applicantName.trim()
+    ? applicantName.trim()
+    : 'Candidate';
+  const normalizedTitle = typeof jobTitle === 'string' ? jobTitle.trim() : '';
+  const titlePhrase = normalizedTitle ? `the ${normalizedTitle}` : 'the role';
+  const focusSentence = summarizeJobFocus(jobDescription);
+  const skillPhrase = formatSkillList(jobSkills);
+
+  const introParts = [`I am excited to apply for ${titlePhrase}.`];
+  if (focusSentence) {
+    introParts.push(`The opportunity to ${focusSentence.toLowerCase()}`);
+  }
+  if (skillPhrase) {
+    introParts.push(`My background with ${skillPhrase} enables me to contribute immediately.`);
+  }
+  const introParagraph = introParts.join(' ').replace(/\s+/g, ' ').trim();
+
+  const experiences = extractExperience(resumeText);
+  const describeExperience = (exp = {}, prefix = 'In my recent role') => {
+    if (!exp || (!exp.title && !exp.company)) {
+      return '';
+    }
+    const title = exp.title ? exp.title.trim() : 'a key contributor';
+    const company = exp.company ? ` at ${exp.company.trim()}` : '';
+    return `${prefix} as ${title}${company}, I delivered measurable improvements by partnering across teams and keeping complex projects on track.`;
+  };
+  const primaryExperience = describeExperience(experiences[0], 'In my recent role');
+  const secondaryExperience = describeExperience(experiences[1], 'Previously');
+
+  const closingTarget = normalizedTitle
+    ? `${normalizedTitle} at your organization`
+    : 'your team';
+  const closingParagraph = `Thank you for considering my application. I welcome the opportunity to discuss how I can support ${closingTarget}.`;
+
+  const coverLetter1 = [
+    'Dear Hiring Manager,',
+    introParagraph,
+    [primaryExperience, secondaryExperience]
+      .filter(Boolean)
+      .join(' ')
+      .trim() ||
+      'In my recent roles I have led cross-functional initiatives, translated ambiguous goals into action, and consistently delivered on schedule.',
+    closingParagraph,
+    `Sincerely,\n${safeName}`,
+  ]
+    .filter((paragraph) => typeof paragraph === 'string' && paragraph.trim())
+    .join('\n\n')
+    .trim();
+
+  const reinforcementParagraph = skillPhrase
+    ? `Throughout my career I have built a strong foundation in ${skillPhrase}, applying these capabilities to launch reliable solutions and mentor high-performing teams.`
+    : 'Throughout my career I have guided teams through complex deliverables, ensuring quality, clarity, and momentum in every engagement.';
+  const alignmentParagraph = focusSentence
+    ? `The focus on ${focusSentence.toLowerCase()} resonates with the impact described in my resume, where I consistently align technology investments with stakeholder goals.`
+    : 'I am known for aligning technology investments with stakeholder goals, providing clear communication, and maintaining a customer-centric mindset.';
+
+  const coverLetter2 = [
+    'Dear Hiring Manager,',
+    `I am ready to contribute to ${titlePhrase} and immediately add value to your organization.`,
+    reinforcementParagraph,
+    alignmentParagraph,
+    primaryExperience ||
+      'I thrive when collaborating with diverse partners, simplifying complex requirements, and guiding initiatives from concept through successful delivery.',
+    `Best regards,\n${safeName}`,
+  ]
+    .filter((paragraph) => typeof paragraph === 'string' && paragraph.trim())
+    .join('\n\n')
+    .trim();
+
+  return {
+    cover_letter1: coverLetter1,
+    cover_letter2: coverLetter2,
+  };
+}
+
 function removeGuidanceLines(text = '') {
   const guidanceRegex =
     /^\s*(?:-\s*\([^)]*\)|\([^)]*\)|\[[^\]]*\])\s*$|\b(?:consolidate relevant experience|add other relevant experience|list key skills|previous roles summarized|for brevity)\b/i;
@@ -7916,6 +8034,7 @@ function createResumeVariants({
   projectText = '',
   modifiedTitle = '',
   skillsToInclude = [],
+  baseSkills = [],
   sanitizeOptions = {},
 } = {}) {
   const sanitizedBase = sanitizeGeneratedText(baseText, sanitizeOptions);
@@ -7925,6 +8044,7 @@ function createResumeVariants({
   });
   ensureProjectInResumeData(resumeData, projectText, sanitizeOptions);
   ensureLatestTitleInExperience(resumeData, modifiedTitle, sanitizeOptions);
+  ensureSkillsInResumeData(resumeData, baseSkills, sanitizeOptions);
   const version1Text = sanitizeGeneratedText(
     resumeDataToText(resumeData),
     sanitizeOptions
@@ -9240,6 +9360,7 @@ async function generateEnhancedDocumentsResponse({
     projectText,
     modifiedTitle: versionsContext.jobTitle,
     skillsToInclude: skillsToHighlight,
+    baseSkills: Array.isArray(geminiAddedSkills) ? geminiAddedSkills : [],
     sanitizeOptions,
   });
 
@@ -9324,9 +9445,42 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
+  const fallbackLetters = buildFallbackCoverLetters({
+    applicantName,
+    jobTitle: versionsContext.jobTitle || applicantTitle,
+    jobDescription,
+    jobSkills,
+    resumeText: combinedProfile,
+  });
+  const missingCoverLetters = [];
+  if (!coverData.cover_letter1) {
+    const fallback = fallbackLetters.cover_letter1?.trim();
+    if (fallback) {
+      coverData.cover_letter1 = fallback;
+      missingCoverLetters.push('cover_letter1');
+    }
+  }
+  if (!coverData.cover_letter2) {
+    const fallback = fallbackLetters.cover_letter2?.trim();
+    if (fallback) {
+      coverData.cover_letter2 = fallback;
+      missingCoverLetters.push('cover_letter2');
+    }
+  }
+  if (missingCoverLetters.length) {
+    logStructured('warn', 'generation_cover_letters_fallback', {
+      ...logContext,
+      missing: missingCoverLetters,
+    });
+  }
+  const coverVariants = ['cover_letter1', 'cover_letter2'].filter(
+    (key) => typeof coverData[key] === 'string' && coverData[key].trim()
+  ).length;
+
   logStructured('info', 'generation_cover_letters_completed', {
     ...logContext,
-    variants: Object.keys(coverData).length,
+    variants: coverVariants,
+    fallbackApplied: missingCoverLetters.length > 0,
   });
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
