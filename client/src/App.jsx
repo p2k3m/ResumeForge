@@ -7,6 +7,7 @@ import TemplateSelector from './components/TemplateSelector.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
+import JobDescriptionPreview from './components/JobDescriptionPreview.jsx'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
@@ -2495,6 +2496,9 @@ function App() {
                   ? 'This job post blocked automatic access. Paste the full JD to continue.'
                   : 'Paste the JD text here or provide the job post URL above and we will fetch it automatically.'}
               </p>
+              {hasManualJobDescriptionInput && (
+                <JobDescriptionPreview text={manualJobDescription} />
+              )}
             </div>
             <input
               type="url"
