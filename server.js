@@ -2255,7 +2255,10 @@ function deriveHeadingLabel(sectionHeading = '', fallback = '') {
 }
 
 function escapeRegExp(value = '') {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function applySectionUpdate(originalResume, updatedResume, options = {}) {
@@ -3544,10 +3547,6 @@ function normalizeGeminiLines(value) {
 }
 
 const ENHANCEMENT_TOKEN_PATTERN = /\{\{RF_ENH_[A-Z0-9_]+\}\}/g;
-
-function escapeRegExp(text = '') {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 function resolveEnhancementTokens(text = '', tokenMap = {}) {
   if (!text || typeof text !== 'string') {
