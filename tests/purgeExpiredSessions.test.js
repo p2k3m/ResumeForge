@@ -8,8 +8,10 @@ describe('purgeExpiredSessions', () => {
     const { serverModule, mocks } = await setupTestServer();
     const oldDate = '2023-01-01';
     const freshDate = '2024-01-15';
-    const sessionPrefix = `candidate/cv/${oldDate}/`;
-    const freshPrefix = `candidate/cv/${freshDate}/`;
+    const sessionId = 'session-abc123';
+    const freshSessionId = 'session-fresh456';
+    const sessionPrefix = `candidate/cv/${oldDate}/${sessionId}/`;
+    const freshPrefix = `candidate/cv/${freshDate}/${freshSessionId}/`;
 
     const listedObjects = [
       buildS3Object(`${sessionPrefix}candidate.pdf`),

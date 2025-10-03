@@ -1411,7 +1411,19 @@ const SESSION_RETENTION_DAYS =
     ? parsedRetention
     : 30;
 const SESSION_PREFIX = '';
-const SESSION_PATH_REGEX = /^([^/]+)\/cv\/(\d{4}-\d{2}-\d{2})\//;
+const SESSION_PATH_REGEX =
+  /^([^/]+)\/cv\/(\d{4}-\d{2}-\d{2})(?:\/([^/]+))?\//;
+
+function deriveSessionPrefix(match) {
+  if (!match) return '';
+  const [, candidate, sessionDate, jobSegment] = match;
+  if (!candidate || !sessionDate) {
+    return '';
+  }
+  return jobSegment
+    ? `${candidate}/cv/${sessionDate}/${jobSegment}/`
+    : `${candidate}/cv/${sessionDate}/`;
+}
 
 function anonymizePersonalData(value) {
   if (!value) return '';
@@ -1515,7 +1527,10 @@ async function purgeExpiredSessions({
       if (!Key) continue;
       const match = Key.match(SESSION_PATH_REGEX);
       if (match) {
-        expiredSessionPrefixes.add(`${match[1]}/cv/${match[2]}/`);
+        const derivedPrefix = deriveSessionPrefix(match);
+        if (derivedPrefix) {
+          expiredSessionPrefixes.add(derivedPrefix);
+        }
       }
     }
     const result = await s3Client.send(
@@ -1556,13 +1571,18 @@ async function purgeExpiredSessions({
         if (s3Key) {
           const match = s3Key.match(SESSION_PATH_REGEX);
           if (match) {
-            detectedPrefix = `${match[1]}/cv/${match[2]}/`;
+            detectedPrefix = deriveSessionPrefix(match);
             const sessionDate = new Date(match[2]);
             if (!Number.isNaN(sessionDate.getTime())) {
               if (sessionDate.getTime() <= cutoff) {
                 shouldDelete = true;
-                expiredSessionPrefixes.add(detectedPrefix);
-              } else if (expiredSessionPrefixes.has(detectedPrefix)) {
+                if (detectedPrefix) {
+                  expiredSessionPrefixes.add(detectedPrefix);
+                }
+              } else if (
+                detectedPrefix &&
+                expiredSessionPrefixes.has(detectedPrefix)
+              ) {
                 shouldDelete = true;
               }
             }
@@ -1601,9 +1621,10 @@ async function purgeExpiredSessions({
             if (!derivedKey) continue;
             const derivedMatch = derivedKey.match(SESSION_PATH_REGEX);
             if (derivedMatch) {
-              expiredSessionPrefixes.add(
-                `${derivedMatch[1]}/cv/${derivedMatch[2]}/`
-              );
+              const linkedPrefix = deriveSessionPrefix(derivedMatch);
+              if (linkedPrefix) {
+                expiredSessionPrefixes.add(linkedPrefix);
+              }
             }
           } catch (err) {
             logStructured('warn', 'metadata_url_parse_failed', {
@@ -8050,6 +8071,18 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
+function sanitizeJobSegment(jobId) {
+  if (typeof jobId !== 'string') return '';
+  const normalized = jobId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!normalized) {
+    return '';
+  }
+  return normalized.slice(0, 48);
+}
+
 function sanitizeManualJobDescription(input = '') {
   if (typeof input !== 'string') return '';
 
@@ -11105,9 +11138,12 @@ app.post(
         );
       }
 
+      const jobKeySegment = sanitizeJobSegment(jobId);
       const prefix = originalUploadKey
         ? originalUploadKey.replace(/[^/]+$/, '')
-        : `${sanitizedName}/cv/${date}/`;
+        : jobKeySegment
+          ? `${sanitizedName}/cv/${date}/${jobKeySegment}/`
+          : `${sanitizedName}/cv/${date}/`;
       const logKey = `${prefix}logs/processing.jsonl`;
 
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_started' });
@@ -11958,7 +11994,10 @@ app.post(
   const anonymizedIp = anonymizePersonalData(ipAddress);
   const anonymizedUserAgent = anonymizePersonalData(userAgent);
   const anonymizedCredly = anonymizePersonalData(credlyProfileUrl);
-  const prefix = `${sanitizedName}/cv/${date}/`;
+  const jobKeySegment = sanitizeJobSegment(jobId);
+  const prefix = jobKeySegment
+    ? `${sanitizedName}/cv/${date}/${jobKeySegment}/`
+    : `${sanitizedName}/cv/${date}/`;
   const finalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
   const finalLogKey = `${prefix}logs/processing.jsonl`;
   const metadataKey = `${prefix}logs/log.json`;

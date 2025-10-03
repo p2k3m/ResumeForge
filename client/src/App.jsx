@@ -534,12 +534,12 @@ function getDownloadPresentation(file = {}) {
       return {
         label: 'Original CV Upload',
         description: 'Exact resume you submitted before any AI enhancements—keep this for applications that prefer the untouched version.',
-        badgeText: 'Original',
+        badgeText: 'Original CV',
         badgeStyle: 'bg-slate-100 text-slate-700 border-slate-200',
         buttonStyle: 'bg-slate-700 hover:bg-slate-800 focus:ring-slate-500',
         cardAccent: 'bg-gradient-to-br from-slate-50 via-white to-white',
         cardBorder: 'border-slate-200',
-        linkLabel: 'Download original file',
+        linkLabel: 'Download original PDF',
         category: 'resume',
         autoPreviewPriority: 4
       }
@@ -547,12 +547,12 @@ function getDownloadPresentation(file = {}) {
       return {
         label: 'Enhanced CV Version 1',
         description: 'Primary rewrite balanced for ATS scoring and recruiter readability with the strongest keyword alignment.',
-        badgeText: 'Enhanced',
+        badgeText: 'Enhanced CV',
         badgeStyle: 'bg-emerald-100 text-emerald-700 border-emerald-200',
         buttonStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
         cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
         cardBorder: 'border-emerald-200',
-        linkLabel: 'Download PDF',
+        linkLabel: 'Download enhanced PDF',
         category: 'resume',
         autoPreviewPriority: 0
       }
@@ -560,12 +560,12 @@ function getDownloadPresentation(file = {}) {
       return {
         label: 'Enhanced CV Version 2',
         description: 'Alternate layout that spotlights impact metrics and leadership achievements for different screening preferences.',
-        badgeText: 'Enhanced Alt',
+        badgeText: 'Enhanced CV Alt',
         badgeStyle: 'bg-emerald-100 text-emerald-700 border-emerald-200',
         buttonStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
         cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
         cardBorder: 'border-emerald-200',
-        linkLabel: 'Download PDF',
+        linkLabel: 'Download enhanced PDF',
         category: 'resume',
         autoPreviewPriority: 1
       }

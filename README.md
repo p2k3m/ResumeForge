@@ -64,7 +64,7 @@ Because the configuration is loaded and cached once, the service reuses the same
 ### Privacy, GDPR, and data retention
 
 - DynamoDB inserts now hash candidate names, LinkedIn URLs, IP addresses, and user agents with SHA-256 (plus the optional `PII_HASH_SECRET` salt) before persisting them. The table retains browser, OS, and device metadata for aggregate analytics without storing raw personally identifiable information.
-- An EventBridge rule can invoke the Lambda on a schedule to remove generated sessions from S3 that are older than `SESSION_RETENTION_DAYS` (30 days by default). The scheduled handler deletes entire `<candidate>/cv/<ISO-date>/...` prefixes so no PDFs or logs linger past the retention window.
+- An EventBridge rule can invoke the Lambda on a schedule to remove generated sessions from S3 that are older than `SESSION_RETENTION_DAYS` (30 days by default). The scheduled handler deletes entire `<candidate>/cv/<ISO-date>/<session-id>/...` prefixes so no PDFs or logs linger past the retention window.
 
 Implementation snippet:
 
@@ -389,7 +389,7 @@ ownload URLs expire after one hour:
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `<candidate>/cv/<ISO-date>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type. The API now returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
+S3 keys follow the pattern `<candidate>/cv/<ISO-date>/<session-id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type. The original upload remains stored at `<candidate>/cv/<ISO-date>/<session-id>/<candidate>.pdf` to guarantee the untouched résumé is always available. The API now returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
 jane_doe/cv/2025-01-15/
