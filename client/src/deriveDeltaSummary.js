@@ -140,6 +140,9 @@ export function deriveDeltaSummary({
 
   const changeLogEntries = Array.isArray(changeLog) ? changeLog : []
   changeLogEntries.forEach((entry) => {
+    if (entry?.reverted) {
+      return
+    }
     const entryType = normalizeText(entry?.type)
     const entryAdded = normalizeStringList(entry?.addedItems)
     const entryRemoved = normalizeStringList(entry?.removedItems)
