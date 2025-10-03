@@ -3543,16 +3543,87 @@ function normalizeGeminiLines(value) {
   return [];
 }
 
+const ENHANCEMENT_TOKEN_PATTERN = /\{\{RF_ENH_[A-Z0-9_]+\}\}/g;
+
+function escapeRegExp(text = '') {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function resolveEnhancementTokens(text = '', tokenMap = {}) {
+  if (!text || typeof text !== 'string') {
+    return text;
+  }
+  if (!tokenMap || typeof tokenMap !== 'object') {
+    return text;
+  }
+  let resolved = text;
+  Object.entries(tokenMap).forEach(([token, value]) => {
+    if (typeof value !== 'string' || !value.trim()) return;
+    resolved = resolved.split(token).join(value);
+  });
+  return resolved;
+}
+
+function injectEnhancementTokens(text = '', tokenMap = {}) {
+  if (!text || typeof text !== 'string') {
+    return text;
+  }
+  if (!tokenMap || typeof tokenMap !== 'object') {
+    return text;
+  }
+  let tokenized = text;
+  Object.entries(tokenMap).forEach(([token, value]) => {
+    if (typeof value !== 'string' || !value.trim()) return;
+    const escapedValue = escapeRegExp(value.trim());
+    const bulletPattern = new RegExp(`(^|\\n)([-*•]\s*)${escapedValue}(?=\\n|$)`, 'g');
+    const linePattern = new RegExp(`(^|\\n)${escapedValue}(?=\\n|$)`, 'g');
+    tokenized = tokenized.replace(bulletPattern, (match, prefix, bullet = '') => {
+      return `${prefix}${bullet || ''}${token}`;
+    });
+    tokenized = tokenized.replace(linePattern, (match, prefix) => {
+      return `${prefix}${token}`;
+    });
+  });
+  return tokenized;
+}
+
+function resolveTokenText(value = '', tokenMap = {}) {
+  if (typeof value !== 'string' || !value) {
+    return value;
+  }
+  if (!tokenMap || typeof tokenMap !== 'object') {
+    return value;
+  }
+  return value.replace(ENHANCEMENT_TOKEN_PATTERN, (match) => {
+    const replacement = tokenMap[match];
+    return typeof replacement === 'string' ? replacement : match;
+  });
+}
+
 function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeOptions = {}) {
   const parseLineOptions = sanitizeOptions?.preserveLinkText
     ? { preserveLinkText: true }
     : undefined;
   const sections = [];
+  const placeholders = {};
+  let placeholderIndex = 1;
 
-  const toTokens = (line) => {
+  const createPlaceholder = (headingKey = 'section') => {
+    const normalizedHeading = normalizeHeading(headingKey || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'section';
+    const token = `{{RF_ENH_${normalizedHeading}_${String(placeholderIndex).padStart(4, '0')}}}`;
+    placeholderIndex += 1;
+    return token;
+  };
+
+  const toTokens = (line, heading) => {
     const normalized = typeof line === 'string' ? line.trim() : '';
     if (!normalized) return [];
-    const tokens = parseLine(normalized.startsWith('-') ? normalized : `- ${normalized}`, parseLineOptions);
+    const placeholder = createPlaceholder(heading);
+    placeholders[placeholder] = normalized;
+    const tokens = parseLine(`- ${placeholder}`, parseLineOptions);
     if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
     return tokens;
   };
@@ -3562,7 +3633,7 @@ function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeO
     if (!normalizedHeading) return;
     const normalizedLines = normalizeGeminiLines(lines);
     const items = normalizedLines
-      .map((line) => toTokens(line))
+      .map((line) => toTokens(line, normalizedHeading))
       .filter((tokens) => tokens.length);
     if (items.length) {
       sections.push({ heading: normalizedHeading, items });
@@ -3605,11 +3676,20 @@ function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeO
   return {
     name: name && String(name).trim() ? String(name).trim() : 'Resume',
     sections,
+    placeholders,
   };
 }
 
 function mergeResumeDataSections(baseData = {}, updatesData = {}) {
   const result = cloneResumeData(baseData);
+  const placeholderMap = {
+    ...(baseData?.placeholders && typeof baseData.placeholders === 'object'
+      ? baseData.placeholders
+      : {}),
+    ...(updatesData?.placeholders && typeof updatesData.placeholders === 'object'
+      ? updatesData.placeholders
+      : {}),
+  };
   if (updatesData?.name) {
     const trimmedName = String(updatesData.name).trim();
     if (trimmedName) {
@@ -3666,6 +3746,7 @@ function mergeResumeDataSections(baseData = {}, updatesData = {}) {
   });
 
   result.sections = mergedSections;
+  result.placeholders = placeholderMap;
   return result;
 }
 
@@ -3698,6 +3779,7 @@ async function rewriteSectionsWithGemini(
     modifiedTitle: '',
     addedSkills: [],
     sanitizedFallbackUsed: true,
+    placeholders: {},
   };
 
   if (!generativeModel?.generateContent) {
@@ -3758,6 +3840,7 @@ async function rewriteSectionsWithGemini(
         modifiedTitle: parsed.latestRoleTitle || '',
         addedSkills,
         sanitizedFallbackUsed: false,
+        placeholders: mergedData.placeholders || {},
       };
     }
   } catch {
@@ -5101,9 +5184,13 @@ let generatePdf = async function (
     options && typeof options.templateParams === 'object'
       ? { ...options.templateParams }
       : {};
+  const enhancementTokenMap =
+    options && typeof options.enhancementTokenMap === 'object'
+      ? options.enhancementTokenMap
+      : {};
 
   const contactContext = buildTemplateContactContext({
-    text,
+    text: resolveEnhancementTokens(text, enhancementTokenMap),
     options,
     templateParams,
   });
@@ -5147,7 +5234,7 @@ let generatePdf = async function (
     try {
       const pdfBuffer = await renderTemplatePdf(requestedTemplateId, {
         data,
-        rawText: text,
+        rawText: resolveEnhancementTokens(text, enhancementTokenMap),
         options: { ...options },
         templateParams,
         templateId
@@ -5255,7 +5342,8 @@ let generatePdf = async function (
           items: sec.items.map((tokens) =>
             tokens
               .map((t, i) => {
-                const text = t.text ? escapeHtml(t.text) : '';
+                const resolvedText = resolveTokenText(t.text, enhancementTokenMap);
+                const text = resolvedText ? escapeHtml(resolvedText) : '';
                 if (t.type === 'link') {
                   const next = tokens[i + 1];
                   const space = next && next.text && !/^\s/.test(next.text)
@@ -8447,6 +8535,10 @@ function cloneResumeData(data = {}) {
             : [],
         }))
       : [],
+    placeholders:
+      data?.placeholders && typeof data.placeholders === 'object'
+        ? { ...data.placeholders }
+        : {},
   };
 }
 
@@ -9809,6 +9901,7 @@ async function generateEnhancedDocumentsResponse({
   let modifiedTitle = '';
   let geminiAddedSkills = [];
   let sanitizedFallbackUsed = false;
+  let enhancementTokenMap = {};
 
   if (canUseGenerativeModel) {
     try {
@@ -9837,7 +9930,11 @@ async function generateEnhancedDocumentsResponse({
         },
         resumeText
       );
-      text = enhanced.text;
+      enhancementTokenMap =
+        enhanced.placeholders && typeof enhanced.placeholders === 'object'
+          ? enhanced.placeholders
+          : {};
+      text = resolveEnhancementTokens(enhanced.text || resumeText, enhancementTokenMap);
       projectText = enhanced.project;
       modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
       geminiAddedSkills = enhanced.addedSkills || [];
@@ -9959,6 +10056,15 @@ async function generateEnhancedDocumentsResponse({
     return null;
   }
 
+  const version1Tokenized = injectEnhancementTokens(
+    versionData.version1,
+    enhancementTokenMap
+  );
+  const version2Tokenized = injectEnhancementTokens(
+    versionData.version2,
+    enhancementTokenMap
+  );
+
   const version1Skills = extractResumeSkills(versionData.version1);
   const match1 = calculateMatchScore(jobSkills, version1Skills);
   const version2Skills = extractResumeSkills(versionData.version2);
@@ -10071,10 +10177,22 @@ async function generateEnhancedDocumentsResponse({
     : `${sanitizedName}/cv/${new Date().toISOString().slice(0, 10)}/`;
   const generatedPrefix = `${prefix}generated/`;
   const outputs = {
-    cover_letter1: coverData.cover_letter1,
-    cover_letter2: coverData.cover_letter2,
-    version1: versionData.version1,
-    version2: versionData.version2,
+    cover_letter1: {
+      text: coverData.cover_letter1,
+      templateText: coverData.cover_letter1,
+    },
+    cover_letter2: {
+      text: coverData.cover_letter2,
+      templateText: coverData.cover_letter2,
+    },
+    version1: {
+      text: versionData.version1,
+      templateText: version1Tokenized,
+    },
+    version2: {
+      text: versionData.version2,
+      templateText: version2Tokenized,
+    },
   };
   const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
   const downloadsEnabled = allowedOriginsForDownloads.length > 0;
@@ -10101,8 +10219,9 @@ async function generateEnhancedDocumentsResponse({
   }
 
   if (downloadsEnabled) {
-    for (const [name, textValue] of Object.entries(outputs)) {
-      if (!textValue) continue;
+    for (const [name, entry] of Object.entries(outputs)) {
+      const templateText = entry?.templateText || entry?.text;
+      if (!templateText) continue;
       const isCvDocument = name === 'version1' || name === 'version2';
       const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
       let fileName;
@@ -10143,26 +10262,27 @@ async function generateEnhancedDocumentsResponse({
         }
       );
 
-  const templateOptions = {
-    jobSkills,
-    linkedinExperience,
-    resumeEducation,
-    linkedinEducation,
-    resumeCertifications,
-    linkedinCertifications,
-    credlyCertifications,
-    credlyProfileUrl,
-    jobTitle: versionsContext.jobTitle,
-    project: projectText,
-    contactLines: contactDetails.contactLines,
-    contactDetails,
-    email: contactDetails.email,
-    phone: contactDetails.phone,
-    cityState: contactDetails.cityState,
-    linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
-    ...sectionPreservation,
-    templateParams: resolvedTemplateParams,
-  };
+      const templateOptions = {
+        jobSkills,
+        linkedinExperience,
+        resumeEducation,
+        linkedinEducation,
+        resumeCertifications,
+        linkedinCertifications,
+        credlyCertifications,
+        credlyProfileUrl,
+        jobTitle: versionsContext.jobTitle,
+        project: projectText,
+        contactLines: contactDetails.contactLines,
+        contactDetails,
+        email: contactDetails.email,
+        phone: contactDetails.phone,
+        cityState: contactDetails.cityState,
+        linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
+        ...sectionPreservation,
+        templateParams: resolvedTemplateParams,
+        enhancementTokenMap,
+      };
 
       if (isCvDocument) {
         templateOptions.resumeExperience = resumeExperience;
@@ -10171,7 +10291,7 @@ async function generateEnhancedDocumentsResponse({
       }
 
       const pdfBuffer = await generatePdf(
-        textValue,
+        templateText,
         primaryTemplate,
         templateOptions,
         generativeModel
@@ -10198,7 +10318,7 @@ async function generateEnhancedDocumentsResponse({
       ).toISOString();
       const urlEntry = { type: name, url: signedUrl, expiresAt };
       if (isCoverLetter) {
-        urlEntry.text = textValue;
+        urlEntry.text = entry?.text || '';
       }
       urls.push(urlEntry);
     }
@@ -12172,6 +12292,8 @@ export {
   selectTemplates,
   removeGuidanceLines,
   sanitizeGeneratedText,
+  resolveEnhancementTokens,
+  injectEnhancementTokens,
   relocateProfileLinks,
   verifyResume,
   purgeExpiredSessions,
