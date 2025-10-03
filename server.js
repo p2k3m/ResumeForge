@@ -3527,23 +3527,181 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
   return { summary, experience, education, certifications, skills, projects };
 }
 
+function normalizeGeminiLines(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeOptions = {}) {
+  const parseLineOptions = sanitizeOptions?.preserveLinkText
+    ? { preserveLinkText: true }
+    : undefined;
+  const sections = [];
+
+  const toTokens = (line) => {
+    const normalized = typeof line === 'string' ? line.trim() : '';
+    if (!normalized) return [];
+    const tokens = parseLine(normalized.startsWith('-') ? normalized : `- ${normalized}`, parseLineOptions);
+    if (!tokens.some((t) => t.type === 'bullet')) tokens.unshift({ type: 'bullet' });
+    return tokens;
+  };
+
+  const pushSection = (heading, lines) => {
+    const normalizedHeading = normalizeHeading(heading || '');
+    if (!normalizedHeading) return;
+    const normalizedLines = normalizeGeminiLines(lines);
+    const items = normalizedLines
+      .map((line) => toTokens(line))
+      .filter((tokens) => tokens.length);
+    if (items.length) {
+      sections.push({ heading: normalizedHeading, items });
+    }
+  };
+
+  const experienceLines = [];
+  const latestTitle = typeof parsed.latestRoleTitle === 'string' ? parsed.latestRoleTitle.trim() : '';
+  const latestDescription =
+    typeof parsed.latestRoleDescription === 'string' ? parsed.latestRoleDescription.trim() : '';
+  if (latestTitle || latestDescription) {
+    const combined = [latestTitle, latestDescription].filter(Boolean).join(': ');
+    if (combined) {
+      experienceLines.push(combined);
+    }
+  }
+  experienceLines.push(...normalizeGeminiLines(parsed.experience));
+
+  const skillsInput = [
+    ...normalizeGeminiLines(parsed.skills),
+    ...normalizeGeminiLines(parsed.mandatorySkills),
+  ];
+  const seenSkills = new Set();
+  const dedupedSkills = [];
+  skillsInput.forEach((skill) => {
+    const lower = skill.toLowerCase();
+    if (lower && !seenSkills.has(lower)) {
+      seenSkills.add(lower);
+      dedupedSkills.push(skill);
+    }
+  });
+
+  pushSection('Summary', parsed.summary);
+  pushSection('Work Experience', experienceLines);
+  pushSection('Education', parsed.education);
+  pushSection('Certifications', parsed.certifications);
+  pushSection('Skills', dedupedSkills);
+  pushSection('Projects', parsed.projects);
+
+  return {
+    name: name && String(name).trim() ? String(name).trim() : 'Resume',
+    sections,
+  };
+}
+
+function mergeResumeDataSections(baseData = {}, updatesData = {}) {
+  const result = cloneResumeData(baseData);
+  if (updatesData?.name) {
+    const trimmedName = String(updatesData.name).trim();
+    if (trimmedName) {
+      result.name = trimmedName;
+    }
+  }
+
+  const updateSections = Array.isArray(updatesData?.sections) ? updatesData.sections : [];
+  if (!updateSections.length) {
+    return result;
+  }
+
+  const cloneSection = (section = {}) => ({
+    heading: normalizeHeading(section.heading || ''),
+    items: Array.isArray(section.items)
+      ? section.items.map((tokens) =>
+          Array.isArray(tokens) ? tokens.map((token) => ({ ...token })) : []
+        )
+      : [],
+  });
+
+  const updateMap = new Map();
+  updateSections.forEach((section) => {
+    const cloned = cloneSection(section);
+    const key = cloned.heading.toLowerCase();
+    if (key && !updateMap.has(key)) {
+      updateMap.set(key, cloned);
+    }
+  });
+
+  if (!updateMap.size) {
+    return result;
+  }
+
+  const mergedSections = [];
+  const seenKeys = new Set();
+
+  (Array.isArray(result.sections) ? result.sections : []).forEach((section) => {
+    const normalizedHeading = normalizeHeading(section.heading || '');
+    const key = normalizedHeading.toLowerCase();
+    if (key && updateMap.has(key)) {
+      mergedSections.push(cloneSection(updateMap.get(key)));
+      seenKeys.add(key);
+    } else {
+      mergedSections.push(cloneSection(section));
+    }
+  });
+
+  updateMap.forEach((section, key) => {
+    if (!seenKeys.has(key)) {
+      mergedSections.push(cloneSection(section));
+      seenKeys.add(key);
+    }
+  });
+
+  result.sections = mergedSections;
+  return result;
+}
+
 async function rewriteSectionsWithGemini(
   name,
   sections,
   jobDescription,
   jobSkills = [],
   generativeModel,
-  sanitizeOptions = {}
+  sanitizeOptions = {},
+  baseResumeText = ''
 ) {
+  const normalizeOptions = sanitizeOptions && typeof sanitizeOptions === 'object'
+    ? { ...sanitizeOptions }
+    : {};
+  const baseParseOptions = { ...normalizeOptions, skipRequiredSections: true };
+  let baseResumeData;
+  try {
+    baseResumeData = parseContent(baseResumeText || '', baseParseOptions);
+  } catch {
+    baseResumeData = { name: name || 'Resume', sections: [] };
+  }
+  const baseText = resumeDataToText(baseResumeData);
+  const sanitizedBaseText = sanitizeGeneratedText(baseText, normalizeOptions);
+  baseResumeData = parseContent(sanitizedBaseText, baseParseOptions);
+
+  const fallbackResult = {
+    text: sanitizedBaseText,
+    project: '',
+    modifiedTitle: '',
+    addedSkills: [],
+    sanitizedFallbackUsed: true,
+  };
+
   if (!generativeModel?.generateContent) {
-    const text = [name].join('\n');
-    return {
-      text: sanitizeGeneratedText(text, sanitizeOptions),
-      project: '',
-      modifiedTitle: '',
-      addedSkills: [],
-      sanitizedFallbackUsed: true,
-    };
+    return fallbackResult;
   }
   try {
     const outputSchema = {
@@ -3583,59 +3741,29 @@ async function rewriteSectionsWithGemini(
     const result = await generativeModel.generateContent(prompt);
     const parsed = parseAiJson(result?.response?.text?.());
     if (parsed) {
-      const mk = (heading, arr) =>
-        arr?.length ? [`# ${heading}`, ...arr.map((b) => `- ${b}`)] : [];
-      const lines = [name];
-      lines.push(...mk('Summary', parsed.summary));
-
-      const expItems = [];
-      if (parsed.latestRoleTitle || parsed.latestRoleDescription) {
-        const combined = [
-          parsed.latestRoleTitle,
-          parsed.latestRoleDescription,
-        ]
-          .filter(Boolean)
-          .join(': ');
-        expItems.push(`- ${combined}`.trim());
-      }
-      if (Array.isArray(parsed.experience)) {
-        expItems.push(...parsed.experience.map((b) => `- ${b}`));
-      }
-      if (expItems.length) {
-        lines.push('# Work Experience', ...expItems);
-      }
-
-      lines.push(...mk('Education', parsed.education));
-      lines.push(...mk('Certifications', parsed.certifications));
-      const skillsList = Array.from(
-        new Set([...(parsed.skills || []), ...(parsed.mandatorySkills || [])])
+      const resumeData = buildResumeDataFromGeminiOutput(
+        parsed,
+        baseResumeData?.name || name,
+        normalizeOptions
       );
-      lines.push(...mk('Skills', skillsList));
-      lines.push(...mk('Projects', parsed.projects));
-      const raw = lines.join('\n');
-      const cleaned = sanitizeGeneratedText(
-        sanitizeGeneratedText(raw, sanitizeOptions),
-        sanitizeOptions
-      );
+      const mergedData = mergeResumeDataSections(baseResumeData, resumeData);
+      const mergedText = resumeDataToText(mergedData);
+      const cleaned = sanitizeGeneratedText(mergedText, normalizeOptions);
+      const addedSkills = Array.isArray(parsed.addedSkills)
+        ? parsed.addedSkills.filter((skill) => typeof skill === 'string' && skill.trim())
+        : [];
       return {
         text: cleaned,
         project: parsed.projectSnippet || parsed.project || '',
         modifiedTitle: parsed.latestRoleTitle || '',
-        addedSkills: parsed.addedSkills || [],
+        addedSkills,
         sanitizedFallbackUsed: false,
       };
     }
   } catch {
     /* ignore */
   }
-  const fallback = [name].join('\n');
-  return {
-    text: sanitizeGeneratedText(fallback, sanitizeOptions),
-    project: '',
-    modifiedTitle: '',
-    addedSkills: [],
-    sanitizedFallbackUsed: true,
-  };
+  return fallbackResult;
 }
 
 function buildUcmoGeminiLayoutPrompt({
@@ -9511,7 +9639,8 @@ async function generateEnhancedDocumentsResponse({
           credlyProfileUrl,
           contactLines: contactDetails.contactLines,
           ...sectionPreservation,
-        }
+        },
+        resumeText
       );
       text = enhanced.text;
       projectText = enhanced.project;
