@@ -43,6 +43,41 @@
       margin-bottom: 32px;
     }
 
+    .masthead {
+      display: grid;
+      gap: 22px;
+    }
+
+    @media (min-width: 720px) {
+      .masthead {
+        grid-template-columns: 1fr auto;
+        align-items: center;
+      }
+    }
+
+    .identity {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .crest {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 18px 32px rgba(31, 41, 51, 0.18);
+      border: 1px solid rgba(31, 41, 51, 0.08);
+    }
+
+    .crest img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
     header h1 {
       font-family: 'Playfair Display', 'Times New Roman', serif;
       font-size: 38px;
@@ -57,6 +92,40 @@
       letter-spacing: 0.12em;
       color: var(--muted);
       text-transform: uppercase;
+    }
+
+    .qr-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: center;
+      padding: 12px 18px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(45, 90, 158, 0.12), rgba(45, 90, 158, 0.04));
+      border: 1px solid rgba(31, 41, 51, 0.12);
+      box-shadow: 0 16px 28px rgba(31, 41, 51, 0.12);
+    }
+
+    .qr-card img {
+      width: 72px;
+      height: 72px;
+      border-radius: 12px;
+      box-shadow: 0 10px 18px rgba(31, 41, 51, 0.18);
+    }
+
+    .qr-card strong {
+      display: block;
+      font-size: 0.95rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .qr-card span {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
     }
 
     .sections {
@@ -141,8 +210,32 @@
 <body>
   <main class="sheet">
     <header>
-      <h1>{{name}}</h1>
-      <p>Curriculum Vitae</p>
+      <div class="masthead">
+        <div class="identity">
+          <div class="crest">
+            {{#if avatar}}
+            <img src="{{avatar}}" alt="{{name}} monogram" />
+            {{else}}
+            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CiAgPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByeD0iMTQiIGZpbGw9IiMyZDVhOWUiLz4KICA8cGF0aCBkPSJNMjAgMjBoMjR2MThjMCA4LjgzNy03LjE2MyAxNi0xNiAxNnMtMTYtNy4xNjMtMTYtMTZWMjB6IiBmaWxsPSIjZjhmYWZjIiBvcGFjaXR5PSIwLjkiLz4KICA8cGF0aCBkPSJNMjQgMTZoMTZhNCA0IDAgMCAxIDQgNHYxMGwtMTIgNi0xMi02VjIwYTQgNCAwIDAgMSA0LTR6IiBmaWxsPSIjMWYyOTMzIiBvcGFjaXR5PSIwLjM1Ii8+CiAgPHBhdGggZD0iTTI0IDI0aDE2IiBzdHJva2U9IiMxZjI5MzMiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjY1Ii8+CiAgPHBhdGggZD0iTTI0IDMwaDE2IiBzdHJva2U9IiMxZjI5MzMiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBvcGFjaXR5PSIwLjQiLz4KICA8cGF0aCBkPSJNMTYgMTJsLTIgNGMtMS42IDMuMi0yLjQgNi43LTIuNCAxMC4yQzExLjYgMzkuNyAyMSA0OCAzMiA0OHMyMC40LTguMyAyMC40LTIxLjhjMC0zLjUtMC44LTctMi40LTEwLjJsLTItNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjhmYWZjIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgb3BhY2l0eT0iMC42NSIvPgo8L3N2Zz4=" alt="Classic crest placeholder" />
+            {{/if}}
+          </div>
+          <div>
+            <h1>{{name}}</h1>
+            <p>Curriculum Vitae</p>
+          </div>
+        </div>
+        <div class="qr-card">
+          {{#if qrCode}}
+          <img src="{{qrCode}}" alt="QR code linking to {{name}}'s professional dossier" />
+          {{else}}
+          <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjggMTI4Ij4KICA8cmVjdCB3aWR0aD0iMTI4IiBoZWlnaHQ9IjEyOCIgcng9IjE4IiBmaWxsPSIjMGYxNzJhIi8+CiAgPGcgZmlsbD0iIzM4YmRmOCI+CiAgICA8cmVjdCB4PSIxNiIgeT0iMTYiIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgcng9IjQiLz4KICAgIDxyZWN0IHg9IjgwIiB5PSIxNiIgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNCIvPgogICAgPHJlY3QgeD0iMTYiIHk9IjgwIiB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI0Ii8+CiAgICA8cmVjdCB4PSI4MCIgeT0iODAiIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIvPgogICAgPHJlY3QgeD0iOTYiIHk9Ijk2IiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiLz4KICAgIDxyZWN0IHg9IjY0IiB5PSI0OCIgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2Ii8+CiAgICA8cmVjdCB4PSI0OCIgeT0iNjQiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIvPgogICAgPHJlY3QgeD0iNjQiIHk9IjgwIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiLz4KICAgIDxyZWN0IHg9IjgwIiB5PSI2NCIgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2Ii8+CiAgICA8cmVjdCB4PSIzMiIgeT0iNDgiIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIvPgogICAgPHJlY3QgeD0iNDgiIHk9IjMyIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiLz4KICA8L2c+Cjwvc3ZnPg==" alt="Static QR code placeholder" />
+          {{/if}}
+          <div>
+            <strong>Portfolio QR</strong>
+            <span>Scan to explore work samples and credentials.</span>
+          </div>
+        </div>
+      </div>
     </header>
     <div class="sections">
       {{#each sections}}
