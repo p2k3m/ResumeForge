@@ -76,6 +76,7 @@ export async function setupTestServer({
     DynamoDBClient: jest.fn(() => ({ send: mockDynamoSend })),
     CreateTableCommand: jest.fn((input) => ({ input, __type: 'CreateTableCommand' })),
     DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
+    GetItemCommand: jest.fn((input) => ({ input, __type: 'GetItemCommand' })),
     PutItemCommand: jest.fn((input) => ({ input, __type: 'PutItemCommand' })),
     UpdateItemCommand: jest.fn((input) => ({ input, __type: 'UpdateItemCommand' })),
     ScanCommand: jest.fn((input) => ({ input, __type: 'ScanCommand' })),
