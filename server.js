@@ -5424,7 +5424,45 @@ let generatePdf = async function (
       (sec.items || []).forEach((tokens) => {
         const startY = doc.y;
         doc.font(style.font).fontSize(bodyFontSize);
-        tokens.forEach((t, idx) => {
+        const renderTokens = [];
+        for (let i = 0; i < tokens.length; i += 1) {
+          const token = tokens[i];
+          if (
+            token?.type === 'paragraph' &&
+            typeof token.text === 'string'
+          ) {
+            let labelText = token.text;
+            let spaces = 0;
+            const trimmed = labelText.replace(/\s+$/, '');
+            if (trimmed !== labelText) {
+              spaces += labelText.length - trimmed.length;
+              labelText = trimmed;
+            }
+            let j = i + 1;
+            while (tokens[j]?.type === 'paragraph' && tokens[j].text === ' ') {
+              spaces += 1;
+              j += 1;
+            }
+            const linkToken = tokens[j];
+            if (
+              labelText &&
+              /[:：]$/.test(labelText) &&
+              linkToken?.type === 'link'
+            ) {
+              renderTokens.push({
+                type: 'label_link',
+                label: labelText,
+                labelStyle: token.style,
+                spaces: spaces || 1,
+                link: linkToken,
+              });
+              i = j;
+              continue;
+            }
+          }
+          renderTokens.push(token);
+        }
+        renderTokens.forEach((t, idx) => {
           if (t.type === 'bullet') {
             const glyph =
               sec.heading?.toLowerCase() === 'education'
@@ -5447,7 +5485,63 @@ let generatePdf = async function (
             doc.text('   ', { continued: true, lineGap });
             return;
           }
-          const opts = { continued: idx < tokens.length - 1, lineGap };
+          const opts = { continued: idx < renderTokens.length - 1, lineGap };
+          if (
+            t.type === 'paragraph' &&
+            typeof t.text === 'string' &&
+            /\s$/.test(t.text) &&
+            renderTokens[idx + 1]?.type === 'link'
+          ) {
+            const trimmed = t.text.replace(/\s+$/, '');
+            if (trimmed && /[:：]$/.test(trimmed)) {
+              const merged = trimmed + '\u00a0'.repeat(Math.max(t.text.length - trimmed.length, 1));
+              if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
+              else if (t.style === 'italic') doc.font(style.italic);
+              else doc.font(style.font);
+              doc.text(merged, { continued: true, lineGap, lineBreak: false });
+              doc.font(style.font);
+              return;
+            }
+          }
+          if (
+            t.type === 'paragraph' &&
+            t.text === ' ' &&
+            renderTokens[idx + 1]?.type === 'link'
+          ) {
+            const prev = renderTokens[idx - 1];
+            const prevText = typeof prev?.text === 'string' ? prev.text.trim() : '';
+            if (prevText && /[:：]$/.test(prevText)) {
+              doc.text('\u00a0', { ...opts, lineBreak: false });
+              return;
+            }
+          }
+          if (t.type === 'label_link') {
+            const linkToken = t.link;
+            const linkText = linkToken.text || linkToken.href || '';
+            const spacer = ' '.repeat(Math.max(t.spaces || 1, 1));
+            const combined = `${t.label}${spacer}${linkText}`;
+            const startX = doc.x;
+            const baselineY = doc.y;
+            const lineHeight = doc.currentLineHeight(true);
+            doc.font(style.font);
+            doc.text(combined, {
+              continued: idx < renderTokens.length - 1,
+              lineGap,
+              lineBreak: false,
+            });
+            const labelWidth = doc.widthOfString(`${t.label}${spacer}`);
+            const totalWidth = doc.widthOfString(combined);
+            const top = baselineY - lineHeight;
+            if (totalWidth > labelWidth) {
+              const width = totalWidth - labelWidth;
+              const linkColor = style.linkColor || 'blue';
+              doc.link(startX + labelWidth, top, width, lineHeight, linkToken.href);
+              doc.underline(startX + labelWidth, top, width, lineHeight, {
+                color: linkColor,
+              });
+            }
+            return;
+          }
           if (t.type === 'tab') {
             doc.text(' '.repeat(tabSize), opts);
             return;
@@ -5458,19 +5552,22 @@ let generatePdf = async function (
             const baselineY = doc.y;
             const lineHeight = doc.currentLineHeight(true);
             const linkWidth = Math.max(doc.widthOfString(linkText), 0);
-            doc.fillColor('blue');
-            doc.text(linkText, { continued: idx < tokens.length - 1, lineGap });
+            doc.text(linkText, {
+              continued: idx < renderTokens.length - 1,
+              lineGap,
+              lineBreak: false,
+            });
             const endX = doc.x;
             let width = linkWidth;
-            if (idx < tokens.length - 1) {
+            if (idx < renderTokens.length - 1) {
               width = Math.max(endX - startX, linkWidth);
             }
             const top = baselineY - lineHeight;
             if (width > 0) {
+              const linkColor = style.linkColor || 'blue';
               doc.link(startX, top, width, lineHeight, t.href);
-              doc.underline(startX, top, width, lineHeight, { color: 'blue' });
+              doc.underline(startX, top, width, lineHeight, { color: linkColor });
             }
-            doc.fillColor(style.textColor);
             return;
           }
           if (t.type === 'heading') {
