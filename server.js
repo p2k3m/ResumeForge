@@ -1111,12 +1111,18 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
-const CV_TEMPLATE_ALIASES = {
-  ucmo: 'classic',
-  vibrant: 'creative'
-};
+const CV_TEMPLATE_ALIASES = {};
 
-const CV_TEMPLATES = ['modern', 'professional', 'classic', 'creative', 'ats', '2025'];
+const CV_TEMPLATES = [
+  'modern',
+  'professional',
+  'classic',
+  'creative',
+  'ats',
+  '2025',
+  'ucmo',
+  'vibrant'
+];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
 const TEMPLATE_IDS = [...CV_TEMPLATES, ...LEGACY_CV_TEMPLATES]; // Backwards compatibility
@@ -1283,7 +1289,7 @@ function selectTemplates({
     template2,
     preferredTemplate,
   ]);
-  const availableCvTemplates = parsedCvTemplates.length
+  let availableCvTemplates = parsedCvTemplates.length
     ? Array.from(
         new Set([
           ...parsedCvTemplates,
@@ -1292,16 +1298,14 @@ function selectTemplates({
       )
     : [...CV_TEMPLATES];
 
-  const primaryFallback = canonicalizeCvTemplateId(
-    availableCvTemplates[0] || CV_TEMPLATES[0]
-  );
-  let primaryTemplate = canonicalizeCvTemplateId(
-    template1 || preferredTemplate,
-    primaryFallback
-  );
-  if (!primaryTemplate) {
-    primaryTemplate = primaryFallback;
-  }
+  const ucmoFirst = ['ucmo', ...availableCvTemplates.filter((tpl) => tpl !== 'ucmo')];
+  availableCvTemplates = Array.from(new Set(ucmoFirst));
+
+  const primaryTemplate =
+    availableCvTemplates.find((tpl) => tpl === 'ucmo') ||
+    availableCvTemplates[0] ||
+    canonicalizeCvTemplateId('ucmo') ||
+    CV_TEMPLATES[0];
 
   const chooseSecondary = (current, pool) => {
     const contrasting = pool.find(
@@ -1312,10 +1316,30 @@ function selectTemplates({
     return different || current;
   };
 
-  let secondaryTemplate = canonicalizeCvTemplateId(
-    template2,
-    chooseSecondary(primaryTemplate, availableCvTemplates)
-  );
+  const secondaryCandidates = uniqueValidCvTemplates(
+    [
+      template1,
+      template2,
+      preferredTemplate,
+      ...availableCvTemplates.filter((tpl) => tpl !== primaryTemplate),
+    ].filter(Boolean)
+  ).filter((tpl) => tpl !== primaryTemplate);
+
+  let secondaryTemplate =
+    secondaryCandidates[0] || chooseSecondary(primaryTemplate, availableCvTemplates);
+
+  if (
+    secondaryTemplate &&
+    CV_TEMPLATE_GROUPS[secondaryTemplate] === CV_TEMPLATE_GROUPS[primaryTemplate]
+  ) {
+    const contrasted = secondaryCandidates.find(
+      (tpl) => CV_TEMPLATE_GROUPS[tpl] !== CV_TEMPLATE_GROUPS[primaryTemplate]
+    );
+    if (contrasted) {
+      secondaryTemplate = contrasted;
+    }
+  }
+
   if (secondaryTemplate === primaryTemplate) {
     const extendedPool = Array.from(
       new Set([...availableCvTemplates, ...CV_TEMPLATES])
@@ -4266,6 +4290,50 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
+function tokensToPlainText(tokens = []) {
+  return tokens
+    .map((token) => {
+      if (!token) return '';
+      if (token.type === 'bullet') return '• ';
+      if (token.type === 'edu-bullet') return '• ';
+      if (token.type === 'newline') return '\n';
+      if (token.type === 'tab') return '\t';
+      if (typeof token.text === 'string') return token.text;
+      return '';
+    })
+    .join('')
+    .replace(/\s+\n/g, '\n')
+    .trim();
+}
+
+function buildUcmoLayoutPrompt(context) {
+  const lines = [
+    'You are an elite front-end designer building a University of Central Missouri (UCMO) resume layout.',
+    'Create a complete HTML document with inline CSS only. Requirements:',
+    '- Use UCMO crimson (#900021) as the accent colour with charcoal (#2d3748) body text.',
+    '- Include a top contact bar with the candidate details on the left and the official logo (https://resumeforge.s3.amazonaws.com/ucmo-logo.png) on the right.',
+    '- Render the candidate name in a prominent header and ensure section headings are uppercase with subtle background panels.',
+    '- Output bullet lists using <span class="bullet">•</span> elements matching the accent colour.',
+    '- Keep markup accessible, semantic (<section>, <header>, <ul>), and responsive without external fonts.',
+    '',
+    'CANDIDATE_CONTEXT:',
+    JSON.stringify(context, null, 2),
+    '',
+    'Return ONLY raw HTML markup (no Markdown, code fences, or commentary).'
+  ];
+  return lines.join('\n');
+}
+
+function extractGeminiHtml(raw = '') {
+  if (!raw) return '';
+  const trimmed = raw.trim();
+  const fenceMatch = trimmed.match(/```(?:html)?\n([\s\S]*?)```/i);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+  return trimmed;
+}
+
 let generatePdf = async function (
   text,
   templateId = 'modern',
@@ -4340,6 +4408,58 @@ let generatePdf = async function (
     }
   }
   let html;
+  if (
+    templateId === 'ucmo' &&
+    generativeModel?.generateContent &&
+    Array.isArray(data.sections) &&
+    data.sections.length
+  ) {
+    const contactLines = Array.isArray(options?.contactLines)
+      ? options.contactLines
+          .map((line) => (typeof line === 'string' ? line.trim() : ''))
+          .filter(Boolean)
+      : [];
+    const sections = data.sections.map((sec) => ({
+      heading: sec.heading,
+      items: (sec.items || [])
+        .map((tokens) => tokensToPlainText(tokens))
+        .filter(Boolean),
+    }));
+    const promptContext = {
+      name: data.name,
+      contact: contactLines,
+      sections,
+    };
+    try {
+      const prompt = buildUcmoLayoutPrompt(promptContext);
+      logStructured('debug', 'pdf_template_gemini_prompt', {
+        templateId,
+        requestedTemplateId,
+        promptLength: prompt.length,
+      });
+      const result = await generativeModel.generateContent(prompt);
+      const generatedHtml = extractGeminiHtml(result?.response?.text?.());
+      if (generatedHtml) {
+        html = generatedHtml;
+        logStructured('info', 'pdf_template_gemini_markup_ready', {
+          templateId,
+          requestedTemplateId,
+          length: html.length,
+        });
+      } else {
+        logStructured('warn', 'pdf_template_gemini_empty', {
+          templateId,
+          requestedTemplateId,
+        });
+      }
+    } catch (err) {
+      logStructured('warn', 'pdf_template_gemini_failed', {
+        templateId,
+        requestedTemplateId,
+        error: serializeError(err),
+      });
+    }
+  }
   if (!html) {
     const templatePath = path.resolve('templates', `${templateId}.html`);
     logStructured('debug', 'pdf_template_loading', {
@@ -4488,18 +4608,8 @@ let generatePdf = async function (
   const styleMap = {
     modern: {
       ...baseStyle,
-      headingColor: '#38bdf8',
-      bulletColor: '#38bdf8',
-      textColor: '#e2e8f0',
-      nameColor: '#ffffff',
-      headingFontSize: 16,
-      nameFontSize: 28,
-      bodyFontSize: 11,
-      backgroundColor: '#0f172a',
-      lineGap: 7,
-      paragraphGap: 12,
-      headingUppercase: true,
-      margin: 56
+      headingUppercase: false,
+      nameFontSize: 20
     },
     professional: {
       ...baseStyle,
@@ -4637,6 +4747,10 @@ let generatePdf = async function (
   };
   return new Promise((resolve, reject) => {
     const style = styleMap[templateId] || styleMap.modern;
+    const paragraphGap = style.paragraphGap ?? baseStyle.paragraphGap ?? 8;
+    const lineGap = style.lineGap ?? baseStyle.lineGap ?? 6;
+    const bodyFontSize = style.bodyFontSize || baseStyle.bodyFontSize || 12;
+    const tabSize = style.tabSize || 4;
     const doc = new PDFDocument({ margin: style.margin || 50 });
     const buffers = [];
     doc.on('data', (d) => buffers.push(d));
@@ -4699,34 +4813,28 @@ let generatePdf = async function (
 
     doc
       .font(style.bold)
-      .fillColor(style.nameColor || style.headingColor)
-      .fontSize(style.nameFontSize || 22)
+      .fillColor(style.headingColor)
+      .fontSize(style.nameFontSize || 20)
       .text(data.name, {
-        paragraphGap: style.paragraphGap,
+        paragraphGap,
         align: 'left',
-        lineGap: style.lineGap,
-        characterSpacing: style.headingUppercase ? 0.3 : undefined,
+        lineGap,
       })
-      .fillColor(style.textColor)
-      .font(style.font)
-      .fontSize(style.bodyFontSize || 12);
+      .fillColor(style.textColor);
 
     data.sections.forEach((sec) => {
+      const headingText = style.headingUppercase ? sec.heading?.toUpperCase() : sec.heading;
       doc
         .font(style.bold)
         .fillColor(style.headingColor)
         .fontSize(style.headingFontSize || 14)
-        .text(style.headingUppercase ? sec.heading?.toUpperCase() : sec.heading, {
-          paragraphGap: style.paragraphGap,
-          lineGap: style.lineGap,
-        })
-        .fillColor(style.textColor)
-        .font(style.font)
-        .fontSize(style.bodyFontSize || 12);
+        .text(headingText, {
+          paragraphGap,
+          lineGap,
+        });
       (sec.items || []).forEach((tokens) => {
         const startY = doc.y;
-        doc.font(style.font).fontSize(style.bodyFontSize || 12);
-        const indentSpaces = Math.max(1, Math.floor((style.bulletIndent || 12) / 4));
+        doc.font(style.font).fontSize(bodyFontSize);
         tokens.forEach((t, idx) => {
           if (t.type === 'bullet') {
             const glyph =
@@ -4735,11 +4843,8 @@ let generatePdf = async function (
                 : style.bullet;
             doc
               .fillColor(style.bulletColor)
-              .text(`${glyph}`, { continued: true, lineGap: style.lineGap })
-              .text(' '.repeat(indentSpaces), {
-                continued: true,
-                lineGap: style.lineGap,
-              })
+              .text(`${glyph} `, { continued: true, lineGap })
+              .text('', { continued: true })
               .fillColor(style.textColor);
             return;
           }
@@ -4748,30 +4853,26 @@ let generatePdf = async function (
           }
           if (t.type === 'newline') {
             const before = doc.y;
-            doc.text('', { continued: false, lineGap: style.lineGap });
+            doc.text('', { continued: false, lineGap });
             if (doc.y === before) doc.moveDown();
-            doc.text(' '.repeat(indentSpaces * 2), {
-              continued: true,
-              lineGap: style.lineGap,
-            });
+            doc.text('   ', { continued: true, lineGap });
             return;
           }
-          const opts = { continued: idx < tokens.length - 1, lineGap: style.lineGap };
+          const opts = { continued: idx < tokens.length - 1, lineGap };
           if (t.type === 'tab') {
-            const tabSize = style.tabSize || 4;
             doc.text(' '.repeat(tabSize), opts);
             return;
           }
           if (t.type === 'link') {
             doc.fillColor('blue');
             doc.text(t.text, {
-              lineGap: style.lineGap,
+              lineGap,
               link: t.href,
               underline: true,
               continued: false
             });
             if (idx < tokens.length - 1)
-              doc.text('', { continued: true, lineGap: style.lineGap });
+              doc.text('', { continued: true, lineGap });
             doc.fillColor(style.textColor);
             return;
           }
@@ -4788,7 +4889,7 @@ let generatePdf = async function (
           doc.font(style.font);
         });
         if (doc.y === startY) doc.moveDown();
-        const extra = style.paragraphGap / doc.currentLineHeight(true);
+        const extra = paragraphGap / doc.currentLineHeight(true);
         if (extra) doc.moveDown(extra);
       });
       doc.moveDown();
