@@ -131,6 +131,7 @@ const { default: app, extractText, setGeneratePdf, parseContent, classifyDocumen
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
 const mammothMock = (await import('mammoth')).default;
 const axios = (await import('axios')).default;
+axios.get = jest.fn();
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
 const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -151,6 +152,10 @@ beforeEach(() => {
   });
   mammothMock.extractRawText.mockReset();
   mammothMock.extractRawText.mockResolvedValue({ value: 'Docx text' });
+  axios.get.mockReset();
+  axios.get.mockResolvedValue({
+    data: '<html><title>Software Engineer</title><p>Design and build APIs.</p></html>'
+  });
 });
 
 describe('health check', () => {
@@ -340,6 +345,52 @@ describe('/api/process-cv', () => {
     expect(manual.status).toBe(200);
     expect(manual.body.success).toBe(true);
     expect(manual.body.jobDescriptionText).toContain('Manual JD text');
+  });
+
+  test('fetches job description when a URL is supplied', async () => {
+    axios.get.mockResolvedValueOnce({
+      data: '<html><title>Backend Engineer</title><p>Design scalable systems.</p></html>'
+    });
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://jobs.example.com/backend-engineer')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(String(response.body.jobDescriptionText || '')).toContain('Design scalable systems.');
+    expect(axios.get).toHaveBeenCalledWith('https://jobs.example.com/backend-engineer', expect.any(Object));
+  });
+
+  test('requires pasted JD when URL fetch is blocked', async () => {
+    const blockedError = Object.assign(new Error('Forbidden'), {
+      response: { status: 403 },
+      code: 'ERR_BLOCKED_BY_RESPONSE',
+    });
+    axios.get.mockRejectedValueOnce(blockedError);
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .field('jobDescriptionUrl', 'https://jobs.example.com/protected-role')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('JOB_DESCRIPTION_FETCH_FAILED');
+    expect(response.body.error.message).toBe(
+      'Unable to fetch JD from this URL. Please paste full job description below.'
+    );
+    expect(response.body.error.details).toMatchObject({
+      manualInputRequired: true,
+      url: 'https://jobs.example.com/protected-role',
+    });
   });
 
   test('sanitizes manual job description input before analysis', async () => {

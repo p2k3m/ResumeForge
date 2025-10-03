@@ -2935,6 +2935,78 @@ async function runTargetedImprovement(type, context = {}) {
   return enforceTargetedUpdate(type, resumeText, fallbackResult, scopeContext);
 }
 
+class JobDescriptionFetchBlockedError extends Error {
+  constructor(message = 'Job description fetch blocked', options = {}) {
+    super(message);
+    this.name = 'JobDescriptionFetchBlockedError';
+    this.code = 'FETCH_BLOCKED';
+    this.reason = 'FETCH_BLOCKED';
+    this.manualInputRequired = true;
+    if (options.status) {
+      this.status = options.status;
+    }
+    if (options.code) {
+      this.upstreamCode = options.code;
+    }
+    if (options.url) {
+      this.url = options.url;
+    }
+    if (options.cause) {
+      this.cause = options.cause;
+    }
+  }
+}
+
+function isJobDescriptionFetchBlocked(err = {}) {
+  if (err instanceof JobDescriptionFetchBlockedError) {
+    return true;
+  }
+
+  if (err && err.manualInputRequired) {
+    return true;
+  }
+
+  const code = typeof err.code === 'string' ? err.code.toUpperCase() : '';
+  if (code.includes('BLOCKED') || code === 'ERR_NETWORK' || code === 'ECONNREFUSED') {
+    return true;
+  }
+
+  const status = err?.response?.status ?? err?.statusCode;
+  if (typeof status === 'number' && [401, 403, 407, 429, 451].includes(status)) {
+    return true;
+  }
+
+  const message = typeof err?.message === 'string' ? err.message.toLowerCase() : '';
+  if (!message) {
+    return false;
+  }
+
+  return (
+    message.includes('forbidden') ||
+    message.includes('access denied') ||
+    message.includes('blocked') ||
+    message.includes('captcha') ||
+    message.includes('authorization')
+  );
+}
+
+function toJobDescriptionFetchError(err, context = {}) {
+  if (err instanceof JobDescriptionFetchBlockedError) {
+    return err;
+  }
+
+  if (isJobDescriptionFetchBlocked(err)) {
+    return new JobDescriptionFetchBlockedError('Job description fetch was blocked', {
+      status: err?.response?.status ?? err?.statusCode,
+      code: typeof err?.code === 'string' ? err.code : undefined,
+      url: context.url,
+      cause: err,
+    });
+  }
+
+  return err;
+}
+
 async function scrapeJobDescription(url, options = {}) {
   if (!url) throw new Error('Job description URL is required');
 
@@ -2963,12 +3035,13 @@ async function scrapeJobDescription(url, options = {}) {
           }
           return html;
         } catch (err) {
+          const normalizedError = toJobDescriptionFetchError(err, { url });
           try {
             await page.close();
           } catch {
             /* ignore */
           }
-          throw err;
+          throw normalizedError;
         }
       }
 
@@ -2984,7 +3057,11 @@ async function scrapeJobDescription(url, options = {}) {
       }
       return html;
     } catch (err) {
-      lastError = err;
+      const normalizedError = toJobDescriptionFetchError(err, { url });
+      if (normalizedError instanceof JobDescriptionFetchBlockedError) {
+        throw normalizedError;
+      }
+      lastError = normalizedError;
       if (attempt < maxAttempts) {
         const delay = 500 * 2 ** (attempt - 1);
         await sleep(delay);
@@ -9163,9 +9240,12 @@ app.post(
         : '';
   const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
   const hasManualJobDescription = Boolean(manualJobDescription);
+  const jobDescriptionUrlValue =
+    typeof jobDescriptionUrl === 'string' ? jobDescriptionUrl.trim() : '';
+  const hasJobDescriptionUrl = Boolean(jobDescriptionUrlValue);
   logStructured('info', 'process_cv_started', {
     ...logContext,
-    jobDescriptionHost: getUrlHost(jobDescriptionUrl),
+    jobDescriptionHost: getUrlHost(jobDescriptionUrlValue),
     linkedinHost: getUrlHost(linkedinProfileUrl),
     credlyHost: getUrlHost(credlyProfileUrl),
     manualJobDescriptionProvided: hasManualJobDescription,
@@ -9228,7 +9308,7 @@ app.post(
       { field: 'resume' }
     );
   }
-  if (!hasManualJobDescription) {
+  if (!hasManualJobDescription && !hasJobDescriptionUrl) {
     logStructured('warn', 'job_description_missing', logContext);
     return sendError(
       res,
@@ -9457,9 +9537,6 @@ app.post(
     typeof requestId === 'string' && requestId.trim()
       ? requestId.trim()
       : String(requestId || '');
-  const jobDescriptionUrlValue =
-    typeof jobDescriptionUrl === 'string' ? jobDescriptionUrl : '';
-
   try {
     await ensureTableExists();
     const timestamp = new Date().toISOString();
@@ -9646,12 +9723,12 @@ app.post(
         jobId,
         event: 'job_description_supplied_manually'
       });
-    } else {
+    } else if (jobDescriptionUrlValue) {
       try {
-        jobDescriptionHtml = await scrapeJobDescription(jobDescriptionUrl);
+        jobDescriptionHtml = await scrapeJobDescription(jobDescriptionUrlValue);
         logStructured('info', 'job_description_fetched', {
           ...logContext,
-          url: jobDescriptionUrl,
+          url: jobDescriptionUrlValue,
           bytes: jobDescriptionHtml.length,
         });
         await logEvent({
@@ -9675,14 +9752,32 @@ app.post(
           ...logContext,
           error: serializeError(err),
         });
+        const reason =
+          typeof err?.reason === 'string'
+            ? err.reason
+            : typeof err?.code === 'string'
+              ? err.code
+              : undefined;
         return sendError(
           res,
           400,
           'JOB_DESCRIPTION_FETCH_FAILED',
           'Unable to fetch JD from this URL. Please paste full job description below.',
-          { url: jobDescriptionUrl, manualInputRequired: true }
+          {
+            url: jobDescriptionUrlValue,
+            manualInputRequired: true,
+            ...(reason ? { reason } : {}),
+          }
         );
       }
+    } else {
+      return sendError(
+        res,
+        400,
+        'JOB_DESCRIPTION_REQUIRED',
+        'manualJobDescription required',
+        { field: 'manualJobDescription' }
+      );
     }
     const {
       title: jobTitle,
@@ -10116,4 +10211,5 @@ export {
   classifyDocument,
   buildScoreBreakdown,
   enforceTargetedUpdate,
+  JobDescriptionFetchBlockedError,
 };
