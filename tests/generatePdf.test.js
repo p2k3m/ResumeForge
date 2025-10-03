@@ -486,6 +486,27 @@ describe('generatePdf and parsing', () => {
     expect(raw).toContain('https://credly.com/badges/xyz');
   });
 
+  test('cover letter PDFs preserve raw link text formatting', async () => {
+    const input = [
+      'Jane Candidate',
+      '',
+      'LinkedIn: https://linkedin.com/in/janedoe',
+      'Credly: https://credly.com/badges/xyz',
+      '',
+      'Sincerely,',
+      'Jane'
+    ].join('\n');
+    const buffer = await generatePdf(input, 'cover_modern', {
+      skipRequiredSections: true
+    });
+    const text = await parsePdfText(buffer);
+    expect(text).toContain('LinkedIn: https://linkedin.com/in/janedoe');
+    expect(text).toContain('Credly: https://credly.com/badges/xyz');
+    const raw = buffer.toString();
+    expect(raw).toContain('https://linkedin.com/in/janedoe');
+    expect(raw).toContain('https://credly.com/badges/xyz');
+  });
+
   test('PDFKit link annotations stop before following text', async () => {
     const input = 'John Doe\n- Visit [OpenAI](https://openai.com) for more';
     const buffer = await generatePdf(input);

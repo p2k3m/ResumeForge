@@ -55,4 +55,15 @@ describe('parseLine emphasis handling', () => {
     expect(texts).not.toContain('(');
     expect(texts).not.toContain(')');
   });
+
+  test('preserves raw link text when requested', () => {
+    const tokens = parseLine('LinkedIn: https://linkedin.com/in/example', {
+      preserveLinkText: true
+    });
+    const link = tokens.find((t) => t.type === 'link');
+    expect(link.text).toBe('https://linkedin.com/in/example');
+    expect(link.href).toBe('https://linkedin.com/in/example');
+    const combined = tokens.map((t) => t.text || '').join('');
+    expect(combined).toContain('LinkedIn: https://linkedin.com/in/example');
+  });
 });
