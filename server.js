@@ -4290,50 +4290,6 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
-function tokensToPlainText(tokens = []) {
-  return tokens
-    .map((token) => {
-      if (!token) return '';
-      if (token.type === 'bullet') return '• ';
-      if (token.type === 'edu-bullet') return '• ';
-      if (token.type === 'newline') return '\n';
-      if (token.type === 'tab') return '\t';
-      if (typeof token.text === 'string') return token.text;
-      return '';
-    })
-    .join('')
-    .replace(/\s+\n/g, '\n')
-    .trim();
-}
-
-function buildUcmoLayoutPrompt(context) {
-  const lines = [
-    'You are an elite front-end designer building a University of Central Missouri (UCMO) resume layout.',
-    'Create a complete HTML document with inline CSS only. Requirements:',
-    '- Use UCMO crimson (#900021) as the accent colour with charcoal (#2d3748) body text.',
-    '- Include a top contact bar with the candidate details on the left and the official logo (https://resumeforge.s3.amazonaws.com/ucmo-logo.png) on the right.',
-    '- Render the candidate name in a prominent header and ensure section headings are uppercase with subtle background panels.',
-    '- Output bullet lists using <span class="bullet">•</span> elements matching the accent colour.',
-    '- Keep markup accessible, semantic (<section>, <header>, <ul>), and responsive without external fonts.',
-    '',
-    'CANDIDATE_CONTEXT:',
-    JSON.stringify(context, null, 2),
-    '',
-    'Return ONLY raw HTML markup (no Markdown, code fences, or commentary).'
-  ];
-  return lines.join('\n');
-}
-
-function extractGeminiHtml(raw = '') {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  const fenceMatch = trimmed.match(/```(?:html)?\n([\s\S]*?)```/i);
-  if (fenceMatch) {
-    return fenceMatch[1].trim();
-  }
-  return trimmed;
-}
-
 let generatePdf = async function (
   text,
   templateId = 'modern',
@@ -4408,58 +4364,6 @@ let generatePdf = async function (
     }
   }
   let html;
-  if (
-    templateId === 'ucmo' &&
-    generativeModel?.generateContent &&
-    Array.isArray(data.sections) &&
-    data.sections.length
-  ) {
-    const contactLines = Array.isArray(options?.contactLines)
-      ? options.contactLines
-          .map((line) => (typeof line === 'string' ? line.trim() : ''))
-          .filter(Boolean)
-      : [];
-    const sections = data.sections.map((sec) => ({
-      heading: sec.heading,
-      items: (sec.items || [])
-        .map((tokens) => tokensToPlainText(tokens))
-        .filter(Boolean),
-    }));
-    const promptContext = {
-      name: data.name,
-      contact: contactLines,
-      sections,
-    };
-    try {
-      const prompt = buildUcmoLayoutPrompt(promptContext);
-      logStructured('debug', 'pdf_template_gemini_prompt', {
-        templateId,
-        requestedTemplateId,
-        promptLength: prompt.length,
-      });
-      const result = await generativeModel.generateContent(prompt);
-      const generatedHtml = extractGeminiHtml(result?.response?.text?.());
-      if (generatedHtml) {
-        html = generatedHtml;
-        logStructured('info', 'pdf_template_gemini_markup_ready', {
-          templateId,
-          requestedTemplateId,
-          length: html.length,
-        });
-      } else {
-        logStructured('warn', 'pdf_template_gemini_empty', {
-          templateId,
-          requestedTemplateId,
-        });
-      }
-    } catch (err) {
-      logStructured('warn', 'pdf_template_gemini_failed', {
-        templateId,
-        requestedTemplateId,
-        error: serializeError(err),
-      });
-    }
-  }
   if (!html) {
     const templatePath = path.resolve('templates', `${templateId}.html`);
     logStructured('debug', 'pdf_template_loading', {
