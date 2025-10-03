@@ -12594,6 +12594,51 @@ app.post(
       });
     }
 
+    let enhancedResponse = null;
+    try {
+      enhancedResponse = await generateEnhancedDocumentsResponse({
+        res,
+        s3,
+        dynamo,
+        tableName,
+        bucket,
+        logKey,
+        jobId,
+        requestId,
+        logContext,
+        resumeText: text,
+        originalResumeTextInput: originalResumeText,
+        jobDescription,
+        jobSkills,
+        resumeSkills,
+        originalMatch,
+        linkedinProfileUrl,
+        linkedinData,
+        credlyProfileUrl,
+        credlyCertifications,
+        credlyStatus,
+        manualCertificates,
+        templateContextInput,
+        templateParamConfig,
+        applicantName,
+        sanitizedName,
+        anonymizedLinkedIn,
+        originalUploadKey,
+        selection,
+        geminiApiKey: secrets.GEMINI_API_KEY,
+        changeLogEntries: [],
+      });
+    } catch (generationErr) {
+      logStructured('warn', 'process_cv_generation_failed', {
+        ...logContext,
+        error: serializeError(generationErr),
+      });
+    }
+
+    if (enhancedResponse) {
+      return res.json(enhancedResponse);
+    }
+
     const fallbackResponse = {
       success: true,
       requestId,
