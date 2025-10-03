@@ -288,9 +288,14 @@ describe('/api/process-cv', () => {
       ([cmd]) => cmd.__type === 'UpdateItemCommand'
     );
     expect(updateCall).toBeTruthy();
-    expect(updateCall[0].input.ConditionExpression).toBe('jobId = :jobId');
+    expect(updateCall[0].input.ConditionExpression).toBe(
+      'jobId = :jobId AND (#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status))'
+    );
     expect(updateCall[0].input.ExpressionAttributeValues[':status'].S).toBe(
       'scored'
+    );
+    expect(updateCall[0].input.ExpressionAttributeValues[':statusUploaded'].S).toBe(
+      'uploaded'
     );
     expect(updateCall[0].input.ExpressionAttributeNames['#status']).toBe(
       'status'

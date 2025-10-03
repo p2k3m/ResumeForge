@@ -10797,6 +10797,8 @@ async function generateEnhancedDocumentsResponse({
       ':status': { S: 'completed' },
       ':generatedAt': { S: nowIso },
       ':jobId': { S: jobId },
+      ':statusScored': { S: 'scored' },
+      ':statusCompleted': { S: 'completed' },
     };
 
     const assignKey = (field, placeholder, value) => {
@@ -10818,7 +10820,8 @@ async function generateEnhancedDocumentsResponse({
           UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
           ExpressionAttributeNames: expressionAttributeNames,
           ExpressionAttributeValues: expressionAttributeValues,
-          ConditionExpression: 'jobId = :jobId',
+          ConditionExpression:
+            'jobId = :jobId AND (#status = :statusScored OR #status = :statusCompleted)',
         })
       );
       await logEvent({
@@ -12570,9 +12573,11 @@ app.post(
             },
             ':score': { N: String(scoringUpdate.normalizedScore) },
             ':jobId': { S: jobId },
+            ':statusUploaded': { S: 'uploaded' },
           },
           ExpressionAttributeNames: { '#status': 'status' },
-          ConditionExpression: 'jobId = :jobId',
+          ConditionExpression:
+            'jobId = :jobId AND (#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status))',
         })
       );
       await logEvent({
