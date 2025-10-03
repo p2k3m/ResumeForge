@@ -16,6 +16,29 @@ function clampScore(score) {
   return Math.min(Math.max(Math.round(score), 0), 100)
 }
 
+function normalizeSkills(skills) {
+  if (!Array.isArray(skills)) {
+    return []
+  }
+  return skills
+    .map((skill) => {
+      if (typeof skill === 'string') return skill.trim()
+      if (skill === null || skill === undefined) return ''
+      return String(skill).trim()
+    })
+    .filter(Boolean)
+}
+
+function summariseSkills(skills, limit = 5) {
+  const list = normalizeSkills(skills)
+  if (list.length <= limit) {
+    return list.join(', ')
+  }
+  const visible = list.slice(0, limit)
+  const remaining = list.length - visible.length
+  return `${visible.join(', ')}, +${remaining} more`
+}
+
 function formatDelta(originalScore, enhancedScore) {
   if (typeof originalScore !== 'number' || typeof enhancedScore !== 'number') {
     return null
@@ -97,6 +120,39 @@ function ATSScoreDashboard({ metrics = [], match }) {
   const selectionProbabilityDescription =
     'Combines ATS scores, keyword coverage, and credential alignment to estimate how likely you are to be shortlisted.'
 
+  const missingSkills = normalizeSkills(match?.missingSkills)
+  const addedSkills = normalizeSkills(match?.addedSkills)
+
+  const matchStatusStyles = {
+    match: {
+      label: 'Match',
+      badgeClass:
+        'inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 ring-1 ring-inset ring-emerald-200'
+    },
+    mismatch: {
+      label: 'Mismatch',
+      badgeClass:
+        'inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 ring-1 ring-inset ring-rose-200'
+    }
+  }
+
+  const originalStatus = missingSkills.length > 0 ? 'mismatch' : 'match'
+  const enhancedStatus = missingSkills.length > 0 ? 'mismatch' : 'match'
+
+  const originalAdvice =
+    originalStatus === 'mismatch'
+      ? `You are missing these skills: ${summariseSkills(missingSkills)}`
+      : addedSkills.length > 0
+        ? `ResumeForge added: ${summariseSkills(addedSkills)}`
+        : 'All priority JD skills are covered.'
+
+  const enhancedAdvice =
+    enhancedStatus === 'mismatch'
+      ? `Still missing these skills: ${summariseSkills(missingSkills)}`
+      : addedSkills.length > 0
+        ? `Now highlighting: ${summariseSkills(addedSkills)}`
+        : 'Enhanced draft fully aligns with the JD keywords.'
+
   return (
     <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -144,6 +200,17 @@ function ATSScoreDashboard({ metrics = [], match }) {
             <p className="mt-2 text-sm text-indigo-600/90" data-testid="original-title">
               {match.originalTitle || 'Initial resume title unavailable.'}
             </p>
+            <div className="mt-4 space-y-2">
+              <span
+                className={matchStatusStyles[originalStatus].badgeClass}
+                data-testid="original-match-status"
+              >
+                {matchStatusStyles[originalStatus].label}
+              </span>
+              <p className="text-sm text-indigo-700/90" data-testid="original-match-advice">
+                {originalAdvice}
+              </p>
+            </div>
           </div>
           <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-100 via-white to-emerald-50 p-6 shadow-lg backdrop-blur">
             <div className="flex items-start justify-between gap-3">
@@ -170,6 +237,17 @@ function ATSScoreDashboard({ metrics = [], match }) {
             <p className="mt-2 text-sm text-emerald-700/90" data-testid="enhanced-title">
               {match.modifiedTitle || match.originalTitle || 'Enhanced resume title coming soon.'}
             </p>
+            <div className="mt-4 space-y-2">
+              <span
+                className={matchStatusStyles[enhancedStatus].badgeClass}
+                data-testid="enhanced-match-status"
+              >
+                {matchStatusStyles[enhancedStatus].label}
+              </span>
+              <p className="text-sm text-emerald-700/90" data-testid="enhanced-match-advice">
+                {enhancedAdvice}
+              </p>
+            </div>
           </div>
           {hasComparableScores && (
             <div
