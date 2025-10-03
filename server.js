@@ -9155,11 +9155,20 @@ app.post(
   };
 
   const { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
+  const manualJobDescriptionInput =
+    typeof req.body.manualJobDescription === 'string'
+      ? req.body.manualJobDescription
+      : typeof req.body.jobDescriptionText === 'string'
+        ? req.body.jobDescriptionText
+        : '';
+  const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
+  const hasManualJobDescription = Boolean(manualJobDescription);
   logStructured('info', 'process_cv_started', {
     ...logContext,
     jobDescriptionHost: getUrlHost(jobDescriptionUrl),
     linkedinHost: getUrlHost(linkedinProfileUrl),
     credlyHost: getUrlHost(credlyProfileUrl),
+    manualJobDescriptionProvided: hasManualJobDescription,
   });
   const bodyTemplate =
     typeof req.body.template === 'string' ? req.body.template.trim() : '';
@@ -9219,13 +9228,14 @@ app.post(
       { field: 'resume' }
     );
   }
-  if (!jobDescriptionUrl) {
+  if (!hasManualJobDescription) {
     logStructured('warn', 'job_description_missing', logContext);
     return sendError(
       res,
       400,
-      'JOB_DESCRIPTION_URL_REQUIRED',
-      'jobDescriptionUrl required'
+      'JOB_DESCRIPTION_REQUIRED',
+      'manualJobDescription required',
+      { field: 'manualJobDescription' }
     );
   }
   const ext = (path.extname(req.file.originalname) || '').toLowerCase();
@@ -9621,16 +9631,6 @@ app.post(
       event: 'selected_templates',
       message: `template1=${template1}; template2=${template2}`
     });
-
-    const manualJobDescriptionInput =
-      typeof req.body.manualJobDescription === 'string'
-        ? req.body.manualJobDescription
-        : typeof req.body.jobDescriptionText === 'string'
-          ? req.body.jobDescriptionText
-          : '';
-    const manualJobDescription = sanitizeManualJobDescription(
-      manualJobDescriptionInput
-    );
 
     let jobDescriptionHtml;
     if (manualJobDescription) {
