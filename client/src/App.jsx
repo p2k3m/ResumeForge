@@ -8,6 +8,15 @@ import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
 import JobDescriptionPreview from './components/JobDescriptionPreview.jsx'
+import summaryIcon from './assets/icon-summary.svg'
+import skillsIcon from './assets/icon-skills.svg'
+import experienceIcon from './assets/icon-experience.svg'
+import designationIcon from './assets/icon-designation.svg'
+import certificationsIcon from './assets/icon-certifications.svg'
+import projectsIcon from './assets/icon-projects.svg'
+import highlightsIcon from './assets/icon-highlights.svg'
+import enhanceIcon from './assets/icon-enhance.svg'
+import qrOptimisedResume from './assets/qr-optimised-resume.svg'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 
@@ -18,42 +27,50 @@ const improvementActions = [
   {
     key: 'improve-summary',
     label: 'Improve Summary',
-    helper: 'Refresh your summary to mirror the JD tone and keywords.'
+    helper: 'Refresh your summary to mirror the JD tone and keywords.',
+    icon: summaryIcon
   },
   {
     key: 'add-missing-skills',
     label: 'Improve Skills',
-    helper: 'Blend missing keywords into the skills and experience sections.'
+    helper: 'Blend missing keywords into the skills and experience sections.',
+    icon: skillsIcon
   },
   {
     key: 'align-experience',
     label: 'Improve Experience',
-    helper: 'Emphasise accomplishments that mirror the job requirements.'
+    helper: 'Emphasise accomplishments that mirror the job requirements.',
+    icon: experienceIcon
   },
   {
     key: 'change-designation',
     label: 'Improve Designation',
-    helper: 'Align your visible job title with the target role.'
+    helper: 'Align your visible job title with the target role.',
+    icon: designationIcon
   },
   {
     key: 'improve-certifications',
     label: 'Improve Certifications',
-    helper: 'Surface credentials that validate your readiness for this JD.'
+    helper: 'Surface credentials that validate your readiness for this JD.',
+    icon: certificationsIcon
   },
   {
     key: 'improve-projects',
     label: 'Improve Projects',
-    helper: 'Spotlight portfolio wins that map directly to the role priorities.'
+    helper: 'Spotlight portfolio wins that map directly to the role priorities.',
+    icon: projectsIcon
   },
   {
     key: 'improve-highlights',
     label: 'Improve Highlights',
-    helper: 'Refine top achievements so they echo the job’s success metrics.'
+    helper: 'Refine top achievements so they echo the job’s success metrics.',
+    icon: highlightsIcon
   },
   {
     key: 'enhance-all',
     label: 'Enhance All',
-    helper: 'Apply every improvement in one pass for a best-fit CV.'
+    helper: 'Apply every improvement in one pass for a best-fit CV.',
+    icon: enhanceIcon
   }
 ]
 
@@ -3073,6 +3090,31 @@ function App() {
           </p>
         </header>
 
+        <section className="rounded-3xl border border-slate-200/80 bg-white/70 p-6 shadow-lg">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-3 md:max-w-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                Explore the output
+              </p>
+              <h2 className="text-2xl font-bold text-slate-900">Preview an optimised resume</h2>
+              <p className="text-sm leading-relaxed text-slate-600">
+                Scan the QR code to view an example of the AI-enhanced download package. Every section shown
+                in the dashboard is preserved in the PDF so you can confidently review the final design on any device.
+              </p>
+            </div>
+            <figure className="mx-auto flex flex-col items-center gap-3 rounded-2xl bg-slate-50/80 p-4 shadow-inner">
+              <img
+                src={qrOptimisedResume}
+                alt="QR code linking to a sample optimised resume"
+                className="h-32 w-32 md:h-36 md:w-36"
+              />
+              <figcaption className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">
+                Scan &amp; explore
+              </figcaption>
+            </figure>
+          </div>
+        </section>
+
         <ProcessFlow steps={flowSteps} />
 
         <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
@@ -3433,13 +3475,18 @@ function App() {
                       !improvementsUnlocked && improvementUnlockMessage ? improvementUnlockMessage : undefined
                     }
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
+                    <div className="flex items-center gap-4">
+                      {action.icon && (
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50/90 p-2 ring-1 ring-purple-100">
+                          <img src={action.icon} alt="" className="h-8 w-8" aria-hidden="true" />
+                        </span>
+                      )}
+                      <div className="flex-1">
                         <p className="text-lg font-semibold text-purple-800">{action.label}</p>
                         <p className="text-sm text-purple-600">{action.helper}</p>
                       </div>
                       {isActive && (
-                        <span className="h-6 w-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                        <span className="h-6 w-6 shrink-0 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
                       )}
                     </div>
                   </button>
