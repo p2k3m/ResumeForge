@@ -14,7 +14,11 @@ const generativeModelMock = {
   })
 };
 
-const { collectSectionText, rewriteSectionsWithGemini } = await import('../server.js');
+const {
+  collectSectionText,
+  rewriteSectionsWithGemini,
+  sanitizeGeneratedText,
+} = await import('../server.js');
 
 describe('rewriteSectionsWithGemini prompt construction', () => {
   beforeEach(() => {
@@ -47,7 +51,8 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
       'Exciting job description here',
       ['JavaScript', 'AWS'],
       generativeModelMock,
-      { skipRequiredSections: true }
+      { skipRequiredSections: true },
+      resume
     );
 
     expect(generativeModelMock.generateContent).toHaveBeenCalledTimes(1);
@@ -75,10 +80,11 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
       'Job description',
       [],
       null,
-      { skipRequiredSections: true }
+      { skipRequiredSections: true },
+      resume
     );
 
-    expect(result.text).toContain('Jane Doe');
+    expect(result.text).toBe(sanitizeGeneratedText(resume, { skipRequiredSections: true }));
     expect(result.project).toBe('');
     expect(result.modifiedTitle).toBe('');
     expect(result.addedSkills).toEqual([]);

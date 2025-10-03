@@ -36,13 +36,14 @@ describe('rewriteSectionsWithGemini', () => {
       },
     });
     const generativeModel = { generateContent: generateContentMock };
-    const { text, modifiedTitle, addedSkills } = await rewriteSectionsWithGemini(
+    const { text, modifiedTitle, addedSkills, sanitizedFallbackUsed } = await rewriteSectionsWithGemini(
       'John Doe',
       sections,
       'JD text',
       ['Leadership', 'Skill C'],
       generativeModel,
-      { skipRequiredSections: true }
+      { skipRequiredSections: true },
+      resumeText
     );
     expect(generativeModel.generateContent).toHaveBeenCalled();
     expect(text).toContain('Polished summary');
@@ -55,6 +56,7 @@ describe('rewriteSectionsWithGemini', () => {
     expect(text).toContain('Updated Title');
     expect(modifiedTitle).toBe('Updated Title');
     expect(addedSkills).toEqual(['Skill C']);
+    expect(sanitizedFallbackUsed).toBe(false);
   });
 
   test('falls back to sanitized resume when Gemini returns plain text', async () => {
@@ -74,13 +76,15 @@ describe('rewriteSectionsWithGemini', () => {
       'Job description text',
       ['Communication'],
       generativeModel,
-      options
+      options,
+      resumeText
     );
 
     expect(generativeModel.generateContent).toHaveBeenCalledTimes(1);
-    expect(result.text).toBe(sanitizeGeneratedText('Jane Doe', options));
+    expect(result.text).toBe(sanitizeGeneratedText(resumeText, options));
     expect(result.project).toBe('');
     expect(result.modifiedTitle).toBe('');
     expect(result.addedSkills).toEqual([]);
+    expect(result.sanitizedFallbackUsed).toBe(true);
   });
 });
