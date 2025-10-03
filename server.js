@@ -2426,37 +2426,50 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       defaultReasons.experience
     );
 
-    trackChange(
-      'certifications',
-      'Certifications',
-      applySectionUpdate(workingResume, baseResult.updatedResume, {
+    const certificationsResult = applySectionUpdate(
+      workingResume,
+      baseResult.updatedResume,
+      {
         pattern: CERTIFICATIONS_SECTION_PATTERN,
         defaultLabel: 'Certifications',
         insertIndex: 3,
-      }),
-      defaultReasons.certifications
+      }
     );
+
+    trackChange(
+      'certifications',
+      'Certifications',
+      certificationsResult,
+      defaultReasons.certifications,
+      { forceRecord: true }
+    );
+
+    const projectsResult = applySectionUpdate(workingResume, baseResult.updatedResume, {
+      pattern: PROJECTS_SECTION_PATTERN,
+      defaultLabel: 'Projects',
+      insertIndex: 3,
+    });
 
     trackChange(
       'projects',
       'Projects',
-      applySectionUpdate(workingResume, baseResult.updatedResume, {
-        pattern: PROJECTS_SECTION_PATTERN,
-        defaultLabel: 'Projects',
-        insertIndex: 3,
-      }),
-      defaultReasons.projects
+      projectsResult,
+      defaultReasons.projects,
+      { forceRecord: true }
     );
+
+    const highlightsResult = applySectionUpdate(workingResume, baseResult.updatedResume, {
+      pattern: HIGHLIGHTS_SECTION_PATTERN,
+      defaultLabel: 'Highlights',
+      insertIndex: 2,
+    });
 
     trackChange(
       'highlights',
       'Highlights',
-      applySectionUpdate(workingResume, baseResult.updatedResume, {
-        pattern: HIGHLIGHTS_SECTION_PATTERN,
-        defaultLabel: 'Highlights',
-        insertIndex: 2,
-      }),
-      defaultReasons.highlights
+      highlightsResult,
+      defaultReasons.highlights,
+      { forceRecord: true }
     );
 
     trackChange(
