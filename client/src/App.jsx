@@ -731,6 +731,7 @@ function App() {
   const downloadCount = outputFiles.length
   const changeCount = changeLog.length
   const scoreMetricCount = scoreBreakdown.length
+  const scoreDashboardReady = scoreMetricCount > 0
   const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
   const hasAnalysisData =
     scoreMetricCount > 0 || hasMatch || improvementCount > 0 || downloadCount > 0 || changeCount > 0
@@ -2308,7 +2309,7 @@ function App() {
           </section>
         )}
 
-        {improvementActions.length > 0 && (
+        {scoreDashboardReady && improvementActions.length > 0 && (
           <section className="space-y-4">
             <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
             <p className="text-sm text-purple-700/80">
@@ -2356,6 +2357,16 @@ function App() {
                 Review your ATS results, then pick an improvement above to see tailored rewrites before generating downloads.
               </div>
             )}
+          </section>
+        )}
+
+        {!scoreDashboardReady && improvementActions.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
+            <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+              Run the ATS scoring first to populate your dashboard. Once the metrics are ready, you can unlock focused
+              improvement options tailored to the analysis.
+            </div>
           </section>
         )}
 
