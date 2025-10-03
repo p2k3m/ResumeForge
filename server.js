@@ -11109,6 +11109,25 @@ app.post(
             'The upload context could not be located for final generation.'
           );
         }
+
+        const currentStatus = item.status?.S || '';
+        if (
+          currentStatus &&
+          currentStatus !== 'scored' &&
+          currentStatus !== 'completed'
+        ) {
+          logStructured('warn', 'generation_job_not_ready', {
+            ...logContext,
+            status: currentStatus,
+          });
+          return sendError(
+            res,
+            409,
+            'JOB_NOT_READY_FOR_ENHANCEMENT',
+            'Wait for ATS scoring to finish before generating enhanced documents.'
+          );
+        }
+
         originalUploadKey = item.s3Key?.S || '';
         storedBucket = item.s3Bucket?.S || '';
         if (!bucket && storedBucket) {
@@ -11669,11 +11688,9 @@ app.post(
   const s3 = s3Client;
   let bucket;
   let secrets;
-  let geminiApiKey;
   try {
     secrets = getSecrets();
     bucket = secrets.S3_BUCKET;
-    geminiApiKey = secrets.GEMINI_API_KEY;
   } catch (err) {
     const missing = extractMissingConfig(err);
     logStructured('error', 'configuration_load_failed', {
@@ -12570,42 +12587,6 @@ app.post(
         ...logContext,
         error: serializeError(updateErr),
       });
-    }
-
-    const generationResponse = await generateEnhancedDocumentsResponse({
-      res,
-      s3,
-      dynamo,
-      tableName,
-      bucket,
-      logKey,
-      jobId,
-      requestId,
-      logContext,
-      resumeText: text,
-      originalResumeTextInput: originalResumeText,
-      jobDescription,
-      jobSkills,
-      resumeSkills,
-      originalMatch,
-      linkedinProfileUrl,
-      linkedinData,
-      credlyProfileUrl,
-      credlyCertifications,
-      credlyStatus,
-      manualCertificates,
-      templateContextInput,
-      templateParamConfig,
-      applicantName,
-      sanitizedName,
-      anonymizedLinkedIn,
-      originalUploadKey,
-      selection,
-      geminiApiKey,
-    });
-
-    if (generationResponse) {
-      return res.json(generationResponse);
     }
 
     const fallbackResponse = {
