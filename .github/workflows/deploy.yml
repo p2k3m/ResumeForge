@@ -267,7 +267,23 @@ jobs:
             fi
 
             deploy_err=$(cat "$tmp_deploy_log")
-            deploy_err_normalized=$(printf '%s\n' "$deploy_err" | tr '\r\n' '  ' | tr -s ' ')
+
+            # sam deploy may emit ANSI color codes when running in a TTY. These escape
+            # sequences prevent the grep patterns below from matching reliably (for
+            # example, the word "ChangeSet" may appear as "\x1b[0mChangeSet"). Strip
+            # the sequences before normalizing whitespace so detection works even when
+            # colors are enabled.
+            deploy_err_stripped=$(printf '%s\n' "$deploy_err" | \
+              python <<'PY'
+import re
+import sys
+
+ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+sys.stdout.write(ansi_escape.sub('', sys.stdin.read()))
+PY
+            )
+
+            deploy_err_normalized=$(printf '%s\n' "$deploy_err_stripped" | tr '\r\n' '  ' | tr -s ' ')
             if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE)_IN_PROGRESS state (and )?can[[:space:]]*not be updated"; then
               if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
                 echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
@@ -300,7 +316,7 @@ jobs:
             : >"$tmp_err"
             if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'AlreadyExistsException' && \
                printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'ChangeSet [^ ]* cannot be created due to a mismatch with existing attribute Description'; then
-              change_set_name=$(printf '%s\n' "$deploy_err" | sed -n "s/.*ChangeSet[[:space:]]\([^[:space:]]*\)[[:space:]].*/\1/p" | head -n1)
+              change_set_name=$(printf '%s\n' "$deploy_err_stripped" | sed -n "s/.*ChangeSet[[:space:]]\([^[:space:]]*\)[[:space:]].*/\1/p" | head -n1)
 
               if [ -z "$change_set_name" ]; then
                 echo "sam deploy reported an AlreadyExistsException but the change set name could not be determined." >&2
