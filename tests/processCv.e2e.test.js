@@ -21,9 +21,17 @@ describe('end-to-end CV processing', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
-    expect(response.body.urlExpiresInSeconds).toBe(0);
+    expect(response.body.urlExpiresInSeconds).toBe(3600);
     expect(Array.isArray(response.body.urls)).toBe(true);
-    expect(response.body.urls).toHaveLength(0);
+    expect(response.body.urls).toHaveLength(5);
+    response.body.urls.forEach((entry) => {
+      expect(entry).toEqual(
+        expect.objectContaining({
+          type: expect.any(String),
+          url: expect.stringContaining('https://'),
+        })
+      );
+    });
     expect(typeof response.body.applicantName).toBe('string');
     expect(typeof response.body.originalScore).toBe('number');
     expect(typeof response.body.enhancedScore).toBe('number');

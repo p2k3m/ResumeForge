@@ -1,6 +1,30 @@
 import request from 'supertest';
-import app from '../server.js';
+import app, { setS3Client } from '../server.js';
 import { generateContentMock } from './mocks/generateContentMock.js';
+
+function primePdfGeneration() {
+  generateContentMock.mockResolvedValueOnce({
+    response: {
+      text: () =>
+        JSON.stringify({
+          version1: 'Version 1 content',
+          version2: 'Version 2 content',
+          project: 'Project summary',
+        }),
+    },
+  });
+  generateContentMock.mockResolvedValueOnce({ response: { text: () => '' } });
+  generateContentMock.mockResolvedValueOnce({ response: { text: () => '' } });
+  generateContentMock.mockResolvedValueOnce({
+    response: {
+      text: () =>
+        JSON.stringify({
+          cover_letter1: 'Cover letter one',
+          cover_letter2: 'Cover letter two',
+        }),
+    },
+  });
+}
 
 const baseResume = [
   'Alex Candidate',
@@ -27,6 +51,21 @@ const jobDescription = [
 describe('targeted improvement routes', () => {
   beforeEach(() => {
     generateContentMock.mockReset();
+    setS3Client({
+      send: async (command) => {
+        const commandName = command?.constructor?.name || '';
+        if (commandName === 'GetObjectCommand') {
+          const err = new Error('NoSuchKey');
+          err.name = 'NoSuchKey';
+          throw err;
+        }
+        return {};
+      },
+    });
+  });
+
+  afterAll(() => {
+    setS3Client(null);
   });
 
   it('returns a structured improvement summary for improve-summary', async () => {
@@ -53,6 +92,7 @@ describe('targeted improvement routes', () => {
           }),
       },
     });
+    primePdfGeneration();
 
     const response = await request(app).post('/api/improve-summary').send({
       jobId: 'job-123',
@@ -117,6 +157,16 @@ describe('targeted improvement routes', () => {
     expect(typeof response.body.selectionProbabilityBefore).toBe('number');
     expect(typeof response.body.selectionProbabilityAfter).toBe('number');
     expect(typeof response.body.selectionProbabilityDelta).toBe('number');
+    expect(response.body.urlExpiresInSeconds).toBe(3600);
+    expect(response.body.urls).toHaveLength(5);
+    response.body.urls.forEach((entry) => {
+      expect(entry).toEqual(
+        expect.objectContaining({
+          type: expect.any(String),
+          url: expect.stringContaining('https://'),
+        })
+      );
+    });
   });
 
   it('returns a structured improvement summary for improve-certifications', async () => {
@@ -143,6 +193,7 @@ describe('targeted improvement routes', () => {
           }),
       },
     });
+    primePdfGeneration();
 
     const response = await request(app).post('/api/improve-certifications').send({
       jobId: 'job-789',
@@ -199,6 +250,16 @@ describe('targeted improvement routes', () => {
         }),
       })
     );
+    expect(response.body.urlExpiresInSeconds).toBe(3600);
+    expect(response.body.urls).toHaveLength(5);
+    response.body.urls.forEach((entry) => {
+      expect(entry).toEqual(
+        expect.objectContaining({
+          type: expect.any(String),
+          url: expect.stringContaining('https://'),
+        })
+      );
+    });
   });
 
   it('validates required fields for improvement requests', async () => {
