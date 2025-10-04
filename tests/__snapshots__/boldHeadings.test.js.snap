@@ -176,6 +176,13 @@ exports[`all headings including Skills are bold in HTML and PDF outputs: html 1`
       line-height: 1.55;
     }
 
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      grid-template-columns: 1fr;
+    }
+
     .marker {
       width: 1.1em;
       height: 1.1em;
@@ -217,39 +224,36 @@ exports[`all headings including Skills are bold in HTML and PDF outputs: html 1`
       <p>Crafted with a modern product-design aesthetic for standout first impressions.</p>
     </header>
     <main class="content-grid">
-      <section class="card ">
+      <section class="card  section--experience">
         <div class="card-header">
-          <h2>Skills</h2>
+          <h2 class="card-title section-heading--experience">Work Experience</h2>
           <span class="accent-line"></span>
         </div>
-        <ul>
-          <li>
-            <span class="marker">◆</span>
-            <span class="content"><span class="bullet">•</span> Testing</span>
+        <ul class="section-list section-list--experience">
+          <li class="section-item ">
+            <span class="content ">Information not provided</span>
           </li>
         </ul>
       </section>
-      <section class="card ">
+      <section class="card  section--education">
         <div class="card-header">
-          <h2>Work Experience</h2>
+          <h2 class="card-title section-heading--education">Education</h2>
           <span class="accent-line"></span>
         </div>
-        <ul>
-          <li>
-            <span class="marker">◆</span>
-            <span class="content">Information not provided</span>
+        <ul class="section-list section-list--education">
+          <li class="section-item ">
+            <span class="content ">Information not provided</span>
           </li>
         </ul>
       </section>
-      <section class="card ">
+      <section class="card  section--skills">
         <div class="card-header">
-          <h2>Education</h2>
+          <h2 class="card-title section-heading--skills">Skills</h2>
           <span class="accent-line"></span>
         </div>
-        <ul>
-          <li>
-            <span class="marker">◆</span>
-            <span class="content">Information not provided</span>
+        <ul class="section-list section-list--skills">
+          <li class="section-item ">
+            <span class="content ">Testing</span>
           </li>
         </ul>
       </section>
