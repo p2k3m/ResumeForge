@@ -35,6 +35,10 @@ describe('end-to-end CV processing', () => {
     expect(typeof response.body.applicantName).toBe('string');
     expect(typeof response.body.originalScore).toBe('number');
     expect(typeof response.body.enhancedScore).toBe('number');
+    expect(typeof response.body.atsScoreBefore).toBe('number');
+    expect(typeof response.body.atsScoreAfter).toBe('number');
+    expect(response.body.atsScoreBefore).toBe(response.body.originalScore);
+    expect(response.body.atsScoreAfter).toBe(response.body.enhancedScore);
     expect(Array.isArray(response.body.addedSkills)).toBe(true);
     expect(Array.isArray(response.body.missingSkills)).toBe(true);
     expect(typeof response.body.scoreBreakdown).toBe('object');

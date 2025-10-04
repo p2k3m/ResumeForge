@@ -12032,6 +12032,11 @@ async function generateEnhancedDocumentsResponse({
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
 
+  const atsScoreBefore = Number.isFinite(originalMatchResult.score)
+    ? originalMatchResult.score
+    : bestMatch.score;
+  const atsScoreAfter = bestMatch.score;
+
   return {
     success: true,
     requestId,
@@ -12039,10 +12044,10 @@ async function generateEnhancedDocumentsResponse({
     urlExpiresInSeconds: urls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
     urls,
     applicantName,
-    originalScore: Number.isFinite(originalMatchResult.score)
-      ? originalMatchResult.score
-      : bestMatch.score,
-    enhancedScore: bestMatch.score,
+    originalScore: atsScoreBefore,
+    enhancedScore: atsScoreAfter,
+    atsScoreBefore,
+    atsScoreAfter,
     table: bestMatch.table,
     addedSkills,
     missingSkills: bestMatch.newSkills,

@@ -46,6 +46,8 @@ describe('ATSScoreDashboard', () => {
   const baseMatch = {
     originalScore: 48,
     enhancedScore: 76,
+    atsScoreBefore: 48,
+    atsScoreAfter: 76,
     originalTitle: 'Product Manager',
     modifiedTitle: 'Senior Product Manager'
   }
@@ -63,12 +65,12 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getAllByText('ATS Score Before')).not.toHaveLength(0)
     expect(screen.getAllByText('ATS Score After')).not.toHaveLength(0)
     expect(screen.getByLabelText('match comparison')).toBeInTheDocument()
-    expect(screen.getByTestId('original-score')).toHaveTextContent('48')
-    expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76')
+    expect(screen.getByTestId('original-score')).toHaveTextContent('48%')
+    expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76%')
     const chart = screen.getByTestId('score-comparison-chart')
     expect(chart).toBeInTheDocument()
-    expect(within(chart).getByText('Original')).toBeInTheDocument()
-    expect(within(chart).getByText('Enhanced')).toBeInTheDocument()
+    expect(within(chart).getByText('ATS Score Before')).toBeInTheDocument()
+    expect(within(chart).getByText('ATS Score After')).toBeInTheDocument()
     expect(screen.getByTestId('dashboard-live-indicator')).toBeInTheDocument()
     expect(screen.getByTestId('original-match-status')).toHaveTextContent('Mismatch')
     expect(screen.getByTestId('enhanced-match-status')).toHaveTextContent('Mismatch')
@@ -90,7 +92,7 @@ describe('ATSScoreDashboard', () => {
       <ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />
     )
 
-    const updatedMatch = { ...match, enhancedScore: 90 }
+    const updatedMatch = { ...match, enhancedScore: 90, atsScoreAfter: 90 }
     rerender(
       <ATSScoreDashboard
         metrics={metrics}
