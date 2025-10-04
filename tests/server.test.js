@@ -905,6 +905,30 @@ describe('/api/process-cv', () => {
     }
   });
 
+  test('returns error when PDF generation fails for all templates', async () => {
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
+
+    const pdfError = new Error('PDF render failed');
+    setGeneratePdf(
+      jest.fn(() => {
+        throw pdfError;
+      })
+    );
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(500);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('DOCUMENT_GENERATION_FAILED');
+
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
   test('final CV includes updated title, project, and skills', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';

@@ -13381,103 +13381,105 @@ app.post(
     }
 
     let enhancedResponse = null;
+    let lastGenerationError = null;
+    const generationRequest = {
+      res,
+      s3,
+      dynamo,
+      tableName,
+      bucket,
+      logKey,
+      jobId,
+      requestId,
+      logContext,
+      resumeText: text,
+      originalResumeTextInput: originalResumeText,
+      jobDescription,
+      jobSkills,
+      resumeSkills,
+      originalMatch,
+      linkedinProfileUrl,
+      linkedinData,
+      credlyProfileUrl,
+      credlyCertifications,
+      credlyStatus,
+      manualCertificates,
+      templateContextInput,
+      templateParamConfig,
+      applicantName,
+      sanitizedName,
+      anonymizedLinkedIn,
+      originalUploadKey,
+      selection,
+      geminiApiKey: secrets.GEMINI_API_KEY,
+      changeLogEntries: [],
+      existingRecord: {
+        device: { S: device },
+        os: { S: os },
+        browser: { S: browser },
+        location: { S: locationLabel },
+        locationCity: { S: locationMeta.city || '' },
+        locationRegion: { S: locationMeta.region || '' },
+        locationCountry: { S: locationMeta.country || '' },
+      },
+      userId: res.locals.userId,
+    };
+
     try {
-      enhancedResponse = await generateEnhancedDocumentsResponse({
-        res,
-        s3,
-        dynamo,
-        tableName,
-        bucket,
-        logKey,
-        jobId,
-        requestId,
-        logContext,
-        resumeText: text,
-        originalResumeTextInput: originalResumeText,
-        jobDescription,
-        jobSkills,
-        resumeSkills,
-        originalMatch,
-        linkedinProfileUrl,
-        linkedinData,
-        credlyProfileUrl,
-        credlyCertifications,
-        credlyStatus,
-        manualCertificates,
-        templateContextInput,
-        templateParamConfig,
-        applicantName,
-        sanitizedName,
-        anonymizedLinkedIn,
-        originalUploadKey,
-        selection,
-        geminiApiKey: secrets.GEMINI_API_KEY,
-        changeLogEntries: [],
-        existingRecord: {
-          device: { S: device },
-          os: { S: os },
-          browser: { S: browser },
-          location: { S: locationLabel },
-          locationCity: { S: locationMeta.city || '' },
-          locationRegion: { S: locationMeta.region || '' },
-          locationCountry: { S: locationMeta.country || '' },
-        },
-        userId: res.locals.userId,
-      });
+      enhancedResponse = await generateEnhancedDocumentsResponse(generationRequest);
     } catch (generationErr) {
+      lastGenerationError = generationErr;
       logStructured('warn', 'process_cv_generation_failed', {
         ...logContext,
         error: serializeError(generationErr),
       });
     }
 
+    if (!enhancedResponse && !res.headersSent) {
+      logStructured('info', 'process_cv_generation_retry', {
+        ...logContext,
+        strategy: 'disable_generative_enhancements',
+      });
+      try {
+        enhancedResponse = await generateEnhancedDocumentsResponse({
+          ...generationRequest,
+          geminiApiKey: null,
+        });
+      } catch (retryErr) {
+        lastGenerationError = retryErr;
+        logStructured('error', 'process_cv_generation_retry_failed', {
+          ...logContext,
+          error: serializeError(retryErr),
+        });
+      }
+    }
+
     if (enhancedResponse) {
       return res.json(enhancedResponse);
     }
 
-    const fallbackResponse = {
-      success: true,
-      requestId,
-      jobId,
-      urlExpiresInSeconds: 0,
-      urls: [],
-      applicantName,
-      originalScore: Number.isFinite(originalMatch?.score)
-        ? Number(originalMatch.score)
-        : normalizedScore,
-      enhancedScore: Number.isFinite(originalMatch?.score)
-        ? Number(originalMatch.score)
-        : normalizedScore,
-      table: Array.isArray(originalMatch?.table) ? originalMatch.table : [],
-      addedSkills,
-      missingSkills,
-      originalTitle,
-      modifiedTitle: originalTitle,
-      scoreBreakdown: finalScoreBreakdown,
-      atsSubScores,
-      resumeText: originalResumeText,
-      originalResumeText,
-      jobDescriptionText: jobDescription,
-      jobSkills,
-      resumeSkills,
-      certificateInsights: {
-        known: knownCertificates,
-        suggestions: certificateSuggestions,
-        manualEntryRequired: manualCertificatesRequired,
-        credlyStatus,
-      },
-      manualCertificates,
-      selectionProbability: selectionInsights?.probability ?? null,
-      selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
-      selectionInsights,
-      templateContext: {
-        ...templateContextInput,
-        selectedTemplate: canonicalSelectedTemplate,
-        templateHistory,
-      },
-    };
+    if (res.headersSent) {
+      return;
+    }
 
-    return res.json(fallbackResponse);
+    logStructured('error', 'process_cv_generation_unavailable', {
+      ...logContext,
+      error: lastGenerationError ? serializeError(lastGenerationError) : undefined,
+    });
+
+    const errorDetails =
+      lastGenerationError && lastGenerationError.message &&
+      lastGenerationError.message !== CV_GENERATION_ERROR_MESSAGE
+        ? { reason: lastGenerationError.message }
+        : undefined;
+
+    return sendError(
+      res,
+      500,
+      'DOCUMENT_GENERATION_FAILED',
+      CV_GENERATION_ERROR_MESSAGE,
+      errorDetails
+    );
 
 
   } catch (err) {
