@@ -175,6 +175,101 @@ jobs:
             printf '%s' "$status"
           }
 
+          cleanup_description_conflicts() {
+            local context="$1"
+            local list_output
+
+            : >"$tmp_err"
+            if ! list_output=$(aws cloudformation list-change-sets \
+                --stack-name "$STACK_NAME" \
+                --output json 2>"$tmp_err"); then
+              local list_err
+              list_err=$(cat "$tmp_err")
+              if echo "$list_err" | grep -qi 'does not exist'; then
+                return
+              fi
+
+              echo "$list_err" >&2
+              exit 1
+            fi
+
+            local change_set_names
+            change_set_names=$(python <<'PY' <<<"$list_output"
+import json, sys
+
+data = json.load(sys.stdin)
+for summary in data.get('Summaries', []):
+    if summary.get('Status') == 'FAILED':
+        name = summary.get('ChangeSetName')
+        if name:
+            print(name)
+PY
+)
+
+            if [ -z "$change_set_names" ]; then
+              return
+            fi
+
+            local deleted_any=false
+            while IFS= read -r change_set_name; do
+              [ -n "$change_set_name" ] || continue
+
+              : >"$tmp_err"
+              local describe_json
+              if ! describe_json=$(aws cloudformation describe-change-set \
+                  --stack-name "$STACK_NAME" \
+                  --change-set-name "$change_set_name" \
+                  --output json 2>"$tmp_err"); then
+                local describe_err
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi 'does not exist'; then
+                  continue
+                fi
+
+                echo "$describe_err" >&2
+                exit 1
+              fi
+
+              local should_delete
+              should_delete=$(python <<'PY' <<<"$describe_json"
+import json, sys
+
+data = json.load(sys.stdin)
+status = data.get('Status', '')
+reason = (data.get('StatusReason') or '').lower()
+
+if status == 'FAILED' and 'mismatch with existing attribute description' in reason:
+    print('yes')
+PY
+)
+
+              if [ "$should_delete" = "yes" ]; then
+                echo "Deleting leftover change set '$change_set_name' $context due to description mismatch..."
+                : >"$tmp_err"
+                if aws cloudformation delete-change-set \
+                    --stack-name "$STACK_NAME" \
+                    --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
+                  echo "Deleted change set '$change_set_name'."
+                  deleted_any=true
+                else
+                  local delete_err
+                  delete_err=$(cat "$tmp_err")
+                  if echo "$delete_err" | grep -qi 'does not exist'; then
+                    echo "Change set '$change_set_name' already deleted."
+                  else
+                    echo "Failed to delete change set '$change_set_name': $delete_err" >&2
+                    exit 1
+                  fi
+                fi
+              fi
+            done <<<"$change_set_names"
+
+            if [ "$deleted_any" = "true" ]; then
+              echo "Waiting for CloudFormation to finalize change set cleanup ($context)..."
+              sleep 10
+            fi
+          }
+
           : >"$tmp_err"
           if stack_status=$(aws cloudformation describe-stacks \
               --stack-name "$STACK_NAME" \
@@ -204,6 +299,8 @@ jobs:
           fi
 
           : >"$tmp_err"
+
+          cleanup_description_conflicts "before starting deployment attempts"
 
           create_data_bucket='true'
           if aws s3api head-bucket --bucket "$DATA_BUCKET" 1>/dev/null 2>"$tmp_err"; then
@@ -312,26 +409,27 @@ jobs:
                printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'ChangeSet [^ ]* cannot be created due to a mismatch with existing attribute Description'; then
               change_set_name=$(printf '%s\n' "$deploy_err_stripped" | sed -n "s/.*ChangeSet[[:space:]]\([^[:space:]]*\)[[:space:]].*/\1/p" | head -n1)
 
-              if [ -z "$change_set_name" ]; then
-                echo "sam deploy reported an AlreadyExistsException but the change set name could not be determined." >&2
-                exit 1
+              if [ -n "$change_set_name" ]; then
+                echo "Existing change set '$change_set_name' has conflicting description. Deleting before retrying..."
+                : >"$tmp_err"
+                if aws cloudformation delete-change-set \
+                    --stack-name "$STACK_NAME" \
+                    --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
+                  echo "Deleted conflicting change set '$change_set_name'."
+                else
+                  delete_conflict_err=$(cat "$tmp_err")
+                  if echo "$delete_conflict_err" | grep -qi "does not exist"; then
+                    echo "Change set '$change_set_name' no longer exists. Proceeding with retry."
+                  else
+                    echo "Failed to delete conflicting change set: $delete_conflict_err" >&2
+                    exit 1
+                  fi
+                fi
+              else
+                echo "sam deploy reported an AlreadyExistsException but the change set name could not be determined. Attempting to locate conflicting change sets via AWS CLI..."
               fi
 
-              echo "Existing change set '$change_set_name' has conflicting description. Deleting before retrying..."
-              : >"$tmp_err"
-              if aws cloudformation delete-change-set \
-                  --stack-name "$STACK_NAME" \
-                  --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
-                echo "Deleted conflicting change set '$change_set_name'."
-              else
-                delete_conflict_err=$(cat "$tmp_err")
-                if echo "$delete_conflict_err" | grep -qi "does not exist"; then
-                  echo "Change set '$change_set_name' no longer exists. Proceeding with retry."
-                else
-                  echo "Failed to delete conflicting change set: $delete_conflict_err" >&2
-                  exit 1
-                fi
-              fi
+              cleanup_description_conflicts "after sam deploy reported a conflicting change set"
 
               deploy_attempt=$((deploy_attempt + 1))
               sleep 15
