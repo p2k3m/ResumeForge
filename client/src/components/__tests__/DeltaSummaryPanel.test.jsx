@@ -22,6 +22,11 @@ describe('DeltaSummaryPanel', () => {
     expect(screen.getByText('GraphQL')).toBeInTheDocument()
     expect(screen.getByText('Senior Engineer')).toBeInTheDocument()
     expect(screen.getByText('PMP')).toBeInTheDocument()
+    expect(screen.getByText(/Add these skills next: GraphQL/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Change your last designation from Engineer to Senior Engineer/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Expand these highlights: Scaled API throughput/i)).toBeInTheDocument()
   })
 
   it('shows placeholders when a category has no entries', () => {

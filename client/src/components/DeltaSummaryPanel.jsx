@@ -28,6 +28,82 @@ const categories = [
 
 const addedBadgeClass = 'bg-emerald-100 text-emerald-700 border border-emerald-200'
 const missingBadgeClass = 'bg-rose-100 text-rose-700 border border-rose-200'
+const actionBadgeClass =
+  'inline-flex items-center rounded-full bg-purple-100 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-purple-700'
+
+function formatList(items = []) {
+  const values = Array.isArray(items) ? items.filter(Boolean) : []
+  if (values.length === 0) return ''
+  if (values.length === 1) return values[0]
+  if (values.length === 2) return `${values[0]} and ${values[1]}`
+  const head = values.slice(0, -1).join(', ')
+  return `${head}, and ${values[values.length - 1]}`
+}
+
+function buildActionableAdvice(key, { added = [], missing = [] }) {
+  const addedText = formatList(added)
+  const missingText = formatList(missing)
+
+  switch (key) {
+    case 'skills':
+      if (missingText && addedText) {
+        return `Add these skills next: ${missingText}. Keep spotlighting ${addedText}.`
+      }
+      if (missingText) {
+        return `Add these skills next: ${missingText}.`
+      }
+      if (addedText) {
+        return `Keep spotlighting these skills: ${addedText}.`
+      }
+      return 'Keep mirroring the JD skill keywords in upcoming drafts.'
+    case 'experience':
+      if (addedText && missingText) {
+        return `Expand these highlights: ${addedText}. Rework stories covering ${missingText}.`
+      }
+      if (addedText) {
+        return `Expand these highlights: ${addedText}.`
+      }
+      if (missingText) {
+        return `Add measurable wins covering: ${missingText}.`
+      }
+      return 'Continue backing experience bullets with quantified impact.'
+    case 'designation':
+      if (addedText && missingText) {
+        return `Change your last designation from ${missingText} to ${addedText} so the ATS reads the target title.`
+      }
+      if (addedText) {
+        return `Change your last designation to ${addedText} to mirror the job post.`
+      }
+      if (missingText) {
+        return `Retire the ${missingText} title so your headline matches the role.`
+      }
+      return 'Keep the job title aligned with the role you are pursuing.'
+    case 'keywords':
+      if (missingText && addedText) {
+        return `Blend these keywords into bullets: ${missingText}. Reinforce ${addedText} across sections.`
+      }
+      if (missingText) {
+        return `Blend these keywords into bullets: ${missingText}.`
+      }
+      if (addedText) {
+        return `Reinforce these keywords across sections: ${addedText}.`
+      }
+      return 'Maintain consistent keyword usage throughout the resume.'
+    case 'certificates':
+      if (missingText && addedText) {
+        return `Log these certificates next: ${missingText}. Highlight ${addedText} near your summary.`
+      }
+      if (missingText) {
+        return `Log these certificates next: ${missingText}.`
+      }
+      if (addedText) {
+        return `Highlight these certificates near your summary: ${addedText}.`
+      }
+      return 'Keep credentials up to date across LinkedIn and your resume.'
+    default:
+      return ''
+  }
+}
 
 function renderItems(items, type, label) {
   if (!Array.isArray(items) || items.length === 0) {
@@ -86,6 +162,7 @@ function DeltaSummaryPanel({ summary }) {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {categories.map((category) => {
           const bucket = summary[category.key] || { added: [], missing: [] }
+          const advice = buildActionableAdvice(category.key, bucket)
           return (
             <article
               key={category.key}
@@ -105,6 +182,12 @@ function DeltaSummaryPanel({ summary }) {
                   {renderItems(bucket.missing, 'missing', category.label)}
                 </div>
               </div>
+              {advice && (
+                <p className="text-sm leading-relaxed text-purple-900/80">
+                  <span className={actionBadgeClass}>Action</span>
+                  <span className="ml-2 align-middle">{advice}</span>
+                </p>
+              )}
             </article>
           )
         })}
