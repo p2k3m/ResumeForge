@@ -17,6 +17,9 @@ const itemizedChangeTypeStyles = {
   replaced: 'bg-indigo-100 text-indigo-700 border border-indigo-200'
 }
 
+const summaryActionBadgeClass =
+  'inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.35em] text-purple-700'
+
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -34,6 +37,81 @@ function normaliseList(items) {
     output.push(text)
   })
   return output
+}
+
+function formatReadableList(items) {
+  const list = normaliseList(items)
+  if (list.length === 0) return ''
+  if (list.length === 1) return list[0]
+  if (list.length === 2) return `${list[0]} and ${list[1]}`
+  return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`
+}
+
+function buildSummaryAction(label, segment = {}) {
+  const addedItems = normaliseList(segment.added)
+  const removedItems = normaliseList(segment.removed)
+  const addedText = formatReadableList(addedItems)
+  const removedText = formatReadableList(removedItems)
+
+  if (!addedText && !removedText) {
+    return ''
+  }
+
+  const lowerLabel = label.toLowerCase()
+  const isSkillSegment = /skill|keyword|competenc|cert/i.test(lowerLabel)
+  const isDesignationSegment = /designation|title|headline|position|role/i.test(lowerLabel)
+  const isExperienceSegment = /experience|achievement|project|impact|work|career|highlight/i.test(
+    lowerLabel
+  )
+  const isSummarySegment = /summary|profile|overview/i.test(lowerLabel)
+
+  if (isSkillSegment) {
+    if (addedText && removedText) {
+      return `Add these skills: ${addedText}. Retire ${removedText} to keep your keywords on target.`
+    }
+    if (addedText) {
+      return `Add these skills: ${addedText}.`
+    }
+    return `Retire ${removedText} to keep your skill list focused.`
+  }
+
+  if (isDesignationSegment) {
+    if (addedText && removedText) {
+      return `Change your last designation from ${removedText} to ${addedText}.`
+    }
+    if (addedText) {
+      return `Change your last designation to ${addedText}.`
+    }
+    return `Retire the ${removedText} designation so your headline matches the target role.`
+  }
+
+  if (isExperienceSegment) {
+    if (addedText && removedText) {
+      return `Expand these highlights: ${addedText}. Refresh the stories covering ${removedText}.`
+    }
+    if (addedText) {
+      return `Expand these highlights: ${addedText}.`
+    }
+    return `Refresh the stories covering ${removedText}.`
+  }
+
+  if (isSummarySegment) {
+    if (addedText && removedText) {
+      return `Surface these summary hooks: ${addedText}. Phase out ${removedText} for clarity.`
+    }
+    if (addedText) {
+      return `Surface these summary hooks: ${addedText}.`
+    }
+    return `Trim ${removedText} from the summary to stay concise.`
+  }
+
+  if (addedText && removedText) {
+    return `Swap ${removedText} with ${addedText}.`
+  }
+  if (addedText) {
+    return `Add ${addedText}.`
+  }
+  return `Remove ${removedText}.`
 }
 
 function normaliseItemizedChanges(changes) {
@@ -325,6 +403,7 @@ function ChangeComparisonView({
                     const containerTone = isSkillSegment
                       ? 'border-emerald-200 bg-emerald-50/70'
                       : 'border-slate-200 bg-slate-50/70'
+                    const actionableSummary = buildSummaryAction(label, segment)
                     return (
                       <div
                         key={`${label}-${index}`}
@@ -358,6 +437,12 @@ function ChangeComparisonView({
                             </span>
                           ))}
                         </div>
+                        {actionableSummary && (
+                          <p className="mt-3 text-xs font-semibold text-slate-600">
+                            <span className={summaryActionBadgeClass}>Action</span>
+                            <span className="ml-2 align-middle">{actionableSummary}</span>
+                          </p>
+                        )}
                       </div>
                     )
                   })}
