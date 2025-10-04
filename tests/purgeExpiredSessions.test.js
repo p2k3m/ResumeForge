@@ -45,7 +45,7 @@ describe('purgeExpiredSessions', () => {
                 linkedinProfileUrl: { S: 'expired-hash' },
                 s3Key: { S: `${sessionPrefix}candidate.pdf` },
                 cv1Url: {
-                  S: `https://example.com/${sessionPrefix}generated/cv/candidate.pdf?expires=100`,
+                  S: `https://example.com/${sessionPrefix}generated/cv/candidate.pdf?X-Amz-Signature=mock-signature&X-Amz-Expires=100`,
                 },
               },
               {
