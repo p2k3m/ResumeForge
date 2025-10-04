@@ -4276,27 +4276,131 @@ function App() {
 
   const handleRejectImprovement = async (id) => {
     const targetSuggestion = improvementResults.find((item) => item.id === id)
+    if (!targetSuggestion) {
+      return
+    }
+
+    const wasAccepted = targetSuggestion.accepted === true
+
+    const previousEnhanceAllSummaryText = enhanceAllSummaryText
+    const previousImprovementResults = cloneData(improvementResults)
+    const previousChangeLogState = cloneData(changeLog)
+    const previousResumeTextValue = resumeText
+    const previousMatchValue = match ? cloneData(match) : null
+    const previousScoreBreakdownValue = Array.isArray(scoreBreakdown)
+      ? cloneData(scoreBreakdown)
+      : []
+    const previousResumeSkillsValue = Array.isArray(resumeSkills)
+      ? cloneData(resumeSkills)
+      : []
+    const previousResumeHistoryValue = Array.isArray(resumeHistory)
+      ? cloneData(resumeHistory)
+      : []
+
+    let historyEntry = null
+    let revertResumeText = ''
+    let revertMatch = null
+    let revertScoreBreakdown = []
+    let revertResumeSkills = []
+
+    if (wasAccepted) {
+      historyEntry = resumeHistoryMap.get(id) || null
+      if (!historyEntry) {
+        const changeEntry = changeLog.find((entry) => entry?.id === id)
+        if (changeEntry && typeof changeEntry.resumeBeforeText === 'string') {
+          historyEntry = {
+            id: changeEntry.id,
+            suggestionId: changeEntry.id,
+            title: changeEntry.title || 'Improvement Applied',
+            type: changeEntry.type || 'custom',
+            detail: changeEntry.detail || '',
+            changeLabel: changeEntry.label || '',
+            resumeBefore: changeEntry.resumeBeforeText,
+            resumeAfter: changeEntry.resumeAfterText,
+            timestamp: changeEntry.acceptedAt
+              ? new Date(changeEntry.acceptedAt).getTime()
+              : Date.now(),
+            matchBefore: changeEntry.historyContext?.matchBefore || null,
+            scoreBreakdownBefore:
+              changeEntry.historyContext?.scoreBreakdownBefore || [],
+            resumeSkillsBefore: changeEntry.historyContext?.resumeSkillsBefore || []
+          }
+        }
+      }
+
+      const previousResumeText = historyEntry
+        ? typeof historyEntry.resumeBefore === 'string' && historyEntry.resumeBefore
+          ? historyEntry.resumeBefore
+          : typeof historyEntry.resumeBeforeText === 'string'
+            ? historyEntry.resumeBeforeText
+            : ''
+        : ''
+
+      if (!historyEntry || !previousResumeText) {
+        setError('Previous version is unavailable for this update.')
+        return
+      }
+
+      revertResumeText = previousResumeText
+      revertMatch = historyEntry.matchBefore
+        ? cloneData(historyEntry.matchBefore)
+        : null
+      revertScoreBreakdown = Array.isArray(historyEntry.scoreBreakdownBefore)
+        ? cloneData(historyEntry.scoreBreakdownBefore)
+        : []
+      revertResumeSkills = Array.isArray(historyEntry.resumeSkillsBefore)
+        ? historyEntry.resumeSkillsBefore
+            .map((item) => (typeof item === 'string' ? item.trim() : ''))
+            .filter(Boolean)
+        : []
+    }
+
     if (targetSuggestion?.type === 'enhance-all') {
       setEnhanceAllSummaryText('')
     }
+
     setImprovementResults((prev) =>
       prev.map((item) =>
         item.id === id
-          ? { ...item, accepted: false, rescorePending: false, rescoreError: '' }
+          ? {
+              ...item,
+              accepted: false,
+              rescorePending: false,
+              rescoreError: '',
+              scoreDelta: null
+            }
           : item
       )
     )
-    let previousChangeLog = null
-    setChangeLog((prev) => {
-      previousChangeLog = prev
-      return prev.filter((entry) => entry.id !== id)
-    })
+
+    setChangeLog((prev) => prev.filter((entry) => entry.id !== id))
+
+    setResumeHistory((prev) => prev.filter((entry) => entry.id !== id))
+
+    if (wasAccepted) {
+      setResumeText(revertResumeText)
+      setMatch(revertMatch ? cloneData(revertMatch) : null)
+      setScoreBreakdown(revertScoreBreakdown)
+      setResumeSkills(revertResumeSkills)
+    }
+
     try {
       await removeChangeLogEntry(id)
     } catch (err) {
       console.error('Removing change log entry failed', err)
       setError(err.message || 'Unable to remove the change log entry.')
-      setChangeLog(previousChangeLog || [])
+      setChangeLog(previousChangeLogState || [])
+      setImprovementResults(previousImprovementResults || [])
+      setResumeHistory(previousResumeHistoryValue || [])
+      if (targetSuggestion?.type === 'enhance-all') {
+        setEnhanceAllSummaryText(previousEnhanceAllSummaryText)
+      }
+      if (wasAccepted) {
+        setResumeText(previousResumeTextValue)
+        setMatch(previousMatchValue ? cloneData(previousMatchValue) : null)
+        setScoreBreakdown(previousScoreBreakdownValue)
+        setResumeSkills(previousResumeSkillsValue)
+      }
     }
   }
 
