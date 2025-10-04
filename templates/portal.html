@@ -220,14 +220,18 @@
         </label>
         <label>
           Preferred CV template (optional)
-          <select name="template">
+          <select name="template" id="cv-template-select">
             <option value="">Let ResumeForge decide</option>
-            <option value="modern">Modern</option>
-            <option value="ucmo">Classic</option>
-            <option value="professional">Professional</option>
-            <option value="vibrant">Vibrant</option>
-            <option value="2025">Futuristic</option>
+            <option value="modern">Modern Minimal</option>
+            <option value="professional">Professional Edge</option>
+            <option value="vibrant">Vibrant Fusion</option>
+            <option value="ats">ATS Optimized</option>
+            <option value="2025">Future Vision 2025</option>
+            <option value="ucmo">Crimson Heritage</option>
+            <option value="classic">Classic Heritage</option>
+            <option value="creative">Creative Spotlight</option>
           </select>
+          <input type="hidden" name="templateId" id="cv-template-id" />
         </label>
         <label>
           Preferred cover letter template (optional)
@@ -255,6 +259,19 @@
       const links = document.getElementById('links');
       const metrics = document.getElementById('metrics');
       const scoreGrid = document.getElementById('score-grid');
+      const templateSelect = form.querySelector('#cv-template-select');
+      const templateIdField = form.querySelector('#cv-template-id');
+
+      const syncTemplateId = () => {
+        if (!templateIdField) return;
+        const value = templateSelect && templateSelect.value ? templateSelect.value.trim() : '';
+        templateIdField.value = value;
+      };
+
+      if (templateSelect && templateIdField) {
+        syncTemplateId();
+        templateSelect.addEventListener('change', syncTemplateId);
+      }
 
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -265,6 +282,7 @@
         metrics.innerHTML = '';
         scoreGrid.innerHTML = '';
 
+        syncTemplateId();
         const formData = new FormData(form);
         const submitButton = form.querySelector('button[type="submit"]');
         const originalText = submitButton.textContent;
