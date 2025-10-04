@@ -1,0 +1,232 @@
+const cx = (...classes) => classes.filter(Boolean).join(' ')
+
+const RESUME_TEMPLATE_PREVIEWS = {
+  modern: {
+    accent: 'from-indigo-500 via-purple-500 to-pink-500',
+    container: 'border-purple-200 bg-white',
+    sidebar: 'bg-gradient-to-b from-slate-900/90 to-slate-700/80',
+    line: 'bg-slate-300/80',
+    highlight: 'bg-purple-500/30',
+    chip: 'bg-purple-100 text-purple-700'
+  },
+  professional: {
+    accent: 'from-blue-700 via-slate-700 to-slate-900',
+    container: 'border-slate-200 bg-slate-50',
+    sidebar: 'bg-gradient-to-b from-blue-900/90 to-slate-800/80',
+    line: 'bg-slate-300/70',
+    highlight: 'bg-slate-700/20',
+    chip: 'bg-blue-100 text-blue-700'
+  },
+  classic: {
+    accent: 'from-amber-600 via-rose-500 to-rose-700',
+    container: 'border-amber-200 bg-amber-50/60',
+    sidebar: 'bg-gradient-to-b from-amber-900/90 to-rose-900/80',
+    line: 'bg-amber-300/60',
+    highlight: 'bg-amber-500/30',
+    chip: 'bg-amber-100 text-amber-700'
+  },
+  creative: {
+    accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
+    container: 'border-fuchsia-200 bg-white',
+    sidebar: 'bg-gradient-to-b from-fuchsia-700/90 to-cyan-600/80',
+    line: 'bg-fuchsia-200/70',
+    highlight: 'bg-cyan-400/30',
+    chip: 'bg-fuchsia-100 text-fuchsia-700'
+  },
+  vibrant: {
+    accent: 'from-orange-400 via-pink-500 to-purple-600',
+    container: 'border-orange-200 bg-white',
+    sidebar: 'bg-gradient-to-b from-orange-600/90 to-purple-600/80',
+    line: 'bg-orange-200/70',
+    highlight: 'bg-purple-500/25',
+    chip: 'bg-orange-100 text-orange-700'
+  },
+  ucmo: {
+    accent: 'from-rose-900 via-rose-700 to-rose-500',
+    container: 'border-rose-300 bg-rose-50',
+    sidebar: 'bg-gradient-to-b from-rose-900/95 to-rose-700/85',
+    line: 'bg-rose-200/80',
+    highlight: 'bg-rose-500/30',
+    chip: 'bg-rose-100 text-rose-700'
+  },
+  2025: {
+    accent: 'from-sky-500 via-cyan-400 to-emerald-400',
+    container: 'border-cyan-200 bg-slate-900/90 text-slate-50',
+    sidebar: 'bg-gradient-to-b from-slate-900 to-slate-800',
+    line: 'bg-slate-600/80',
+    highlight: 'bg-cyan-400/30',
+    chip: 'bg-cyan-300/40 text-cyan-100'
+  },
+  ats: {
+    accent: 'from-slate-600 via-slate-500 to-slate-400',
+    container: 'border-slate-200 bg-white',
+    sidebar: 'bg-slate-100',
+    line: 'bg-slate-300/80',
+    highlight: 'bg-slate-400/20',
+    chip: 'bg-slate-200 text-slate-600'
+  }
+}
+
+const COVER_TEMPLATE_PREVIEWS = {
+  cover_modern: {
+    header: 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white',
+    border: 'border-purple-200 bg-white',
+    line: 'bg-slate-200/80',
+    highlight: 'bg-purple-500/10'
+  },
+  cover_classic: {
+    header: 'bg-gradient-to-r from-amber-700 via-amber-600 to-rose-600 text-amber-50',
+    border: 'border-amber-200 bg-amber-50/70',
+    line: 'bg-amber-200/80',
+    highlight: 'bg-amber-500/15'
+  }
+}
+
+const DEFAULT_RESUME_PREVIEW = {
+  accent: 'from-slate-700 via-slate-500 to-slate-400',
+  container: 'border-slate-200 bg-white',
+  sidebar: 'bg-slate-800/90',
+  line: 'bg-slate-300/70',
+  highlight: 'bg-slate-500/20',
+  chip: 'bg-slate-200 text-slate-600'
+}
+
+const DEFAULT_COVER_PREVIEW = {
+  header: 'bg-gradient-to-r from-slate-700 via-slate-600 to-slate-500 text-white',
+  border: 'border-slate-200 bg-white',
+  line: 'bg-slate-200/80',
+  highlight: 'bg-slate-500/10'
+}
+
+function TemplatePreview({
+  resumeTemplateId,
+  resumeTemplateName,
+  resumeTemplateDescription,
+  coverTemplateId,
+  coverTemplateName,
+  coverTemplateDescription
+}) {
+  const resumeStyle = RESUME_TEMPLATE_PREVIEWS[resumeTemplateId] || DEFAULT_RESUME_PREVIEW
+  const coverStyle = COVER_TEMPLATE_PREVIEWS[coverTemplateId] || DEFAULT_COVER_PREVIEW
+
+  return (
+    <section className="rounded-3xl border border-purple-100 bg-white/80 shadow-xl p-6 space-y-6" aria-label="Template previews">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-purple-800">Preview Your Look &amp; Feel</h2>
+          <p className="text-sm text-purple-600">
+            See how your enhanced CV and cover letter will be styled before you download them.
+          </p>
+        </div>
+        <span className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">
+          Live Preview
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">CV Template</p>
+              <h3 className="text-xl font-bold text-purple-800">{resumeTemplateName}</h3>
+              {resumeTemplateDescription && (
+                <p className="mt-1 text-sm text-purple-600">{resumeTemplateDescription}</p>
+              )}
+            </div>
+            <span className={cx('px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide', resumeStyle.chip)}>
+              CV
+            </span>
+          </div>
+          <div
+            className={cx(
+              'relative overflow-hidden rounded-3xl border shadow-inner',
+              resumeStyle.container
+            )}
+            aria-hidden="true"
+          >
+            <div className={cx('h-20 rounded-t-3xl bg-gradient-to-r', resumeStyle.accent)}>
+              <div className="absolute top-4 left-6 text-white">
+                <div className="text-sm font-semibold tracking-wide uppercase">Alex Morgan</div>
+                <div className="text-xs opacity-80">Product Manager</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-4 p-5">
+              <div className="col-span-2 space-y-3">
+                <div className={cx('h-3 w-24 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-3 w-20 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-3 w-28 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-24 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
+                  "Grew ARR 3x by orchestrating global product launches and data-informed iteration."
+                </div>
+                <div className={cx('h-3 w-16 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-3 w-24 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-16 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
+                  Keyword-rich skills, certifications, and JD-aligned highlights land here.
+                </div>
+              </div>
+              <div className="col-span-3 space-y-3">
+                <div className={cx('h-3 w-32 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-3 w-40 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-16 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
+                  Impact bullet points spotlight measurable wins using JD keywords.
+                </div>
+                <div className={cx('h-3 w-36 rounded-full', resumeStyle.line)} />
+                <div className={cx('h-24 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
+                  Modern typography, subtle dividers, and ATS-safe spacing keep recruiters engaged.
+                </div>
+              </div>
+            </div>
+            <div className={cx('absolute inset-y-20 left-0 w-20 rounded-r-3xl', resumeStyle.sidebar)} />
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Cover Letter</p>
+              <h3 className="text-xl font-bold text-purple-800">{coverTemplateName}</h3>
+              {coverTemplateDescription && (
+                <p className="mt-1 text-sm text-purple-600">{coverTemplateDescription}</p>
+              )}
+            </div>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-purple-100 text-purple-700">
+              Cover
+            </span>
+          </div>
+          <div
+            className={cx(
+              'relative overflow-hidden rounded-3xl border shadow-inner',
+              coverStyle.border
+            )}
+            aria-hidden="true"
+          >
+            <div className={cx('h-16 flex items-end px-6 pb-3 rounded-t-3xl', coverStyle.header)}>
+              <div>
+                <div className="text-sm font-semibold tracking-wide uppercase">Alex Morgan</div>
+                <div className="text-xs opacity-80">alex.morgan@email.com</div>
+              </div>
+            </div>
+            <div className="space-y-3 p-6">
+              <div className={cx('h-3 w-40 rounded-full', coverStyle.line)} />
+              <div className={cx('h-3 w-32 rounded-full', coverStyle.line)} />
+              <div className={cx('h-24 rounded-2xl p-4 text-[10px] leading-relaxed', coverStyle.highlight)}>
+                Engaging opener tailored to the role, mirroring the JD tone and priority keywords.
+              </div>
+              <div className={cx('h-3 w-36 rounded-full', coverStyle.line)} />
+              <div className={cx('h-24 rounded-2xl p-4 text-[10px] leading-relaxed', coverStyle.highlight)}>
+                Body paragraphs connect achievements to business outcomes, showing cultural and skills fit.
+              </div>
+              <div className={cx('h-3 w-28 rounded-full', coverStyle.line)} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-xs text-purple-500">
+        Previews update instantly when you switch templates so you always know what your documents will look like.
+      </p>
+    </section>
+  )
+}
+
+export default TemplatePreview

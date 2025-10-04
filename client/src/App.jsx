@@ -4,6 +4,7 @@ import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
 import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
 import InfoTooltip from './components/InfoTooltip.jsx'
 import TemplateSelector from './components/TemplateSelector.jsx'
+import TemplatePreview from './components/TemplatePreview.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
@@ -507,6 +508,27 @@ const BASE_TEMPLATE_OPTIONS = [
     description: 'Futuristic grid layout with crisp typography and subtle neon cues.'
   }
 ]
+
+const COVER_TEMPLATE_DETAILS = {
+  cover_modern: {
+    name: 'Modern Cover Letter',
+    description: 'Gradient header with confident typography and clean paragraph rhythm.'
+  },
+  cover_classic: {
+    name: 'Classic Cover Letter',
+    description: 'Elegant serif presentation with letterhead-inspired spacing and signature close.'
+  }
+}
+
+const formatCoverTemplateName = (id) => {
+  if (!id) return 'Cover Letter'
+  return COVER_TEMPLATE_DETAILS[id]?.name || 'Cover Letter'
+}
+
+const getCoverTemplateDescription = (id) => {
+  if (!id) return ''
+  return COVER_TEMPLATE_DETAILS[id]?.description || ''
+}
 
 const ATS_SUB_SCORE_ORDER = [
   'Layout & Searchability',
@@ -1375,6 +1397,16 @@ function App() {
     ]
   }, [templateContext, selectedTemplate])
 
+  const selectedTemplateOption = useMemo(() => {
+    if (!availableTemplateOptions.length) return null
+    const canonical = canonicalizeTemplateId(selectedTemplate)
+    return (
+      availableTemplateOptions.find((option) => option.id === canonical) ||
+      availableTemplateOptions.find((option) => option.id === selectedTemplate) ||
+      null
+    )
+  }, [availableTemplateOptions, selectedTemplate])
+
   const templateHistorySummary = useMemo(() => {
     const baseHistory = Array.isArray(templateContext?.templateHistory)
       ? templateContext.templateHistory
@@ -1495,6 +1527,15 @@ function App() {
     },
     [setTemplateContext]
   )
+
+  const selectedCoverTemplate = useMemo(() => {
+    const fromContext = canonicalizeCoverTemplateId(templateContext?.coverTemplate1)
+    if (fromContext) {
+      return fromContext
+    }
+    return deriveCoverTemplateFromResume(selectedTemplate || DEFAULT_COVER_TEMPLATE)
+  }, [selectedTemplate, templateContext])
+
   const flowSteps = useMemo(() => {
     const improvementsComplete = improvementCount > 0
     const downloadComplete = downloadCount > 0
@@ -3890,6 +3931,15 @@ function App() {
             onSelect={handleTemplateSelect}
             disabled={isProcessing}
             historySummary={templateHistorySummary}
+          />
+
+          <TemplatePreview
+            resumeTemplateId={selectedTemplate}
+            resumeTemplateName={formatTemplateName(selectedTemplate)}
+            resumeTemplateDescription={selectedTemplateOption?.description || ''}
+            coverTemplateId={selectedCoverTemplate}
+            coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
+            coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
           />
 
           {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
