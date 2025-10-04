@@ -2672,6 +2672,14 @@ function App() {
     () => improvementResults.some((item) => item.accepted === true),
     [improvementResults]
   )
+  const improvementsRequireAcceptance = useMemo(
+    () => improvementResults.length > 0,
+    [improvementResults]
+  )
+  const canGenerateEnhancedDocs = useMemo(
+    () => !improvementsRequireAcceptance || hasAcceptedImprovement,
+    [improvementsRequireAcceptance, hasAcceptedImprovement]
+  )
   const analysisHighlights = useMemo(() => {
     const items = []
     if (Array.isArray(match?.missingSkills) && match.missingSkills.length > 0) {
@@ -3469,7 +3477,7 @@ function App() {
       setError('Complete the initial scoring and improvement review before generating downloads.')
       return
     }
-    if (!hasAcceptedImprovement) {
+    if (improvementsRequireAcceptance && !hasAcceptedImprovement) {
       setError('Accept at least one improvement before generating the enhanced documents.')
       return
     }
@@ -3634,6 +3642,7 @@ function App() {
     API_BASE_URL,
     credlyUrl,
     hasAcceptedImprovement,
+    improvementsRequireAcceptance,
     improvementsUnlocked,
     initialAnalysisSnapshot,
     isGeneratingDocs,
@@ -4469,7 +4478,10 @@ function App() {
           </section>
         )}
 
-        {outputFiles.length === 0 && improvementsUnlocked && !hasAcceptedImprovement && (
+        {outputFiles.length === 0 &&
+          improvementsUnlocked &&
+          improvementsRequireAcceptance &&
+          !hasAcceptedImprovement && (
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold text-purple-900">Review Improvements First</h2>
@@ -4483,12 +4495,14 @@ function App() {
           </section>
         )}
 
-        {outputFiles.length === 0 && improvementsUnlocked && hasAcceptedImprovement && (
+        {outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
               <p className="text-sm text-purple-700/80">
-                Apply the improvements you like, then create polished CV and cover letter downloads tailored to the JD.
+                {improvementsRequireAcceptance
+                  ? 'Apply the improvements you like, then create polished CV and cover letter downloads tailored to the JD.'
+                  : 'Great news — no manual fixes were required. Generate polished CV and cover letter downloads tailored to the JD.'}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
