@@ -235,6 +235,10 @@ describe('/api/process-cv', () => {
     expect(res2.body.urls).toHaveLength(5);
     expect(typeof res2.body.originalScore).toBe('number');
     expect(typeof res2.body.enhancedScore).toBe('number');
+    expect(typeof res2.body.atsScoreBefore).toBe('number');
+    expect(typeof res2.body.atsScoreAfter).toBe('number');
+    expect(res2.body.atsScoreBefore).toBe(res2.body.originalScore);
+    expect(res2.body.atsScoreAfter).toBe(res2.body.enhancedScore);
     expect(res2.body.applicantName).toBeTruthy();
     const sanitized = res2.body.applicantName
       .trim()

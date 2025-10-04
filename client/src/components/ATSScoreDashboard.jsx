@@ -179,12 +179,23 @@ function ATSScoreDashboard({
     }
   })
 
-  const originalScoreValue = clampScore(match?.originalScore)
-  const enhancedScoreValue = clampScore(match?.enhancedScore)
+  const originalScoreValue = clampScore(
+    typeof match?.atsScoreBefore === 'number'
+      ? match.atsScoreBefore
+      : match?.originalScore
+  )
+  const enhancedScoreValue = clampScore(
+    typeof match?.atsScoreAfter === 'number'
+      ? match.atsScoreAfter
+      : match?.enhancedScore
+  )
   const matchDelta =
     originalScoreValue !== null && enhancedScoreValue !== null
       ? formatDelta(originalScoreValue, enhancedScoreValue)
-      : formatDelta(match?.originalScore, match?.enhancedScore)
+      : formatDelta(
+          typeof match?.atsScoreBefore === 'number' ? match.atsScoreBefore : match?.originalScore,
+          typeof match?.atsScoreAfter === 'number' ? match.atsScoreAfter : match?.enhancedScore
+        )
   const selectionProbabilityBeforeValue =
     typeof match?.selectionProbabilityBefore === 'number'
       ? match.selectionProbabilityBefore
@@ -235,13 +246,13 @@ function ATSScoreDashboard({
   const scoreBands = hasComparableScores
     ? [
         {
-          label: 'Original',
+          label: 'ATS Score Before',
           value: originalScoreValue,
           tone: 'bg-indigo-500',
           textTone: 'text-indigo-700'
         },
         {
-          label: 'Enhanced',
+          label: 'ATS Score After',
           value: enhancedScoreValue,
           tone: 'bg-emerald-500',
           textTone: 'text-emerald-700'
@@ -382,16 +393,16 @@ function ATSScoreDashboard({
         >
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-lg backdrop-blur">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Original Match</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">ATS Score Before</p>
               <InfoTooltip
                 variant="light"
                 align="right"
-                label="How is the original match score calculated?"
+                label="How is the ATS score before calculated?"
                 content={originalScoreDescription}
               />
             </div>
             <p className="mt-3 text-5xl font-black text-indigo-700" data-testid="original-score">
-              {match.originalScore ?? '—'}%
+              {typeof originalScoreValue === 'number' ? `${originalScoreValue}%` : '—'}
             </p>
             <p className="mt-2 text-sm text-indigo-600/90" data-testid="original-title">
               {match.originalTitle || 'Initial resume title unavailable.'}
@@ -412,15 +423,15 @@ function ATSScoreDashboard({
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Enhanced Match</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">ATS Score After</p>
                   <p className="mt-3 text-5xl font-black text-emerald-700" data-testid="enhanced-score">
-                    {match.enhancedScore ?? '—'}%
+                    {typeof enhancedScoreValue === 'number' ? `${enhancedScoreValue}%` : '—'}
                   </p>
                 </div>
                 <InfoTooltip
                   variant="light"
                   align="left"
-                  label="How is the enhanced match score calculated?"
+                  label="How is the ATS score after calculated?"
                   content={enhancedScoreDescription}
                 />
               </div>
@@ -471,7 +482,11 @@ function ATSScoreDashboard({
                   )}
                 </div>
               </div>
-              <div className="mt-4 space-y-4" role="img" aria-label={`Original score ${originalScoreValue}%, enhanced score ${enhancedScoreValue}%`}>
+              <div
+                className="mt-4 space-y-4"
+                role="img"
+                aria-label={`ATS score before ${originalScoreValue}%, ATS score after ${enhancedScoreValue}%`}
+              >
                 {scoreBands.map(({ label, value, tone, textTone }) => (
                   <div key={label} className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-slate-600">

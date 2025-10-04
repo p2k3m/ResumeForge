@@ -2875,22 +2875,35 @@ function App() {
           ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
           : null)
 
-      const enhancedScoreResponse =
-        typeof data.enhancedScore === 'number'
-          ? data.enhancedScore
+      const atsScoreAfterResponse =
+        typeof data.atsScoreAfter === 'number'
+          ? data.atsScoreAfter
+          : typeof data.enhancedScore === 'number'
+            ? data.enhancedScore
+            : typeof data.originalScore === 'number'
+              ? data.originalScore
+              : null
+      const atsScoreBeforeResponse =
+        typeof data.atsScoreBefore === 'number'
+          ? data.atsScoreBefore
           : typeof data.originalScore === 'number'
             ? data.originalScore
-            : null
+            : atsScoreAfterResponse ?? null
 
       const matchPayload = {
         table: Array.isArray(data.table) ? data.table : [],
         addedSkills: Array.isArray(data.addedSkills) ? data.addedSkills : [],
         missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
+        atsScoreBefore: atsScoreBeforeResponse ?? 0,
+        atsScoreAfter: atsScoreAfterResponse ?? 0,
         originalScore:
-          typeof data.originalScore === 'number'
-            ? data.originalScore
-            : enhancedScoreResponse ?? 0,
-        enhancedScore: enhancedScoreResponse ?? 0,
+          typeof atsScoreBeforeResponse === 'number'
+            ? atsScoreBeforeResponse
+            : 0,
+        enhancedScore:
+          typeof atsScoreAfterResponse === 'number'
+            ? atsScoreAfterResponse
+            : 0,
         originalTitle: data.originalTitle || '',
         modifiedTitle: data.modifiedTitle || '',
         selectionProbability: probabilityValue,
@@ -3514,11 +3527,15 @@ function App() {
 
       const id = suggestion.id
       const updatedResumeDraft = suggestion.updatedResume || resumeText
-      const baselineScore = Number.isFinite(match?.enhancedScore)
-        ? match.enhancedScore
-        : Number.isFinite(match?.originalScore)
-          ? match.originalScore
-          : null
+      const baselineScore = Number.isFinite(match?.atsScoreAfter)
+        ? match.atsScoreAfter
+        : Number.isFinite(match?.enhancedScore)
+          ? match.enhancedScore
+          : Number.isFinite(match?.atsScoreBefore)
+            ? match.atsScoreBefore
+            : Number.isFinite(match?.originalScore)
+              ? match.originalScore
+              : null
       const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
       const changeLogEntry = buildChangeLogEntry(suggestion)
       const historySnapshot = {
@@ -4685,7 +4702,10 @@ function App() {
                 </tbody>
               </table>
               <p className="text-purple-800 font-medium">
-                {formatMatchMessage(match.originalScore, match.enhancedScore)}
+                {formatMatchMessage(
+                  typeof match.atsScoreBefore === 'number' ? match.atsScoreBefore : match.originalScore,
+                  typeof match.atsScoreAfter === 'number' ? match.atsScoreAfter : match.enhancedScore
+                )}
               </p>
               <div className="text-sm text-purple-700 space-y-1">
                 <p>

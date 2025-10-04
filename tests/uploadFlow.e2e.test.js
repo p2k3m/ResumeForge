@@ -63,6 +63,8 @@ describe('upload to download flow (e2e)', () => {
     expect(uploadResponse.body.jobId.length).toBeGreaterThan(10);
     expect(typeof uploadResponse.body.originalScore).toBe('number');
     expect(typeof uploadResponse.body.enhancedScore).toBe('number');
+    expect(typeof uploadResponse.body.atsScoreBefore).toBe('number');
+    expect(typeof uploadResponse.body.atsScoreAfter).toBe('number');
 
     const uploadTypes = extractTypes(uploadResponse.body.urls);
     expect(uploadTypes).toEqual(
@@ -122,7 +124,10 @@ describe('upload to download flow (e2e)', () => {
       jobSkills,
       resumeSkills,
       baseline: {
-        originalScore: uploadResponse.body.originalScore,
+        originalScore:
+          typeof uploadResponse.body.atsScoreBefore === 'number'
+            ? uploadResponse.body.atsScoreBefore
+            : uploadResponse.body.originalScore,
         missingSkills: uploadResponse.body.missingSkills || missingSkills,
         table: uploadResponse.body.table || [],
       },
