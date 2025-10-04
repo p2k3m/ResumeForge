@@ -5575,9 +5575,19 @@ function canonicalSectionKey(heading = '') {
 
 function renderSectionTokensToHtml(
   tokens = [],
-  { sectionKey, enhancementTokenMap } = {}
+  { sectionKey, enhancementTokenMap, presentation } = {}
 ) {
-  const skipBullets = sectionKey === 'summary' || sectionKey === 'contact';
+  let skipBullets = false;
+  if (presentation && Object.prototype.hasOwnProperty.call(presentation, 'showMarkers')) {
+    skipBullets = presentation.showMarkers === false;
+  } else if (sectionKey) {
+    try {
+      const resolvedPresentation = resolveTemplatePresentation(sectionKey);
+      skipBullets = resolvedPresentation.showMarkers === false;
+    } catch {
+      skipBullets = sectionKey === 'summary' || sectionKey === 'contact';
+    }
+  }
   return tokens
     .map((t, i) => {
       const resolvedText = resolveTokenText(t.text, enhancementTokenMap);
@@ -5730,7 +5740,11 @@ function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
     const key = canonicalSectionKey(heading);
     const tokensList = Array.isArray(section.items) ? section.items : [];
     const htmlItems = tokensList.map((tokens) =>
-      renderSectionTokensToHtml(tokens, { sectionKey: key, enhancementTokenMap })
+      renderSectionTokensToHtml(tokens, {
+        sectionKey: key,
+        enhancementTokenMap,
+        presentation,
+      })
     );
     const presentation = resolveTemplatePresentation(key);
     const entry = {
