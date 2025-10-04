@@ -9307,6 +9307,19 @@ function buildImprovementSummary(
   ];
 }
 
+const CHANGE_LOG_TRUNCATION_SUFFIX = '…';
+const MAX_CHANGE_LOG_DETAIL_LENGTH = 2000;
+const MAX_CHANGE_LOG_DIFF_LENGTH = 5000;
+const MAX_CHANGE_LOG_RESUME_TEXT_LENGTH = 10000;
+const MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH = 20000;
+const CHANGE_LOG_FIELD_LIMITS = Object.freeze({
+  detail: MAX_CHANGE_LOG_DETAIL_LENGTH,
+  diff: MAX_CHANGE_LOG_DIFF_LENGTH,
+  resume: MAX_CHANGE_LOG_RESUME_TEXT_LENGTH,
+  history: MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH,
+  suffix: CHANGE_LOG_TRUNCATION_SUFFIX,
+});
+
 function normalizeChangeLogString(value) {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -9316,6 +9329,36 @@ function normalizeChangeLogString(value) {
     return '';
   }
   return String(value || '').trim();
+}
+
+function truncateChangeLogText(text, maxLength, suffix = CHANGE_LOG_TRUNCATION_SUFFIX) {
+  if (!text || typeof maxLength !== 'number' || maxLength <= 0) {
+    return text || '';
+  }
+  if (text.length <= maxLength) {
+    return text;
+  }
+
+  const appliedSuffix = typeof suffix === 'string' ? suffix : '';
+  const suffixLength = appliedSuffix.length;
+  const sliceLength = Math.max(0, maxLength - suffixLength);
+
+  if (!sliceLength) {
+    return appliedSuffix ? appliedSuffix.slice(0, maxLength) : text.slice(0, maxLength);
+  }
+
+  return `${text.slice(0, sliceLength)}${appliedSuffix}`;
+}
+
+function normalizeChangeLogText(value, maxLength) {
+  const text = normalizeChangeLogString(value);
+  if (!text) {
+    return '';
+  }
+  if (typeof maxLength !== 'number') {
+    return text;
+  }
+  return truncateChangeLogText(text, maxLength);
 }
 
 function normalizeChangeLogList(value) {
@@ -9432,7 +9475,15 @@ function stringifyChangeLogHistoryContext(context) {
     return '';
   }
   try {
-    return JSON.stringify(context);
+    const serialized = JSON.stringify(context);
+    if (
+      typeof MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH === 'number' &&
+      MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH > 0 &&
+      serialized.length > MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH
+    ) {
+      return '';
+    }
+    return serialized;
   } catch (err) {
     return '';
   }
@@ -9450,15 +9501,20 @@ function normalizeChangeLogEntryInput(entry) {
 
   const type = normalizeChangeLogString(entry.type);
   const title = normalizeChangeLogString(entry.title);
-  const detail = normalizeChangeLogString(entry.detail || entry.explanation);
-  const label = normalizeChangeLogString(entry.label);
-  const before = normalizeChangeLogString(entry.before);
-  const after = normalizeChangeLogString(entry.after);
-  const resumeBeforeText = normalizeChangeLogString(
-    entry.resumeBeforeText || entry.resumeBeforeFull || entry.previousResumeText
+  const detail = normalizeChangeLogText(
+    entry.detail || entry.explanation,
+    MAX_CHANGE_LOG_DETAIL_LENGTH
   );
-  const resumeAfterText = normalizeChangeLogString(
-    entry.resumeAfterText || entry.resumeAfterFull || entry.updatedResumeText
+  const label = normalizeChangeLogString(entry.label);
+  const before = normalizeChangeLogText(entry.before, MAX_CHANGE_LOG_DIFF_LENGTH);
+  const after = normalizeChangeLogText(entry.after, MAX_CHANGE_LOG_DIFF_LENGTH);
+  const resumeBeforeText = normalizeChangeLogText(
+    entry.resumeBeforeText || entry.resumeBeforeFull || entry.previousResumeText,
+    MAX_CHANGE_LOG_RESUME_TEXT_LENGTH
+  );
+  const resumeAfterText = normalizeChangeLogText(
+    entry.resumeAfterText || entry.resumeAfterFull || entry.updatedResumeText,
+    MAX_CHANGE_LOG_RESUME_TEXT_LENGTH
   );
   const addedItems = normalizeChangeLogList(entry.addedItems);
   const removedItems = normalizeChangeLogList(entry.removedItems);
@@ -13133,4 +13189,5 @@ export {
   enforceTargetedUpdate,
   JobDescriptionFetchBlockedError,
   extractContactDetails,
+  CHANGE_LOG_FIELD_LIMITS,
 };
