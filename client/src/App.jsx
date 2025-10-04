@@ -137,6 +137,103 @@ function deriveCoverLetterStateFromFiles(files) {
   return { drafts, originals }
 }
 
+function getDownloadStateKey(file = {}) {
+  const type = typeof file.type === 'string' ? file.type.trim() : ''
+  if (type) return type
+  const url = typeof file.url === 'string' ? file.url.trim() : ''
+  return url
+}
+
+function extractFileNameFromDisposition(header) {
+  if (!header || typeof header !== 'string') return ''
+  const utf8Match = header.match(/filename\*=(?:UTF-8'')?([^;]+)/i)
+  if (utf8Match && utf8Match[1]) {
+    const rawValue = utf8Match[1].trim().replace(/^['"]|['"]$/g, '')
+    try {
+      const decoded = decodeURIComponent(rawValue)
+      if (decoded) return decoded
+    } catch (err) {
+      return rawValue
+    }
+    return rawValue
+  }
+  const asciiMatch = header.match(/filename="?([^";]+)"?/i)
+  if (asciiMatch && asciiMatch[1]) {
+    return asciiMatch[1].trim()
+  }
+  return ''
+}
+
+function extractFileNameFromUrl(downloadUrl) {
+  if (!downloadUrl || typeof downloadUrl !== 'string') return ''
+  try {
+    const parsed = new URL(downloadUrl)
+    const pathname = parsed.pathname || ''
+    const segments = pathname.split('/')
+    while (segments.length && !segments[segments.length - 1]) {
+      segments.pop()
+    }
+    const candidate = segments.pop() || ''
+    return candidate ? decodeURIComponent(candidate) : ''
+  } catch (err) {
+    const sanitized = downloadUrl.split('?')[0]
+    const parts = sanitized.split('/')
+    const candidate = parts.pop() || parts.pop() || ''
+    return candidate || ''
+  }
+}
+
+function sanitizeFileNameSegment(segment) {
+  if (!segment || typeof segment !== 'string') {
+    return 'document'
+  }
+  const normalized = segment
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return normalized || 'document'
+}
+
+function deriveDownloadFileName(file, presentation = {}, response) {
+  const disposition = response?.headers?.get?.('content-disposition') || ''
+  const dispositionName = extractFileNameFromDisposition(disposition)
+  if (dispositionName) {
+    return dispositionName
+  }
+
+  const urlName = extractFileNameFromUrl(file?.url)
+  if (urlName) {
+    return urlName
+  }
+
+  const baseSource =
+    (typeof file?.fileName === 'string' && file.fileName.trim()) ||
+    (typeof presentation?.label === 'string' && presentation.label.trim()) ||
+    (typeof file?.type === 'string' && file.type.trim()) ||
+    'document'
+  const base = sanitizeFileNameSegment(baseSource)
+
+  const contentType = response?.headers?.get?.('content-type') || ''
+  const normalizedType = contentType.split(';')[0]?.trim().toLowerCase()
+
+  let extension = '.pdf'
+  if (normalizedType) {
+    if (normalizedType === 'application/pdf') {
+      extension = '.pdf'
+    } else if (normalizedType.includes('wordprocessingml')) {
+      extension = '.docx'
+    } else if (normalizedType.includes('msword')) {
+      extension = '.doc'
+    } else if (normalizedType === 'text/plain') {
+      extension = '.txt'
+    } else if (normalizedType === 'application/json') {
+      extension = '.json'
+    }
+  }
+
+  return `${base}${extension}`
+}
+
 function normaliseReasonLines(reason) {
   if (!reason) return []
   if (Array.isArray(reason)) {
@@ -1316,6 +1413,7 @@ function App() {
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
+  const [downloadStates, setDownloadStates] = useState({})
   const [match, setMatch] = useState(null)
   const [scoreBreakdown, setScoreBreakdown] = useState([])
   const [resumeText, setResumeText] = useState('')
@@ -1865,6 +1963,10 @@ function App() {
     return { resume, cover, other }
   }, [outputFiles])
 
+  useEffect(() => {
+    setDownloadStates({})
+  }, [outputFiles])
+
   const handleCoverLetterTextChange = useCallback(
     (type, value) => {
       if (!isCoverLetterType(type)) return
@@ -1990,6 +2092,73 @@ function App() {
     setPreviewFile(null)
   }, [])
 
+  const handleDownloadFile = useCallback(
+    async (file) => {
+      if (!file || typeof file !== 'object') {
+        setError('Unable to download this document. Please try again.')
+        return
+      }
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        setError('Download is not supported in this environment.')
+        return
+      }
+      const stateKeyBase = getDownloadStateKey(file)
+      const downloadUrl = typeof file.url === 'string' ? file.url : ''
+      if (!downloadUrl) {
+        setError('Download link is unavailable. Please regenerate the document.')
+        if (stateKeyBase) {
+          setDownloadStates((prev) => ({
+            ...prev,
+            [stateKeyBase]: { status: 'idle', error: 'Download link unavailable.' }
+          }))
+        }
+        return
+      }
+      const presentation = file.presentation || getDownloadPresentation(file)
+      const stateKey = stateKeyBase || downloadUrl
+      setDownloadStates((prev) => ({
+        ...prev,
+        [stateKey]: { status: 'loading', error: '' }
+      }))
+      try {
+        const response = await fetch(downloadUrl)
+        if (!response.ok) {
+          throw new Error(`Download failed with status ${response.status}`)
+        }
+        const blob = await response.blob()
+        const fileName = deriveDownloadFileName(file, presentation, response)
+        const blobUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(blobUrl)
+        setDownloadStates((prev) => ({
+          ...prev,
+          [stateKey]: { status: 'idle', error: '' }
+        }))
+      } catch (err) {
+        console.error('Download failed', err)
+        setError('Unable to download this document. Please try again.')
+        setDownloadStates((prev) => ({
+          ...prev,
+          [stateKey]: {
+            status: 'idle',
+            error: 'Download failed. Try again or regenerate the document.'
+          }
+        }))
+        try {
+          window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+        } catch (openErr) {
+          console.warn('Fallback open failed', openErr)
+        }
+      }
+    },
+    [setError]
+  )
+
   const renderDownloadCard = useCallback((file) => {
     if (!file) return null
     const presentation = file.presentation || getDownloadPresentation(file)
@@ -2018,6 +2187,12 @@ function App() {
       ? coverLetterOriginals[file.type] ?? (typeof file.text === 'string' ? file.text : '')
       : ''
     const coverEdited = isCoverLetter && coverDraftText && coverDraftText !== coverOriginalText
+    const downloadStateKey = getDownloadStateKey(file)
+    const resolvedStateKey = downloadStateKey || (typeof file.url === 'string' ? file.url : '')
+    const downloadState = resolvedStateKey ? downloadStates[resolvedStateKey] : undefined
+    const isDownloading = downloadState?.status === 'loading'
+    const downloadError = downloadState?.error || ''
+    const downloadButtonClass = `${buttonClass} ${isDownloading ? 'opacity-80 cursor-wait' : ''}`
     return (
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
@@ -2038,19 +2213,22 @@ function App() {
             >
               {isCoverLetter ? 'Review & Edit' : 'Preview'}
             </button>
-            <a
-              href={file.url}
-              className={buttonClass}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={() => handleDownloadFile(file)}
+              className={downloadButtonClass}
+              disabled={isDownloading}
             >
-              {presentation.linkLabel || 'Download'}
-            </a>
+              {isDownloading ? 'Downloading…' : presentation.linkLabel || 'Download'}
+            </button>
           </div>
           {expiryLabel && (
             <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
           )}
         </div>
+        {downloadError && (
+          <p className="text-xs font-semibold text-rose-600">{downloadError}</p>
+        )}
         {isCoverLetter && (
           <p className={`text-xs ${coverEdited ? 'text-indigo-600 font-semibold' : 'text-purple-500'}`}>
             {coverEdited
@@ -2064,7 +2242,9 @@ function App() {
     openDownloadPreview,
     openCoverLetterEditorModal,
     coverLetterDrafts,
-    coverLetterOriginals
+    coverLetterOriginals,
+    downloadStates,
+    handleDownloadFile
   ])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
