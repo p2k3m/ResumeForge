@@ -7754,33 +7754,44 @@ function buildSelectionInsights(context = {}) {
       ? 'partial'
       : 'match';
 
-  const computeProbability = ({ designation, skills, experience, tasks, highlights }) => {
-    const metrics = [designation, skills, experience, tasks, highlights]
-      .map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : null))
+  const selectionMetricKeys = ['designation', 'skills', 'experience', 'tasks', 'highlights'];
+  const computeProbability = (scores = {}) => {
+    const values = selectionMetricKeys
+      .map((key) => {
+        const value = scores[key];
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          return null;
+        }
+        return clamp(Math.round(value), 0, 100);
+      })
       .filter((value) => value !== null);
-    const average = metrics.length
-      ? metrics.reduce((total, value) => total + value, 0) / metrics.length
+
+    const average = values.length
+      ? Math.round(values.reduce((total, value) => total + value, 0) / values.length)
       : 0;
-    const probability = clamp(Math.round(average), 5, 97);
+
+    const probability = clamp(average, 0, 100);
     const level = probability >= 75 ? 'High' : probability >= 55 ? 'Medium' : 'Low';
     return { probability, level };
   };
 
-  const { probability: baselineProbability, level: baselineLevel } = computeProbability({
-    designation: baselineDesignation.designationScore,
-    skills: originalCoverage,
-    experience: experienceScore,
-    tasks: computeTaskAlignmentScore(baselineImpactScore),
-    highlights: baselineHighlightScore,
-  });
+  const baselineProbabilityInput = {
+    designation: normalizeFitScore(baselineDesignation.designationScore),
+    skills: normalizeFitScore(originalCoverage),
+    experience: normalizeFitScore(experienceScore),
+    tasks: normalizeFitScore(computeTaskAlignmentScore(baselineImpactScore)),
+    highlights: normalizeFitScore(baselineHighlightScore),
+  };
 
-  const { probability, level } = computeProbability({
-    designation: designationScore,
-    skills: skillCoverage,
-    experience: experienceScore,
-    tasks: tasksScore,
-    highlights: highlightScore,
-  });
+  const selectionProbabilityInput = jobFitScores
+    .filter((metric) => selectionMetricKeys.includes(metric.key))
+    .reduce((acc, metric) => ({ ...acc, [metric.key]: metric.score }), {});
+
+  const { probability: baselineProbability, level: baselineLevel } = computeProbability(
+    baselineProbabilityInput
+  );
+
+  const { probability, level } = computeProbability(selectionProbabilityInput);
 
   const probabilityMessage = buildProbabilityNarrative({
     probability,
