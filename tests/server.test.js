@@ -115,7 +115,14 @@ jest.unstable_mockModule('mammoth', () => ({
 }));
 
 const serverModule = await import('../server.js');
-const { default: app, extractText, setGeneratePdf, parseContent, classifyDocument } = serverModule;
+const {
+  default: app,
+  extractText,
+  setGeneratePdf,
+  parseContent,
+  classifyDocument,
+  CHANGE_LOG_FIELD_LIMITS,
+} = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
 const mammothMock = (await import('mammoth')).default;
 const axios = (await import('axios')).default;
@@ -1208,5 +1215,67 @@ describe('client download labels', () => {
       expect(source).toContain(`case '${type}':`);
       expect(source).toContain(`label: '${label}'`);
     });
+  });
+});
+
+describe('change log persistence safeguards', () => {
+  test('truncates oversized change log fields before persisting', async () => {
+    const longResume = 'R'.repeat(CHANGE_LOG_FIELD_LIMITS.resume + 500);
+    const longDetail = 'D'.repeat(CHANGE_LOG_FIELD_LIMITS.detail + 200);
+    const largeHistoryContext = {
+      matchBefore: {
+        summary: 'M'.repeat(CHANGE_LOG_FIELD_LIMITS.history + 1000)
+      }
+    };
+
+    const updateCommands = [];
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-123' },
+              changeLog: { L: [] }
+            }
+          });
+        case 'UpdateItemCommand':
+          updateCommands.push(cmd);
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-123',
+        linkedinProfileUrl: 'https://www.linkedin.com/in/example',
+        entry: {
+          id: 'entry-1',
+          detail: longDetail,
+          resumeBeforeText: longResume,
+          resumeAfterText: longResume,
+          historyContext: largeHistoryContext
+        }
+      });
+
+    expect(response.status).toBe(200);
+    expect(updateCommands).toHaveLength(1);
+    const updateCommand = updateCommands[0];
+    const { ExpressionAttributeValues } = updateCommand.input;
+    const serializedEntries = ExpressionAttributeValues[':changeLog'].L;
+    expect(serializedEntries).toHaveLength(1);
+
+    const entryMap = serializedEntries[0].M;
+    expect(entryMap.detail.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.detail);
+    expect(entryMap.detail.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
+    expect(entryMap.resumeBeforeText.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
+    expect(entryMap.resumeBeforeText.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
+    expect(entryMap.resumeAfterText.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
+    expect(entryMap.resumeAfterText.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
+    expect(entryMap.historyContext).toBeUndefined();
   });
 });
