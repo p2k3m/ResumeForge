@@ -20,6 +20,7 @@ import enhanceIcon from './assets/icon-enhance.svg'
 import qrOptimisedResume from './assets/qr-optimised-resume.svg'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
+import { normalizeOutputFiles } from './utils/normalizeOutputFiles.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Could not enhance CV; your formatting remained untouched.'
@@ -845,7 +846,7 @@ function getDownloadPresentation(file = {}) {
         buttonStyle: 'bg-slate-700 hover:bg-slate-800 focus:ring-slate-500',
         cardAccent: 'bg-gradient-to-br from-slate-50 via-white to-white',
         cardBorder: 'border-slate-200',
-        linkLabel: 'Download original PDF',
+        linkLabel: 'Download Original CV',
         category: 'resume',
         autoPreviewPriority: 4
       }
@@ -858,7 +859,7 @@ function getDownloadPresentation(file = {}) {
         buttonStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
         cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
         cardBorder: 'border-emerald-200',
-        linkLabel: 'Download enhanced PDF',
+        linkLabel: 'Download Enhanced CV',
         category: 'resume',
         autoPreviewPriority: 0
       }
@@ -871,7 +872,7 @@ function getDownloadPresentation(file = {}) {
         buttonStyle: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500',
         cardAccent: 'bg-gradient-to-br from-emerald-50 via-white to-white',
         cardBorder: 'border-emerald-200',
-        linkLabel: 'Download enhanced PDF',
+        linkLabel: 'Download Enhanced CV',
         category: 'resume',
         autoPreviewPriority: 1
       }
@@ -884,7 +885,7 @@ function getDownloadPresentation(file = {}) {
         buttonStyle: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
         cardAccent: 'bg-gradient-to-br from-indigo-50 via-white to-white',
         cardBorder: 'border-indigo-200',
-        linkLabel: 'Download PDF',
+        linkLabel: 'Download Cover Letter',
         category: 'cover',
         autoPreviewPriority: 2
       }
@@ -897,7 +898,7 @@ function getDownloadPresentation(file = {}) {
         buttonStyle: 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500',
         cardAccent: 'bg-gradient-to-br from-indigo-50 via-white to-white',
         cardBorder: 'border-indigo-200',
-        linkLabel: 'Download PDF',
+        linkLabel: 'Download Cover Letter',
         category: 'cover',
         autoPreviewPriority: 3
       }
@@ -910,7 +911,7 @@ function getDownloadPresentation(file = {}) {
         buttonStyle: 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500',
         cardAccent: 'bg-white/85',
         cardBorder: 'border-purple-200',
-        linkLabel: 'Download file',
+        linkLabel: 'Download File',
         category: 'other',
         autoPreviewPriority: 10
       }
@@ -2174,13 +2175,15 @@ function App() {
     const secondaryButtonClass =
       'inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold border border-purple-200 text-purple-700 transition hover:text-purple-900 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200 focus:ring-offset-2'
     const expiryDate = file.expiresAt ? new Date(file.expiresAt) : null
-    const expiryLabel =
-      expiryDate && !Number.isNaN(expiryDate.getTime())
-        ? expiryDate.toLocaleString(undefined, {
-            dateStyle: 'medium',
-            timeStyle: 'short'
-          })
-        : null
+    const isExpiryValid = expiryDate && !Number.isNaN(expiryDate.getTime())
+    const expiryLabel = isExpiryValid
+      ? expiryDate.toLocaleString(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short'
+        })
+      : null
+    const downloadUrl = typeof file.url === 'string' ? file.url : ''
+    const isExpired = Boolean(isExpiryValid && expiryDate.getTime() <= Date.now())
     const isCoverLetter = presentation.category === 'cover' && isCoverLetterType(file.type)
     const coverDraftText = isCoverLetter ? coverLetterDrafts[file.type] ?? '' : ''
     const coverOriginalText = isCoverLetter
@@ -2192,7 +2195,24 @@ function App() {
     const downloadState = resolvedStateKey ? downloadStates[resolvedStateKey] : undefined
     const isDownloading = downloadState?.status === 'loading'
     const downloadError = downloadState?.error || ''
-    const downloadButtonClass = `${buttonClass} ${isDownloading ? 'opacity-80 cursor-wait' : ''}`
+    const derivedDownloadError = isExpired
+      ? 'This link has expired. Generate the enhanced documents again to refresh it.'
+      : !downloadUrl
+        ? 'Download link unavailable. Please regenerate the document.'
+        : downloadError
+    const isDownloadDisabled = isDownloading || !downloadUrl || isExpired
+    const downloadButtonClass = `${buttonClass} ${
+      isDownloading
+        ? 'opacity-80 cursor-wait'
+        : isDownloadDisabled
+          ? 'opacity-60 cursor-not-allowed'
+          : ''
+    }`
+    const downloadButtonLabel = isExpired
+      ? 'Link expired'
+      : isDownloading
+        ? 'Downloading…'
+        : presentation.linkLabel || 'Download'
     return (
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
@@ -2215,19 +2235,28 @@ function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleDownloadFile(file)}
+              onClick={() => {
+                if (!isDownloadDisabled) {
+                  handleDownloadFile(file)
+                }
+              }}
               className={downloadButtonClass}
-              disabled={isDownloading}
+              disabled={isDownloadDisabled}
             >
-              {isDownloading ? 'Downloading…' : presentation.linkLabel || 'Download'}
+              {downloadButtonLabel}
             </button>
           </div>
-          {expiryLabel && (
+          {expiryLabel && !isExpired && (
             <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
           )}
+          {expiryLabel && isExpired && (
+            <p className="text-xs font-semibold text-rose-600">
+              Expired on {expiryLabel}. Generate the documents again to refresh the download link.
+            </p>
+          )}
         </div>
-        {downloadError && (
-          <p className="text-xs font-semibold text-rose-600">{downloadError}</p>
+        {derivedDownloadError && (
+          <p className="text-xs font-semibold text-rose-600">{derivedDownloadError}</p>
         )}
         {isCoverLetter && (
           <p className={`text-xs ${coverEdited ? 'text-indigo-600 font-semibold' : 'text-purple-500'}`}>
@@ -2590,7 +2619,7 @@ function App() {
         return
       }
 
-      const outputFilesValue = Array.isArray(data.urls) ? data.urls : []
+      const outputFilesValue = normalizeOutputFiles(data.urls)
       setOutputFiles(outputFilesValue)
       const { drafts: analysisCoverLetterDrafts, originals: analysisCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(outputFilesValue)
@@ -2804,9 +2833,7 @@ function App() {
       : []
     setScoreBreakdown(scoreBreakdownValue)
 
-    const outputFilesValue = Array.isArray(snapshot.outputFiles)
-      ? cloneData(snapshot.outputFiles)
-      : []
+    const outputFilesValue = normalizeOutputFiles(snapshot.outputFiles)
     setOutputFiles(outputFilesValue)
 
     const snapshotCoverDrafts =
@@ -3741,7 +3768,7 @@ function App() {
       }
 
       const data = await response.json()
-      const urlsValue = Array.isArray(data.urls) ? data.urls : []
+      const urlsValue = normalizeOutputFiles(data.urls)
       setOutputFiles(urlsValue)
       const { drafts: generatedCoverLetterDrafts, originals: generatedCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(urlsValue)
