@@ -94,25 +94,29 @@ exports[`ATSScoreCard matches the gradient snapshot for consistency 1`] = `
           Score
         </span>
       </div>
-      <footer
-        class="mt-auto rounded-2xl border border-white/10 bg-white/10 p-4 text-sm md:text-base leading-relaxed text-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.28)]"
-        data-testid="metric-tip"
+      <div
+        class="mt-auto space-y-3"
       >
-        <div
-          class="flex items-start gap-3"
+        <footer
+          class="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm md:text-base leading-relaxed text-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.28)]"
+          data-testid="metric-tip"
         >
-          <span
-            class="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-white/20 text-xs font-semibold uppercase tracking-[0.35em]"
+          <div
+            class="flex items-start gap-3"
           >
-            Tip
-          </span>
-          <p
-            class="flex-1"
-          >
-            Incorporate the role-specific leadership verbs to boost resonance.
-          </p>
-        </div>
-      </footer>
+            <span
+              class="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-white/20 text-xs font-semibold uppercase tracking-[0.35em]"
+            >
+              Tip
+            </span>
+            <p
+              class="flex-1"
+            >
+              Incorporate the role-specific leadership verbs to boost resonance.
+            </p>
+          </div>
+        </footer>
+      </div>
     </div>
   </article>
 </DocumentFragment>
