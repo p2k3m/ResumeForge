@@ -9253,8 +9253,52 @@ function buildImprovementSummary(
   changeDetails = [],
   primarySection = ''
 ) {
+  const primaryConfig =
+    primarySection && typeof primarySection === 'object'
+      ? primarySection
+      : { label: typeof primarySection === 'string' ? primarySection : '' };
+
+  const normalizeToken = (value) =>
+    typeof value === 'string' ? value.replace(/[^a-z0-9]/gi, '').toLowerCase() : '';
+
+  const primaryLabel = typeof primaryConfig?.label === 'string' ? primaryConfig.label : '';
+  const primaryKey = typeof primaryConfig?.key === 'string' ? primaryConfig.key : '';
+  const normalizedPrimaryLabel = normalizeToken(primaryLabel);
+  const normalizedPrimaryKey = normalizeToken(primaryKey);
+
+  const buildFallbackEntry = (sectionName = '') => {
+    const fallbackSectionLabel = typeof sectionName === 'string' ? sectionName : '';
+    const added = [];
+    const removed = [];
+    const beforeLines = extractDiffLines(beforeText);
+    const afterLines = extractDiffLines(afterText);
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+
+    afterLines.forEach((line) => {
+      if (!beforeSet.has(line.toLowerCase())) {
+        added.push(line);
+      }
+    });
+
+    beforeLines.forEach((line) => {
+      if (!afterSet.has(line.toLowerCase())) {
+        removed.push(line);
+      }
+    });
+
+    const reason = extractReasonsList(explanation);
+
+    return {
+      section: fallbackSectionLabel,
+      added,
+      removed,
+      reason,
+    };
+  };
+
   if (Array.isArray(changeDetails) && changeDetails.length) {
-    const entries = changeDetails.map((detail) => {
+    const entriesWithMeta = changeDetails.map((detail) => {
       const before = typeof detail?.before === 'string' ? detail.before : '';
       const after = typeof detail?.after === 'string' ? detail.after : '';
       const beforeLines = extractDiffLines(before);
@@ -9284,59 +9328,67 @@ function buildImprovementSummary(
           : typeof detail?.key === 'string'
             ? detail.key
             : '';
+      const detailKey = typeof detail?.key === 'string' ? detail.key : '';
+      const detailLabel = typeof detail?.label === 'string' ? detail.label : sectionLabel;
 
       return {
-        section: sectionLabel,
-        added,
-        removed,
-        reason: reasons,
+        entry: {
+          section: sectionLabel,
+          added,
+          removed,
+          reason: reasons,
+        },
+        tokens: {
+          section: normalizeToken(sectionLabel),
+          key: normalizeToken(detailKey),
+          label: normalizeToken(detailLabel),
+        },
       };
     });
 
-    const normalizedPrimary = typeof primarySection === 'string' ? primarySection.trim().toLowerCase() : '';
-    if (normalizedPrimary) {
-      const matchIndex = entries.findIndex((entry) => {
-        if (!entry || typeof entry.section !== 'string') return false;
-        return entry.section.trim().toLowerCase() === normalizedPrimary;
+    let matchedPrimary = false;
+    let matchIndex = -1;
+    if (normalizedPrimaryLabel || normalizedPrimaryKey) {
+      matchIndex = entriesWithMeta.findIndex(({ tokens }) => {
+        if (!tokens) return false;
+        if (normalizedPrimaryLabel) {
+          if (tokens.section === normalizedPrimaryLabel) return true;
+          if (tokens.label === normalizedPrimaryLabel) return true;
+        }
+        if (normalizedPrimaryKey) {
+          if (tokens.key === normalizedPrimaryKey) return true;
+          if (!tokens.key && tokens.section === normalizedPrimaryKey) return true;
+        }
+        return false;
       });
+
+      if (matchIndex >= 0) {
+        matchedPrimary = true;
+      }
       if (matchIndex > 0) {
-        const [match] = entries.splice(matchIndex, 1);
-        entries.unshift(match);
+        const [match] = entriesWithMeta.splice(matchIndex, 1);
+        entriesWithMeta.unshift(match);
       }
     }
 
-    return entries;
+    if (!matchedPrimary && (primaryLabel || primaryKey)) {
+      const fallbackSectionName = primaryLabel || primaryKey;
+      entriesWithMeta.unshift({
+        entry: buildFallbackEntry(fallbackSectionName),
+        tokens: {
+          section: normalizeToken(fallbackSectionName),
+          key: normalizedPrimaryKey,
+          label: normalizedPrimaryLabel,
+        },
+      });
+    }
+
+    return entriesWithMeta.map(({ entry }) => entry);
   }
 
-  const added = [];
-  const removed = [];
-  const beforeLines = extractDiffLines(beforeText);
-  const afterLines = extractDiffLines(afterText);
-  const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
-  const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+  const fallbackSection = primaryLabel || primaryKey || '';
 
-  afterLines.forEach((line) => {
-    if (!beforeSet.has(line.toLowerCase())) {
-      added.push(line);
-    }
-  });
-
-  beforeLines.forEach((line) => {
-    if (!afterSet.has(line.toLowerCase())) {
-      removed.push(line);
-    }
-  });
-
-  const reason = extractReasonsList(explanation);
-
-  return [
-    {
-      section: typeof primarySection === 'string' ? primarySection : '',
-      added,
-      removed,
-      reason,
-    },
-  ];
+  return [buildFallbackEntry(fallbackSection)];
 }
 
 const CHANGE_LOG_TRUNCATION_SUFFIX = '…';
@@ -10461,6 +10513,8 @@ async function handleImprovementRequest(type, req, res) {
       confidence: result.confidence,
       appliedSkills: missingSkills.length,
     });
+    const improvementConfig = IMPROVEMENT_SECTION_CONFIG[type] || {};
+
     const responsePayload = {
       success: true,
       type,
@@ -10476,7 +10530,7 @@ async function handleImprovementRequest(type, req, res) {
         normalizedAfterExcerpt,
         result.explanation,
         result.changeDetails,
-        IMPROVEMENT_SECTION_CONFIG[type]?.label
+        improvementConfig
       ),
       rescore: rescoreSummary,
       selectionProbabilityBefore: normalizedSelectionProbabilityBefore,
@@ -10783,8 +10837,19 @@ async function generateEnhancedDocumentsResponse({
     originalMatchResult = calculateMatchScore(jobSkills, resumeSkillsList);
   }
 
-  const genAI = new GoogleGenerativeAI(geminiApiKey);
-  const generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const isImprovementRoute =
+    logContext && typeof logContext.route === 'string'
+      ? logContext.route.startsWith('improvement:')
+      : false;
+  const enableGenerativeEnhancements =
+    (!isTestEnvironment || !isImprovementRoute || process.env.ENABLE_TEST_GENERATIVE === 'true') &&
+    geminiApiKey;
+
+  let generativeModel = null;
+  if (enableGenerativeEnhancements) {
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  }
   const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
 
   let text = resumeText;
