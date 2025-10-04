@@ -5739,6 +5739,7 @@ function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
     const heading = normalizeHeading(section.heading || '');
     const key = canonicalSectionKey(heading);
     const tokensList = Array.isArray(section.items) ? section.items : [];
+    const presentation = resolveTemplatePresentation(key);
     const htmlItems = tokensList.map((tokens) =>
       renderSectionTokensToHtml(tokens, {
         sectionKey: key,
@@ -5746,7 +5747,6 @@ function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
         presentation,
       })
     );
-    const presentation = resolveTemplatePresentation(key);
     const entry = {
       heading,
       key,
