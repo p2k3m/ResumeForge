@@ -99,6 +99,13 @@
       line-height: 1.6;
     }
 
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      grid-template-columns: 1fr;
+    }
+
     .marker {
       width: 1.2em;
       height: 1.2em;
@@ -141,16 +148,18 @@
     </header>
     <div class="sections">
       {{#each sections}}
-      <section>
+      <section class="{{sectionClass}}">
         {{#if heading}}
-        <h2>{{heading}}</h2>
+        <h2 class="{{headingClass}}">{{heading}}</h2>
         {{/if}}
         {{#if items}}
-        <ul>
+        <ul class="section-list {{listClass}}">
           {{#each items}}
-          <li>
-            <span class="marker">◆</span>
-            <span>{{{this}}}</span>
+          <li class="section-item {{../itemClass}}">
+            {{#if ../showMarkers}}
+            <span class="marker {{../markerClass}}">◆</span>
+            {{/if}}
+            <span class="section-text {{../textClass}}">{{{this}}}</span>
           </li>
           {{/each}}
         </ul>
