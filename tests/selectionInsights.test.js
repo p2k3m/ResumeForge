@@ -88,4 +88,40 @@ describe('buildSelectionInsights', () => {
     expect(insights.before.level).toBeDefined()
     expect(insights.after.level).toBe('High')
   })
+
+  test('averages key alignment metrics to calculate selection probability', () => {
+    const insights = buildSelectionInsights({
+      jobTitle: 'Data Scientist',
+      originalTitle: 'Data Scientist',
+      modifiedTitle: 'Data Scientist',
+      jobDescriptionText:
+        'Seeking a Data Scientist with 4+ years experience in Python, machine learning, and model deployment.',
+      bestMatch: { score: 90 },
+      originalMatch: { score: 70 },
+      missingSkills: [],
+      addedSkills: ['Model Deployment'],
+      scoreBreakdown: {
+        impact: { score: 88 },
+        crispness: { score: 86 },
+        otherQuality: { score: 90 },
+        atsReadability: { score: 90 },
+      },
+      resumeExperience: [{ startDate: '2018', endDate: 'Present' }],
+      linkedinExperience: [],
+      knownCertificates: [],
+      certificateSuggestions: [],
+      manualCertificatesRequired: false,
+    })
+
+    const selectionMetrics = ['designation', 'skills', 'experience', 'tasks', 'highlights']
+    const expectedAverage = Math.round(
+      insights.jobFitScores
+        .filter((metric) => selectionMetrics.includes(metric.key))
+        .reduce((total, metric) => total + metric.score, 0) / selectionMetrics.length,
+    )
+
+    expect(insights.probability).toBe(expectedAverage)
+    expect(insights.level).toBe('High')
+    expect(insights.before.probability).toBeLessThanOrEqual(insights.probability)
+  })
 })
