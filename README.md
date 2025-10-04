@@ -166,7 +166,13 @@ After `sam deploy` completes it prints the `AppBaseUrl`, `ApiBaseUrl`, and `Clou
 npm run print:cloudfront-url -- <stack-name>
 ```
 
-The script uses your configured AWS credentials/region to read the `CloudFrontUrl` output from the specified stack and prints the full distribution URL (for example, `https://d123456abcdef8.cloudfront.net`). The production endpoint for the application is:
+The script uses your configured AWS credentials/region to read the `CloudFrontUrl` output from the specified stack and prints the full distribution URL (for example, `https://d123456abcdef8.cloudfront.net`).
+
+> **Active CloudFront domain:** `https://d3exampleabcdef8.cloudfront.net`
+
+The React portal now surfaces this value in the hero card so onboarding teams can copy or open the canonical entry point without digging through CloudFormation outputs or JSON helpers.
+
+The REST API remains available directly via API Gateway if you need to integrate programmatically:
 
 ```
 https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
@@ -184,6 +190,8 @@ npm run publish:cloudfront-url -- <stack-name>
 - The script always issues a `/*` invalidation for the previously published distribution, even when the stack reuses the same distribution id, so caches are busted after every deploy.
 
 The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment.
+
+The portal reads `/api/published-cloudfront` on load and renders the active domain with copy/open controls. This gives support teams and new joiners a self-serve place to confirm the production endpoint while candidates continue straight into the resume workflow.
 
 Once the metadata is published, the API exposes two helper endpoints:
 
