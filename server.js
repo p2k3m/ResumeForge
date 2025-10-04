@@ -5505,6 +5505,168 @@ function escapeHtml(str = '') {
     .replace(/'/g, '&#39;');
 }
 
+const CANONICAL_SECTION_SYNONYMS = (() => {
+  const synonymMap = {
+    contact: [
+      'contact',
+      'contact info',
+      'contact information',
+      'contact details'
+    ],
+    summary: [
+      'summary',
+      'professional summary',
+      'executive summary',
+      'profile',
+      'about me'
+    ],
+    experience: [
+      'experience',
+      'work experience',
+      'professional experience',
+      'employment',
+      'employment history'
+    ],
+    education: ['education', 'academic background', 'academics'],
+    skills: [
+      'skills',
+      'technical skills',
+      'core skills',
+      'key skills',
+      'core competencies',
+      'areas of expertise'
+    ],
+    certifications: [
+      'certification',
+      'certifications',
+      'certifications & training',
+      'licenses',
+      'licenses & certifications',
+      'certifications and training'
+    ]
+  };
+
+  const map = new Map();
+  Object.entries(synonymMap).forEach(([canonical, values]) => {
+    const set = new Set();
+    values.forEach((value) => {
+      const normalized = normalizeHeading(value || '').toLowerCase();
+      if (normalized) set.add(normalized);
+      const raw = String(value || '').trim().toLowerCase();
+      if (raw) set.add(raw);
+    });
+    set.add(canonical);
+    map.set(canonical, set);
+  });
+  return map;
+})();
+
+function canonicalSectionKey(heading = '') {
+  const normalized = normalizeHeading(heading || '');
+  const normalizedLower = normalized.toLowerCase();
+  const rawLower = String(heading || '').trim().toLowerCase();
+  for (const [canonical, variants] of CANONICAL_SECTION_SYNONYMS.entries()) {
+    if (variants.has(normalizedLower) || variants.has(rawLower)) {
+      return canonical;
+    }
+  }
+  return normalizedLower || rawLower;
+}
+
+function renderSectionTokensToHtml(
+  tokens = [],
+  { sectionKey, enhancementTokenMap } = {}
+) {
+  const skipBullets = sectionKey === 'summary' || sectionKey === 'contact';
+  return tokens
+    .map((t, i) => {
+      const resolvedText = resolveTokenText(t.text, enhancementTokenMap);
+      const text = resolvedText ? escapeHtml(resolvedText) : '';
+      if (t.type === 'link') {
+        const next = tokens[i + 1];
+        const space = next && next.text && !/^\s/.test(next.text) ? ' ' : '';
+        return `<a href="${t.href}">${text.trim()}</a>${space}`;
+      }
+      if (t.type === 'heading') {
+        return `<strong>${text}</strong>`;
+      }
+      if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
+      if (t.style === 'bold') return `<strong>${text}</strong>`;
+      if (t.style === 'italic') return `<em>${text}</em>`;
+      if (t.type === 'newline') return '<br>';
+      if (t.type === 'tab') return '<span class="tab"></span>';
+      if (t.type === 'bullet') {
+        if (skipBullets) return '';
+        if (sectionKey === 'education') {
+          return '<span class="edu-bullet">•</span> ';
+        }
+        return '<span class="bullet">•</span> ';
+      }
+      if (t.type === 'jobsep') return '';
+      return text;
+    })
+    .join('');
+}
+
+function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
+  const buckets = {
+    contact: [],
+    summary: [],
+    experience: [],
+    education: [],
+    skills: [],
+    certifications: [],
+    other: []
+  };
+  const map = new Map();
+  const renderedSections = (Array.isArray(sections) ? sections : []).map((section) => {
+    const heading = normalizeHeading(section.heading || '');
+    const key = canonicalSectionKey(heading);
+    const tokensList = Array.isArray(section.items) ? section.items : [];
+    const htmlItems = tokensList.map((tokens) =>
+      renderSectionTokensToHtml(tokens, { sectionKey: key, enhancementTokenMap })
+    );
+    const entry = {
+      heading,
+      key,
+      tokens: tokensList,
+      htmlItems
+    };
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(entry);
+    if (buckets[key]) buckets[key].push(entry);
+    else buckets.other.push(entry);
+    return entry;
+  });
+
+  return { sections: renderedSections, buckets, map };
+}
+
+function buildTemplateContactEntries(contactLines = []) {
+  return (Array.isArray(contactLines) ? contactLines : [])
+    .map((line) => {
+      const raw = typeof line === 'string' ? line.trim() : '';
+      if (!raw) return null;
+      const parsed = parseContactLine(raw);
+      if (!parsed) return null;
+      const label = parsed.label ? parsed.label.trim() : '';
+      const value = parsed.value ? parsed.value.trim() : '';
+      const resolvedValue = value || (!label ? raw : '');
+      const safeLabel = escapeHtml(label);
+      const safeValue = escapeHtml(resolvedValue);
+      const html = label
+        ? `<span class="contact-label">${safeLabel}</span><span class="contact-separator">:</span><span class="contact-value">${safeValue}</span>`
+        : `<span class="contact-value">${safeValue}</span>`;
+      return {
+        raw,
+        label,
+        value: resolvedValue,
+        html
+      };
+    })
+    .filter(Boolean);
+}
+
 let generatePdf = async function (
   text,
   templateId = 'modern',
@@ -5693,46 +5855,41 @@ let generatePdf = async function (
       const linkedinDisplay = linkedinValue
         ? linkedinValue.replace(/^(?:https?:\/\/)?(?:www\.)?/i, '') || linkedinValue
         : '';
+      const sectionContext = buildTemplateSectionContext(
+        data.sections,
+        enhancementTokenMap
+      );
+      const contactEntries = buildTemplateContactEntries(
+        contactContext.contactLines
+      );
+      const toRenderableSection = (entry = {}) => ({
+        heading: entry.heading,
+        key: entry.key,
+        items: entry.htmlItems,
+        tokens: entry.tokens,
+      });
+      const mapBucket = (bucket = []) => bucket.map(toRenderableSection);
       const htmlData = {
         ...data,
         ...contactContext.fieldValues,
         linkedinDisplay,
         contactLines: contactContext.contactLines,
+        contactEntries,
+        contact: {
+          ...contactContext.fieldValues,
+          entries: contactEntries,
+        },
         templateParams,
-        sections: data.sections.map((sec) => ({
-          ...sec,
-          items: sec.items.map((tokens) =>
-            tokens
-              .map((t, i) => {
-                const resolvedText = resolveTokenText(t.text, enhancementTokenMap);
-                const text = resolvedText ? escapeHtml(resolvedText) : '';
-                if (t.type === 'link') {
-                  const next = tokens[i + 1];
-                  const space = next && next.text && !/^\s/.test(next.text)
-                    ? ' '
-                    : '';
-                  return `<a href="${t.href}">${text.trim()}</a>${space}`;
-                }
-                if (t.type === 'heading') {
-                  return `<strong>${text}</strong>`;
-                }
-                if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
-                if (t.style === 'bold') return `<strong>${text}</strong>`;
-                if (t.style === 'italic') return `<em>${text}</em>`;
-                if (t.type === 'newline') return '<br>';
-                if (t.type === 'tab') return '<span class="tab"></span>';
-                if (t.type === 'bullet') {
-                  if (sec.heading?.toLowerCase() === 'education') {
-                    return '<span class="edu-bullet">•</span> ';
-                  }
-                  return '<span class="bullet">•</span> ';
-                }
-                if (t.type === 'jobsep') return '';
-                return text;
-              })
-              .join('')
-          )
-        }))
+        sections: sectionContext.sections.map(toRenderableSection),
+        sectionGroups: {
+          contact: mapBucket(sectionContext.buckets.contact),
+          summary: mapBucket(sectionContext.buckets.summary),
+          experience: mapBucket(sectionContext.buckets.experience),
+          education: mapBucket(sectionContext.buckets.education),
+          skills: mapBucket(sectionContext.buckets.skills),
+          certifications: mapBucket(sectionContext.buckets.certifications),
+          other: mapBucket(sectionContext.buckets.other),
+        },
       };
       html = Handlebars.compile(templateSource)(htmlData);
       if (css) {
@@ -13641,6 +13798,7 @@ export {
   estimateExperienceYears,
   extractRequiredExperience,
   buildSelectionInsights,
+  canonicalSectionKey,
   TEMPLATE_IDS,
   CV_TEMPLATES,
   CL_TEMPLATES,
@@ -13661,6 +13819,8 @@ export {
   enforceTargetedUpdate,
   JobDescriptionFetchBlockedError,
   extractContactDetails,
+  buildTemplateSectionContext,
+  buildTemplateContactEntries,
   CHANGE_LOG_FIELD_LIMITS,
   CHANGE_LOG_DYNAMO_LIMITS,
 };
