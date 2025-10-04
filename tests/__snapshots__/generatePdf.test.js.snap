@@ -234,38 +234,35 @@ body {
         </div>
       </header>
       <main class="resume-grid">
-        <section class="resume-section ">
+        <section class="resume-section">
           <div class="section-header">
-            <h2>Skills</h2>
+            <h2 class="section-title">Skills</h2>
             <span class="section-accent"></span>
           </div>
           <ul class="section-list">
             <li class="section-item">
-              <span class="bullet">◆</span>
               <span class="item-content"><span class="bullet">•</span>Testing</span>
             </li>
           </ul>
         </section>
-        <section class="resume-section ">
+        <section class="resume-section">
           <div class="section-header">
-            <h2>Work Experience</h2>
+            <h2 class="section-title">Work Experience</h2>
             <span class="section-accent"></span>
           </div>
           <ul class="section-list">
             <li class="section-item">
-              <span class="bullet">◆</span>
               <span class="item-content">Information not provided</span>
             </li>
           </ul>
         </section>
-        <section class="resume-section ">
+        <section class="resume-section">
           <div class="section-header">
-            <h2>Education</h2>
+            <h2 class="section-title">Education</h2>
             <span class="section-accent"></span>
           </div>
           <ul class="section-list">
             <li class="section-item">
-              <span class="bullet">◆</span>
               <span class="item-content">Information not provided</span>
             </li>
           </ul>
