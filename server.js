@@ -5511,30 +5511,55 @@ const CANONICAL_SECTION_SYNONYMS = (() => {
       'contact',
       'contact info',
       'contact information',
-      'contact details'
+      'contact details',
+      'contact me',
+      'get in touch',
+      'how to reach me'
     ],
     summary: [
       'summary',
       'professional summary',
       'executive summary',
       'profile',
-      'about me'
+      'about me',
+      'professional overview',
+      'executive overview',
+      'summary of qualifications',
+      'career summary'
     ],
     experience: [
       'experience',
       'work experience',
       'professional experience',
       'employment',
-      'employment history'
+      'employment history',
+      'career experience',
+      'work history',
+      'professional background',
+      'experience summary'
     ],
-    education: ['education', 'academic background', 'academics'],
+    education: [
+      'education',
+      'academic background',
+      'academics',
+      'education & training',
+      'training & education',
+      'academic history',
+      'academic achievements'
+    ],
     skills: [
       'skills',
       'technical skills',
       'core skills',
       'key skills',
       'core competencies',
-      'areas of expertise'
+      'areas of expertise',
+      'technical proficiencies',
+      'skills & expertise',
+      'professional skills',
+      'technical expertise',
+      'key competencies',
+      'skill highlights'
     ],
     certifications: [
       'certification',
@@ -5542,7 +5567,13 @@ const CANONICAL_SECTION_SYNONYMS = (() => {
       'certifications & training',
       'licenses',
       'licenses & certifications',
-      'certifications and training'
+      'licenses and certifications',
+      'certifications and training',
+      'professional certifications',
+      'training & certifications',
+      'licenses and training',
+      'professional development',
+      'certifications & licenses'
     ]
   };
 
@@ -5550,10 +5581,14 @@ const CANONICAL_SECTION_SYNONYMS = (() => {
   Object.entries(synonymMap).forEach(([canonical, values]) => {
     const set = new Set();
     values.forEach((value) => {
-      const normalized = normalizeHeading(value || '').toLowerCase();
-      if (normalized) set.add(normalized);
-      const raw = String(value || '').trim().toLowerCase();
-      if (raw) set.add(raw);
+      const trimmed = String(value || '').trim();
+      if (!trimmed) return;
+      const lower = trimmed.toLowerCase();
+      const collapsed = lower.replace(/\s+/g, ' ');
+      if (lower) set.add(lower);
+      if (collapsed) set.add(collapsed);
+      const ampersandNormalized = collapsed.replace(/&/g, 'and');
+      if (ampersandNormalized) set.add(ampersandNormalized);
     });
     set.add(canonical);
     map.set(canonical, set);
@@ -5571,6 +5606,14 @@ function canonicalSectionKey(heading = '') {
     }
   }
   return normalizedLower || rawLower;
+}
+
+function normalizeSectionClassKey(key = '') {
+  return String(key || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .trim() || 'other';
 }
 
 function renderSectionTokensToHtml(
@@ -5695,16 +5738,17 @@ const TEMPLATE_SECTION_PRESENTATION = Object.freeze({
 
 function resolveTemplatePresentation(key = '') {
   const normalizedKey = key || 'other';
+  const classKey = normalizeSectionClassKey(normalizedKey);
   const defaults = TEMPLATE_SECTION_PRESENTATION.default || {};
   const overrides = TEMPLATE_SECTION_PRESENTATION[normalizedKey] || {};
   const merged = { ...defaults, ...overrides };
   const baseClasses = {
-    sectionClass: `section--${normalizedKey}`,
-    headingClass: `section-heading--${normalizedKey}`,
-    listClass: `section-list--${normalizedKey}`,
-    itemClass: `section-item--${normalizedKey}`,
-    textClass: `section-text--${normalizedKey}`,
-    markerClass: `marker--${normalizedKey}`
+    sectionClass: `section--${classKey}`,
+    headingClass: `section-heading--${classKey}`,
+    listClass: `section-list--${classKey}`,
+    itemClass: `section-item--${classKey}`,
+    textClass: `section-text--${classKey}`,
+    markerClass: `marker--${classKey}`
   };
   const presentation = { key: normalizedKey };
   ['sectionClass', 'headingClass', 'listClass', 'itemClass', 'textClass', 'markerClass'].forEach(
