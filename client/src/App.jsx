@@ -1496,11 +1496,35 @@ function App() {
   const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
   const profileInputRef = useRef(null)
+  const analysisContextRef = useRef({ hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' })
+  const cvSignatureRef = useRef('')
+  const jobSignatureRef = useRef('')
   const [linkedinRequired, setLinkedinRequired] = useState(false)
   const userIdentifier = useMemo(
     () => deriveUserIdentifier({ profileUrl }),
     [profileUrl]
   )
+
+  const currentCvSignature = useMemo(() => {
+    if (!cvFile) {
+      return ''
+    }
+    const name = typeof cvFile.name === 'string' ? cvFile.name : ''
+    const lastModified = typeof cvFile.lastModified === 'number' ? cvFile.lastModified : 0
+    return `${name}|${lastModified}`
+  }, [cvFile])
+
+  const currentJobSignature = useMemo(() => {
+    const manualText = typeof manualJobDescription === 'string' ? manualJobDescription.trim() : ''
+    if (manualText) {
+      return `manual:${manualText}`
+    }
+    const url = typeof jobDescriptionUrl === 'string' ? jobDescriptionUrl.trim() : ''
+    if (url) {
+      return `url:${url}`
+    }
+    return ''
+  }, [jobDescriptionUrl, manualJobDescription])
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
@@ -1525,6 +1549,14 @@ function App() {
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
   const improvementBusy = Boolean(activeImprovement)
+
+  useEffect(() => {
+    cvSignatureRef.current = currentCvSignature
+  }, [currentCvSignature])
+
+  useEffect(() => {
+    jobSignatureRef.current = currentJobSignature
+  }, [currentJobSignature])
   const improvementActionMap = useMemo(() => {
     const map = new Map()
     improvementActions.forEach((action) => {
@@ -2538,6 +2570,16 @@ function App() {
         setCoverLetterDrafts(drafts)
         setCoverLetterOriginals(originals)
         setMatch(payload.match || null)
+        const payloadJobId = typeof payload.jobId === 'string' ? payload.jobId : ''
+        if (payloadJobId) {
+          setJobId(payloadJobId)
+        }
+        analysisContextRef.current = {
+          hasAnalysis: true,
+          cvSignature: cvSignatureRef.current,
+          jobSignature: jobSignatureRef.current,
+          jobId: payloadJobId || analysisContextRef.current.jobId || ''
+        }
       } else if (data.type === 'OFFLINE_UPLOAD_FAILED') {
         setQueuedMessage('')
         setIsProcessing(false)
@@ -2589,6 +2631,7 @@ function App() {
   }
 
   const resetAnalysisState = useCallback(() => {
+    analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
     setOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
@@ -2602,6 +2645,9 @@ function App() {
     setSelectionInsights(null)
     setImprovementResults([])
     setChangeLog([])
+    setActiveImprovement('')
+    setError('')
+    setQueuedMessage('')
     setInitialAnalysisSnapshot(null)
     setJobId('')
     setTemplateContext(null)
@@ -2612,12 +2658,39 @@ function App() {
     setCoverLetterDownloadError('')
     setCoverLetterClipboardStatus('')
     setResumeHistory([])
+    setPreviewSuggestion(null)
+    setPreviewFile(null)
+    setEnhanceAllSummaryText('')
+    setIsCoverLetterDownloading(false)
   }, [])
+
+  useEffect(() => {
+    const context = analysisContextRef.current || {}
+    if (!context.hasAnalysis) {
+      return
+    }
+    const storedCvSignature = context.cvSignature || ''
+    const storedJobSignature = context.jobSignature || ''
+    const cvChanged =
+      (storedCvSignature && currentCvSignature && storedCvSignature !== currentCvSignature) ||
+      (!currentCvSignature && storedCvSignature) ||
+      (currentCvSignature && !storedCvSignature)
+    const jobChanged =
+      (storedJobSignature && currentJobSignature && storedJobSignature !== currentJobSignature) ||
+      (!currentJobSignature && storedJobSignature) ||
+      (currentJobSignature && !storedJobSignature)
+
+    if (cvChanged || jobChanged) {
+      analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
+      resetAnalysisState()
+    }
+  }, [currentCvSignature, currentJobSignature, resetAnalysisState])
 
   const handleScoreSubmit = useCallback(async () => {
     const manualText = manualJobDescription.trim()
     const jobUrl = jobDescriptionUrl.trim()
     const fileSignature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
+    const jobSignature = manualText ? `manual:${manualText}` : jobUrl ? `url:${jobUrl}` : ''
 
     if (!cvFile) {
       setError('Please upload a CV before submitting.')
@@ -2884,6 +2957,12 @@ function App() {
         coverLetterOriginals: cloneData(analysisCoverLetterOriginals)
       })
       setResumeHistory([])
+      analysisContextRef.current = {
+        hasAnalysis: true,
+        cvSignature: fileSignature,
+        jobSignature,
+        jobId: jobIdValue
+      }
     } catch (err) {
       console.error('Unable to enhance CV', err)
       const errorMessage =
