@@ -41,6 +41,14 @@ describe('buildTemplateSectionContext', () => {
     expect(summarySection.sectionClass).toContain('section--summary');
     expect(summarySection.markerClass).toContain('marker');
 
+    const contactSection = context.sections.find((sec) => sec.key === 'contact');
+    expect(contactSection).toBeDefined();
+    expect(contactSection.sectionClass).toContain('section--contact');
+    expect(contactSection.headingClass).toContain('section-heading--contact');
+    expect(contactSection.listClass).toContain('section-list--contact');
+    expect(contactSection.htmlItems[0]).not.toContain('class="bullet"');
+    expect(contactSection.showMarkers).toBe(false);
+
     const experienceSection = context.sections.find((sec) => sec.key === 'experience');
     expect(experienceSection.htmlItems[0]).toContain('class="bullet"');
     expect(experienceSection.showMarkers).toBe(true);
@@ -49,6 +57,20 @@ describe('buildTemplateSectionContext', () => {
     const educationSection = context.sections.find((sec) => sec.key === 'education');
     expect(educationSection.htmlItems[0]).toContain('class="edu-bullet"');
     expect(educationSection.markerClass).toContain('marker--education');
+
+    const skillsSection = context.sections.find((sec) => sec.key === 'skills');
+    expect(skillsSection).toBeDefined();
+    expect(skillsSection.sectionClass).toContain('section--skills');
+    expect(skillsSection.textClass).toContain('section-text--skills');
+    expect(skillsSection.htmlItems[0]).not.toContain('class="bullet"');
+    expect(skillsSection.showMarkers).toBe(false);
+
+    const certificationsSection = context.sections.find((sec) => sec.key === 'certifications');
+    expect(certificationsSection).toBeDefined();
+    expect(certificationsSection.sectionClass).toContain('section--certifications');
+    expect(certificationsSection.textClass).toContain('section-text--certifications');
+    expect(certificationsSection.htmlItems[0]).not.toContain('class="bullet"');
+    expect(certificationsSection.showMarkers).toBe(false);
 
     expect(context.buckets.skills).toHaveLength(1);
     expect(context.buckets.certifications).toHaveLength(1);
