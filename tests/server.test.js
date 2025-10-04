@@ -246,13 +246,25 @@ describe('/api/process-cv', () => {
     const tempDelete = s3Commands.find((cmd) => cmd.type === 'DeleteObjectCommand');
     expect(tempDelete).toBeTruthy();
 
-    const generatedPdfKeys = s3Commands.filter(
-      (cmd) =>
-        cmd.type === 'PutObjectCommand' &&
-        typeof cmd.key === 'string' &&
-        cmd.key.includes('/generated/')
-    );
+    const generatedPdfKeys = s3Commands
+      .filter(
+        (cmd) =>
+          cmd.type === 'PutObjectCommand' &&
+          typeof cmd.key === 'string' &&
+          cmd.key.includes('/generated/')
+      )
+      .filter((cmd) => cmd.key.endsWith('.pdf'));
     expect(generatedPdfKeys).toHaveLength(4);
+
+    const generatedJsonKeys = s3Commands
+      .filter(
+        (cmd) =>
+          cmd.type === 'PutObjectCommand' &&
+          typeof cmd.key === 'string' &&
+          cmd.key.includes('/generated/')
+      )
+      .filter((cmd) => cmd.key.endsWith('.json'));
+    expect(generatedJsonKeys).toHaveLength(4);
 
     const putCall = mockDynamoSend.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'
@@ -285,25 +297,33 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.cv1Url.S).toBe('');
     expect(putCall[0].input.Item.cv2Url.S).toBe('');
 
-    const updateCall = mockDynamoSend.mock.calls.find(
+    const updateCalls = mockDynamoSend.mock.calls.filter(
       ([cmd]) => cmd.__type === 'UpdateItemCommand'
     );
-    expect(updateCall).toBeTruthy();
-    expect(updateCall[0].input.ConditionExpression).toBe(
+    expect(updateCalls.length).toBeGreaterThan(0);
+
+    const scoringUpdate = updateCalls[0];
+    expect(scoringUpdate[0].input.ConditionExpression).toBe(
       'jobId = :jobId AND (#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status))'
     );
-    expect(updateCall[0].input.ExpressionAttributeValues[':status'].S).toBe(
+    expect(scoringUpdate[0].input.ExpressionAttributeValues[':status'].S).toBe(
       'scored'
     );
-    expect(updateCall[0].input.ExpressionAttributeValues[':statusUploaded'].S).toBe(
+    expect(scoringUpdate[0].input.ExpressionAttributeValues[':statusUploaded'].S).toBe(
       'uploaded'
     );
-    expect(updateCall[0].input.ExpressionAttributeNames['#status']).toBe(
+    expect(scoringUpdate[0].input.ExpressionAttributeNames['#status']).toBe(
       'status'
     );
-    expect(updateCall[0].input.UpdateExpression).toContain('#status');
-    expect(updateCall[0].input.UpdateExpression).toContain('analysisCompletedAt');
-    expect(updateCall[0].input.UpdateExpression).not.toContain('cv1Url');
+    expect(scoringUpdate[0].input.UpdateExpression).toContain('#status');
+    expect(scoringUpdate[0].input.UpdateExpression).toContain('analysisCompletedAt');
+    expect(scoringUpdate[0].input.UpdateExpression).not.toContain('cv1Url');
+
+    const finalUpdate = updateCalls[updateCalls.length - 1];
+    expect(finalUpdate[0].input.UpdateExpression).toContain('activityLog');
+    expect(finalUpdate[0].input.ExpressionAttributeValues[':lastAction'].S).toBe(
+      'artifacts_uploaded'
+    );
 
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual([

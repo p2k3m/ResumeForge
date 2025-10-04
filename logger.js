@@ -10,7 +10,16 @@ async function streamToString(stream) {
   });
 }
 
-export async function logEvent({ s3, bucket, key, jobId, event, level = 'info', message }) {
+export async function logEvent({
+  s3,
+  bucket,
+  key,
+  jobId,
+  event,
+  level = 'info',
+  message,
+  metadata,
+}) {
   const entry = {
     timestamp: new Date().toISOString(),
     jobId,
@@ -18,6 +27,9 @@ export async function logEvent({ s3, bucket, key, jobId, event, level = 'info', 
     level
   };
   if (message) entry.message = message;
+  if (metadata && typeof metadata === 'object' && Object.keys(metadata).length) {
+    entry.metadata = metadata;
+  }
 
   let existing = '';
   try {

@@ -10162,6 +10162,8 @@ async function generateEnhancedDocumentsResponse({
   selection,
   geminiApiKey,
   changeLogEntries = [],
+  existingRecord = {},
+  userId,
 }) {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (!bucket) {
@@ -10637,6 +10639,14 @@ async function generateEnhancedDocumentsResponse({
   const downloadsEnabled = allowedOriginsForDownloads.length > 0;
   const urls = [];
   const uploadedArtifacts = [];
+  const textArtifactKeys = {};
+  const recordDevice = existingRecord?.device?.S || '';
+  const recordOs = existingRecord?.os?.S || '';
+  const recordBrowser = existingRecord?.browser?.S || '';
+  const recordLocation = existingRecord?.location?.S || '';
+  const recordLocationCity = existingRecord?.locationCity?.S || '';
+  const recordLocationRegion = existingRecord?.locationRegion?.S || '';
+  const recordLocationCountry = existingRecord?.locationCountry?.S || '';
 
   if (downloadsEnabled && originalUploadKey) {
     try {
@@ -10771,6 +10781,82 @@ async function generateEnhancedDocumentsResponse({
     });
   }
 
+  const textArtifactPrefix = `${generatedPrefix}artifacts/`;
+  const artifactTimestamp = new Date().toISOString();
+  const originalResumeForStorage =
+    typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
+      ? originalResumeTextInput
+      : resumeText;
+
+  const textArtifacts = [
+    {
+      type: 'original_text',
+      fileName: 'original.json',
+      payload: {
+        jobId,
+        generatedAt: artifactTimestamp,
+        version: 'original',
+        text: originalResumeForStorage,
+      },
+    },
+    {
+      type: 'version1_text',
+      fileName: 'version1.json',
+      payload: {
+        jobId,
+        generatedAt: artifactTimestamp,
+        version: 'version1',
+        text: outputs.version1?.text || '',
+        template: template1 || '',
+      },
+    },
+    {
+      type: 'version2_text',
+      fileName: 'version2.json',
+      payload: {
+        jobId,
+        generatedAt: artifactTimestamp,
+        version: 'version2',
+        text: outputs.version2?.text || '',
+        template: template2 || '',
+      },
+    },
+    {
+      type: 'change_log',
+      fileName: 'change-log.json',
+      payload: {
+        jobId,
+        generatedAt: artifactTimestamp,
+        entries: normalizedChangeLogEntries,
+      },
+    },
+  ];
+
+  for (const artifact of textArtifacts) {
+    const key = `${textArtifactPrefix}${artifact.fileName}`;
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: JSON.stringify(artifact.payload, null, 2),
+        ContentType: 'application/json',
+      })
+    );
+    uploadedArtifacts.push({ type: artifact.type, key });
+    textArtifactKeys[artifact.type] = key;
+  }
+
+  await logEvent({
+    s3,
+    bucket,
+    key: logKey,
+    jobId,
+    event: 'generation_text_artifacts_uploaded',
+    metadata: {
+      artifacts: Object.keys(textArtifactKeys),
+    },
+  });
+
   if (downloadsEnabled && urls.length === 0) {
     await logEvent({
       s3,
@@ -10806,6 +10892,58 @@ async function generateEnhancedDocumentsResponse({
       ':statusCompleted': { S: 'completed' },
     };
 
+    const activityMetadata = {
+      device: recordDevice,
+      os: recordOs,
+      browser: recordBrowser,
+      location: {
+        label: recordLocation,
+        city: recordLocationCity,
+        region: recordLocationRegion,
+        country: recordLocationCountry,
+      },
+      templates: {
+        primary: template1 || '',
+        secondary: template2 || '',
+        coverPrimary: coverTemplate1 || '',
+        coverSecondary: coverTemplate2 || '',
+      },
+      artifacts: {
+        originalUploadKey: originalUploadKey || '',
+        generated: uploadedArtifacts,
+        text: textArtifactKeys,
+      },
+    };
+
+    if (userId) {
+      activityMetadata.userId = userId;
+    }
+
+    updateExpressionParts.push('#lastAction = :lastAction');
+    updateExpressionParts.push('lastActionAt = :lastActionAt');
+    updateExpressionParts.push(
+      'activityLog = list_append(if_not_exists(activityLog, :emptyActivityLog), :activityEntry)'
+    );
+    updateExpressionParts.push('lastActionMetadata = :lastActionMetadata');
+    expressionAttributeNames['#lastAction'] = 'lastAction';
+    expressionAttributeValues[':lastAction'] = { S: 'artifacts_uploaded' };
+    expressionAttributeValues[':lastActionAt'] = { S: nowIso };
+    expressionAttributeValues[':emptyActivityLog'] = { L: [] };
+    expressionAttributeValues[':activityEntry'] = {
+      L: [
+        {
+          M: {
+            action: { S: 'artifacts_uploaded' },
+            timestamp: { S: nowIso },
+            metadata: { S: JSON.stringify(activityMetadata) },
+          },
+        },
+      ],
+    };
+    expressionAttributeValues[':lastActionMetadata'] = {
+      S: JSON.stringify(activityMetadata),
+    };
+
     const assignKey = (field, placeholder, value) => {
       if (!value) return;
       updateExpressionParts.push(`${field} = ${placeholder}`);
@@ -10816,6 +10954,10 @@ async function generateEnhancedDocumentsResponse({
     assignKey('cv2Url', ':cv2', findArtifactKey('version2'));
     assignKey('coverLetter1Url', ':cover1', findArtifactKey('cover_letter1'));
     assignKey('coverLetter2Url', ':cover2', findArtifactKey('cover_letter2'));
+    assignKey('originalTextKey', ':originalTextKey', textArtifactKeys.original_text);
+    assignKey('enhancedVersion1Key', ':version1TextKey', textArtifactKeys.version1_text);
+    assignKey('enhancedVersion2Key', ':version2TextKey', textArtifactKeys.version2_text);
+    assignKey('changeLogKey', ':changeLogTextKey', textArtifactKeys.change_log);
 
     try {
       await dynamo.send(
@@ -11101,6 +11243,7 @@ app.post(
       let originalUploadKey = '';
       let storedBucket = '';
       let existingChangeLog = [];
+      let existingRecordItem = {};
       try {
         const record = await dynamo.send(
           new GetItemCommand({
@@ -11109,6 +11252,7 @@ app.post(
           })
         );
         const item = record.Item || {};
+        existingRecordItem = item;
         if (!item.jobId || item.jobId.S !== jobId) {
           return sendError(
             res,
@@ -11363,6 +11507,8 @@ app.post(
         selection,
         geminiApiKey,
         changeLogEntries: existingChangeLog,
+        existingRecord: existingRecordItem,
+        userId: res.locals.userId,
       });
 
       if (!responseBody) {
@@ -12632,6 +12778,16 @@ app.post(
         selection,
         geminiApiKey: secrets.GEMINI_API_KEY,
         changeLogEntries: [],
+        existingRecord: {
+          device: { S: device },
+          os: { S: os },
+          browser: { S: browser },
+          location: { S: locationLabel },
+          locationCity: { S: locationMeta.city || '' },
+          locationRegion: { S: locationMeta.region || '' },
+          locationCountry: { S: locationMeta.country || '' },
+        },
+        userId: res.locals.userId,
       });
     } catch (generationErr) {
       logStructured('warn', 'process_cv_generation_failed', {

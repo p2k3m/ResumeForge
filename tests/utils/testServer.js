@@ -88,6 +88,17 @@ export async function setupTestServer({
             const [, fallback = ''] = inner.split(',').map((part) => part.trim());
             return resolveValue(fallback);
           }
+          if (token.startsWith('list_append(')) {
+            const inner = token.slice('list_append('.length, -1);
+            const [leftRaw = '', rightRaw = ''] = inner
+              .split(',')
+              .map((segment) => segment.trim());
+            const leftValue = resolveAssignmentValue(leftRaw);
+            const rightValue = resolveValue(rightRaw);
+            const leftList = Array.isArray(leftValue?.L) ? leftValue.L : [];
+            const rightList = Array.isArray(rightValue?.L) ? rightValue.L : [];
+            return { L: [...leftList, ...rightList].map((entry) => cloneAttrMap(entry)) };
+          }
           return resolveValue(token);
         };
 
