@@ -4364,36 +4364,6 @@ function App() {
             </div>
           </div>
 
-          <TemplateSelector
-            idPrefix="resume-template-selector"
-            title="CV Template Style"
-            description="Choose the CV aesthetic that mirrors your personality and the JD tone."
-            options={availableTemplateOptions}
-            selectedTemplate={selectedTemplate}
-            onSelect={handleTemplateSelect}
-            disabled={isProcessing}
-            historySummary={templateHistorySummary}
-          />
-
-          <TemplateSelector
-            idPrefix="cover-template-selector"
-            title="Cover Letter Template"
-            description="Align your letter visuals with your selected CV or explore a bold alternative."
-            options={availableCoverTemplateOptions}
-            selectedTemplate={selectedCoverTemplate}
-            onSelect={handleCoverTemplateSelect}
-            disabled={isProcessing}
-          />
-
-          <TemplatePreview
-            resumeTemplateId={selectedTemplate}
-            resumeTemplateName={formatTemplateName(selectedTemplate)}
-            resumeTemplateDescription={selectedTemplateOption?.description || ''}
-            coverTemplateId={selectedCoverTemplate}
-            coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
-            coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
-          />
-
           {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
           {isProcessing && (
             <div className="flex justify-center">
@@ -4695,7 +4665,37 @@ function App() {
               </p>
             </header>
             {scoreDashboardReady ? (
-              <div className="space-y-4">
+              <div className="space-y-6">
+                <TemplateSelector
+                  idPrefix="resume-template-selector"
+                  title="CV Template Style"
+                  description="Choose the CV aesthetic that mirrors your personality and the JD tone."
+                  options={availableTemplateOptions}
+                  selectedTemplate={selectedTemplate}
+                  onSelect={handleTemplateSelect}
+                  disabled={isProcessing}
+                  historySummary={templateHistorySummary}
+                />
+
+                <TemplateSelector
+                  idPrefix="cover-template-selector"
+                  title="Cover Letter Template"
+                  description="Align your letter visuals with your selected CV or explore a bold alternative."
+                  options={availableCoverTemplateOptions}
+                  selectedTemplate={selectedCoverTemplate}
+                  onSelect={handleCoverTemplateSelect}
+                  disabled={isProcessing}
+                />
+
+                <TemplatePreview
+                  resumeTemplateId={selectedTemplate}
+                  resumeTemplateName={formatTemplateName(selectedTemplate)}
+                  resumeTemplateDescription={selectedTemplateOption?.description || ''}
+                  coverTemplateId={selectedCoverTemplate}
+                  coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
+                  coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
+                />
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {improvementActions.map((action) => {
                     const isActive = activeImprovement === action.key
