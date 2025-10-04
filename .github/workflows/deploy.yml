@@ -175,6 +175,42 @@ jobs:
             printf '%s' "$status"
           }
 
+          wait_for_change_set_ready() {
+            local change_set_name="$1"
+            local context="$2"
+
+            while :; do
+              : >"$tmp_err"
+              local describe_json
+              if ! describe_json=$(aws cloudformation describe-change-set \
+                  --stack-name "$STACK_NAME" \
+                  --change-set-name "$change_set_name" \
+                  --output json 2>"$tmp_err"); then
+                local describe_err
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi 'does not exist'; then
+                  echo "Change set '$change_set_name' no longer exists while waiting ($context)."
+                  return 1
+                fi
+
+                echo "$describe_err" >&2
+                exit 1
+              fi
+
+              local status
+              status=$(python -c "import json, sys; data=json.load(sys.stdin); sys.stdout.write(data.get('Status',''))" <<<"$describe_json")
+
+              if [[ "$status" == *_IN_PROGRESS ]]; then
+                echo "Change set '$change_set_name' still in progress ($status) while $context. Waiting for completion..."
+                sleep 10
+                continue
+              fi
+
+              echo "Change set '$change_set_name' reached status $status while $context."
+              return 0
+            done
+          }
+
           cleanup_description_conflicts() {
             local context="$1"
             local list_output
@@ -224,6 +260,8 @@ jobs:
               should_delete=$(python -c "import json, sys; data=json.load(sys.stdin); status=data.get('Status', ''); reason=(data.get('StatusReason') or '').lower(); sys.stdout.write('yes' if status == 'FAILED' and 'mismatch with existing attribute description' in reason else '')" <<<"$describe_json")
 
               if [ "$should_delete" = "yes" ]; then
+                wait_for_change_set_ready "$change_set_name" "cleaning up description conflicts $context" || continue
+
                 echo "Deleting leftover change set '$change_set_name' $context due to description mismatch..."
                 : >"$tmp_err"
                 if aws cloudformation delete-change-set \
@@ -390,6 +428,8 @@ jobs:
               change_set_name=$(printf '%s\n' "$deploy_err_stripped" | sed -n "s/.*ChangeSet[[:space:]]\([^[:space:]]*\)[[:space:]].*/\1/p" | head -n1)
 
               if [ -n "$change_set_name" ]; then
+                wait_for_change_set_ready "$change_set_name" "handling conflicting change set from sam deploy" || true
+
                 echo "Existing change set '$change_set_name' has conflicting description. Deleting before retrying..."
                 : >"$tmp_err"
                 if aws cloudformation delete-change-set \
