@@ -76,6 +76,39 @@ const improvementActions = [
   }
 ]
 
+const METRIC_IMPROVEMENT_PRESETS = [
+  {
+    category: 'Layout & Searchability',
+    actionKey: 'enhance-all',
+    label: 'Improve ATS Layout',
+    helper: 'Streamline structure and sections so ATS bots read your resume without errors.'
+  },
+  {
+    category: 'ATS Readability',
+    actionKey: 'enhance-all',
+    label: 'Boost ATS Readability',
+    helper: 'Tighten headings and formatting so automated scanners instantly grasp your experience.'
+  },
+  {
+    category: 'Impact',
+    actionKey: 'align-experience',
+    label: 'Improve Experience Impact',
+    helper: 'Refocus accomplishments on the achievements this JD values most.'
+  },
+  {
+    category: 'Crispness',
+    actionKey: 'improve-summary',
+    label: 'Improve Summary Tone',
+    helper: 'Sharpen your intro so recruiters see a confident, concise story.'
+  },
+  {
+    category: 'Other Quality Metrics',
+    actionKey: 'improve-highlights',
+    label: 'Improve Highlights',
+    helper: 'Polish standout wins so they pop during quick ATS and recruiter scans.'
+  }
+]
+
 function summariseItems(items, { limit = 5 } = {}) {
   const list = Array.isArray(items)
     ? items
@@ -1460,6 +1493,7 @@ function App() {
   const [resumeHistory, setResumeHistory] = useState([])
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
+  const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
   const profileInputRef = useRef(null)
   const [linkedinRequired, setLinkedinRequired] = useState(false)
@@ -1491,6 +1525,42 @@ function App() {
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
   const improvementBusy = Boolean(activeImprovement)
+  const improvementActionMap = useMemo(() => {
+    const map = new Map()
+    improvementActions.forEach((action) => {
+      map.set(action.key, action)
+    })
+    return map
+  }, [])
+  const metricImprovementActionMap = useMemo(() => {
+    const map = new Map()
+    METRIC_IMPROVEMENT_PRESETS.forEach((preset) => {
+      const base = improvementActionMap.get(preset.actionKey) || {}
+      map.set(preset.category, {
+        actionKey: preset.actionKey,
+        label: preset.label || base.label || 'Improve this area',
+        helper: preset.helper || base.helper || ''
+      })
+    })
+    return map
+  }, [improvementActionMap])
+  const metricImprovementState = useMemo(
+    () => ({
+      activeKey: activeImprovement,
+      locked: !improvementsUnlocked,
+      lockMessage: improvementsUnlocked ? '' : improvementUnlockMessage
+    }),
+    [activeImprovement, improvementUnlockMessage, improvementsUnlocked]
+  )
+  const improvementButtonsDisabled = isProcessing || improvementBusy || !improvementsUnlocked
+  const improveSkillsAction = improvementActionMap.get('add-missing-skills') || {
+    label: 'Improve Skills',
+    helper: 'Blend missing keywords into the right sections to lift your ATS alignment.'
+  }
+  const improveCertificationsAction = improvementActionMap.get('improve-certifications') || {
+    label: 'Improve Certifications',
+    helper: 'Highlight the certifications that strengthen your case for this role.'
+  }
 
   useEffect(() => {
     if (!userIdentifier) {
@@ -1538,6 +1608,36 @@ function App() {
     }
     setStoredTemplatePreference(userIdentifier, canonicalSelection)
   }, [selectedTemplate, userIdentifier])
+
+  useEffect(() => {
+    if (!cvFile || isProcessing) {
+      return
+    }
+    const manualText = manualJobDescription.trim()
+    const jobUrl = jobDescriptionUrl.trim()
+    if (manualJobDescriptionRequired && !manualText) {
+      return
+    }
+    if (!manualText && !jobUrl) {
+      return
+    }
+    const signature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
+    if (!signature) {
+      return
+    }
+    if (lastAutoScoreSignatureRef.current === signature && (isProcessing || scoreComplete)) {
+      return
+    }
+    handleScoreSubmit()
+  }, [
+    cvFile,
+    handleScoreSubmit,
+    isProcessing,
+    jobDescriptionUrl,
+    manualJobDescription,
+    manualJobDescriptionRequired,
+    scoreComplete
+  ])
 
   const resumeHistoryMap = useMemo(() => {
     const map = new Map()
@@ -1835,9 +1935,8 @@ function App() {
   )
 
   const flowSteps = useMemo(() => {
-    const improvementsComplete = improvementCount > 0
+    const improvementsComplete = improvementCount > 0 || changeCount > 0
     const downloadComplete = downloadCount > 0
-    const changelogComplete = changeCount > 0
 
     const baseSteps = [
       {
@@ -1859,11 +1958,6 @@ function App() {
         key: 'download',
         label: 'Enhanced Download',
         description: 'Grab the upgraded CVs and tailored cover letters.'
-      },
-      {
-        key: 'changelog',
-        label: 'Changelog Display',
-        description: 'See every accepted change to prep talking points.'
       }
     ]
 
@@ -1877,10 +1971,8 @@ function App() {
             ? scoreComplete
             : step.key === 'improvements'
               ? improvementsComplete
-              : step.key === 'download'
-                ? downloadComplete
-                : step.key === 'changelog'
-                  ? changelogComplete
+                : step.key === 'download'
+                  ? downloadComplete
                   : false
 
       let status = 'upcoming'
@@ -1923,11 +2015,6 @@ function App() {
         case 'download':
           if (downloadCount > 0) {
             note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} available.`
-          }
-          break
-        case 'changelog':
-          if (changeCount > 0) {
-            note = `${changeCount} accepted update${changeCount === 1 ? '' : 's'}.`
           }
           break
         default:
@@ -2483,7 +2570,10 @@ function App() {
       setError('Only PDF, DOC, or DOCX files are supported.')
       return
     }
-    if (file) setCvFile(file)
+    if (file) {
+      lastAutoScoreSignatureRef.current = ''
+      setCvFile(file)
+    }
   }, [])
 
   const handleFileChange = (e) => {
@@ -2492,10 +2582,13 @@ function App() {
       setError('Only PDF, DOC, or DOCX files are supported.')
       return
     }
-    if (file) setCvFile(file)
+    if (file) {
+      lastAutoScoreSignatureRef.current = ''
+      setCvFile(file)
+    }
   }
 
-  const resetAnalysisState = () => {
+  const resetAnalysisState = useCallback(() => {
     setOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
@@ -2519,11 +2612,12 @@ function App() {
     setCoverLetterDownloadError('')
     setCoverLetterClipboardStatus('')
     setResumeHistory([])
-  }
+  }, [])
 
-  const handleScoreSubmit = async () => {
+  const handleScoreSubmit = useCallback(async () => {
     const manualText = manualJobDescription.trim()
     const jobUrl = jobDescriptionUrl.trim()
+    const fileSignature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
 
     if (!cvFile) {
       setError('Please upload a CV before submitting.')
@@ -2538,6 +2632,10 @@ function App() {
       setError('Provide a job description URL or paste the full job description before continuing.')
       manualJobDescriptionRef.current?.focus?.()
       return
+    }
+
+    if (fileSignature) {
+      lastAutoScoreSignatureRef.current = fileSignature
     }
 
     setIsProcessing(true)
@@ -2792,10 +2890,24 @@ function App() {
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
       setError(errorMessage)
+      lastAutoScoreSignatureRef.current = ''
     } finally {
       setIsProcessing(false)
     }
-  }
+  }, [
+    API_BASE_URL,
+    credlyUrl,
+    cvFile,
+    jobDescriptionUrl,
+    manualCertificatesInput,
+    manualJobDescription,
+    manualJobDescriptionRequired,
+    profileUrl,
+    resetAnalysisState,
+    selectedTemplate,
+    templateContext,
+    userIdentifier
+  ])
 
   const hasAcceptedImprovements = useMemo(
     () => improvementResults.some((item) => item.accepted === true),
@@ -4082,7 +4194,7 @@ function App() {
   const jobDescriptionReady = manualJobDescriptionRequired
     ? hasManualJobDescriptionInput
     : hasManualJobDescriptionInput || hasJobDescriptionUrlInput
-  const scoreDisabled = !profileUrl || !cvFile || isProcessing || !jobDescriptionReady
+  const rescoreDisabled = !cvFile || isProcessing || !jobDescriptionReady
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-purple-200 to-purple-300 flex flex-col items-center p-4 md:p-8">
@@ -4125,6 +4237,13 @@ function App() {
         <ProcessFlow steps={flowSteps} />
 
         <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
+          <header className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 1 · Upload</p>
+            <h2 className="text-2xl font-bold text-purple-900">Upload your resume &amp; target JD</h2>
+            <p className="text-sm text-purple-700/80">
+              Drag in your CV, add the job description, and we&apos;ll automatically score all ATS metrics as soon as both are in place.
+            </p>
+          </header>
           <div
             className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50"
             onDragOver={(e) => e.preventDefault()}
@@ -4150,22 +4269,10 @@ function App() {
             >
               Choose File
             </label>
-          </div>
-
-          <div className="pt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <button
-              onClick={handleScoreSubmit}
-              disabled={scoreDisabled}
-              className={`w-full md:w-auto px-6 py-3 rounded-full text-white font-semibold shadow-lg transition ${
-                scoreDisabled
-                  ? 'bg-purple-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
-              }`}
-            >
-              {isProcessing ? 'Scoring…' : 'Score my CV'}
-            </button>
-            <p className="text-sm text-purple-700/90 md:text-right">
-              Evaluate how your CV stacks up against the target JD before generating improvements.
+            <p className="mt-3 text-xs font-medium text-purple-600">
+              {isProcessing
+                ? 'Uploading and scoring your resume…'
+                : 'Upload your file to kick off automated scoring.'}
             </p>
           </div>
 
@@ -4296,9 +4403,45 @@ function App() {
           {error && <p className="text-red-600 text-center font-semibold">{error}</p>}
         </section>
 
-        {scoreBreakdown.length > 0 && (
-          <ATSScoreDashboard metrics={scoreBreakdown} match={match} />
-        )}
+        <section className="space-y-6 rounded-3xl border border-purple-200/70 bg-white/85 p-6 shadow-xl">
+          <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 2 · Score</p>
+              <h2 className="text-2xl font-bold text-purple-900">Review current ATS chances</h2>
+              <p className="text-sm text-purple-700/80">
+                We surface your baseline ATS outlook before any enhancements so you can decide what to improve next.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleScoreSubmit}
+              disabled={rescoreDisabled}
+              className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
+                rescoreDisabled
+                  ? 'bg-purple-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+              }`}
+              aria-busy={isProcessing ? 'true' : 'false'}
+            >
+              {isProcessing ? 'Scoring…' : scoreDashboardReady ? 'Rescore CV' : 'Run ATS scoring'}
+            </button>
+          </header>
+          {scoreDashboardReady ? (
+            <ATSScoreDashboard
+              metrics={scoreBreakdown}
+              match={match}
+              metricActionMap={metricImprovementActionMap}
+              onImproveMetric={handleImprovementClick}
+              improvementState={metricImprovementState}
+            />
+          ) : (
+            <div className="rounded-3xl border border-dashed border-purple-300/80 bg-white/70 p-6 text-sm text-purple-700">
+              {isProcessing
+                ? 'Scoring in progress. Sit tight while we calculate your ATS metrics and current chances.'
+                : 'Upload your resume and job description to generate your ATS scores automatically.'}
+            </div>
+          )}
+        </section>
 
         {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
 
@@ -4462,6 +4605,29 @@ function App() {
                   <p>Still missing: {match.missingSkills.join(', ')}</p>
                 )}
               </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+                {improveSkillsAction.helper && (
+                  <p className="text-sm text-purple-700/80 flex-1 min-w-[200px]">
+                    {improveSkillsAction.helper}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleImprovementClick('add-missing-skills')}
+                  disabled={improvementButtonsDisabled}
+                  className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
+                    improvementButtonsDisabled
+                      ? 'bg-purple-300 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700'
+                  }`}
+                  aria-busy={activeImprovement === 'add-missing-skills' ? 'true' : 'false'}
+                >
+                  {activeImprovement === 'add-missing-skills' ? 'Improving…' : improveSkillsAction.label}
+                </button>
+              </div>
+              {!improvementsUnlocked && (
+                <p className="text-xs font-semibold text-purple-600">{improvementUnlockMessage}</p>
+              )}
             </div>
           </section>
         )}
@@ -4491,72 +4657,97 @@ function App() {
             ) : (
               <p className="text-sm text-blue-700/80">No additional certifications recommended.</p>
             )}
-          </section>
-        )}
-
-        {scoreDashboardReady && improvementActions.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
-            <p className="text-sm text-purple-700/80">
-              Launch AI-powered fixes for any category below. Each enhancement rewrites your resume snippets without adding
-              unrealistic claims.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {improvementActions.map((action) => {
-                const isActive = activeImprovement === action.key
-                const buttonDisabled = isProcessing || improvementBusy || !improvementsUnlocked
-                return (
-                  <button
-                    key={action.key}
-                    type="button"
-                    onClick={() => handleImprovementClick(action.key)}
-                    disabled={buttonDisabled}
-                    className={`rounded-2xl border border-purple-200 bg-white/80 p-4 text-left shadow-sm hover:shadow-lg transition ${
-                      isActive
-                        ? 'opacity-70 cursor-wait'
-                        : buttonDisabled
-                          ? 'opacity-60 cursor-not-allowed'
-                          : 'hover:-translate-y-0.5'
-                    }`}
-                    aria-busy={isActive}
-                    aria-disabled={buttonDisabled}
-                    title={
-                      !improvementsUnlocked && improvementUnlockMessage ? improvementUnlockMessage : undefined
-                    }
-                  >
-                    <div className="flex items-center gap-4">
-                      {action.icon && (
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50/90 p-2 ring-1 ring-purple-100">
-                          <img src={action.icon} alt="" className="h-8 w-8" aria-hidden="true" />
-                        </span>
-                      )}
-                      <div className="flex-1">
-                        <p className="text-lg font-semibold text-purple-800">{action.label}</p>
-                        <p className="text-sm text-purple-600">{action.helper}</p>
-                      </div>
-                      {isActive && (
-                        <span className="h-6 w-6 shrink-0 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3">
+              {improveCertificationsAction.helper && (
+                <p className="text-sm text-blue-800/80 flex-1 min-w-[200px]">
+                  {improveCertificationsAction.helper}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => handleImprovementClick('improve-certifications')}
+                disabled={improvementButtonsDisabled}
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+                  improvementButtonsDisabled
+                    ? 'bg-blue-300 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700'
+                }`}
+                aria-busy={activeImprovement === 'improve-certifications' ? 'true' : 'false'}
+              >
+                {activeImprovement === 'improve-certifications'
+                  ? 'Improving…'
+                  : improveCertificationsAction.label}
+              </button>
             </div>
-            {improvementsUnlocked && improvementResults.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
-                Review your ATS results, then pick an improvement above to see tailored rewrites before generating downloads.
-              </div>
+            {!improvementsUnlocked && (
+              <p className="text-xs font-semibold text-blue-700">{improvementUnlockMessage}</p>
             )}
           </section>
         )}
 
-        {!scoreDashboardReady && improvementActions.length > 0 && (
-          <section className="space-y-3">
-            <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
-            <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
-              Run the ATS scoring first to populate your dashboard. Once the metrics are ready, you can unlock focused
-              improvement options tailored to the analysis.
-            </div>
+        {improvementActions.length > 0 && (
+          <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
+            <header className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 3 · Improve</p>
+              <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
+              <p className="text-sm text-purple-700/80">
+                Choose which section to enhance after reviewing your ATS dashboard. Each rewrite keeps your experience truthful while aligning to the JD.
+              </p>
+            </header>
+            {scoreDashboardReady ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {improvementActions.map((action) => {
+                    const isActive = activeImprovement === action.key
+                    const buttonDisabled = isProcessing || improvementBusy || !improvementsUnlocked
+                    return (
+                      <button
+                        key={action.key}
+                        type="button"
+                        onClick={() => handleImprovementClick(action.key)}
+                        disabled={buttonDisabled}
+                        className={`rounded-2xl border border-purple-200 bg-white/80 p-4 text-left shadow-sm hover:shadow-lg transition ${
+                          isActive
+                            ? 'opacity-70 cursor-wait'
+                            : buttonDisabled
+                              ? 'opacity-60 cursor-not-allowed'
+                              : 'hover:-translate-y-0.5'
+                        }`}
+                        aria-busy={isActive}
+                        aria-disabled={buttonDisabled}
+                        title={
+                          !improvementsUnlocked && improvementUnlockMessage ? improvementUnlockMessage : undefined
+                        }
+                      >
+                        <div className="flex items-center gap-4">
+                          {action.icon && (
+                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50/90 p-2 ring-1 ring-purple-100">
+                              <img src={action.icon} alt="" className="h-8 w-8" aria-hidden="true" />
+                            </span>
+                          )}
+                          <div className="flex-1">
+                            <p className="text-lg font-semibold text-purple-800">{action.label}</p>
+                            <p className="text-sm text-purple-600">{action.helper}</p>
+                          </div>
+                          {isActive && (
+                            <span className="h-6 w-6 shrink-0 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                {improvementsUnlocked && improvementResults.length === 0 && (
+                  <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+                    Review your ATS results, then pick an improvement above to see tailored rewrites before generating downloads.
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+                Run the ATS scoring first to populate your dashboard. Once the metrics are ready, you can unlock focused improvement options tailored to the analysis.
+              </div>
+            )}
           </section>
         )}
 
@@ -4753,14 +4944,15 @@ function App() {
 
         {outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
           <section className="space-y-4">
-            <div className="space-y-1">
+            <header className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 4 · Download</p>
               <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
               <p className="text-sm text-purple-700/80">
                 {improvementsRequireAcceptance
                   ? 'Apply the improvements you like, then create polished CV and cover letter downloads tailored to the JD.'
                   : 'Great news — no manual fixes were required. Generate polished CV and cover letter downloads tailored to the JD.'}
               </p>
-            </div>
+            </header>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               <button
                 type="button"
@@ -4776,12 +4968,13 @@ function App() {
 
         {outputFiles.length > 0 && (
           <section className="space-y-5">
-            <div className="space-y-1">
+            <header className="space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 4 · Download</p>
               <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
               <p className="text-sm text-purple-700/80">
                 Download tailored cover letters plus your original and AI-enhanced CVs. Links remain active for 60 minutes.
               </p>
-            </div>
+            </header>
             <div className="space-y-6">
               {downloadGroups.resume.length > 0 && (
                 <div className="space-y-3">

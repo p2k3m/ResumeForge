@@ -68,7 +68,7 @@ function describeMetric(metric) {
   return 'Shows how this aspect of your resume aligns with ATS expectations.'
 }
 
-function ATSScoreCard({ metric, accentClass = defaultAccent }) {
+function ATSScoreCard({ metric, accentClass = defaultAccent, improvement }) {
   const ratingLabel = normalizeLabel(metric?.ratingLabel)
   const badgeClass = badgeThemes[ratingLabel] || badgeThemes.GOOD
   const labelClass = labelTone[ratingLabel] || labelTone.GOOD
@@ -121,18 +121,47 @@ function ATSScoreCard({ metric, accentClass = defaultAccent }) {
           )}
           <span className={`text-xs font-semibold uppercase tracking-[0.45em] ${labelClass}`}>Score</span>
         </div>
-        {tip && (
-          <footer
-            className="mt-auto rounded-2xl border border-white/10 bg-white/10 p-4 text-sm md:text-base leading-relaxed text-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.28)]"
-            data-testid="metric-tip"
-          >
-            <div className="flex items-start gap-3">
-              <span className="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-white/20 text-xs font-semibold uppercase tracking-[0.35em]">
-                Tip
-              </span>
-              <p className="flex-1">{tip}</p>
-            </div>
-          </footer>
+        {(tip || improvement) && (
+          <div className="mt-auto space-y-3">
+            {tip && (
+              <footer
+                className="rounded-2xl border border-white/10 bg-white/10 p-4 text-sm md:text-base leading-relaxed text-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.28)]"
+                data-testid="metric-tip"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="mt-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-white/20 text-xs font-semibold uppercase tracking-[0.35em]">
+                    Tip
+                  </span>
+                  <p className="flex-1">{tip}</p>
+                </div>
+              </footer>
+            )}
+            {improvement && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/90 shadow-[0_12px_35px_rgba(15,23,42,0.22)]">
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={improvement.onClick}
+                    disabled={improvement.disabled}
+                    className={`w-full rounded-full px-4 py-2 text-sm font-semibold text-purple-900 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white ${
+                      improvement.disabled
+                        ? 'cursor-not-allowed bg-white/40 text-purple-900/60'
+                        : 'bg-white hover:bg-purple-50'
+                    }`}
+                    aria-busy={improvement.busy ? 'true' : 'false'}
+                  >
+                    {improvement.busy ? 'Improving…' : improvement.label}
+                  </button>
+                  {improvement.helper && (
+                    <p className="text-xs leading-relaxed text-white/80">{improvement.helper}</p>
+                  )}
+                  {improvement.lockMessage && (
+                    <p className="text-xs font-medium text-white/70">{improvement.lockMessage}</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </article>

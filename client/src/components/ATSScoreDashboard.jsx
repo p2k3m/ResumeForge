@@ -93,7 +93,13 @@ function formatDelta(originalScore, enhancedScore) {
   return `${prefix}${delta.toFixed(0)} pts`
 }
 
-function ATSScoreDashboard({ metrics = [], match }) {
+function ATSScoreDashboard({
+  metrics = [],
+  match,
+  metricActionMap,
+  onImproveMetric,
+  improvementState = {}
+}) {
   const metricList = Array.isArray(metrics)
     ? metrics
     : Object.values(metrics || {})
@@ -101,10 +107,41 @@ function ATSScoreDashboard({ metrics = [], match }) {
     return null
   }
 
-  const displayMetrics = metricList.map((metric, index) => ({
-    metric,
-    accent: gradientPalette[index % gradientPalette.length]
-  }))
+  const displayMetrics = metricList.map((metric, index) => {
+    const accent = gradientPalette[index % gradientPalette.length]
+    if (!metricActionMap || typeof onImproveMetric !== 'function') {
+      return { metric, accent, improvement: null }
+    }
+
+    const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
+    const config = category ? metricActionMap.get(category) || null : null
+
+    if (!config || !config.actionKey) {
+      return { metric, accent, improvement: null }
+    }
+
+    const busy = improvementState.activeKey === config.actionKey
+    const locked = Boolean(improvementState.locked)
+    const disabledKeys = Array.isArray(improvementState.disabledKeys)
+      ? improvementState.disabledKeys
+      : []
+    const disabled = locked || busy || disabledKeys.includes(config.actionKey)
+    const lockMessage = locked ? improvementState.lockMessage || '' : ''
+
+    return {
+      metric,
+      accent,
+      improvement: {
+        key: config.actionKey,
+        label: config.label,
+        helper: config.helper,
+        onClick: () => onImproveMetric(config.actionKey),
+        disabled,
+        busy,
+        lockMessage
+      }
+    }
+  })
 
   const originalScoreValue = clampScore(match?.originalScore)
   const enhancedScoreValue = clampScore(match?.enhancedScore)
@@ -292,8 +329,13 @@ function ATSScoreDashboard({ metrics = [], match }) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {displayMetrics.map(({ metric, accent }) => (
-          <ATSScoreCard key={metric.category} metric={metric} accentClass={accent} />
+        {displayMetrics.map(({ metric, accent, improvement }) => (
+          <ATSScoreCard
+            key={metric.category}
+            metric={metric}
+            accentClass={accent}
+            improvement={improvement}
+          />
         ))}
       </div>
 
