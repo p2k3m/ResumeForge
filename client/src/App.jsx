@@ -309,22 +309,37 @@ const jobFitToneStyles = {
 
 const TEMPLATE_ALIASES = {}
 
-const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_classic']
+const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_lumina', 'cover_midnight', 'cover_classic']
 
 const COVER_TEMPLATE_ALIASES = {
   modern: 'cover_modern',
   classic: 'cover_classic',
+  lumina: 'cover_lumina',
+  midnight: 'cover_midnight',
   'cover-modern': 'cover_modern',
   'cover-classic': 'cover_classic',
+  'cover-lumina': 'cover_lumina',
+  'cover-midnight': 'cover_midnight',
   'modern-cover': 'cover_modern',
   'classic-cover': 'cover_classic',
+  'lumina-cover': 'cover_lumina',
+  'midnight-cover': 'cover_midnight',
   'cover modern': 'cover_modern',
   'cover classic': 'cover_classic',
+  'cover lumina': 'cover_lumina',
+  'cover midnight': 'cover_midnight',
   covermodern: 'cover_modern',
-  coverclassic: 'cover_classic'
+  coverclassic: 'cover_classic',
+  coverlumina: 'cover_lumina',
+  covermidnight: 'cover_midnight'
 }
 
 const CLASSIC_STYLE_TEMPLATE_IDS = new Set(['classic', 'professional', 'ucmo'])
+
+const RESUME_TO_COVER_TEMPLATE = {
+  lumina: 'cover_lumina',
+  midnight: 'cover_midnight'
+}
 
 const DEFAULT_COVER_TEMPLATE = 'cover_modern'
 
@@ -362,33 +377,42 @@ const normalizeCoverTemplateList = (list = []) => {
 const deriveCoverTemplateFromResume = (templateId) => {
   const canonical = canonicalizeTemplateId(templateId)
   if (!canonical) return DEFAULT_COVER_TEMPLATE
-  return CLASSIC_STYLE_TEMPLATE_IDS.has(canonical) ? 'cover_classic' : 'cover_modern'
+  if (RESUME_TO_COVER_TEMPLATE[canonical]) {
+    return RESUME_TO_COVER_TEMPLATE[canonical]
+  }
+  return CLASSIC_STYLE_TEMPLATE_IDS.has(canonical) ? 'cover_classic' : DEFAULT_COVER_TEMPLATE
 }
 
 const ensureCoverTemplateContext = (context, templateId) => {
   const derived = deriveCoverTemplateFromResume(templateId || DEFAULT_COVER_TEMPLATE)
-  const fallback = derived === 'cover_modern' ? 'cover_classic' : 'cover_modern'
   const base = context ? { ...context } : {}
   const coverTemplates = normalizeCoverTemplateList(base.coverTemplates)
-  const coverTemplate1 = canonicalizeCoverTemplateId(base.coverTemplate1)
+  const coverTemplate1 =
+    canonicalizeCoverTemplateId(base.coverTemplate1) || derived
   const coverTemplate2 = canonicalizeCoverTemplateId(base.coverTemplate2)
   const mergedTemplates = normalizeCoverTemplateList([
-    derived,
     coverTemplate1,
+    derived,
     coverTemplate2,
     ...coverTemplates
   ])
+  if (!mergedTemplates.length) {
+    mergedTemplates.push(DEFAULT_COVER_TEMPLATE)
+  }
+
   if (!mergedTemplates.includes(derived)) {
     mergedTemplates.unshift(derived)
   }
-  if (!mergedTemplates.includes(fallback)) {
-    mergedTemplates.push(fallback)
-  }
+
+  const fallback =
+    mergedTemplates.find((tpl) => tpl !== coverTemplate1) ||
+    COVER_TEMPLATE_IDS.find((tpl) => tpl !== coverTemplate1) ||
+    DEFAULT_COVER_TEMPLATE
 
   base.coverTemplates = mergedTemplates
-  base.coverTemplate1 = derived
-  if (!coverTemplate2 || coverTemplate2 === derived) {
-    base.coverTemplate2 = mergedTemplates.find((tpl) => tpl !== derived) || fallback
+  base.coverTemplate1 = coverTemplate1
+  if (!coverTemplate2 || coverTemplate2 === coverTemplate1) {
+    base.coverTemplate2 = fallback
   } else {
     base.coverTemplate2 = coverTemplate2
   }
@@ -473,6 +497,16 @@ const BASE_TEMPLATE_OPTIONS = [
     description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.'
   },
   {
+    id: 'lumina',
+    name: 'Lumina Spectrum',
+    description: 'Vibrant gradient storytelling with confident header hierarchy.'
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight Glass',
+    description: 'Dark mode glassmorphism with luminous accent highlights.'
+  },
+  {
     id: 'ucmo',
     name: 'Crimson Heritage',
     description: 'Classic serif typography with deep crimson accents inspired by university letterhead design.'
@@ -514,11 +548,29 @@ const COVER_TEMPLATE_DETAILS = {
     name: 'Modern Cover Letter',
     description: 'Gradient header with confident typography and clean paragraph rhythm.'
   },
+  cover_lumina: {
+    name: 'Lumina Cover Letter',
+    description: 'Iridescent gradients with open white space for a storytelling tone.'
+  },
+  cover_midnight: {
+    name: 'Midnight Cover Letter',
+    description: 'Noir glassmorphism with electric accents and calm serif body text.'
+  },
   cover_classic: {
     name: 'Classic Cover Letter',
     description: 'Elegant serif presentation with letterhead-inspired spacing and signature close.'
   }
 }
+
+const COVER_TEMPLATE_ORDER = ['cover_modern', 'cover_lumina', 'cover_midnight', 'cover_classic']
+
+const COVER_TEMPLATE_OPTIONS = COVER_TEMPLATE_ORDER.filter((id) => COVER_TEMPLATE_DETAILS[id]).map(
+  (id) => ({
+    id,
+    name: COVER_TEMPLATE_DETAILS[id].name,
+    description: COVER_TEMPLATE_DETAILS[id].description
+  })
+)
 
 const formatCoverTemplateName = (id) => {
   if (!id) return 'Cover Letter'
@@ -1407,6 +1459,45 @@ function App() {
     )
   }, [availableTemplateOptions, selectedTemplate])
 
+  const selectedCoverTemplate = useMemo(() => {
+    const fromContext = canonicalizeCoverTemplateId(templateContext?.coverTemplate1)
+    if (fromContext) {
+      return fromContext
+    }
+    return deriveCoverTemplateFromResume(selectedTemplate || DEFAULT_COVER_TEMPLATE)
+  }, [selectedTemplate, templateContext])
+
+  const availableCoverTemplateOptions = useMemo(() => {
+    const registry = new Map(COVER_TEMPLATE_OPTIONS.map((option) => [option.id, option]))
+    const extras = []
+    const register = (value) => {
+      const canonical = canonicalizeCoverTemplateId(value)
+      if (!canonical || registry.has(canonical)) {
+        return
+      }
+      const option = {
+        id: canonical,
+        name: formatCoverTemplateName(canonical),
+        description:
+          getCoverTemplateDescription(canonical) ||
+          'Imported cover letter template from your previous session.'
+      }
+      registry.set(canonical, option)
+      extras.push(option)
+    }
+
+    const templateCandidates = Array.isArray(templateContext?.coverTemplates)
+      ? templateContext.coverTemplates
+      : []
+    templateCandidates.forEach(register)
+    register(templateContext?.coverTemplate1)
+    register(templateContext?.coverTemplate2)
+    register(selectedCoverTemplate)
+    register(deriveCoverTemplateFromResume(selectedTemplate || DEFAULT_COVER_TEMPLATE))
+
+    return [...COVER_TEMPLATE_OPTIONS, ...extras]
+  }, [templateContext, selectedCoverTemplate, selectedTemplate])
+
   const templateHistorySummary = useMemo(() => {
     const baseHistory = Array.isArray(templateContext?.templateHistory)
       ? templateContext.templateHistory
@@ -1528,13 +1619,33 @@ function App() {
     [setTemplateContext]
   )
 
-  const selectedCoverTemplate = useMemo(() => {
-    const fromContext = canonicalizeCoverTemplateId(templateContext?.coverTemplate1)
-    if (fromContext) {
-      return fromContext
-    }
-    return deriveCoverTemplateFromResume(selectedTemplate || DEFAULT_COVER_TEMPLATE)
-  }, [selectedTemplate, templateContext])
+  const handleCoverTemplateSelect = useCallback(
+    (templateId) => {
+      const canonical = canonicalizeCoverTemplateId(templateId, DEFAULT_COVER_TEMPLATE)
+      setTemplateContext((prev) => {
+        const base = prev ? { ...prev } : {}
+        base.coverTemplate1 = canonical
+        const existing = normalizeCoverTemplateList(base.coverTemplates)
+        const nextTemplates = normalizeCoverTemplateList([canonical, ...existing])
+        base.coverTemplates = nextTemplates
+        const secondary = canonicalizeCoverTemplateId(base.coverTemplate2)
+        if (!secondary || secondary === canonical) {
+          const fallback =
+            nextTemplates.find((tpl) => tpl !== canonical) ||
+            COVER_TEMPLATE_IDS.find((tpl) => tpl !== canonical) ||
+            DEFAULT_COVER_TEMPLATE
+          base.coverTemplate2 = fallback
+        } else {
+          base.coverTemplate2 = secondary
+        }
+        return ensureCoverTemplateContext(
+          base,
+          base.selectedTemplate || base.template1 || selectedTemplate || 'modern'
+        )
+      })
+    },
+    [selectedTemplate, setTemplateContext]
+  )
 
   const flowSteps = useMemo(() => {
     const improvementsComplete = improvementCount > 0
@@ -3926,11 +4037,24 @@ function App() {
           </div>
 
           <TemplateSelector
+            idPrefix="resume-template-selector"
+            title="CV Template Style"
+            description="Choose the CV aesthetic that mirrors your personality and the JD tone."
             options={availableTemplateOptions}
             selectedTemplate={selectedTemplate}
             onSelect={handleTemplateSelect}
             disabled={isProcessing}
             historySummary={templateHistorySummary}
+          />
+
+          <TemplateSelector
+            idPrefix="cover-template-selector"
+            title="Cover Letter Template"
+            description="Align your letter visuals with your selected CV or explore a bold alternative."
+            options={availableCoverTemplateOptions}
+            selectedTemplate={selectedCoverTemplate}
+            onSelect={handleCoverTemplateSelect}
+            disabled={isProcessing}
           />
 
           <TemplatePreview

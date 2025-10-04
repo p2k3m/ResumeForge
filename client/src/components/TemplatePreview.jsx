@@ -41,6 +41,22 @@ const RESUME_TEMPLATE_PREVIEWS = {
     highlight: 'bg-purple-500/25',
     chip: 'bg-orange-100 text-orange-700'
   },
+  lumina: {
+    accent: 'from-fuchsia-500 via-rose-500 to-amber-400',
+    container: 'border-rose-200 bg-white',
+    sidebar: 'bg-gradient-to-b from-fuchsia-600/90 to-amber-500/80',
+    line: 'bg-rose-200/80',
+    highlight: 'bg-rose-100 text-rose-700',
+    chip: 'bg-rose-100 text-rose-700'
+  },
+  midnight: {
+    accent: 'from-slate-900 via-indigo-900 to-blue-900',
+    container: 'border-slate-800 bg-slate-950 text-slate-100',
+    sidebar: 'bg-gradient-to-b from-slate-950/95 to-indigo-900/85',
+    line: 'bg-slate-700/70',
+    highlight: 'bg-indigo-500/20 text-indigo-100',
+    chip: 'bg-slate-800 text-indigo-200'
+  },
   ucmo: {
     accent: 'from-rose-900 via-rose-700 to-rose-500',
     container: 'border-rose-300 bg-rose-50',
@@ -72,13 +88,29 @@ const COVER_TEMPLATE_PREVIEWS = {
     header: 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white',
     border: 'border-purple-200 bg-white',
     line: 'bg-slate-200/80',
-    highlight: 'bg-purple-500/10'
+    highlight: 'bg-purple-500/10 text-purple-800',
+    badge: 'bg-purple-100 text-purple-700'
   },
   cover_classic: {
     header: 'bg-gradient-to-r from-amber-700 via-amber-600 to-rose-600 text-amber-50',
     border: 'border-amber-200 bg-amber-50/70',
     line: 'bg-amber-200/80',
-    highlight: 'bg-amber-500/15'
+    highlight: 'bg-amber-500/15 text-amber-900',
+    badge: 'bg-amber-100 text-amber-700'
+  },
+  cover_lumina: {
+    header: 'bg-gradient-to-r from-fuchsia-500 via-rose-500 to-amber-400 text-white',
+    border: 'border-rose-200 bg-white',
+    line: 'bg-rose-200/80',
+    highlight: 'bg-rose-100 text-rose-700',
+    badge: 'bg-rose-100 text-rose-700'
+  },
+  cover_midnight: {
+    header: 'bg-gradient-to-r from-slate-950 via-indigo-900 to-blue-900 text-slate-100',
+    border: 'border-slate-800 bg-slate-950 text-slate-100',
+    line: 'bg-slate-700/70',
+    highlight: 'bg-indigo-500/20 text-indigo-100',
+    badge: 'bg-slate-800 text-indigo-200'
   }
 }
 
@@ -189,7 +221,12 @@ function TemplatePreview({
                 <p className="mt-1 text-sm text-purple-600">{coverTemplateDescription}</p>
               )}
             </div>
-            <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-purple-100 text-purple-700">
+            <span
+              className={cx(
+                'px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide',
+                coverStyle.badge || 'bg-purple-100 text-purple-700'
+              )}
+            >
               Cover
             </span>
           </div>

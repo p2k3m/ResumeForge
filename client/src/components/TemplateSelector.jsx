@@ -3,19 +3,22 @@ function TemplateSelector({
   selectedTemplate,
   onSelect,
   disabled = false,
-  historySummary = ''
+  historySummary = '',
+  title = 'Template Style',
+  description = 'Enhanced CVs and tailored cover letters will follow this selected design.',
+  idPrefix = 'template-selector'
 }) {
   if (!options.length) return null
+
+  const labelId = `${idPrefix}-label`
 
   return (
     <div className="space-y-2">
       <div>
-        <p className="text-sm font-semibold text-purple-700" id="template-selector-label">
-          Template Style
+        <p className="text-sm font-semibold text-purple-700" id={labelId}>
+          {title}
         </p>
-        <p className="text-xs text-purple-600">
-          Enhanced CVs and tailored cover letters will follow this selected design.
-        </p>
+        {description && <p className="text-xs text-purple-600">{description}</p>}
       </div>
       {historySummary && (
         <p className="text-xs text-purple-500">
@@ -23,11 +26,11 @@ function TemplateSelector({
         </p>
       )}
       <div
-        id="template-selector"
+        id={idPrefix}
         role="radiogroup"
         className="grid grid-cols-1 md:grid-cols-2 gap-3"
-        data-testid="template-selector"
-        aria-labelledby="template-selector-label"
+        data-testid={idPrefix}
+        aria-labelledby={labelId}
       >
         {options.map((option) => {
           const isSelected = option.id === selectedTemplate
@@ -47,7 +50,7 @@ function TemplateSelector({
               className={`text-left rounded-2xl border p-4 transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-purple-400 ${stateClass} ${
                 disabled ? 'cursor-not-allowed opacity-60' : ''
               }`}
-              data-testid={`template-option-${option.id}`}
+              data-testid={`${idPrefix}-option-${option.id}`}
             >
               <h3 className="text-lg font-semibold text-purple-800">{option.name}</h3>
               <p className="text-sm text-purple-600">{option.description}</p>
