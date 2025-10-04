@@ -149,6 +149,40 @@ function formatReadableList(items) {
   return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`
 }
 
+function normalizeSegmentText(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : ''
+  }
+  if (value === null || value === undefined) {
+    return ''
+  }
+  return String(value || '').trim()
+}
+
+function normalizeSegmentList(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeSegmentText(entry)).filter(Boolean)
+  }
+  const text = normalizeSegmentText(value)
+  return text ? [text] : []
+}
+
+function buildSummarySegmentSignature(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return ''
+  }
+
+  const normalized = segments.map((segment) => ({
+    section: normalizeSegmentText(segment?.section || segment?.label || segment?.key),
+    added: normalizeSegmentList(segment?.added),
+    removed: normalizeSegmentList(segment?.removed),
+    reason: normalizeSegmentList(segment?.reason)
+  }))
+
+  return JSON.stringify(normalized)
+}
+
 const COVER_LETTER_TYPES = new Set(['cover_letter1', 'cover_letter2'])
 
 function isCoverLetterType(type) {
@@ -3327,6 +3361,39 @@ function App() {
       removedItems: Array.from(aggregatedRemoved)
     }
   }, [baselineResumeText, resumeText, changeLog])
+
+  const { summarySegments: comparisonSummarySegments, signature: comparisonSummarySignature } = useMemo(() => {
+    const segments = resumeComparisonData?.summarySegments || []
+    return {
+      summarySegments: segments,
+      signature: buildSummarySegmentSignature(segments)
+    }
+  }, [resumeComparisonData])
+
+  useEffect(() => {
+    setMatch((prev) => {
+      if (!prev) {
+        return prev
+      }
+
+      const currentSignature = buildSummarySegmentSignature(prev.improvementSummary)
+      if (currentSignature === comparisonSummarySignature) {
+        return prev
+      }
+
+      if (!comparisonSummarySignature && (!comparisonSummarySegments || comparisonSummarySegments.length === 0)) {
+        if (!currentSignature) {
+          return prev
+        }
+        return { ...prev, improvementSummary: [] }
+      }
+
+      return {
+        ...prev,
+        improvementSummary: cloneData(comparisonSummarySegments)
+      }
+    })
+  }, [comparisonSummarySignature, comparisonSummarySegments])
 
   const showDeltaSummary = Boolean(
     match ||
