@@ -343,6 +343,24 @@ describe('targeted improvement endpoints (integration)', () => {
       expect(typeof response.body.selectionProbabilityBefore).toBe('number');
       expect(typeof response.body.selectionProbabilityAfter).toBe('number');
       expect(typeof response.body.selectionProbabilityDelta).toBe('number');
+      expect(response.body.urlExpiresInSeconds).toBe(3600);
+      expect(Array.isArray(response.body.urls)).toBe(true);
+      const assetTypes = response.body.urls.map((entry) => entry.type).sort();
+      expect(assetTypes).toEqual([
+        'cover_letter1',
+        'cover_letter2',
+        'original_upload',
+        'version1',
+        'version2',
+      ]);
+      response.body.urls.forEach((entry) => {
+        expect(entry).toEqual(
+          expect.objectContaining({
+            type: expect.any(String),
+            url: expect.stringMatching(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/),
+          })
+        );
+      });
     }
 
     expect(generateContentMock).toHaveBeenCalledTimes(aiResponses.length);
