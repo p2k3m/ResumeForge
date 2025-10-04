@@ -39,6 +39,8 @@ describe('end-to-end CV processing', () => {
     expect(Array.isArray(response.body.missingSkills)).toBe(true);
     expect(typeof response.body.scoreBreakdown).toBe('object');
     expect(Array.isArray(response.body.atsSubScores)).toBe(true);
+    expect(Array.isArray(response.body.atsSubScoresBefore)).toBe(true);
+    expect(response.body.atsSubScoresBefore.length).toBeGreaterThan(0);
     expect(response.body.selectionInsights).toEqual(
       expect.objectContaining({
         flags: expect.any(Array),
@@ -46,6 +48,10 @@ describe('end-to-end CV processing', () => {
       })
     );
     expect(typeof response.body.selectionProbabilityBefore).toBe('number');
+    const selectionProbabilityAfter = response.body.selectionProbabilityAfter;
+    expect(
+      selectionProbabilityAfter === null || typeof selectionProbabilityAfter === 'number'
+    ).toBe(true);
     const probability = response.body.selectionInsights.probability;
     expect(probability === null || typeof probability === 'number').toBe(true);
     expect(response.body.selectionInsights.before).toEqual(

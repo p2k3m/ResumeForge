@@ -75,24 +75,71 @@ exports[`ATSScoreCard matches the gradient snapshot for consistency 1`] = `
         </div>
       </header>
       <div
-        class="flex flex-wrap items-end gap-x-3 gap-y-1"
+        class="space-y-4"
       >
-        <p
-          class="text-6xl font-black leading-none drop-shadow-md md:text-7xl"
-          data-testid="metric-score"
+        <div
+          class="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
-          82
-        </p>
-        <span
-          class="text-2xl font-semibold uppercase tracking-[0.3em] text-white/80"
-        >
-          %
-        </span>
-        <span
-          class="text-xs font-semibold uppercase tracking-[0.45em] text-white"
-        >
-          Score
-        </span>
+          <div
+            class="rounded-2xl border border-white/20 bg-white/10 p-4 shadow-inner"
+          >
+            <p
+              class="text-[10px] font-semibold uppercase tracking-[0.35em] text-white/70"
+            >
+              ATS Score Before
+            </p>
+            <div
+              class="mt-2 flex items-baseline gap-2"
+              data-testid="metric-score-before"
+            >
+              <span
+                class="text-4xl font-black leading-none text-white/95 md:text-5xl"
+              >
+                82
+              </span>
+              <span
+                class="text-sm font-semibold uppercase tracking-[0.3em] text-white/80"
+              >
+                %
+              </span>
+            </div>
+            <span
+              class="mt-3 inline-flex w-fit rounded-full bg-white/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/80"
+            >
+              EXCELLENT
+            </span>
+          </div>
+          <div
+            class="relative rounded-2xl border border-white/10 bg-white/15 p-4 shadow-inner"
+          >
+            <p
+              class="text-[10px] font-semibold uppercase tracking-[0.35em] text-white/80"
+            >
+              ATS Score After
+            </p>
+            <div
+              class="mt-2 flex items-baseline gap-2"
+              data-testid="metric-score"
+            >
+              <span
+                class="text-5xl font-black leading-none text-white md:text-6xl"
+              >
+                82
+              </span>
+              <span
+                class="text-base font-semibold uppercase tracking-[0.3em] text-white/80"
+              >
+                %
+              </span>
+            </div>
+            <span
+              class="mt-3 inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white"
+              data-testid="rating-badge"
+            >
+              EXCELLENT
+            </span>
+          </div>
+        </div>
       </div>
       <div
         class="mt-auto space-y-3"

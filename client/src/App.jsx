@@ -1462,6 +1462,7 @@ function App() {
   const [downloadStates, setDownloadStates] = useState({})
   const [match, setMatch] = useState(null)
   const [scoreBreakdown, setScoreBreakdown] = useState([])
+  const [baselineScoreBreakdown, setBaselineScoreBreakdown] = useState([])
   const [resumeText, setResumeText] = useState('')
   const [jobDescriptionText, setJobDescriptionText] = useState('')
   const [jobSkills, setJobSkills] = useState([])
@@ -2635,6 +2636,7 @@ function App() {
     setOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
+    setBaselineScoreBreakdown([])
     setResumeText('')
     setJobDescriptionText('')
     setJobSkills([])
@@ -2845,13 +2847,15 @@ function App() {
           ? `Projected ${probabilityBeforeMeaning.toLowerCase()} probability (${probabilityBeforeValue}%) that this resume will be shortlisted for the JD.`
           : null)
       const probabilityValue =
-        typeof data.selectionProbability === 'number'
-          ? data.selectionProbability
-          : typeof data.selectionInsights?.after?.probability === 'number'
-            ? data.selectionInsights.after.probability
-            : typeof data.selectionInsights?.probability === 'number'
-              ? data.selectionInsights.probability
-              : null
+        typeof data.selectionProbabilityAfter === 'number'
+          ? data.selectionProbabilityAfter
+          : typeof data.selectionProbability === 'number'
+            ? data.selectionProbability
+            : typeof data.selectionInsights?.after?.probability === 'number'
+              ? data.selectionInsights.after.probability
+              : typeof data.selectionInsights?.probability === 'number'
+                ? data.selectionInsights.probability
+                : null
       const probabilityMeaning =
         data.selectionInsights?.after?.level ||
         data.selectionInsights?.level ||
@@ -2900,15 +2904,28 @@ function App() {
         selectionProbabilityAfterRationale: probabilityRationale
       }
       setMatch(matchPayload)
-      const breakdownCandidates = Array.isArray(data.atsSubScores)
-        ? data.atsSubScores
-        : Array.isArray(data.scoreBreakdown)
-          ? data.scoreBreakdown
-          : Object.values(data.scoreBreakdown || {})
+      const toMetricArray = (input) => {
+        if (Array.isArray(input)) return input
+        if (input && typeof input === 'object') return Object.values(input)
+        return []
+      }
+      const baselineCandidates = toMetricArray(
+        data.atsSubScoresBefore || data.baselineScoreBreakdown
+      )
+      const breakdownCandidates = toMetricArray(
+        data.atsSubScores || data.atsSubScoresAfter || data.scoreBreakdown
+      )
+      const normalizedBaseline = orderAtsMetrics(
+        baselineCandidates.length ? baselineCandidates : breakdownCandidates
+      ).map((metric) => ({
+        ...metric,
+        tip: metric?.tip ?? metric?.tips?.[0] ?? ''
+      }))
       const normalizedBreakdown = orderAtsMetrics(breakdownCandidates).map((metric) => ({
         ...metric,
-        tip: metric?.tip ?? metric?.tips?.[0] ?? '',
+        tip: metric?.tip ?? metric?.tips?.[0] ?? ''
       }))
+      setBaselineScoreBreakdown(normalizedBaseline)
       setScoreBreakdown(normalizedBreakdown)
       const resumeTextValue = typeof data.resumeText === 'string' ? data.resumeText : ''
       const originalResumeSnapshot =
@@ -2950,6 +2967,7 @@ function App() {
         selectionInsights: cloneData(selectionInsightsValue),
         match: cloneData(matchPayload),
         scoreBreakdown: cloneData(normalizedBreakdown),
+        baselineScoreBreakdown: cloneData(normalizedBaseline),
         outputFiles: cloneData(outputFilesValue),
         templateContext: cloneData(templateContextValue),
         changeLog: cloneData(changeLogValue),
@@ -3044,6 +3062,10 @@ function App() {
       ? cloneData(snapshot.scoreBreakdown)
       : []
     setScoreBreakdown(scoreBreakdownValue)
+    const baselineBreakdownValue = Array.isArray(snapshot.baselineScoreBreakdown)
+      ? cloneData(snapshot.baselineScoreBreakdown)
+      : scoreBreakdownValue
+    setBaselineScoreBreakdown(baselineBreakdownValue)
 
     const outputFilesValue = normalizeOutputFiles(snapshot.outputFiles, {
       defaultExpiresAt: snapshot?.urlExpiresAt,
@@ -3375,7 +3397,10 @@ function App() {
           : Array.isArray(data.scoreBreakdown)
             ? data.scoreBreakdown
             : Object.values(data.scoreBreakdown || {})
-      )
+      ).map((metric) => ({
+        ...metric,
+        tip: metric?.tip ?? metric?.tips?.[0] ?? ''
+      }))
       setScoreBreakdown(metrics)
 
       const nextResumeSkills = Array.isArray(data.resumeSkills) ? data.resumeSkills : []
@@ -3994,11 +4019,13 @@ function App() {
       setChangeLog((prev) => (Array.isArray(data.changeLog) ? data.changeLog : prev))
 
       const probabilityValue =
-        typeof data.selectionProbability === 'number'
-          ? data.selectionProbability
-          : typeof data.selectionInsights?.probability === 'number'
-            ? data.selectionInsights.probability
-            : null
+        typeof data.selectionProbabilityAfter === 'number'
+          ? data.selectionProbabilityAfter
+          : typeof data.selectionProbability === 'number'
+            ? data.selectionProbability
+            : typeof data.selectionInsights?.probability === 'number'
+              ? data.selectionInsights.probability
+              : null
       const probabilityMeaning =
         data.selectionInsights?.level ||
         (typeof probabilityValue === 'number'
@@ -4028,11 +4055,24 @@ function App() {
       }
       setMatch(updatedMatch)
 
-      const breakdownCandidates = Array.isArray(data.atsSubScores)
-        ? data.atsSubScores
-        : Array.isArray(data.scoreBreakdown)
-          ? data.scoreBreakdown
-          : Object.values(data.scoreBreakdown || {})
+      const toMetricArray = (value) => {
+        if (Array.isArray(value)) return value
+        if (value && typeof value === 'object') return Object.values(value)
+        return []
+      }
+      const breakdownCandidates = toMetricArray(
+        data.atsSubScores || data.atsSubScoresAfter || data.scoreBreakdown
+      )
+      const baselineCandidates = toMetricArray(
+        data.atsSubScoresBefore || data.baselineScoreBreakdown
+      )
+      if (baselineCandidates.length && baselineScoreBreakdown.length === 0) {
+        const normalizedBaseline = orderAtsMetrics(baselineCandidates).map((metric) => ({
+          ...metric,
+          tip: metric?.tip ?? metric?.tips?.[0] ?? ''
+        }))
+        setBaselineScoreBreakdown(normalizedBaseline)
+      }
       const normalizedBreakdown = orderAtsMetrics(breakdownCandidates).map((metric) => ({
         ...metric,
         tip: metric?.tip ?? metric?.tips?.[0] ?? ''
@@ -4478,6 +4518,7 @@ function App() {
           {scoreDashboardReady ? (
             <ATSScoreDashboard
               metrics={scoreBreakdown}
+              baselineMetrics={baselineScoreBreakdown}
               match={match}
               metricActionMap={metricImprovementActionMap}
               onImproveMetric={handleImprovementClick}

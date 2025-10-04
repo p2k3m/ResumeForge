@@ -95,6 +95,7 @@ function formatDelta(originalScore, enhancedScore) {
 
 function ATSScoreDashboard({
   metrics = [],
+  baselineMetrics = [],
   match,
   metricActionMap,
   onImproveMetric,
@@ -103,21 +104,56 @@ function ATSScoreDashboard({
   const metricList = Array.isArray(metrics)
     ? metrics
     : Object.values(metrics || {})
+  const baselineList = Array.isArray(baselineMetrics)
+    ? baselineMetrics
+    : Object.values(baselineMetrics || {})
+  const baselineMap = new Map(
+    baselineList
+      .filter((metric) => metric?.category)
+      .map((metric) => [metric.category, metric])
+  )
   if (!metricList.length) {
     return null
   }
 
   const displayMetrics = metricList.map((metric, index) => {
     const accent = gradientPalette[index % gradientPalette.length]
+    const baselineMetric = metric?.category ? baselineMap.get(metric.category) || {} : {}
+    const beforeScore = clampScore(
+      typeof metric?.beforeScore === 'number'
+        ? metric.beforeScore
+        : typeof baselineMetric?.score === 'number'
+          ? baselineMetric.score
+          : typeof metric?.score === 'number'
+            ? metric.score
+            : null
+    )
+    const afterScore = clampScore(
+      typeof metric?.afterScore === 'number'
+        ? metric.afterScore
+        : typeof metric?.score === 'number'
+          ? metric.score
+          : null
+    )
+    const enrichedMetric = {
+      ...metric,
+      beforeScore,
+      afterScore,
+      beforeRatingLabel:
+        metric?.beforeRatingLabel || baselineMetric?.ratingLabel || baselineMetric?.rating || metric?.ratingLabel || null,
+      afterRatingLabel: metric?.afterRatingLabel || metric?.ratingLabel,
+      deltaText: formatDelta(beforeScore, afterScore)
+    }
+
     if (!metricActionMap || typeof onImproveMetric !== 'function') {
-      return { metric, accent, improvement: null }
+      return { metric: enrichedMetric, accent, improvement: null }
     }
 
     const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
     const config = category ? metricActionMap.get(category) || null : null
 
     if (!config || !config.actionKey) {
-      return { metric, accent, improvement: null }
+      return { metric: enrichedMetric, accent, improvement: null }
     }
 
     const busy = improvementState.activeKey === config.actionKey
@@ -129,7 +165,7 @@ function ATSScoreDashboard({
     const lockMessage = locked ? improvementState.lockMessage || '' : ''
 
     return {
-      metric,
+      metric: enrichedMetric,
       accent,
       improvement: {
         key: config.actionKey,
@@ -473,7 +509,7 @@ function ATSScoreDashboard({
                   <div className="rounded-2xl border border-indigo-200/60 bg-white/80 p-4 shadow-sm">
                     <div className="flex items-baseline justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Before Enhancement</p>
+                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Selection % Before</p>
                         <div className="mt-2 flex items-baseline gap-3">
                           <p className="text-4xl font-black text-indigo-700">{selectionProbabilityBeforeValue}%</p>
                           {selectionProbabilityBeforeMeaning && (
@@ -497,7 +533,7 @@ function ATSScoreDashboard({
                 )}
                 {typeof selectionProbabilityAfterValue === 'number' && (
                   <div className="rounded-2xl border border-emerald-300 bg-emerald-100/60 p-4 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">After Enhancement</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection % After</p>
                     <div className="mt-2 flex items-baseline gap-3">
                       <p className="text-4xl font-black text-emerald-700">{selectionProbabilityAfterValue}%</p>
                       {selectionProbabilityAfterMeaning && (

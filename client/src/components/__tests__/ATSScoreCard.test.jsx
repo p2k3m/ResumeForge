@@ -16,12 +16,14 @@ describe('ATSScoreCard', () => {
     render(<ATSScoreCard metric={baseMetric} accentClass="from-indigo-500 to-purple-500" />)
 
     expect(screen.getByText('Keyword Match')).toBeInTheDocument()
+    expect(screen.getByText('ATS Score Before')).toBeInTheDocument()
+    expect(screen.getByText('ATS Score After')).toBeInTheDocument()
+    expect(screen.getByTestId('metric-score-before')).toHaveTextContent('82')
     expect(screen.getByTestId('metric-score')).toHaveTextContent('82')
     expect(screen.getByTestId('rating-badge')).toHaveTextContent('EXCELLENT')
     expect(screen.getByTestId('metric-tip')).toHaveTextContent(
       /leadership verbs/i
     )
-    expect(screen.getByText('%')).toBeInTheDocument()
     expect(screen.getByText('Tip')).toBeInTheDocument()
   })
 
@@ -39,7 +41,8 @@ describe('ATSScoreCard', () => {
 
     expect(screen.getByTestId('rating-badge')).toHaveTextContent('NEEDS IMPROVEMENT')
     expect(screen.getByTestId('metric-score')).toHaveTextContent('N/A')
-    expect(screen.queryByText('%')).not.toBeInTheDocument()
+    expect(screen.getByTestId('metric-score-before')).toHaveTextContent('N/A')
+    expect(screen.queryAllByText('%')).toHaveLength(0)
     expect(screen.queryByTestId('metric-tip')).not.toBeInTheDocument()
   })
 })

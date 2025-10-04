@@ -33,6 +33,22 @@ function formatScore(score) {
   return { display: rounded, suffix: '%' }
 }
 
+function formatScoreDelta(before, after) {
+  if (typeof before !== 'number' || typeof after !== 'number') {
+    return null
+  }
+  if (!Number.isFinite(before) || !Number.isFinite(after)) {
+    return null
+  }
+  const delta = after - before
+  if (delta === 0) {
+    return null
+  }
+  const rounded = Math.round(delta)
+  const prefix = rounded > 0 ? '+' : ''
+  return `${prefix}${rounded} pts`
+}
+
 const defaultAccent = 'from-indigo-500 via-purple-500 to-purple-700'
 
 const metricDescriptions = {
@@ -69,10 +85,26 @@ function describeMetric(metric) {
 }
 
 function ATSScoreCard({ metric, accentClass = defaultAccent, improvement }) {
-  const ratingLabel = normalizeLabel(metric?.ratingLabel)
+  const afterScore =
+    typeof metric?.afterScore === 'number' && Number.isFinite(metric.afterScore)
+      ? metric.afterScore
+      : typeof metric?.score === 'number'
+        ? metric.score
+        : null
+  const beforeScore =
+    typeof metric?.beforeScore === 'number' && Number.isFinite(metric.beforeScore)
+      ? metric.beforeScore
+      : afterScore
+  const { display: afterDisplay, suffix: afterSuffix } = formatScore(afterScore)
+  const { display: beforeDisplay, suffix: beforeSuffix } = formatScore(beforeScore)
+  const rawAfterRating = metric?.afterRatingLabel || metric?.ratingLabel
+  const ratingLabel = normalizeLabel(rawAfterRating)
   const badgeClass = badgeThemes[ratingLabel] || badgeThemes.GOOD
   const labelClass = labelTone[ratingLabel] || labelTone.GOOD
-  const { display: scoreDisplay, suffix: scoreSuffix } = formatScore(metric?.score)
+  const beforeRatingLabel = metric?.beforeRatingLabel
+    ? normalizeLabel(metric.beforeRatingLabel)
+    : null
+  const deltaText = metric?.deltaText || formatScoreDelta(beforeScore, afterScore)
   const tip = metric?.tip ?? metric?.tips?.[0] ?? ''
   const category = metric?.category ?? 'Metric'
   const metricDescription = describeMetric(metric)
@@ -112,14 +144,51 @@ function ATSScoreCard({ metric, accentClass = defaultAccent, improvement }) {
             )}
           </div>
         </header>
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-          <p className="text-6xl font-black leading-none drop-shadow-md md:text-7xl" data-testid="metric-score">
-            {scoreDisplay}
-          </p>
-          {scoreSuffix && (
-            <span className="text-2xl font-semibold uppercase tracking-[0.3em] text-white/80">{scoreSuffix}</span>
-          )}
-          <span className={`text-xs font-semibold uppercase tracking-[0.45em] ${labelClass}`}>Score</span>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/20 bg-white/10 p-4 shadow-inner">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-white/70">
+                ATS Score Before
+              </p>
+              <div className="mt-2 flex items-baseline gap-2" data-testid="metric-score-before">
+                <span className="text-4xl font-black leading-none text-white/95 md:text-5xl">{beforeDisplay}</span>
+                {beforeSuffix && (
+                  <span className="text-sm font-semibold uppercase tracking-[0.3em] text-white/80">
+                    {beforeSuffix}
+                  </span>
+                )}
+              </div>
+              {beforeRatingLabel && (
+                <span className="mt-3 inline-flex w-fit rounded-full bg-white/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/80">
+                  {beforeRatingLabel}
+                </span>
+              )}
+            </div>
+            <div className="relative rounded-2xl border border-white/10 bg-white/15 p-4 shadow-inner">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-white/80">
+                ATS Score After
+              </p>
+              <div className="mt-2 flex items-baseline gap-2" data-testid="metric-score">
+                <span className="text-5xl font-black leading-none text-white md:text-6xl">{afterDisplay}</span>
+                {afterSuffix && (
+                  <span className="text-base font-semibold uppercase tracking-[0.3em] text-white/80">
+                    {afterSuffix}
+                  </span>
+                )}
+              </div>
+              <span
+                className={`mt-3 inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] ${labelClass}`}
+                data-testid="rating-badge"
+              >
+                {ratingLabel}
+              </span>
+              {deltaText && (
+                <span className="absolute -top-3 right-3 inline-flex rounded-full bg-emerald-400/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-950" data-testid="metric-delta">
+                  {deltaText}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
         {(tip || improvement) && (
           <div className="mt-auto space-y-3">
