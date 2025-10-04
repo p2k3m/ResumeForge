@@ -25,7 +25,14 @@ describe('buildTemplateSectionContext', () => {
     const data = parseContent(input);
     const context = buildTemplateSectionContext(data.sections);
 
-    expect(context.sections.map((sec) => sec.key).slice(0, 6)).toEqual([
+    const canonicalOrder = [];
+    context.sections.forEach((sec) => {
+      if (!canonicalOrder.includes(sec.key)) {
+        canonicalOrder.push(sec.key);
+      }
+    });
+
+    expect(canonicalOrder.slice(0, 6)).toEqual([
       'contact',
       'summary',
       'experience',
@@ -74,6 +81,80 @@ describe('buildTemplateSectionContext', () => {
 
     expect(context.buckets.skills).toHaveLength(1);
     expect(context.buckets.certifications).toHaveLength(1);
+  });
+
+  test('recognizes canonical synonyms and applies consistent presentation', () => {
+    const input = [
+      'Jane Doe',
+      '# Professional Summary',
+      'Strategic operator with cross-functional leadership.',
+      '# Contact Information',
+      'Phone: 555-867-5309',
+      '# Work History',
+      '- Director of Ops at Globex (2018 - Present)',
+      '# Education & Training',
+      '- MBA, Stanford',
+      '# Technical Proficiencies',
+      '- Python, SQL, Tableau',
+      '# Licenses and Certifications',
+      '- Six Sigma Black Belt'
+    ].join('\n');
+
+    const data = parseContent(input);
+    const context = buildTemplateSectionContext(data.sections);
+
+    const canonicalOrder = [];
+    context.sections.forEach((sec) => {
+      if (!canonicalOrder.includes(sec.key)) {
+        canonicalOrder.push(sec.key);
+      }
+    });
+
+    expect(canonicalOrder.slice(0, 6)).toEqual([
+      'contact',
+      'summary',
+      'experience',
+      'education',
+      'skills',
+      'certifications'
+    ]);
+
+    const lookup = (key) => context.sections.find((sec) => sec.key === key);
+
+    expect(lookup('contact').sectionClass).toContain('section--contact');
+    expect(lookup('summary').headingClass).toContain('section-heading--summary');
+    expect(lookup('experience').listClass).toContain('section-list--experience');
+    expect(lookup('education').sectionClass).toContain('section--education');
+    expect(lookup('skills').textClass).toContain('section-text--skills');
+    expect(lookup('certifications').textClass).toContain(
+      'section-text--certifications'
+    );
+
+    expect(lookup('summary').showMarkers).toBe(false);
+    expect(lookup('experience').showMarkers).toBe(true);
+  });
+
+  test('sanitizes css classes for non-canonical headings', () => {
+    const input = [
+      'Jane Doe',
+      '# Volunteer Experience',
+      '- Coordinated community outreach'
+    ].join('\n');
+
+    const data = parseContent(input);
+    const context = buildTemplateSectionContext(data.sections);
+
+    const volunteerSection = context.sections.find((sec) =>
+      /Volunteer Experience/i.test(sec.heading)
+    );
+
+    expect(volunteerSection).toBeDefined();
+    expect(volunteerSection.sectionClass).toContain('section--volunteer-experience');
+    expect(volunteerSection.headingClass).toContain(
+      'section-heading--volunteer-experience'
+    );
+    expect(volunteerSection.listClass).toContain('section-list--volunteer-experience');
+    expect(volunteerSection.markerClass).toContain('marker--volunteer-experience');
   });
 });
 
