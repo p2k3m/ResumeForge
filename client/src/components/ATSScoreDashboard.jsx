@@ -39,6 +39,50 @@ function summariseSkills(skills, limit = 5) {
   return `${visible.join(', ')}, +${remaining} more`
 }
 
+function normalizeText(value) {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : ''
+  }
+  if (value === null || value === undefined) {
+    return ''
+  }
+  return String(value || '').trim()
+}
+
+function normalizeList(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeText(entry)).filter(Boolean)
+  }
+  const text = normalizeText(value)
+  return text ? [text] : []
+}
+
+function normalizeImprovementSegment(segment = {}) {
+  if (!segment || typeof segment !== 'object') return null
+  const section = normalizeText(segment.section || segment.label || segment.key)
+  const added = normalizeList(segment.added)
+  const removed = normalizeList(segment.removed)
+  const reasons = normalizeList(segment.reason)
+  if (!section && !added.length && !removed.length && !reasons.length) {
+    return null
+  }
+  return { section, added, removed, reasons }
+}
+
+function formatReadableList(items) {
+  const list = Array.isArray(items) ? items.map((item) => normalizeText(item)).filter(Boolean) : []
+  if (!list.length) return ''
+  if (list.length === 1) return list[0]
+  if (list.length === 2) return `${list[0]} and ${list[1]}`
+  return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`
+}
+
+function stripEndingPunctuation(value) {
+  if (typeof value !== 'string') return ''
+  return value.replace(/[.!?]+$/u, '')
+}
+
 function formatDelta(originalScore, enhancedScore) {
   if (typeof originalScore !== 'number' || typeof enhancedScore !== 'number') {
     return null
@@ -115,12 +159,6 @@ function ATSScoreDashboard({ metrics = [], match }) {
       : null
   const hasComparableScores =
     typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number'
-  const improvementNarrative =
-    match?.improvementSummary ||
-    match?.selectionProbabilityRationale ||
-    (hasComparableScores
-      ? `Score moved from ${originalScoreValue}% to ${enhancedScoreValue}%, lifting selection odds by covering more of the JD's required keywords and achievements.`
-      : 'Enhanced resume aligns more closely with the job description, increasing selection odds.')
   const scoreBands = hasComparableScores
     ? [
         {
@@ -181,6 +219,57 @@ function ATSScoreDashboard({ metrics = [], match }) {
       : addedSkills.length > 0
         ? `Now highlighting: ${summariseSkills(addedSkills)}`
         : 'Enhanced draft fully aligns with the JD keywords.'
+
+  const improvementSegments = Array.isArray(match?.improvementSummary) ? match.improvementSummary : []
+  const normalizedImprovementSegments = improvementSegments
+    .map((segment) => normalizeImprovementSegment(segment))
+    .filter(Boolean)
+
+  const improvementDetails = normalizedImprovementSegments.map((segment, index) => {
+    const changeParts = []
+    if (segment.added.length) {
+      const additions = formatReadableList(segment.added)
+      if (additions) {
+        changeParts.push(`Added ${additions}.`)
+      }
+    }
+    if (segment.removed.length) {
+      const removals = formatReadableList(segment.removed)
+      if (removals) {
+        changeParts.push(`Removed ${removals}.`)
+      }
+    }
+    const changeSummary = changeParts.length
+      ? changeParts.join(' ')
+      : 'Refined this area to tighten alignment with the job description.'
+
+    const reasonText = segment.reasons.length
+      ? segment.reasons.join(' ')
+      : 'Keeps your positioning focused on what this employer values most.'
+
+    const focusSource = segment.reasons[0] || segment.added[0] || segment.section || `update ${index + 1}`
+    const interviewFocus = stripEndingPunctuation(focusSource)
+    const interviewAdvice = interviewFocus
+      ? `Interview prep: Prepare a concise example that demonstrates ${interviewFocus}.`
+      : `Interview prep: Prepare a concise example that demonstrates your impact in ${segment.section || 'this area'}.`
+
+    return {
+      id: `${segment.section || 'segment'}-${index}`,
+      section: segment.section || `Update ${index + 1}`,
+      changeSummary,
+      reasonText,
+      interviewAdvice
+    }
+  })
+
+  const improvementNarrative = improvementDetails.length
+    ? improvementDetails
+        .map((detail) => `${detail.section}: ${detail.reasonText}`)
+        .join(' ')
+    : match?.selectionProbabilityRationale ||
+      (hasComparableScores
+        ? `Score moved from ${originalScoreValue}% to ${enhancedScoreValue}%, lifting selection odds by covering more of the JD's required keywords and achievements.`
+        : 'Enhanced resume aligns more closely with the job description, increasing selection odds.')
 
   return (
     <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
@@ -384,6 +473,43 @@ function ATSScoreDashboard({ metrics = [], match }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+      {match && improvementDetails.length > 0 && (
+        <div
+          className="rounded-3xl border border-purple-200/70 bg-white/90 p-6 shadow-lg backdrop-blur"
+          data-testid="improvement-recap-card"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Improvement Recap</p>
+              <h3 className="mt-1 text-lg font-semibold text-purple-900">What changed and why it matters</h3>
+            </div>
+            <InfoTooltip
+              variant="light"
+              align="right"
+              label="How should you use these improvements?"
+              content="Each update highlights what changed, why it lifts your ATS alignment, and how to talk about it when you interview."
+            />
+          </div>
+          <ul className="mt-4 space-y-4">
+            {improvementDetails.map((detail) => (
+              <li
+                key={detail.id}
+                className="rounded-2xl border border-purple-100/80 bg-purple-50/60 p-4 shadow-sm"
+                data-testid="improvement-recap-item"
+              >
+                <p className="text-sm font-semibold text-purple-900">{detail.section}</p>
+                <p className="mt-2 text-sm text-purple-700/95">{detail.changeSummary}</p>
+                <p className="mt-2 text-sm text-purple-700/95" data-testid="improvement-recap-reason">
+                  <span className="font-semibold text-purple-900">Why it matters:</span> {detail.reasonText}
+                </p>
+                <p className="mt-2 text-sm italic text-purple-700/95" data-testid="improvement-recap-interview">
+                  {detail.interviewAdvice}
+                </p>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>
