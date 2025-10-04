@@ -72,21 +72,25 @@ async function main() {
   }
 
   const urlChanged = previous?.url && previous.url !== urlOutput.OutputValue
+  const previousDistributionId = previous?.distributionId
+  const distributionChanged =
+    previousDistributionId && previousDistributionId !== distributionId
 
-  if (
-    previous?.distributionId &&
-    (previous.distributionId !== distributionId || urlChanged)
-  ) {
+  if (previousDistributionId) {
     const callerReference = `resumeforge-${Date.now()}`
     console.log(
-      urlChanged
-        ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
-        : `Invalidating previous CloudFront distribution ${previous.distributionId} (/*)`
+      distributionChanged
+        ? urlChanged
+          ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating previous CloudFront distribution ${previousDistributionId} (/*)`
+          : `Invalidating previous CloudFront distribution ${previousDistributionId} (/*)`
+        : urlChanged
+          ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating CloudFront distribution ${previousDistributionId} for cache busting (/*)`
+          : `Invalidating CloudFront distribution ${previousDistributionId} for cache busting (/*)`
     )
     try {
       await cloudFront.send(
         new CreateInvalidationCommand({
-          DistributionId: previous.distributionId,
+          DistributionId: previousDistributionId,
           InvalidationBatch: {
             CallerReference: callerReference,
             Paths: {
@@ -99,7 +103,7 @@ async function main() {
     } catch (err) {
       if (err?.name === 'NoSuchDistribution' || err?.Code === 'NoSuchDistribution') {
         console.warn(
-          `Skipping invalidation; distribution ${previous.distributionId} no longer exists.`
+          `Skipping invalidation; distribution ${previousDistributionId} no longer exists.`
         )
       } else {
         throw err
