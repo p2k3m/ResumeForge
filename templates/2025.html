@@ -21,21 +21,21 @@
       </header>
       <main class="resume-grid">
         {{#each sections}}
-        <section class="resume-section {{#if @first}}span-2{{/if}} {{sectionClass}}">
+        <section class="resume-section{{#if @first}} span-2{{/if}}{{#if sectionClass}} {{sectionClass}}{{/if}}">
           {{#if heading}}
           <div class="section-header">
-            <h2 class="section-title {{headingClass}}">{{heading}}</h2>
+            <h2 class="section-title{{#if headingClass}} {{headingClass}}{{/if}}">{{heading}}</h2>
             <span class="section-accent"></span>
           </div>
           {{/if}}
           {{#if items}}
-          <ul class="section-list {{listClass}}">
+          <ul class="section-list{{#if listClass}} {{listClass}}{{/if}}">
             {{#each items}}
-            <li class="section-item {{../itemClass}}">
+            <li class="section-item{{#if ../itemClass}} {{../itemClass}}{{/if}}">
               {{#if ../showMarkers}}
-              <span class="bullet {{../markerClass}}">◆</span>
+              <span class="bullet{{#if ../markerClass}} {{../markerClass}}{{/if}}">◆</span>
               {{/if}}
-              <span class="item-content {{../textClass}}">{{{this}}}</span>
+              <span class="item-content{{#if ../textClass}} {{../textClass}}{{/if}}">{{{this}}}</span>
             </li>
             {{/each}}
           </ul>
