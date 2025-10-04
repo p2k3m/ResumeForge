@@ -1,5 +1,6 @@
 import ATSScoreCard from './ATSScoreCard.jsx'
 import InfoTooltip from './InfoTooltip.jsx'
+import { buildMetricTip } from '../utils/actionableAdvice.js'
 
 const gradientPalette = [
   'from-[#5B21B6] via-[#7C3AED] to-[#4C1D95]',
@@ -144,16 +145,17 @@ function ATSScoreDashboard({
       afterRatingLabel: metric?.afterRatingLabel || metric?.ratingLabel,
       deltaText: formatDelta(beforeScore, afterScore)
     }
+    const metricWithTip = { ...enrichedMetric, tip: buildMetricTip(enrichedMetric, { match }) }
 
     if (!metricActionMap || typeof onImproveMetric !== 'function') {
-      return { metric: enrichedMetric, accent, improvement: null }
+      return { metric: metricWithTip, accent, improvement: null }
     }
 
     const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
     const config = category ? metricActionMap.get(category) || null : null
 
     if (!config || !config.actionKey) {
-      return { metric: enrichedMetric, accent, improvement: null }
+      return { metric: metricWithTip, accent, improvement: null }
     }
 
     const busy = improvementState.activeKey === config.actionKey
@@ -165,7 +167,7 @@ function ATSScoreDashboard({
     const lockMessage = locked ? improvementState.lockMessage || '' : ''
 
     return {
-      metric: enrichedMetric,
+      metric: metricWithTip,
       accent,
       improvement: {
         key: config.actionKey,

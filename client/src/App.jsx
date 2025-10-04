@@ -21,6 +21,7 @@ import qrOptimisedResume from './assets/qr-optimised-resume.svg'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 import { normalizeOutputFiles } from './utils/normalizeOutputFiles.js'
+import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Could not enhance CV; your formatting remained untouched.'
@@ -278,46 +279,8 @@ function deriveDownloadFileName(file, presentation = {}, response) {
   return `${base}${extension}`
 }
 
-function normaliseReasonLines(reason) {
-  if (!reason) return []
-  if (Array.isArray(reason)) {
-    return reason
-      .map((line) => (typeof line === 'string' ? line.trim() : String(line || '').trim()))
-      .filter(Boolean)
-  }
-  if (typeof reason === 'string') {
-    const trimmed = reason.trim()
-    return trimmed ? [trimmed] : []
-  }
-  return []
-}
-
 function buildActionableHint(segment) {
-  if (!segment || typeof segment !== 'object') return null
-  const sectionLabel = [segment.section, segment.label, segment.key]
-    .map((value) => (typeof value === 'string' ? value.trim() : ''))
-    .find(Boolean)
-  const addedText = formatReadableList(Array.isArray(segment.added) ? segment.added : [])
-  const removedText = formatReadableList(Array.isArray(segment.removed) ? segment.removed : [])
-  const reasonText = normaliseReasonLines(segment.reason).join(' ')
-
-  const detailParts = []
-  if (addedText) {
-    detailParts.push(`Added ${addedText}`)
-  }
-  if (removedText) {
-    detailParts.push(`Reworked ${removedText}`)
-  }
-  if (reasonText) {
-    detailParts.push(reasonText)
-  }
-
-  if (!detailParts.length) {
-    return null
-  }
-
-  const detail = detailParts.join(' • ')
-  return sectionLabel ? `${sectionLabel}: ${detail}` : detail
+  return buildImprovementHintFromSegment(segment)
 }
 
 const TEMPLATE_PREFERENCE_STORAGE_KEY = 'resumeForge.templatePreferences'

@@ -163,12 +163,13 @@ describe('ATSScoreDashboard', () => {
     )
   })
 
-  it('handles absent tips gracefully', () => {
+  it('provides actionable tips when the API omits them', () => {
     const minimalMetrics = [{ category: 'Structure', score: 50, ratingLabel: 'Fair' }]
     render(<ATSScoreDashboard metrics={minimalMetrics} baselineMetrics={baselineMetrics} />)
 
     const card = screen.getByTestId('ats-score-card')
     expect(card).toBeInTheDocument()
-    expect(within(card).queryByTestId('metric-tip')).not.toBeInTheDocument()
+    const tip = within(card).getByTestId('metric-tip')
+    expect(tip).toHaveTextContent('Tighten formatting')
   })
 })
