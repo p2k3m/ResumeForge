@@ -2,6 +2,8 @@
 
 This guide walks a candidate through ResumeForge end to end so every action has a clearly defined outcome.
 
+> **Start here:** [`https://d3exampleabcdef8.cloudfront.net`](https://d3exampleabcdef8.cloudfront.net) is the active CloudFront entry point. Share this link with candidates so they always land on the latest deployment.
+
 ## 1. Upload a résumé
 - **What to do:** Drag-and-drop or browse for a PDF, DOC, or DOCX résumé.
 - **Behind the scenes:** The file is streamed straight to S3 and a DynamoDB session is created with hashed personal data. The portal immediately validates the file type and page structure.

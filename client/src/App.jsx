@@ -178,6 +178,32 @@ function buildActionableHint(segment) {
   return sectionLabel ? `${sectionLabel}: ${detail}` : detail
 }
 
+function formatCloudfrontDisplay(url) {
+  if (typeof url !== 'string') {
+    return ''
+  }
+  return url.replace(/^https?:\/\//iu, '')
+}
+
+function formatCloudfrontUpdatedAt(timestamp) {
+  if (!timestamp || typeof timestamp !== 'string') {
+    return ''
+  }
+  try {
+    const date = new Date(timestamp)
+    if (Number.isNaN(date.getTime())) {
+      return ''
+    }
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    }).format(date)
+  } catch (err) {
+    console.error('Unable to format CloudFront updated timestamp', err)
+    return ''
+  }
+}
+
 function formatEnhanceAllSummary(entries) {
   if (!Array.isArray(entries) || !entries.length) {
     return ''
@@ -1164,9 +1190,14 @@ function App() {
   const [coverLetterDownloadError, setCoverLetterDownloadError] = useState('')
   const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
   const [resumeHistory, setResumeHistory] = useState([])
+  const [publishedCloudfront, setPublishedCloudfront] = useState(null)
+  const [publishedCloudfrontError, setPublishedCloudfrontError] = useState('')
+  const [isPublishedCloudfrontLoading, setIsPublishedCloudfrontLoading] = useState(false)
+  const [publishedCloudfrontCopyStatus, setPublishedCloudfrontCopyStatus] = useState('')
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
+  const publishedCloudfrontCopyTimeoutRef = useRef(null)
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
@@ -1191,6 +1222,30 @@ function App() {
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
   const improvementBusy = Boolean(activeImprovement)
+  const publishedCloudfrontUrl =
+    typeof publishedCloudfront?.url === 'string' ? publishedCloudfront.url.trim() : ''
+  const publishedCloudfrontUpdatedAt =
+    typeof publishedCloudfront?.updatedAt === 'string' ? publishedCloudfront.updatedAt : ''
+  const publishedCloudfrontDisplay = useMemo(
+    () => formatCloudfrontDisplay(publishedCloudfrontUrl),
+    [publishedCloudfrontUrl]
+  )
+  const publishedCloudfrontUpdatedLabel = useMemo(
+    () => formatCloudfrontUpdatedAt(publishedCloudfrontUpdatedAt),
+    [publishedCloudfrontUpdatedAt]
+  )
+  const publishedCloudfrontCopyFeedback = useMemo(() => {
+    switch (publishedCloudfrontCopyStatus) {
+      case 'copied':
+        return 'Copied to clipboard.'
+      case 'error':
+        return 'Copy failed. Use your browser shortcuts to copy the link.'
+      case 'unsupported':
+        return 'Clipboard access is unavailable in this browser.'
+      default:
+        return ''
+    }
+  }, [publishedCloudfrontCopyStatus])
 
   const resumeHistoryMap = useMemo(() => {
     const map = new Map()
@@ -1373,6 +1428,37 @@ function App() {
       setEnhanceAllSummaryText('')
     }
   }, [enhanceAllSummaryText, improvementResults])
+
+  const handleCopyPublishedCloudfront = useCallback(async () => {
+    if (!publishedCloudfrontUrl) {
+      return
+    }
+
+    if (publishedCloudfrontCopyTimeoutRef.current) {
+      clearTimeout(publishedCloudfrontCopyTimeoutRef.current)
+      publishedCloudfrontCopyTimeoutRef.current = null
+    }
+
+    if (typeof navigator === 'undefined' || !navigator?.clipboard?.writeText) {
+      setPublishedCloudfrontCopyStatus('unsupported')
+      publishedCloudfrontCopyTimeoutRef.current = setTimeout(() => {
+        setPublishedCloudfrontCopyStatus('')
+      }, 2500)
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(publishedCloudfrontUrl)
+      setPublishedCloudfrontCopyStatus('copied')
+    } catch (err) {
+      console.error('Unable to copy CloudFront URL to clipboard', err)
+      setPublishedCloudfrontCopyStatus('error')
+    }
+
+    publishedCloudfrontCopyTimeoutRef.current = setTimeout(() => {
+      setPublishedCloudfrontCopyStatus('')
+    }, 2500)
+  }, [publishedCloudfrontUrl])
 
   const handleTemplateSelect = useCallback(
     (templateId) => {
@@ -1755,6 +1841,81 @@ function App() {
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
+
+  useEffect(() => {
+    if (publishedCloudfrontCopyTimeoutRef.current) {
+      clearTimeout(publishedCloudfrontCopyTimeoutRef.current)
+    }
+    return () => {
+      if (publishedCloudfrontCopyTimeoutRef.current) {
+        clearTimeout(publishedCloudfrontCopyTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    let isSubscribed = true
+    const controller = new AbortController()
+
+    async function loadPublishedCloudfront() {
+      setIsPublishedCloudfrontLoading(true)
+      setPublishedCloudfrontError('')
+
+      try {
+        const response = await fetch(
+          buildApiUrl(API_BASE_URL, '/api/published-cloudfront'),
+          { signal: controller.signal }
+        )
+
+        if (!response.ok) {
+          let message = 'Unable to load the published CloudFront domain.'
+          try {
+            const errorPayload = await response.json()
+            if (errorPayload && typeof errorPayload.message === 'string') {
+              message = errorPayload.message
+            }
+          } catch (err) {
+            console.error('Failed to parse CloudFront error response', err)
+          }
+
+          if (isSubscribed) {
+            setPublishedCloudfront(null)
+            setPublishedCloudfrontError(message)
+            setPublishedCloudfrontCopyStatus('')
+          }
+          return
+        }
+
+        const data = await response.json()
+        if (!isSubscribed) {
+          return
+        }
+
+        setPublishedCloudfront(data?.cloudfront || null)
+        setPublishedCloudfrontError('')
+        setPublishedCloudfrontCopyStatus('')
+      } catch (err) {
+        if (controller.signal.aborted || !isSubscribed) {
+          return
+        }
+        console.error('Failed to load published CloudFront metadata', err)
+        setPublishedCloudfront(null)
+        setPublishedCloudfrontError('Unable to load the published CloudFront domain.')
+        setPublishedCloudfrontCopyStatus('')
+      } finally {
+        if (isSubscribed) {
+          setIsPublishedCloudfrontLoading(false)
+        }
+      }
+    }
+
+    loadPublishedCloudfront()
+
+    return () => {
+      isSubscribed = false
+      controller.abort()
+    }
+  }, [API_BASE_URL])
 
   useEffect(() => {
     if (!previewSuggestion || typeof window === 'undefined') {
@@ -3518,6 +3679,69 @@ function App() {
             breakdown with tailored improvements you can accept or reject.
           </p>
         </header>
+
+        <section className="rounded-2xl border border-slate-200/70 bg-white/70 shadow-sm p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="space-y-2 md:max-w-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+                Active CloudFront domain
+              </p>
+              {isPublishedCloudfrontLoading ? (
+                <p className="text-sm text-slate-600">Loading active domain…</p>
+              ) : publishedCloudfrontUrl ? (
+                <div className="space-y-1">
+                  <a
+                    href={publishedCloudfrontUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-lg font-semibold text-purple-800 hover:text-purple-900 break-all"
+                  >
+                    {publishedCloudfrontDisplay || publishedCloudfrontUrl}
+                  </a>
+                  <p className="text-sm text-slate-600">
+                    Share this URL with candidates so they always land on the active deployment.
+                  </p>
+                  {publishedCloudfrontUpdatedLabel && (
+                    <p className="text-xs text-slate-500">
+                      Published {publishedCloudfrontUpdatedLabel}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className={`text-sm ${publishedCloudfrontError ? 'text-rose-600' : 'text-slate-600'}`}>
+                  {publishedCloudfrontError ||
+                    'No CloudFront URL has been published yet. Run npm run publish:cloudfront-url to broadcast the latest domain.'}
+                </p>
+              )}
+            </div>
+            {publishedCloudfrontUrl && (
+              <div className="flex flex-col items-start gap-2 md:items-end">
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleCopyPublishedCloudfront}
+                    className="inline-flex items-center justify-center rounded-full bg-purple-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2"
+                  >
+                    {publishedCloudfrontCopyStatus === 'copied' ? 'Copied!' : 'Copy link'}
+                  </button>
+                  <a
+                    href={publishedCloudfrontUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-full border border-purple-200 px-4 py-2 text-sm font-semibold text-purple-700 hover:border-purple-300 hover:text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-200 focus:ring-offset-2"
+                  >
+                    Open domain
+                  </a>
+                </div>
+                {publishedCloudfrontCopyFeedback && (
+                  <p className="text-xs text-slate-500 md:text-right">
+                    {publishedCloudfrontCopyFeedback}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section className="rounded-3xl border border-slate-200/80 bg-white/70 p-6 shadow-lg">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
