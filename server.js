@@ -205,6 +205,14 @@ function setChromiumLauncher(fn) {
   }
 }
 
+function setS3Client(client) {
+  if (client && typeof client.send === 'function') {
+    s3Client = client;
+  } else if (client === null) {
+    s3Client = new S3Client({ region });
+  }
+}
+
 async function getSharedGenerativeModel() {
   if (sharedGenerativeModelPromise) {
     return sharedGenerativeModelPromise;
@@ -1516,7 +1524,7 @@ const configuredRegion =
 process.env.AWS_REGION = configuredRegion;
 
 const region = configuredRegion;
-const s3Client = new S3Client({ region });
+let s3Client = new S3Client({ region });
 errorLogS3Client = s3Client;
 errorLogBucket =
   runtimeConfigSnapshot?.S3_BUCKET ||
@@ -9951,11 +9959,17 @@ async function handleImprovementRequest(type, req, res) {
   const logContext = { requestId, jobId: jobIdInput, type };
 
   const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrlInput);
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+  let dynamo = null;
+  let existingRecord = {};
+  let storedBucket = '';
+  let originalUploadKey = '';
+  let logKey = '';
+  let existingChangeLog = [];
   let jobStatus = '';
 
   if (!isTestEnvironment) {
-    const dynamo = new DynamoDBClient({ region });
-    const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+    dynamo = new DynamoDBClient({ region });
 
     try {
       await ensureDynamoTableExists({ dynamo, tableName });
@@ -9977,8 +9991,6 @@ async function handleImprovementRequest(type, req, res) {
         new GetItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
-          ProjectionExpression: '#status, jobId',
-          ExpressionAttributeNames: { '#status': 'status' },
         })
       );
       const item = record.Item || {};
@@ -9991,6 +10003,16 @@ async function handleImprovementRequest(type, req, res) {
         );
       }
       jobStatus = item?.status?.S || '';
+      existingRecord = item;
+      storedBucket = item.s3Bucket?.S || '';
+      originalUploadKey = item.s3Key?.S || '';
+      const existingPrefix = originalUploadKey
+        ? originalUploadKey.replace(/[^/]+$/, '')
+        : '';
+      if (existingPrefix) {
+        logKey = `${existingPrefix}logs/processing.jsonl`;
+      }
+      existingChangeLog = parseDynamoChangeLog(item.changeLog);
     } catch (err) {
       logStructured('error', 'improvement_job_context_lookup_failed', {
         ...logContext,
@@ -10054,6 +10076,35 @@ async function handleImprovementRequest(type, req, res) {
   const manualCertificates = Array.isArray(payload.manualCertificates)
     ? payload.manualCertificates
     : parseManualCertificates(payload.manualCertificates);
+  const linkedinData =
+    typeof payload.linkedinData === 'object' && payload.linkedinData
+      ? payload.linkedinData
+      : {};
+  const credlyProfileUrl =
+    typeof payload.credlyProfileUrl === 'string' ? payload.credlyProfileUrl.trim() : '';
+  const credlyCertifications = Array.isArray(payload.credlyCertifications)
+    ? payload.credlyCertifications
+    : [];
+  const credlyStatus =
+    typeof payload.credlyStatus === 'object' && payload.credlyStatus
+      ? {
+          attempted:
+            typeof payload.credlyStatus.attempted === 'boolean'
+              ? payload.credlyStatus.attempted
+              : Boolean(credlyProfileUrl),
+          success: Boolean(payload.credlyStatus.success),
+          manualEntryRequired: Boolean(payload.credlyStatus.manualEntryRequired),
+          message:
+            typeof payload.credlyStatus.message === 'string'
+              ? payload.credlyStatus.message
+              : '',
+        }
+      : {
+          attempted: Boolean(credlyProfileUrl),
+          success: false,
+          manualEntryRequired: false,
+          message: '',
+        };
 
   try {
     const result = await runTargetedImprovement(type, {
@@ -10244,12 +10295,149 @@ async function handleImprovementRequest(type, req, res) {
       };
     }
 
+    let assetUrls = [];
+    let assetUrlExpiry = 0;
+    let templateContextOutput;
+
+    try {
+      let secrets;
+      try {
+        secrets = getSecrets();
+      } catch (configErr) {
+        const missing = extractMissingConfig(configErr);
+        logStructured('error', 'targeted_improvement_configuration_failed', {
+          ...logContext,
+          error: serializeError(configErr),
+          missing,
+        });
+        sendError(
+          res,
+          500,
+          'CONFIGURATION_ERROR',
+          describeConfigurationError(configErr),
+          missing.length ? { missing } : undefined
+        );
+        return;
+      }
+
+      let bucket = secrets.S3_BUCKET || storedBucket;
+      const geminiApiKey = secrets.GEMINI_API_KEY;
+      if (!bucket) {
+        logStructured('error', 'targeted_improvement_bucket_missing', logContext);
+        sendError(
+          res,
+          500,
+          'STORAGE_UNAVAILABLE',
+          'Storage bucket is not configured for final generation.'
+        );
+        return;
+      }
+
+      const s3 = s3Client;
+      const applicantName = extractName(updatedResumeText);
+      const sanitizedName = sanitizeName(applicantName) || 'candidate';
+      const jobKeySegment = sanitizeJobSegment(jobIdInput);
+      const dateSegment = new Date().toISOString().slice(0, 10);
+      const prefix = originalUploadKey
+        ? originalUploadKey.replace(/[^/]+$/, '')
+        : `${sanitizedName}/cv/${dateSegment}/${jobKeySegment ? `${jobKeySegment}/` : ''}`;
+      const effectiveOriginalUploadKey =
+        originalUploadKey || `${prefix}${sanitizedName}.pdf`;
+      const effectiveLogKey = logKey || `${prefix}logs/processing.jsonl`;
+
+      let templateContextInput =
+        typeof payload.templateContext === 'object' && payload.templateContext
+          ? { ...payload.templateContext }
+          : {};
+      templateContextInput.templateHistory = normalizeTemplateHistory(
+        templateContextInput.templateHistory,
+        [
+          templateContextInput.selectedTemplate,
+          templateContextInput.template1,
+          templateContextInput.template2,
+        ]
+      );
+
+      const selection = selectTemplates({
+        defaultCvTemplate: templateContextInput.template1 || CV_TEMPLATES[0],
+        defaultClTemplate: templateContextInput.coverTemplate1 || CL_TEMPLATES[0],
+        template1: templateContextInput.template1,
+        template2: templateContextInput.template2,
+        coverTemplate1: templateContextInput.coverTemplate1,
+        coverTemplate2: templateContextInput.coverTemplate2,
+        cvTemplates: templateContextInput.templates,
+        clTemplates: templateContextInput.coverTemplates,
+        preferredTemplate:
+          templateContextInput.selectedTemplate || templateContextInput.template1,
+      });
+
+      const templateParamConfig = parseTemplateParamsConfig(payload.templateParams);
+
+      const enhancedDocs = await generateEnhancedDocumentsResponse({
+        res,
+        s3,
+        dynamo,
+        tableName,
+        bucket,
+        logKey: effectiveLogKey,
+        jobId: jobIdInput,
+        requestId,
+        logContext: { ...logContext, route: `improvement:${type}` },
+        resumeText: updatedResumeText,
+        originalResumeTextInput: resumeText,
+        jobDescription,
+        jobSkills,
+        resumeSkills: updatedResumeSkillsList,
+        originalMatch: overallAfterMatch,
+        linkedinProfileUrl: linkedinProfileUrlInput,
+        linkedinData,
+        credlyProfileUrl,
+        credlyCertifications,
+        credlyStatus,
+        manualCertificates,
+        templateContextInput,
+        templateParamConfig,
+        applicantName,
+        sanitizedName,
+        anonymizedLinkedIn,
+        originalUploadKey: effectiveOriginalUploadKey,
+        selection,
+        geminiApiKey,
+        changeLogEntries: existingChangeLog,
+        existingRecord,
+        userId: res.locals.userId,
+      });
+
+      if (!enhancedDocs) {
+        return;
+      }
+
+      assetUrls = Array.isArray(enhancedDocs.urls) ? enhancedDocs.urls : [];
+      templateContextOutput = enhancedDocs.templateContext;
+      assetUrlExpiry =
+        assetUrls.length > 0
+          ? enhancedDocs.urlExpiresInSeconds || URL_EXPIRATION_SECONDS
+          : 0;
+    } catch (assetErr) {
+      logStructured('error', 'targeted_improvement_asset_generation_failed', {
+        ...logContext,
+        error: serializeError(assetErr),
+      });
+      sendError(
+        res,
+        500,
+        'IMPROVEMENT_DOCUMENT_GENERATION_FAILED',
+        'Unable to generate enhanced documents for the applied improvement.'
+      );
+      return;
+    }
+
     logStructured('info', 'targeted_improvement_completed', {
       ...logContext,
       confidence: result.confidence,
       appliedSkills: missingSkills.length,
     });
-    return res.json({
+    const responsePayload = {
       success: true,
       type,
       title: IMPROVEMENT_CONFIG[type]?.title || '',
@@ -10269,7 +10457,15 @@ async function handleImprovementRequest(type, req, res) {
       selectionProbabilityBefore: normalizedSelectionProbabilityBefore,
       selectionProbabilityAfter: normalizedSelectionProbabilityAfter,
       selectionProbabilityDelta: normalizedSelectionProbabilityDelta,
-    });
+      urlExpiresInSeconds: assetUrlExpiry,
+      urls: assetUrls,
+    };
+
+    if (templateContextOutput) {
+      responsePayload.templateContext = templateContextOutput;
+    }
+
+    return res.json(responsePayload);
   } catch (err) {
     logStructured('error', 'targeted_improvement_failed', {
       ...logContext,
@@ -10940,7 +11136,7 @@ async function generateEnhancedDocumentsResponse({
     },
   };
   const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
-  const downloadsEnabled = allowedOriginsForDownloads.length > 0;
+  const downloadsRestricted = allowedOriginsForDownloads.length === 0;
   const urls = [];
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
@@ -10952,7 +11148,15 @@ async function generateEnhancedDocumentsResponse({
   const recordLocationRegion = existingRecord?.locationRegion?.S || '';
   const recordLocationCountry = existingRecord?.locationCountry?.S || '';
 
-  if (downloadsEnabled && originalUploadKey) {
+  if (downloadsRestricted) {
+    logStructured('info', 'generation_downloads_restricted', {
+      ...logContext,
+      reason: 'no_allowed_origins',
+      allowedOriginsCount: allowedOriginsForDownloads.length,
+    });
+  }
+
+  if (originalUploadKey) {
     try {
       const originalSignedUrl = await getSignedUrl(
         s3,
@@ -10971,118 +11175,110 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  if (downloadsEnabled) {
-    for (const [name, entry] of Object.entries(outputs)) {
-      const templateText = entry?.templateText || entry?.text;
-      if (!templateText) continue;
-      const isCvDocument = name === 'version1' || name === 'version2';
-      const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
-      let fileName;
-      if (name === 'version1') {
-        fileName = sanitizedName;
-      } else if (name === 'version2') {
-        fileName = `${sanitizedName}_2`;
-      } else {
-        fileName = name;
-      }
-      const subdir = isCvDocument
-        ? 'cv/'
-        : isCoverLetter
-          ? 'cover_letter/'
-          : '';
-      const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
-      const primaryTemplate = isCvDocument
-        ? name === 'version1'
-          ? template1
-          : template2
-        : isCoverLetter
-          ? name === 'cover_letter1'
-            ? coverTemplate1
-            : coverTemplate2
-          : template1;
+  for (const [name, entry] of Object.entries(outputs)) {
+    const templateText = entry?.templateText || entry?.text;
+    if (!templateText) continue;
+    const isCvDocument = name === 'version1' || name === 'version2';
+    const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
+    let fileName;
+    if (name === 'version1') {
+      fileName = sanitizedName;
+    } else if (name === 'version2') {
+      fileName = `${sanitizedName}_2`;
+    } else {
+      fileName = name;
+    }
+    const subdir = isCvDocument
+      ? 'cv/'
+      : isCoverLetter
+        ? 'cover_letter/'
+        : '';
+    const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
+    const primaryTemplate = isCvDocument
+      ? name === 'version1'
+        ? template1
+        : template2
+      : isCoverLetter
+        ? name === 'cover_letter1'
+          ? coverTemplate1
+          : coverTemplate2
+        : template1;
 
-      const resolvedTemplateParams = resolveTemplateParamsConfig(
-        templateParamsConfig,
-        {
-          resumeExperience,
-          linkedinExperience,
-          resumeEducation,
-          linkedinEducation,
-          knownCertificates,
-          jobSkills,
-          project: projectText,
-          jobTitle: versionsContext.jobTitle,
-        }
-      );
-
-      const templateOptions = {
-        jobSkills,
+    const resolvedTemplateParams = resolveTemplateParamsConfig(
+      templateParamsConfig,
+      {
+        resumeExperience,
         linkedinExperience,
         resumeEducation,
         linkedinEducation,
-        resumeCertifications,
-        linkedinCertifications,
-        credlyCertifications,
-        credlyProfileUrl,
-        jobTitle: versionsContext.jobTitle,
+        knownCertificates,
+        jobSkills,
         project: projectText,
-        contactLines: contactDetails.contactLines,
-        contactDetails,
-        email: contactDetails.email,
-        phone: contactDetails.phone,
-        cityState: contactDetails.cityState,
-        linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
-        ...sectionPreservation,
-        templateParams: resolvedTemplateParams,
-        enhancementTokenMap,
-      };
-
-      if (isCvDocument) {
-        templateOptions.resumeExperience = resumeExperience;
-      } else if (isCoverLetter) {
-        templateOptions.skipRequiredSections = true;
+        jobTitle: versionsContext.jobTitle,
       }
+    );
 
-      const pdfBuffer = await generatePdf(
-        templateText,
-        primaryTemplate,
-        templateOptions,
-        generativeModel
-      );
+    const templateOptions = {
+      jobSkills,
+      linkedinExperience,
+      resumeEducation,
+      linkedinEducation,
+      resumeCertifications,
+      linkedinCertifications,
+      credlyCertifications,
+      credlyProfileUrl,
+      jobTitle: versionsContext.jobTitle,
+      project: projectText,
+      contactLines: contactDetails.contactLines,
+      contactDetails,
+      email: contactDetails.email,
+      phone: contactDetails.phone,
+      cityState: contactDetails.cityState,
+      linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
+      ...sectionPreservation,
+      templateParams: resolvedTemplateParams,
+      enhancementTokenMap,
+    };
 
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: pdfBuffer,
-          ContentType: 'application/pdf',
-        })
-      );
-
-      uploadedArtifacts.push({ type: name, key });
-
-      const signedUrl = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-        { expiresIn: URL_EXPIRATION_SECONDS }
-      );
-      const expiresAt = new Date(
-        Date.now() + URL_EXPIRATION_SECONDS * 1000
-      ).toISOString();
-      const urlEntry = { type: name, url: signedUrl, expiresAt };
-      if (entry?.text) {
-        urlEntry.text = entry.text;
-      } else if (name !== 'original_upload') {
-        urlEntry.text = '';
-      }
-      urls.push(urlEntry);
+    if (isCvDocument) {
+      templateOptions.resumeExperience = resumeExperience;
+    } else if (isCoverLetter) {
+      templateOptions.skipRequiredSections = true;
     }
-  } else {
-    logStructured('info', 'generation_downloads_skipped', {
-      ...logContext,
-      reason: 'no_allowed_origins',
-      allowedOriginsCount: allowedOriginsForDownloads.length,
-    });
+
+    const pdfBuffer = await generatePdf(
+      templateText,
+      primaryTemplate,
+      templateOptions,
+      generativeModel
+    );
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: pdfBuffer,
+        ContentType: 'application/pdf',
+      })
+    );
+
+    uploadedArtifacts.push({ type: name, key });
+
+    const signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      { expiresIn: URL_EXPIRATION_SECONDS }
+    );
+    const expiresAt = new Date(
+      Date.now() + URL_EXPIRATION_SECONDS * 1000
+    ).toISOString();
+    const urlEntry = { type: name, url: signedUrl, expiresAt };
+    if (entry?.text) {
+      urlEntry.text = entry.text;
+    } else if (name !== 'original_upload') {
+      urlEntry.text = '';
+    }
+    urls.push(urlEntry);
   }
 
   const textArtifactPrefix = `${generatedPrefix}artifacts/`;
@@ -11161,7 +11357,7 @@ async function generateEnhancedDocumentsResponse({
     },
   });
 
-  if (downloadsEnabled && urls.length === 0) {
+  if (urls.length === 0) {
     await logEvent({
       s3,
       bucket,
@@ -13253,6 +13449,7 @@ export {
   generatePdf,
   setGeneratePdf,
   setChromiumLauncher,
+  setS3Client,
   parseContent,
   parseLine,
   ensureRequiredSections,
