@@ -7487,16 +7487,6 @@ function buildSelectionInsights(context = {}) {
     manualCertificatesRequired = false,
   } = context;
 
-  const metrics = Array.isArray(scoreBreakdown)
-    ? scoreBreakdown
-    : scoreBreakdownToArray(scoreBreakdown);
-  const metricScores = metrics
-    .map((metric) => (typeof metric?.score === 'number' ? metric.score : null))
-    .filter((score) => Number.isFinite(score));
-  const metricAverage = metricScores.length
-    ? metricScores.reduce((sum, value) => sum + value, 0) / metricScores.length
-    : 0;
-
   const targetTitle = String(jobTitle || '').trim();
   const normalizeTitle = (value) =>
     value
@@ -7621,6 +7611,16 @@ function buildSelectionInsights(context = {}) {
     tasksMessage = 'Highlight JD-specific responsibilities with quantifiable results to improve task alignment.';
   }
 
+  const computeTaskAlignmentScore = (value) => {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    const normalized = Math.round(clamp(value, 0, 100));
+    const floor = value >= 80 ? 80 : value >= 55 ? 55 : 35;
+    return Math.max(Math.min(normalized, 95), floor);
+  };
+  const tasksScore = computeTaskAlignmentScore(impactScore);
+
   const crispnessScore = Number(scoreBreakdown?.crispness?.score) || 0;
   const otherScore = Number(scoreBreakdown?.otherQuality?.score) || 0;
   const highlightScore = Math.round((crispnessScore + otherScore) / 2) || 0;
@@ -7664,7 +7664,6 @@ function buildSelectionInsights(context = {}) {
     return Math.round(clamp(value, 0, 100));
   };
 
-  const tasksScore = tasksStatus === 'unknown' ? impactScore : Math.max(Math.min(impactScore, 95), tasksStatus === 'match' ? 80 : tasksStatus === 'partial' ? 55 : 35);
   const jobFitScores = [
     {
       key: 'designation',
@@ -7742,15 +7741,6 @@ function buildSelectionInsights(context = {}) {
       )
     : 0;
 
-  const baselineMetrics = Array.isArray(baselineScoreBreakdown)
-    ? baselineScoreBreakdown
-    : scoreBreakdownToArray(baselineScoreBreakdown || {});
-  const baselineMetricScores = baselineMetrics
-    .map((metric) => (typeof metric?.score === 'number' ? metric.score : null))
-    .filter((score) => Number.isFinite(score));
-  const baselineMetricAverage = baselineMetricScores.length
-    ? baselineMetricScores.reduce((sum, value) => sum + value, 0) / baselineMetricScores.length
-    : metricAverage;
   const baselineImpactScore = Number(baselineScoreBreakdown?.impact?.score) || impactScore;
   const baselineCrispness = Number(baselineScoreBreakdown?.crispness?.score) || crispnessScore;
   const baselineOther = Number(baselineScoreBreakdown?.otherQuality?.score) || otherScore;
@@ -7764,46 +7754,32 @@ function buildSelectionInsights(context = {}) {
       ? 'partial'
       : 'match';
 
-  const computeProbability = ({
-    average,
-    coverage,
-    experience,
-    designation,
-    impact,
-    highlight,
-    certification,
-  }) => {
-    let probability =
-      average * 0.3 +
-      coverage * 0.25 +
-      experience * 0.15 +
-      designation * 0.1 +
-      (impact || average) * 0.1 +
-      certification * 0.05 +
-      highlight * 0.05;
-    probability = clamp(Math.round(probability), 5, 97);
+  const computeProbability = ({ designation, skills, experience, tasks, highlights }) => {
+    const metrics = [designation, skills, experience, tasks, highlights]
+      .map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : null))
+      .filter((value) => value !== null);
+    const average = metrics.length
+      ? metrics.reduce((total, value) => total + value, 0) / metrics.length
+      : 0;
+    const probability = clamp(Math.round(average), 5, 97);
     const level = probability >= 75 ? 'High' : probability >= 55 ? 'Medium' : 'Low';
     return { probability, level };
   };
 
   const { probability: baselineProbability, level: baselineLevel } = computeProbability({
-    average: baselineMetricAverage,
-    coverage: originalCoverage,
-    experience: experienceScore,
     designation: baselineDesignation.designationScore,
-    impact: baselineImpactScore,
-    highlight: baselineHighlightScore,
-    certification: certificationScore,
+    skills: originalCoverage,
+    experience: experienceScore,
+    tasks: computeTaskAlignmentScore(baselineImpactScore),
+    highlights: baselineHighlightScore,
   });
 
   const { probability, level } = computeProbability({
-    average: metricAverage,
-    coverage: skillCoverage,
-    experience: experienceScore,
     designation: designationScore,
-    impact: impactScore,
-    highlight: highlightScore,
-    certification: certificationScore,
+    skills: skillCoverage,
+    experience: experienceScore,
+    tasks: tasksScore,
+    highlights: highlightScore,
   });
 
   const probabilityMessage = buildProbabilityNarrative({
