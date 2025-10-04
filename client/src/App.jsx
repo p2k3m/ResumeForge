@@ -2619,7 +2619,10 @@ function App() {
         return
       }
 
-      const outputFilesValue = normalizeOutputFiles(data.urls)
+      const outputFilesValue = normalizeOutputFiles(data.urls, {
+        defaultExpiresAt: data?.urlExpiresAt,
+        defaultExpiresInSeconds: data?.urlExpiresInSeconds,
+      })
       setOutputFiles(outputFilesValue)
       const { drafts: analysisCoverLetterDrafts, originals: analysisCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(outputFilesValue)
@@ -2833,7 +2836,10 @@ function App() {
       : []
     setScoreBreakdown(scoreBreakdownValue)
 
-    const outputFilesValue = normalizeOutputFiles(snapshot.outputFiles)
+    const outputFilesValue = normalizeOutputFiles(snapshot.outputFiles, {
+      defaultExpiresAt: snapshot?.urlExpiresAt,
+      defaultExpiresInSeconds: snapshot?.urlExpiresInSeconds,
+    })
     setOutputFiles(outputFilesValue)
 
     const snapshotCoverDrafts =
@@ -3768,7 +3774,10 @@ function App() {
       }
 
       const data = await response.json()
-      const urlsValue = normalizeOutputFiles(data.urls)
+      const urlsValue = normalizeOutputFiles(data.urls, {
+        defaultExpiresAt: data?.urlExpiresAt,
+        defaultExpiresInSeconds: data?.urlExpiresInSeconds,
+      })
       setOutputFiles(urlsValue)
       const { drafts: generatedCoverLetterDrafts, originals: generatedCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(urlsValue)
