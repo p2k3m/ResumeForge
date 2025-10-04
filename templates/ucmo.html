@@ -39,6 +39,13 @@
     .tab { display:inline-block; width:1.5em; }
     .tab + p { margin-top: 0; }
     strong { font-weight: 700; }
+
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      margin-left: 0;
+    }
   </style>
 </head>
 <body>
@@ -55,14 +62,14 @@
     <h1>{{name}}</h1>
   </header>
   {{#each sections}}
-  <section>
+  <section class="{{sectionClass}}">
     {{#if heading}}
-    <h2>{{heading}}</h2>
+    <h2 class="{{headingClass}}">{{heading}}</h2>
     {{/if}}
     {{#if items}}
-      <ul>
+      <ul class="{{listClass}}">
         {{#each items}}
-          <li>{{{this}}}</li>
+          <li class="{{../itemClass}}">{{{this}}}</li>
         {{/each}}
       </ul>
     {{/if}}

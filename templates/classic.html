@@ -185,6 +185,21 @@
       font-size: 18px;
     }
 
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      padding-left: 0;
+    }
+
+    .section-item--contact::before,
+    .section-item--summary::before,
+    .section-item--skills::before,
+    .section-item--certifications::before {
+      content: '';
+      display: none;
+    }
+
     strong {
       color: var(--ink);
       font-weight: 700;
@@ -239,14 +254,14 @@
     </header>
     <div class="sections">
       {{#each sections}}
-      <section>
+      <section class="{{sectionClass}}">
         {{#if heading}}
-        <h2>{{heading}}</h2>
+        <h2 class="{{headingClass}}">{{heading}}</h2>
         {{/if}}
         {{#if items}}
-        <ul>
+        <ul class="{{listClass}}">
           {{#each items}}
-          <li>{{{this}}}</li>
+          <li class="{{../itemClass}}">{{{this}}}</li>
           {{/each}}
         </ul>
         {{/if}}

@@ -144,6 +144,13 @@
       color: var(--text);
     }
 
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      grid-template-columns: 1fr;
+    }
+
     .dot {
       width: 0.9rem;
       height: 0.9rem;
@@ -181,19 +188,21 @@
     </header>
     <main class="sections">
       {{#each sections}}
-      <section class="section-card {{#if @first}}section-card--wide{{/if}}">
+      <section class="section-card {{#if @first}}section-card--wide{{/if}} {{sectionClass}}">
         {{#if heading}}
         <div class="section-header">
-          <h2>{{heading}}</h2>
+          <h2 class="section-title {{headingClass}}">{{heading}}</h2>
           <span class="rule"></span>
         </div>
         {{/if}}
         {{#if items}}
-        <ul>
+        <ul class="section-list {{listClass}}">
           {{#each items}}
-          <li>
-            <span class="dot"></span>
-            <span class="item-text">{{{this}}}</span>
+          <li class="section-item {{../itemClass}}">
+            {{#if ../showMarkers}}
+            <span class="dot {{../markerClass}}"></span>
+            {{/if}}
+            <span class="item-text {{../textClass}}">{{{this}}}</span>
           </li>
           {{/each}}
         </ul>

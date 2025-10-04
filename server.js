@@ -5608,6 +5608,112 @@ function renderSectionTokensToHtml(
     .join('');
 }
 
+const TEMPLATE_SECTION_ORDER = Object.freeze([
+  'contact',
+  'summary',
+  'experience',
+  'education',
+  'skills',
+  'certifications'
+]);
+
+const TEMPLATE_SECTION_PRESENTATION = Object.freeze({
+  default: {
+    sectionClass: 'section--other',
+    headingClass: 'section-heading--other',
+    listClass: 'section-list--other',
+    itemClass: 'section-item--other',
+    textClass: 'section-text--other',
+    markerClass: 'marker--default',
+    showMarkers: true
+  },
+  contact: {
+    sectionClass: 'section--contact',
+    headingClass: 'section-heading--contact',
+    listClass: 'section-list--contact',
+    itemClass: 'section-item--contact',
+    textClass: 'section-text--contact',
+    markerClass: 'marker--contact',
+    showMarkers: false
+  },
+  summary: {
+    sectionClass: 'section--summary',
+    headingClass: 'section-heading--summary',
+    listClass: 'section-list--summary',
+    itemClass: 'section-item--summary',
+    textClass: 'section-text--summary',
+    markerClass: 'marker--summary',
+    showMarkers: false
+  },
+  experience: {
+    sectionClass: 'section--experience',
+    headingClass: 'section-heading--experience',
+    listClass: 'section-list--experience',
+    itemClass: 'section-item--experience',
+    textClass: 'section-text--experience',
+    markerClass: 'marker--experience',
+    showMarkers: true
+  },
+  education: {
+    sectionClass: 'section--education',
+    headingClass: 'section-heading--education',
+    listClass: 'section-list--education',
+    itemClass: 'section-item--education',
+    textClass: 'section-text--education',
+    markerClass: 'marker--education',
+    showMarkers: true
+  },
+  skills: {
+    sectionClass: 'section--skills',
+    headingClass: 'section-heading--skills',
+    listClass: 'section-list--skills',
+    itemClass: 'section-item--skills',
+    textClass: 'section-text--skills',
+    markerClass: 'marker--skills',
+    showMarkers: false
+  },
+  certifications: {
+    sectionClass: 'section--certifications',
+    headingClass: 'section-heading--certifications',
+    listClass: 'section-list--certifications',
+    itemClass: 'section-item--certifications',
+    textClass: 'section-text--certifications',
+    markerClass: 'marker--certifications',
+    showMarkers: false
+  }
+});
+
+function resolveTemplatePresentation(key = '') {
+  const normalizedKey = key || 'other';
+  const defaults = TEMPLATE_SECTION_PRESENTATION.default || {};
+  const overrides = TEMPLATE_SECTION_PRESENTATION[normalizedKey] || {};
+  const merged = { ...defaults, ...overrides };
+  const baseClasses = {
+    sectionClass: `section--${normalizedKey}`,
+    headingClass: `section-heading--${normalizedKey}`,
+    listClass: `section-list--${normalizedKey}`,
+    itemClass: `section-item--${normalizedKey}`,
+    textClass: `section-text--${normalizedKey}`,
+    markerClass: `marker--${normalizedKey}`
+  };
+  const presentation = { key: normalizedKey };
+  ['sectionClass', 'headingClass', 'listClass', 'itemClass', 'textClass', 'markerClass'].forEach(
+    (prop) => {
+      const values = [baseClasses[prop], merged[prop]]
+        .filter(Boolean)
+        .flatMap((value) => String(value).split(/\s+/).filter(Boolean));
+      const unique = Array.from(new Set(values));
+      presentation[prop] = unique.join(' ');
+    }
+  );
+  if (Object.prototype.hasOwnProperty.call(merged, 'showMarkers')) {
+    presentation.showMarkers = merged.showMarkers;
+  } else {
+    presentation.showMarkers = defaults.showMarkers;
+  }
+  return presentation;
+}
+
 function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
   const buckets = {
     contact: [],
@@ -5619,18 +5725,28 @@ function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
     other: []
   };
   const map = new Map();
-  const renderedSections = (Array.isArray(sections) ? sections : []).map((section) => {
+  const renderedSections = (Array.isArray(sections) ? sections : []).map((section, index) => {
     const heading = normalizeHeading(section.heading || '');
     const key = canonicalSectionKey(heading);
     const tokensList = Array.isArray(section.items) ? section.items : [];
     const htmlItems = tokensList.map((tokens) =>
       renderSectionTokensToHtml(tokens, { sectionKey: key, enhancementTokenMap })
     );
+    const presentation = resolveTemplatePresentation(key);
     const entry = {
       heading,
       key,
       tokens: tokensList,
-      htmlItems
+      htmlItems,
+      presentation,
+      sectionClass: presentation.sectionClass,
+      headingClass: presentation.headingClass,
+      listClass: presentation.listClass,
+      itemClass: presentation.itemClass,
+      textClass: presentation.textClass,
+      markerClass: presentation.markerClass,
+      showMarkers: presentation.showMarkers,
+      originalIndex: index
     };
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(entry);
@@ -5639,7 +5755,26 @@ function buildTemplateSectionContext(sections = [], enhancementTokenMap = {}) {
     return entry;
   });
 
-  return { sections: renderedSections, buckets, map };
+  const orderedSections = [];
+  const seenEntries = new Set();
+  const addEntry = (entry) => {
+    if (!entry || seenEntries.has(entry)) return;
+    orderedSections.push(entry);
+    seenEntries.add(entry);
+  };
+  TEMPLATE_SECTION_ORDER.forEach((sectionKey) => {
+    const bucket = map.get(sectionKey);
+    if (bucket) bucket.forEach(addEntry);
+  });
+  renderedSections.forEach(addEntry);
+
+  return {
+    sections: orderedSections,
+    buckets,
+    map,
+    order: TEMPLATE_SECTION_ORDER,
+    presentation: TEMPLATE_SECTION_PRESENTATION
+  };
 }
 
 function buildTemplateContactEntries(contactLines = []) {
@@ -5867,6 +6002,15 @@ let generatePdf = async function (
         key: entry.key,
         items: entry.htmlItems,
         tokens: entry.tokens,
+        presentation: entry.presentation,
+        sectionClass: entry.sectionClass,
+        headingClass: entry.headingClass,
+        listClass: entry.listClass,
+        itemClass: entry.itemClass,
+        textClass: entry.textClass,
+        markerClass: entry.markerClass,
+        showMarkers: entry.showMarkers,
+        originalIndex: entry.originalIndex,
       });
       const mapBucket = (bucket = []) => bucket.map(toRenderableSection);
       const htmlData = {

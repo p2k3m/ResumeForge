@@ -173,6 +173,13 @@
       line-height: 1.55;
     }
 
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      grid-template-columns: 1fr;
+    }
+
     .marker {
       width: 1.1em;
       height: 1.1em;
@@ -215,19 +222,21 @@
     </header>
     <main class="content-grid">
       {{#each sections}}
-      <section class="card {{#if @first}}card--spotlight{{/if}}">
+      <section class="card {{#if @first}}card--spotlight{{/if}} {{sectionClass}}">
         {{#if heading}}
         <div class="card-header">
-          <h2>{{heading}}</h2>
+          <h2 class="card-title {{headingClass}}">{{heading}}</h2>
           <span class="accent-line"></span>
         </div>
         {{/if}}
         {{#if items}}
-        <ul>
+        <ul class="section-list {{listClass}}">
           {{#each items}}
-          <li>
-            <span class="marker">◆</span>
-            <span class="content">{{{this}}}</span>
+          <li class="section-item {{../itemClass}}">
+            {{#if ../showMarkers}}
+            <span class="marker {{../markerClass}}">◆</span>
+            {{/if}}
+            <span class="content {{../textClass}}">{{{this}}}</span>
           </li>
           {{/each}}
         </ul>
