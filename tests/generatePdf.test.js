@@ -288,20 +288,13 @@ describe('generatePdf and parsing', () => {
     expect(CL_TEMPLATES).toContain(coverTemplate2);
   });
 
-  test('providing one template still includes ucmo', () => {
-    const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates({
-      template1: CV_TEMPLATES[0],
-      coverTemplate1: CL_TEMPLATES[0]
-    });
-    expect([template1, template2]).toContain('ucmo');
-    const other = template1 === 'ucmo' ? template2 : template1;
-    expect(other).toBe(CV_TEMPLATES[0]);
-    expect(CV_TEMPLATE_GROUPS[other]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
-    expect(coverTemplate1).toBe(CL_TEMPLATES[0]);
-    expect(coverTemplate2).not.toBe(coverTemplate1);
-    expect(CV_TEMPLATES).toContain(template1);
+  test('explicit template preference becomes primary', () => {
+    const preferred = CV_TEMPLATES.find((tpl) => tpl !== 'ucmo') || CV_TEMPLATES[0];
+    const { template1, template2 } = selectTemplates({ preferredTemplate: preferred });
+    expect(template1).toBe(preferred);
+    expect(template2).not.toBe(preferred);
     expect(CV_TEMPLATES).toContain(template2);
-    expect(CL_TEMPLATES).toContain(coverTemplate2);
+    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(CV_TEMPLATE_GROUPS[template2]);
   });
 
   test('script tags render as text', () => {

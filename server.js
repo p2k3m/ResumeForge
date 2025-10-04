@@ -1129,10 +1129,10 @@ const CV_TEMPLATES = [
   'professional',
   'classic',
   'creative',
+  'vibrant',
   'ats',
   '2025',
-  'ucmo',
-  'vibrant'
+  'ucmo'
 ];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
@@ -1147,17 +1147,18 @@ const CV_TEMPLATE_GROUPS = {
   professional: 'professional',
   classic: 'classic',
   creative: 'creative',
+  vibrant: 'creative',
   ats: 'ats',
   2025: 'futuristic',
-  ucmo: 'classic',
-  vibrant: 'creative'
+  ucmo: 'classic'
 };
 
 // Predefined contrasting template pairs used when no explicit templates are provided
 const CONTRASTING_PAIRS = [
   ['modern', 'creative'],
+  ['professional', 'vibrant'],
   ['classic', 'ats'],
-  ['professional', '2025']
+  ['2025', 'modern']
 ];
 
 const KNOWN_CV_TEMPLATE_SET = new Set(TEMPLATE_IDS);
@@ -1417,26 +1418,36 @@ function selectTemplates({
   clTemplates,
   preferredTemplate,
 } = {}) {
+  const canonicalPreferred = preferredTemplate
+    ? canonicalizeCvTemplateId(preferredTemplate, '')
+    : template1
+      ? canonicalizeCvTemplateId(template1, '')
+      : '';
   const parsedCvTemplates = uniqueValidCvTemplates([
     ...parseTemplateArray(cvTemplates),
     template1,
     template2,
+    canonicalPreferred,
     preferredTemplate,
   ]);
   let availableCvTemplates = parsedCvTemplates.length
-    ? Array.from(
-        new Set([
-          ...parsedCvTemplates,
-          ...CV_TEMPLATES.filter((tpl) => !parsedCvTemplates.includes(tpl)),
-        ])
-      )
+    ? Array.from(new Set([...parsedCvTemplates, ...CV_TEMPLATES]))
     : [...CV_TEMPLATES];
 
-  const ucmoFirst = ['ucmo', ...availableCvTemplates.filter((tpl) => tpl !== 'ucmo')];
-  availableCvTemplates = Array.from(new Set(ucmoFirst));
+  if (canonicalPreferred) {
+    availableCvTemplates = [
+      canonicalPreferred,
+      ...availableCvTemplates.filter((tpl) => tpl !== canonicalPreferred),
+    ];
+  } else if (availableCvTemplates.includes('ucmo')) {
+    availableCvTemplates = [
+      'ucmo',
+      ...availableCvTemplates.filter((tpl) => tpl !== 'ucmo'),
+    ];
+  }
 
   const primaryTemplate =
-    availableCvTemplates.find((tpl) => tpl === 'ucmo') ||
+    canonicalPreferred ||
     availableCvTemplates[0] ||
     canonicalizeCvTemplateId('ucmo') ||
     CV_TEMPLATES[0];
@@ -1455,7 +1466,9 @@ function selectTemplates({
       template1,
       template2,
       preferredTemplate,
+      canonicalPreferred,
       ...availableCvTemplates.filter((tpl) => tpl !== primaryTemplate),
+      primaryTemplate !== 'ucmo' ? 'ucmo' : null,
     ].filter(Boolean)
   ).filter((tpl) => tpl !== primaryTemplate);
 
@@ -1476,9 +1489,21 @@ function selectTemplates({
 
   if (secondaryTemplate === primaryTemplate) {
     const extendedPool = Array.from(
-      new Set([...availableCvTemplates, ...CV_TEMPLATES])
+      new Set([
+        ...availableCvTemplates,
+        ...CV_TEMPLATES,
+        canonicalPreferred,
+      ])
     );
     secondaryTemplate = chooseSecondary(primaryTemplate, extendedPool);
+    if (secondaryTemplate === primaryTemplate && primaryTemplate !== 'ucmo') {
+      const ucmoCandidate = extendedPool.find((tpl) => tpl === 'ucmo');
+      if (ucmoCandidate) secondaryTemplate = ucmoCandidate;
+    }
+  }
+
+  if (!secondaryTemplate && primaryTemplate !== 'ucmo' && CV_TEMPLATES.includes('ucmo')) {
+    secondaryTemplate = 'ucmo';
   }
 
   let parsedCoverTemplates = uniqueValidCoverTemplates([

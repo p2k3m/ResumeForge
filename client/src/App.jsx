@@ -490,37 +490,25 @@ const jobFitToneStyles = {
 
 const TEMPLATE_ALIASES = {}
 
-const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_lumina', 'cover_midnight', 'cover_classic']
+const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_classic']
 
 const COVER_TEMPLATE_ALIASES = {
   modern: 'cover_modern',
   classic: 'cover_classic',
-  lumina: 'cover_lumina',
-  midnight: 'cover_midnight',
   'cover-modern': 'cover_modern',
   'cover-classic': 'cover_classic',
-  'cover-lumina': 'cover_lumina',
-  'cover-midnight': 'cover_midnight',
   'modern-cover': 'cover_modern',
   'classic-cover': 'cover_classic',
-  'lumina-cover': 'cover_lumina',
-  'midnight-cover': 'cover_midnight',
   'cover modern': 'cover_modern',
   'cover classic': 'cover_classic',
-  'cover lumina': 'cover_lumina',
-  'cover midnight': 'cover_midnight',
   covermodern: 'cover_modern',
   coverclassic: 'cover_classic',
-  coverlumina: 'cover_lumina',
-  covermidnight: 'cover_midnight'
+  covermidnight: 'cover_classic'
 }
 
 const CLASSIC_STYLE_TEMPLATE_IDS = new Set(['classic', 'professional', 'ucmo'])
 
-const RESUME_TO_COVER_TEMPLATE = {
-  lumina: 'cover_lumina',
-  midnight: 'cover_midnight'
-}
+const RESUME_TO_COVER_TEMPLATE = {}
 
 const DEFAULT_COVER_TEMPLATE = 'cover_modern'
 
@@ -678,34 +666,9 @@ const BASE_TEMPLATE_OPTIONS = [
     description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.'
   },
   {
-    id: 'lumina',
-    name: 'Lumina Spectrum',
-    description: 'Vibrant gradient storytelling with confident header hierarchy.'
-  },
-  {
-    id: 'midnight',
-    name: 'Midnight Glass',
-    description: 'Dark mode glassmorphism with luminous accent highlights.'
-  },
-  {
-    id: 'ucmo',
-    name: 'Crimson Heritage',
-    description: 'Classic serif typography with deep crimson accents inspired by university letterhead design.'
-  },
-  {
     id: 'professional',
     name: 'Professional Edge',
     description: 'Refined business styling with signature accents for leadership roles.'
-  },
-  {
-    id: 'classic',
-    name: 'Classic Heritage',
-    description: 'Timeless serif typography with elegant section framing.'
-  },
-  {
-    id: 'creative',
-    name: 'Creative Spotlight',
-    description: 'Gradient-rich storytelling layout with bold highlights.'
   },
   {
     id: 'vibrant',
@@ -721,6 +684,21 @@ const BASE_TEMPLATE_OPTIONS = [
     id: '2025',
     name: 'Future Vision 2025',
     description: 'Futuristic grid layout with crisp typography and subtle neon cues.'
+  },
+  {
+    id: 'ucmo',
+    name: 'Crimson Heritage',
+    description: 'Classic serif typography with deep crimson accents inspired by university letterhead design.'
+  },
+  {
+    id: 'classic',
+    name: 'Classic Heritage',
+    description: 'Timeless serif typography with elegant section framing.'
+  },
+  {
+    id: 'creative',
+    name: 'Creative Spotlight',
+    description: 'Gradient-rich storytelling layout with bold highlights.'
   }
 ]
 
@@ -729,21 +707,13 @@ const COVER_TEMPLATE_DETAILS = {
     name: 'Modern Cover Letter',
     description: 'Gradient header with confident typography and clean paragraph rhythm.'
   },
-  cover_lumina: {
-    name: 'Lumina Cover Letter',
-    description: 'Iridescent gradients with open white space for a storytelling tone.'
-  },
-  cover_midnight: {
-    name: 'Midnight Cover Letter',
-    description: 'Noir glassmorphism with electric accents and calm serif body text.'
-  },
   cover_classic: {
     name: 'Classic Cover Letter',
     description: 'Elegant serif presentation with letterhead-inspired spacing and signature close.'
   }
 }
 
-const COVER_TEMPLATE_ORDER = ['cover_modern', 'cover_lumina', 'cover_midnight', 'cover_classic']
+const COVER_TEMPLATE_ORDER = ['cover_modern', 'cover_classic']
 
 const COVER_TEMPLATE_OPTIONS = COVER_TEMPLATE_ORDER.filter((id) => COVER_TEMPLATE_DETAILS[id]).map(
   (id) => ({
