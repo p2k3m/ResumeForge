@@ -12053,11 +12053,28 @@ app.post(
         typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
       const legacyTemplateInput =
         typeof req.body.template === 'string' ? req.body.template.trim() : '';
+      const requestTemplate1 =
+        typeof req.body.template1 === 'string' ? req.body.template1.trim() : '';
+      const requestTemplate2 =
+        typeof req.body.template2 === 'string' ? req.body.template2.trim() : '';
+      const hasExplicitTemplateRequest = Boolean(
+        templateIdInput ||
+          legacyTemplateInput ||
+          requestTemplate1 ||
+          requestTemplate2
+      );
 
       const templateContextInput =
         typeof req.body.templateContext === 'object' && req.body.templateContext
           ? req.body.templateContext
           : {};
+      if (requestTemplate1) {
+        templateContextInput.template1 = requestTemplate1;
+        templateContextInput.selectedTemplate = requestTemplate1;
+      }
+      if (requestTemplate2) {
+        templateContextInput.template2 = requestTemplate2;
+      }
       templateContextInput.templateHistory = normalizeTemplateHistory(
         templateContextInput.templateHistory,
         [
@@ -12065,8 +12082,15 @@ app.post(
           templateContextInput.template1,
         ]
       );
+      const effectivePreferredTemplate = hasExplicitTemplateRequest
+        ? templateIdInput || legacyTemplateInput
+        : templateIdInput ||
+          legacyTemplateInput ||
+          templateContextInput.selectedTemplate ||
+          templateContextInput.template1;
       const selection = selectTemplates({
-        defaultCvTemplate: templateContextInput.template1 || CV_TEMPLATES[0],
+        defaultCvTemplate:
+          templateContextInput.template1 || effectivePreferredTemplate || CV_TEMPLATES[0],
         defaultClTemplate: templateContextInput.coverTemplate1 || CL_TEMPLATES[0],
         template1: templateContextInput.template1,
         template2: templateContextInput.template2,
@@ -12074,11 +12098,7 @@ app.post(
         coverTemplate2: templateContextInput.coverTemplate2,
         cvTemplates: templateContextInput.templates,
         clTemplates: templateContextInput.coverTemplates,
-        preferredTemplate:
-          templateIdInput ||
-          legacyTemplateInput ||
-          templateContextInput.selectedTemplate ||
-          templateContextInput.template1,
+        preferredTemplate: effectivePreferredTemplate,
       });
       let {
         template1,
@@ -12605,25 +12625,39 @@ app.post(
     typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
   const queryTemplateId =
     typeof req.query?.templateId === 'string' ? req.query.templateId.trim() : '';
+  const bodyTemplate1 =
+    typeof req.body.template1 === 'string' ? req.body.template1.trim() : '';
+  const queryTemplate1 =
+    typeof req.query?.template1 === 'string' ? req.query.template1.trim() : '';
+  const bodyTemplate2 =
+    typeof req.body.template2 === 'string' ? req.body.template2.trim() : '';
+  const queryTemplate2 =
+    typeof req.query?.template2 === 'string' ? req.query.template2.trim() : '';
   const requestedTemplateInput =
     bodyTemplateId || queryTemplateId || bodyTemplate || queryTemplate;
-  const effectivePreferredTemplate =
-    requestedTemplateInput || storedTemplatePreference;
-  if (!requestedTemplateInput && storedTemplatePreference) {
+  const requestTemplate1 = bodyTemplate1 || queryTemplate1;
+  const requestTemplate2 = bodyTemplate2 || queryTemplate2;
+  const hasExplicitTemplateRequest = Boolean(
+    requestedTemplateInput || requestTemplate1 || requestTemplate2
+  );
+  const effectivePreferredTemplate = hasExplicitTemplateRequest
+    ? requestedTemplateInput
+    : requestedTemplateInput || storedTemplatePreference;
+  if (!hasExplicitTemplateRequest && storedTemplatePreference) {
     logStructured('info', 'user_template_preference_applied', {
       ...logContext,
       template: storedTemplatePreference,
     });
   }
   const defaultCvTemplate =
-    effectivePreferredTemplate || CV_TEMPLATES[0];
+    requestTemplate1 || effectivePreferredTemplate || CV_TEMPLATES[0];
   const defaultClTemplate =
     req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
   const selection = selectTemplates({
     defaultCvTemplate,
     defaultClTemplate,
-    template1: req.body.template1 || req.query.template1,
-    template2: req.body.template2 || req.query.template2,
+    template1: requestTemplate1,
+    template2: requestTemplate2,
     coverTemplate1: req.body.coverTemplate1 || req.query.coverTemplate1,
     coverTemplate2: req.body.coverTemplate2 || req.query.coverTemplate2,
     cvTemplates: req.body.templates || req.query.templates,
