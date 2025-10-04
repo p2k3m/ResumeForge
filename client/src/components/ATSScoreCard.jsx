@@ -27,7 +27,7 @@ function normalizeLabel(label) {
 
 function formatScore(score) {
   if (typeof score !== 'number') {
-    return { display: score ?? '—', suffix: '' }
+    return { display: score ?? 'N/A', suffix: '' }
   }
   const rounded = Number.isFinite(score) ? Math.round(score) : score
   return { display: rounded, suffix: '%' }
@@ -177,8 +177,7 @@ function ATSScoreCard({ metric, accentClass = defaultAccent, improvement }) {
                 )}
               </div>
               <span
-                className={`mt-3 inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] ${labelClass}`}
-                data-testid="rating-badge"
+                className={`mt-3 inline-flex w-fit rounded-full bg-white/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] ${labelClass}`}
               >
                 {ratingLabel}
               </span>

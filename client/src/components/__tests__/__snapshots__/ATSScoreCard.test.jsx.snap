@@ -133,8 +133,7 @@ exports[`ATSScoreCard matches the gradient snapshot for consistency 1`] = `
               </span>
             </div>
             <span
-              class="mt-3 inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white"
-              data-testid="rating-badge"
+              class="mt-3 inline-flex w-fit rounded-full bg-white/15 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-white"
             >
               EXCELLENT
             </span>
