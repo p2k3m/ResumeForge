@@ -2180,7 +2180,7 @@ function App() {
         )
 
         if (!response.ok) {
-          let message = 'Unable to load the published CloudFront domain.'
+          let message = ''
           try {
             const errorPayload = await response.json()
             if (errorPayload && typeof errorPayload.message === 'string') {
@@ -2212,7 +2212,7 @@ function App() {
         }
         console.error('Failed to load published CloudFront metadata', err)
         setPublishedCloudfront(null)
-        setPublishedCloudfrontError('Unable to load the published CloudFront domain.')
+        setPublishedCloudfrontError('')
         setPublishedCloudfrontCopyStatus('')
       } finally {
         if (isSubscribed) {
