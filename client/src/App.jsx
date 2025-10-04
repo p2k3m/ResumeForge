@@ -205,6 +205,115 @@ function formatCloudfrontUpdatedAt(timestamp) {
   }
 }
 
+const TEMPLATE_PREFERENCE_STORAGE_KEY = 'resumeForge.templatePreferences'
+
+function readTemplatePreferenceStore() {
+  if (typeof window === 'undefined' || !window?.localStorage) {
+    return {}
+  }
+  try {
+    const raw = window.localStorage.getItem(TEMPLATE_PREFERENCE_STORAGE_KEY)
+    if (!raw) {
+      return {}
+    }
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch (err) {
+    console.warn('Failed to read template preference store', err)
+    return {}
+  }
+}
+
+function writeTemplatePreferenceStore(store) {
+  if (typeof window === 'undefined' || !window?.localStorage) {
+    return
+  }
+  try {
+    window.localStorage.setItem(
+      TEMPLATE_PREFERENCE_STORAGE_KEY,
+      JSON.stringify(store || {})
+    )
+  } catch (err) {
+    console.warn('Failed to persist template preference store', err)
+  }
+}
+
+function getStoredTemplatePreference(userIdentifier) {
+  if (!userIdentifier) {
+    return ''
+  }
+  const store = readTemplatePreferenceStore()
+  const entry = store[userIdentifier]
+  if (!entry) {
+    return ''
+  }
+  if (typeof entry === 'string') {
+    return entry
+  }
+  if (entry && typeof entry === 'object') {
+    return typeof entry.template === 'string' ? entry.template : ''
+  }
+  return ''
+}
+
+function setStoredTemplatePreference(userIdentifier, templateId) {
+  if (!userIdentifier || typeof templateId !== 'string' || !templateId.trim()) {
+    return
+  }
+  const store = readTemplatePreferenceStore()
+  const normalizedTemplate = templateId.trim()
+  const existing = store[userIdentifier]
+  if (
+    (typeof existing === 'string' && existing === normalizedTemplate) ||
+    (existing && typeof existing === 'object' && existing.template === normalizedTemplate)
+  ) {
+    return
+  }
+  store[userIdentifier] = {
+    template: normalizedTemplate,
+    updatedAt: new Date().toISOString()
+  }
+  writeTemplatePreferenceStore(store)
+}
+
+function canonicalizeProfileIdentifier(profileUrl) {
+  if (typeof profileUrl !== 'string') {
+    return ''
+  }
+  const trimmed = profileUrl.trim()
+  if (!trimmed) {
+    return ''
+  }
+  try {
+    const hasScheme = /^[a-z][a-z\d+\-.]*:/i.test(trimmed)
+    const url = new URL(hasScheme ? trimmed : `https://${trimmed}`)
+    url.hash = ''
+    url.search = ''
+    let host = url.hostname.toLowerCase()
+    if (host.startsWith('www.')) {
+      host = host.slice(4)
+    }
+    let path = url.pathname.replace(/\s+/g, '').replace(/\/+/g, '/')
+    if (path.endsWith('/')) {
+      path = path.slice(0, -1)
+    }
+    if (!path || path === '/') {
+      return host
+    }
+    return `${host}${path.toLowerCase()}`
+  } catch {
+    return trimmed.toLowerCase()
+  }
+}
+
+function deriveUserIdentifier({ profileUrl, userId } = {}) {
+  const explicitId = typeof userId === 'string' ? userId.trim() : ''
+  if (explicitId) {
+    return explicitId.toLowerCase()
+  }
+  return canonicalizeProfileIdentifier(profileUrl)
+}
+
 function formatEnhanceAllSummary(entries) {
   if (!Array.isArray(entries) || !entries.length) {
     return ''
@@ -1272,6 +1381,10 @@ function App() {
   const autoPreviewSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
   const publishedCloudfrontCopyTimeoutRef = useRef(null)
+  const userIdentifier = useMemo(
+    () => deriveUserIdentifier({ profileUrl }),
+    [profileUrl]
+  )
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
@@ -1320,6 +1433,53 @@ function App() {
         return ''
     }
   }, [publishedCloudfrontCopyStatus])
+
+  useEffect(() => {
+    if (!userIdentifier) {
+      return
+    }
+    const storedTemplate = canonicalizeTemplateId(
+      getStoredTemplatePreference(userIdentifier)
+    )
+    if (!storedTemplate) {
+      return
+    }
+    setSelectedTemplate((current) => {
+      const canonicalCurrent = canonicalizeTemplateId(current)
+      if (canonicalCurrent === storedTemplate) {
+        return current
+      }
+      return storedTemplate
+    })
+    setTemplateContext((prev) => {
+      if (!prev || typeof prev !== 'object') {
+        return prev
+      }
+      const currentCanonical = canonicalizeTemplateId(
+        prev.selectedTemplate || prev.template1
+      )
+      if (currentCanonical === storedTemplate) {
+        return prev
+      }
+      const base = { ...prev }
+      base.selectedTemplate = storedTemplate
+      if (!base.template1) {
+        base.template1 = storedTemplate
+      }
+      return ensureCoverTemplateContext(base, storedTemplate)
+    })
+  }, [userIdentifier])
+
+  useEffect(() => {
+    if (!userIdentifier) {
+      return
+    }
+    const canonicalSelection = canonicalizeTemplateId(selectedTemplate)
+    if (!canonicalSelection) {
+      return
+    }
+    setStoredTemplatePreference(userIdentifier, canonicalSelection)
+  }, [selectedTemplate, userIdentifier])
 
   const resumeHistoryMap = useMemo(() => {
     const map = new Map()
@@ -2342,6 +2502,9 @@ function App() {
         formData.append('template', selectedTemplate)
         formData.append('templateId', selectedTemplate)
       }
+      if (userIdentifier) {
+        formData.append('userId', userIdentifier)
+      }
 
       const requestUrl = buildApiUrl(API_BASE_URL, '/api/process-cv')
 
@@ -2914,6 +3077,10 @@ function App() {
         payload.baselineScore = baselineScore
       }
 
+      if (userIdentifier) {
+        payload.userId = userIdentifier
+      }
+
       const requestUrl = buildApiUrl(API_BASE_URL, '/api/rescore-improvement')
       const response = await fetch(requestUrl, {
         method: 'POST',
@@ -3000,7 +3167,7 @@ function App() {
 
       return { delta, enhancedScore: enhancedValid ? data.enhancedScore : null }
     },
-    [API_BASE_URL, jobDescriptionText, jobSkills]
+    [API_BASE_URL, jobDescriptionText, jobSkills, userIdentifier]
   )
 
   const persistChangeLogEntry = useCallback(
@@ -3013,6 +3180,10 @@ function App() {
         jobId,
         linkedinProfileUrl: profileUrl.trim(),
         entry
+      }
+
+      if (userIdentifier) {
+        payload.userId = userIdentifier
       }
 
       const response = await fetch(buildApiUrl(API_BASE_URL, '/api/change-log'), {
@@ -3036,7 +3207,7 @@ function App() {
       setChangeLog(entries)
       return entries
     },
-    [API_BASE_URL, jobId, profileUrl]
+    [API_BASE_URL, jobId, profileUrl, userIdentifier]
   )
 
   const applyImprovementSuggestion = useCallback(
@@ -3422,6 +3593,10 @@ function App() {
         entryId
       }
 
+      if (userIdentifier) {
+        payload.userId = userIdentifier
+      }
+
       const response = await fetch(buildApiUrl(API_BASE_URL, '/api/change-log'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3443,7 +3618,7 @@ function App() {
       setChangeLog(entries)
       return entries
     },
-    [API_BASE_URL, jobId, profileUrl]
+    [API_BASE_URL, jobId, profileUrl, userIdentifier]
   )
 
   const handleGenerateEnhancedDocs = useCallback(async () => {
@@ -3499,6 +3674,7 @@ function App() {
         templateContext: coverSyncedContext,
         templateId: canonicalTemplate,
         template: canonicalTemplate,
+        ...(userIdentifier ? { userId: userIdentifier } : {}),
         baseline: {
           table: cloneData(initialAnalysisSnapshot?.match?.table || []),
           missingSkills: cloneData(initialAnalysisSnapshot?.match?.missingSkills || []),
@@ -3627,6 +3803,7 @@ function App() {
     jobSkills,
     manualCertificatesData,
     profileUrl,
+    userIdentifier,
     resumeSkills,
     resumeText,
     selectionInsights,
@@ -3686,6 +3863,9 @@ function App() {
       }
       if (manualCertificatesInput.trim()) {
         payload.manualCertificates = manualCertificatesInput.trim()
+      }
+      if (userIdentifier) {
+        payload.userId = userIdentifier
       }
 
       const response = await fetch(requestUrl, {
