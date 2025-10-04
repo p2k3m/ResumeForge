@@ -80,6 +80,7 @@
       "^qrcode$": "<rootDir>/tests/mocks/qrcode.js",
       "^react$": "<rootDir>/node_modules/react/index.js",
       "^react-dom$": "<rootDir>/node_modules/react-dom/index.js",
+      "actionableAdvice\\.js$": "<rootDir>/client/src/utils/actionableAdviceShared.cjs",
       "^.+\\.(css|scss)$": "identity-obj-proxy"
     },
     "collectCoverage": true,

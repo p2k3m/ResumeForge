@@ -29,7 +29,7 @@ describe('ChangeComparisonView', () => {
       />
     )
 
-    expect(screen.getByText(/Add these skills: GraphQL and Rust/i)).toBeInTheDocument()
+    expect(screen.getByText(/Keep spotlighting GraphQL and Rust/i)).toBeInTheDocument()
     expect(
       screen.getByText(/Change your last designation from Engineer to Senior Engineer/i)
     ).toBeInTheDocument()
