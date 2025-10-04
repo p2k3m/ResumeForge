@@ -9250,10 +9250,11 @@ function buildImprovementSummary(
   beforeText = '',
   afterText = '',
   explanation = '',
-  changeDetails = []
+  changeDetails = [],
+  primarySection = ''
 ) {
   if (Array.isArray(changeDetails) && changeDetails.length) {
-    return changeDetails.map((detail) => {
+    const entries = changeDetails.map((detail) => {
       const before = typeof detail?.before === 'string' ? detail.before : '';
       const after = typeof detail?.after === 'string' ? detail.after : '';
       const beforeLines = extractDiffLines(before);
@@ -9276,13 +9277,35 @@ function buildImprovementSummary(
                 : 'Update applied to align with the job description.',
             ];
 
+      const sectionLabel = typeof detail?.section === 'string'
+        ? detail.section
+        : typeof detail?.label === 'string'
+          ? detail.label
+          : typeof detail?.key === 'string'
+            ? detail.key
+            : '';
+
       return {
-        section: detail?.section || detail?.label || detail?.key || '',
+        section: sectionLabel,
         added,
         removed,
         reason: reasons,
       };
     });
+
+    const normalizedPrimary = typeof primarySection === 'string' ? primarySection.trim().toLowerCase() : '';
+    if (normalizedPrimary) {
+      const matchIndex = entries.findIndex((entry) => {
+        if (!entry || typeof entry.section !== 'string') return false;
+        return entry.section.trim().toLowerCase() === normalizedPrimary;
+      });
+      if (matchIndex > 0) {
+        const [match] = entries.splice(matchIndex, 1);
+        entries.unshift(match);
+      }
+    }
+
+    return entries;
   }
 
   const added = [];
@@ -9308,6 +9331,7 @@ function buildImprovementSummary(
 
   return [
     {
+      section: typeof primarySection === 'string' ? primarySection : '',
       added,
       removed,
       reason,
@@ -10451,7 +10475,8 @@ async function handleImprovementRequest(type, req, res) {
         normalizedBeforeExcerpt,
         normalizedAfterExcerpt,
         result.explanation,
-        result.changeDetails
+        result.changeDetails,
+        IMPROVEMENT_SECTION_CONFIG[type]?.label
       ),
       rescore: rescoreSummary,
       selectionProbabilityBefore: normalizedSelectionProbabilityBefore,
