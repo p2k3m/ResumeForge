@@ -194,17 +194,7 @@ jobs:
             fi
 
             local change_set_names
-            change_set_names=$(python <<'PY' <<<"$list_output"
-import json, sys
-
-data = json.load(sys.stdin)
-for summary in data.get('Summaries', []):
-    if summary.get('Status') == 'FAILED':
-        name = summary.get('ChangeSetName')
-        if name:
-            print(name)
-PY
-)
+            change_set_names=$(python -c "import json, sys; data=json.load(sys.stdin); names=[s.get('ChangeSetName') for s in data.get('Summaries', []) if s.get('Status') == 'FAILED' and s.get('ChangeSetName')]; sys.stdout.write('\\n'.join(names))" <<<"$list_output")
 
             if [ -z "$change_set_names" ]; then
               return
@@ -231,17 +221,7 @@ PY
               fi
 
               local should_delete
-              should_delete=$(python <<'PY' <<<"$describe_json"
-import json, sys
-
-data = json.load(sys.stdin)
-status = data.get('Status', '')
-reason = (data.get('StatusReason') or '').lower()
-
-if status == 'FAILED' and 'mismatch with existing attribute description' in reason:
-    print('yes')
-PY
-)
+              should_delete=$(python -c "import json, sys; data=json.load(sys.stdin); status=data.get('Status', ''); reason=(data.get('StatusReason') or '').lower(); sys.stdout.write('yes' if status == 'FAILED' and 'mismatch with existing attribute description' in reason else '')" <<<"$describe_json")
 
               if [ "$should_delete" = "yes" ]; then
                 echo "Deleting leftover change set '$change_set_name' $context due to description mismatch..."
