@@ -2518,10 +2518,14 @@ function App() {
       if (manualCertificatesInput.trim()) {
         formData.append('manualCertificates', manualCertificatesInput.trim())
       }
-      if (selectedTemplate) {
-        formData.append('template', selectedTemplate)
-        formData.append('templateId', selectedTemplate)
-      }
+      const canonicalUploadTemplate =
+        canonicalizeTemplateId(selectedTemplate) || 'modern'
+      formData.append('template', canonicalUploadTemplate)
+      formData.append('templateId', canonicalUploadTemplate)
+      formData.append('template1', canonicalUploadTemplate)
+      const secondaryUploadTemplate =
+        canonicalizeTemplateId(templateContext?.template2) || canonicalUploadTemplate
+      formData.append('template2', secondaryUploadTemplate)
       if (userIdentifier) {
         formData.append('userId', userIdentifier)
       }
@@ -3699,6 +3703,13 @@ function App() {
         canonicalTemplate
       )
 
+      const canonicalPrimaryTemplate =
+        canonicalizeTemplateId(coverSyncedContext.template1) || canonicalTemplate
+      const canonicalSecondaryTemplate =
+        canonicalizeTemplateId(coverSyncedContext.template2) || canonicalPrimaryTemplate
+      coverSyncedContext.template1 = canonicalPrimaryTemplate
+      coverSyncedContext.template2 = canonicalSecondaryTemplate
+
       const payload = {
         jobId,
         resumeText,
@@ -3715,6 +3726,8 @@ function App() {
         templateContext: coverSyncedContext,
         templateId: canonicalTemplate,
         template: canonicalTemplate,
+        template1: canonicalPrimaryTemplate,
+        template2: canonicalSecondaryTemplate,
         ...(userIdentifier ? { userId: userIdentifier } : {}),
         baseline: {
           table: cloneData(initialAnalysisSnapshot?.match?.table || []),
