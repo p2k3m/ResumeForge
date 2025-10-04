@@ -97,6 +97,9 @@ describe('AWS integrations for /api/process-cv', () => {
     expect(mocks.logEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'completed' })
     );
+    expect(mocks.logEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'generation_text_artifacts_uploaded' })
+    );
   });
 
   test('surfaces initial upload errors and records failure log', async () => {
