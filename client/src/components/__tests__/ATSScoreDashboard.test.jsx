@@ -111,6 +111,41 @@ describe('ATSScoreDashboard', () => {
     )
   })
 
+  it('summarises improvements with rationale and interview preparation guidance', () => {
+    const match = {
+      ...baseMatch,
+      improvementSummary: [
+        {
+          section: 'Professional Summary',
+          added: ['Product strategist framing'],
+          removed: ['Generic objective statement'],
+          reason: ['Signals senior-level ownership that the hiring panel expects.']
+        },
+        {
+          section: 'Experience',
+          added: ['Revenue growth metrics'],
+          reason: ['Highlights measurable impact aligned to the JD KPIs.']
+        }
+      ]
+    }
+
+    render(<ATSScoreDashboard metrics={metrics} match={match} />)
+
+    const recap = screen.getByTestId('improvement-recap-card')
+    expect(recap).toBeInTheDocument()
+
+    const items = screen.getAllByTestId('improvement-recap-item')
+    expect(items).toHaveLength(2)
+    expect(within(items[0]).getByText('Professional Summary')).toBeInTheDocument()
+    expect(within(items[0]).getByText(/Added Product strategist framing/)).toBeInTheDocument()
+    expect(within(items[0]).getByTestId('improvement-recap-reason')).toHaveTextContent(
+      'Why it matters: Signals senior-level ownership that the hiring panel expects.'
+    )
+    expect(within(items[0]).getByTestId('improvement-recap-interview')).toHaveTextContent(
+      /Interview prep:/
+    )
+  })
+
   it('handles absent tips gracefully', () => {
     const minimalMetrics = [{ category: 'Structure', score: 50, ratingLabel: 'Fair' }]
     render(<ATSScoreDashboard metrics={minimalMetrics} />)
