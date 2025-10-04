@@ -29,4 +29,18 @@ describe('TemplateSelector', () => {
     fireEvent.click(professionalButton)
     expect(handleSelect).toHaveBeenCalledWith('professional')
   })
+
+  it('shows a history summary when provided', () => {
+    render(
+      <TemplateSelector
+        options={options}
+        selectedTemplate="modern"
+        historySummary="Professional, Modern, and Classic"
+      />
+    )
+
+    expect(
+      screen.getByText(/You tried Professional, Modern, and Classic/i)
+    ).toBeInTheDocument()
+  })
 })

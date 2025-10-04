@@ -1,4 +1,10 @@
-function TemplateSelector({ options = [], selectedTemplate, onSelect, disabled = false }) {
+function TemplateSelector({
+  options = [],
+  selectedTemplate,
+  onSelect,
+  disabled = false,
+  historySummary = ''
+}) {
   if (!options.length) return null
 
   return (
@@ -11,6 +17,11 @@ function TemplateSelector({ options = [], selectedTemplate, onSelect, disabled =
           Enhanced CVs and tailored cover letters will follow this selected design.
         </p>
       </div>
+      {historySummary && (
+        <p className="text-xs text-purple-500">
+          You tried {historySummary}
+        </p>
+      )}
       <div
         id="template-selector"
         role="radiogroup"
