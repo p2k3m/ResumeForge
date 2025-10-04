@@ -1128,6 +1128,8 @@ const CV_TEMPLATES = [
 ];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
+const USER_TEMPLATE_ITEM_TYPE = 'USER_TEMPLATE_PREFERENCE';
+const USER_TEMPLATE_PREFIX = 'user_template#';
 const TEMPLATE_IDS = [...CV_TEMPLATES, ...LEGACY_CV_TEMPLATES]; // Backwards compatibility
 const ALL_TEMPLATES = [...new Set([...TEMPLATE_IDS, ...CL_TEMPLATES])];
 
@@ -1228,6 +1230,104 @@ function normalizeTemplateHistory(list = [], additional = []) {
     history.unshift(canonical);
   }
   return history;
+}
+
+function buildUserTemplatePreferenceKey(userId) {
+  if (!userId) return { key: '', hash: '' };
+  const hash = anonymizePersonalData(userId);
+  if (!hash) return { key: '', hash: '' };
+  return { key: `${USER_TEMPLATE_PREFIX}${hash}`, hash };
+}
+
+async function loadUserTemplatePreference({
+  dynamo,
+  tableName,
+  userId,
+  logContext = {},
+}) {
+  if (!dynamo || !tableName || !userId) {
+    return undefined;
+  }
+  const { key, hash } = buildUserTemplatePreferenceKey(userId);
+  if (!key) {
+    return undefined;
+  }
+  try {
+    const response = await dynamo.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: key } },
+        ProjectionExpression: 'templatePreference',
+      })
+    );
+    const preference = response?.Item?.templatePreference?.S || '';
+    const canonical = canonicalizeCvTemplateId(preference);
+    if (canonical) {
+      logStructured('info', 'user_template_preference_loaded', {
+        ...logContext,
+        userPreferenceKey: key,
+        template: canonical,
+      });
+    }
+    return canonical || undefined;
+  } catch (err) {
+    logStructured('warn', 'user_template_preference_load_failed', {
+      ...logContext,
+      error: serializeError(err),
+      userPreferenceKey: key,
+      userIdHash: hash,
+    });
+    return undefined;
+  }
+}
+
+async function persistUserTemplatePreference({
+  dynamo,
+  tableName,
+  userId,
+  templateId,
+  logContext = {},
+}) {
+  if (!dynamo || !tableName || !userId) {
+    return;
+  }
+  const canonical = canonicalizeCvTemplateId(templateId);
+  if (!canonical) {
+    return;
+  }
+  const { key, hash } = buildUserTemplatePreferenceKey(userId);
+  if (!key) {
+    return;
+  }
+  const nowIso = new Date().toISOString();
+  try {
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: key } },
+        UpdateExpression:
+          'SET itemType = :itemType, templatePreference = :template, updatedAt = :updatedAt, userIdHash = :userIdHash',
+        ExpressionAttributeValues: {
+          ':itemType': { S: USER_TEMPLATE_ITEM_TYPE },
+          ':template': { S: canonical },
+          ':updatedAt': { S: nowIso },
+          ':userIdHash': { S: hash },
+        },
+      })
+    );
+    logStructured('info', 'user_template_preference_recorded', {
+      ...logContext,
+      userPreferenceKey: key,
+      template: canonical,
+    });
+  } catch (err) {
+    logStructured('warn', 'user_template_preference_record_failed', {
+      ...logContext,
+      error: serializeError(err),
+      userPreferenceKey: key,
+      userIdHash: hash,
+    });
+  }
 }
 
 function canonicalizeCoverTemplateId(templateId, fallback = CL_TEMPLATES[0]) {
@@ -10275,6 +10375,19 @@ async function generateEnhancedDocumentsResponse({
     ]
   );
 
+  const canonicalSelectedTemplate =
+    canonicalizeCvTemplateId(templateContextInput.selectedTemplate) || template1;
+
+  if (dynamo && tableName && userId && canonicalSelectedTemplate) {
+    await persistUserTemplatePreference({
+      dynamo,
+      tableName,
+      userId,
+      templateId: canonicalSelectedTemplate,
+      logContext,
+    });
+  }
+
   const templateParamsConfig =
     templateParamConfig ?? parseTemplateParamsConfig(undefined);
 
@@ -11111,7 +11224,7 @@ async function generateEnhancedDocumentsResponse({
       coverTemplate2,
       templates: availableCvTemplates,
       coverTemplates: availableCoverTemplates,
-      selectedTemplate: template1,
+      selectedTemplate: canonicalSelectedTemplate,
       templateHistory,
     },
   };
@@ -11876,8 +11989,9 @@ app.post(
   res.locals.jobId = jobId;
   captureUserContext(req, res);
   const requestId = res.locals.requestId;
-  const logContext = res.locals.userId
-    ? { requestId, jobId, userId: res.locals.userId }
+  const userId = res.locals.userId;
+  const logContext = userId
+    ? { requestId, jobId, userId }
     : { requestId, jobId };
   const date = new Date().toISOString().slice(0, 10);
   const s3 = s3Client;
@@ -11972,6 +12086,27 @@ app.post(
     tableEnsured = true;
   };
 
+  let storedTemplatePreference = '';
+  if (userId) {
+    try {
+      await ensureTableExists();
+      const preference = await loadUserTemplatePreference({
+        dynamo,
+        tableName,
+        userId,
+        logContext,
+      });
+      if (preference) {
+        storedTemplatePreference = preference;
+      }
+    } catch (err) {
+      logStructured('warn', 'user_template_preference_lookup_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
+
   const { jobDescriptionUrl, linkedinProfileUrl, credlyProfileUrl } = req.body;
   const manualJobDescriptionInput =
     typeof req.body.manualJobDescription === 'string'
@@ -11999,10 +12134,18 @@ app.post(
     typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
   const queryTemplateId =
     typeof req.query?.templateId === 'string' ? req.query.templateId.trim() : '';
-  const preferredTemplateInput =
+  const requestedTemplateInput =
     bodyTemplateId || queryTemplateId || bodyTemplate || queryTemplate;
+  const effectivePreferredTemplate =
+    requestedTemplateInput || storedTemplatePreference;
+  if (!requestedTemplateInput && storedTemplatePreference) {
+    logStructured('info', 'user_template_preference_applied', {
+      ...logContext,
+      template: storedTemplatePreference,
+    });
+  }
   const defaultCvTemplate =
-    preferredTemplateInput || CV_TEMPLATES[0];
+    effectivePreferredTemplate || CV_TEMPLATES[0];
   const defaultClTemplate =
     req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
   const selection = selectTemplates({
@@ -12014,7 +12157,7 @@ app.post(
     coverTemplate2: req.body.coverTemplate2 || req.query.coverTemplate2,
     cvTemplates: req.body.templates || req.query.templates,
     clTemplates: req.body.coverTemplates || req.query.coverTemplates,
-    preferredTemplate: preferredTemplateInput,
+    preferredTemplate: effectivePreferredTemplate,
   });
   let {
     template1,
@@ -12039,6 +12182,8 @@ app.post(
     availableCvTemplates,
     availableCoverTemplates,
   });
+  const canonicalSelectedTemplate =
+    canonicalizeCvTemplateId(effectivePreferredTemplate) || template1;
   if (!req.file) {
     logStructured('warn', 'resume_missing', logContext);
     return sendError(
@@ -12737,11 +12882,13 @@ app.post(
       template2,
       coverTemplate1,
       coverTemplate2,
-      templates: availableCvTemplates,
-      coverTemplates: availableCoverTemplates,
-      selectedTemplate: template1,
-      templateHistory: normalizeTemplateHistory(req.body.templateHistory, [template1])
-    };
+    templates: availableCvTemplates,
+    coverTemplates: availableCoverTemplates,
+    selectedTemplate: canonicalSelectedTemplate,
+    templateHistory: normalizeTemplateHistory(req.body.templateHistory, [
+      canonicalSelectedTemplate,
+    ])
+  };
     const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
     try {
@@ -12879,6 +13026,7 @@ app.post(
       selectionInsights,
       templateContext: {
         ...templateContextInput,
+        selectedTemplate: canonicalSelectedTemplate,
         templateHistory,
       },
     };

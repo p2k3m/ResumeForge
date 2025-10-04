@@ -73,4 +73,40 @@ describe('end-to-end CV processing', () => {
     expect(response.body?.error?.details?.description).toContain('job description');
     expect(response.body?.error?.message).toMatch(/Please upload a correct CV/i);
   });
+
+  test('reuses the last selected template for returning users', async () => {
+    const { app } = await setupTestServer();
+
+    await primeSuccessfulAi();
+
+    const initialResponse = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('userId', 'user-123')
+      .field('template', 'professional')
+      .field('templateId', 'professional')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(initialResponse.status).toBe(200);
+    expect(initialResponse.body?.templateContext?.selectedTemplate).toBe(
+      'professional'
+    );
+
+    await primeSuccessfulAi();
+
+    const followUpResponse = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .field('userId', 'user-123')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(followUpResponse.status).toBe(200);
+    expect(followUpResponse.body?.templateContext?.selectedTemplate).toBe(
+      'professional'
+    );
+  });
 });
