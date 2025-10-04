@@ -1,4 +1,8 @@
 import { Fragment, useMemo, useState } from 'react'
+import {
+  buildSegmentAdvice,
+  normaliseActionList
+} from '../utils/actionableAdvice.js'
 
 const viewOptions = [
   { key: 'split', label: 'Side by side' },
@@ -24,96 +28,6 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function normaliseList(items) {
-  if (!Array.isArray(items)) return []
-  const seen = new Set()
-  const output = []
-  items.forEach((item) => {
-    const text = typeof item === 'string' ? item.trim() : String(item || '').trim()
-    if (!text) return
-    const key = text.toLowerCase()
-    if (seen.has(key)) return
-    seen.add(key)
-    output.push(text)
-  })
-  return output
-}
-
-function formatReadableList(items) {
-  const list = normaliseList(items)
-  if (list.length === 0) return ''
-  if (list.length === 1) return list[0]
-  if (list.length === 2) return `${list[0]} and ${list[1]}`
-  return `${list.slice(0, -1).join(', ')}, and ${list[list.length - 1]}`
-}
-
-function buildSummaryAction(label, segment = {}) {
-  const addedItems = normaliseList(segment.added)
-  const removedItems = normaliseList(segment.removed)
-  const addedText = formatReadableList(addedItems)
-  const removedText = formatReadableList(removedItems)
-
-  if (!addedText && !removedText) {
-    return ''
-  }
-
-  const lowerLabel = label.toLowerCase()
-  const isSkillSegment = /skill|keyword|competenc|cert/i.test(lowerLabel)
-  const isDesignationSegment = /designation|title|headline|position|role/i.test(lowerLabel)
-  const isExperienceSegment = /experience|achievement|project|impact|work|career|highlight/i.test(
-    lowerLabel
-  )
-  const isSummarySegment = /summary|profile|overview/i.test(lowerLabel)
-
-  if (isSkillSegment) {
-    if (addedText && removedText) {
-      return `Add these skills: ${addedText}. Retire ${removedText} to keep your keywords on target.`
-    }
-    if (addedText) {
-      return `Add these skills: ${addedText}.`
-    }
-    return `Retire ${removedText} to keep your skill list focused.`
-  }
-
-  if (isDesignationSegment) {
-    if (addedText && removedText) {
-      return `Change your last designation from ${removedText} to ${addedText}.`
-    }
-    if (addedText) {
-      return `Change your last designation to ${addedText}.`
-    }
-    return `Retire the ${removedText} designation so your headline matches the target role.`
-  }
-
-  if (isExperienceSegment) {
-    if (addedText && removedText) {
-      return `Expand these highlights: ${addedText}. Refresh the stories covering ${removedText}.`
-    }
-    if (addedText) {
-      return `Expand these highlights: ${addedText}.`
-    }
-    return `Refresh the stories covering ${removedText}.`
-  }
-
-  if (isSummarySegment) {
-    if (addedText && removedText) {
-      return `Surface these summary hooks: ${addedText}. Phase out ${removedText} for clarity.`
-    }
-    if (addedText) {
-      return `Surface these summary hooks: ${addedText}.`
-    }
-    return `Trim ${removedText} from the summary to stay concise.`
-  }
-
-  if (addedText && removedText) {
-    return `Swap ${removedText} with ${addedText}.`
-  }
-  if (addedText) {
-    return `Add ${addedText}.`
-  }
-  return `Remove ${removedText}.`
-}
-
 function normaliseItemizedChanges(changes) {
   if (!Array.isArray(changes)) return []
   const map = new Map()
@@ -125,7 +39,7 @@ function normaliseItemizedChanges(changes) {
     if (!itemText || !changeType) return
     const key = `${changeType}::${itemText.toLowerCase()}`
     const entry = map.get(key) || { item: itemText, changeType, reasons: [] }
-    const reasonList = normaliseList(
+    const reasonList = normaliseActionList(
       Array.isArray(change.reasons)
         ? change.reasons
         : typeof change.reason === 'string'
@@ -168,8 +82,8 @@ function ChangeComparisonView({
   const [view, setView] = useState(availableSplit ? 'split' : 'stack')
 
   const highlightData = useMemo(() => {
-    const addedList = normaliseList(addedItems)
-    const removedList = normaliseList(removedItems)
+    const addedList = normaliseActionList(addedItems)
+    const removedList = normaliseActionList(removedItems)
     const addedSet = new Set(addedList.map((item) => item.toLowerCase()))
     const removedSet = new Set(removedList.map((item) => item.toLowerCase()))
     const patternSources = [...addedSet, ...removedSet]
@@ -367,7 +281,7 @@ function ChangeComparisonView({
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">Key highlights</p>
                 <div className="flex flex-wrap gap-2">
-                  {normaliseList(addedItems).map((item) => (
+                  {normaliseActionList(addedItems).map((item) => (
                     <span
                       key={`added-chip-${item}`}
                       className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-1 text-xs font-semibold text-emerald-700"
@@ -376,7 +290,7 @@ function ChangeComparisonView({
                       {item}
                     </span>
                   ))}
-                  {normaliseList(removedItems).map((item) => (
+                  {normaliseActionList(removedItems).map((item) => (
                     <span
                       key={`removed-chip-${item}`}
                       className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50/80 px-3 py-1 text-xs font-semibold text-rose-700"
@@ -403,7 +317,7 @@ function ChangeComparisonView({
                     const containerTone = isSkillSegment
                       ? 'border-emerald-200 bg-emerald-50/70'
                       : 'border-slate-200 bg-slate-50/70'
-                    const actionableSummary = buildSummaryAction(label, segment)
+                    const actionableSummary = buildSegmentAdvice(label, segment)
                     return (
                       <div
                         key={`${label}-${index}`}
@@ -418,7 +332,7 @@ function ChangeComparisonView({
                           )}
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {normaliseList(segment.added).map((item) => (
+                          {normaliseActionList(segment.added).map((item) => (
                             <span
                               key={`segment-added-${label}-${item}`}
                               className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white/70 px-2.5 py-1 text-xs font-semibold text-emerald-700"
@@ -427,7 +341,7 @@ function ChangeComparisonView({
                               {item}
                             </span>
                           ))}
-                          {normaliseList(segment.removed).map((item) => (
+                          {normaliseActionList(segment.removed).map((item) => (
                             <span
                               key={`segment-removed-${label}-${item}`}
                               className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-white/70 px-2.5 py-1 text-xs font-semibold text-rose-700"
