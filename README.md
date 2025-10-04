@@ -170,7 +170,7 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 
 > **Active CloudFront domain:** `https://d3exampleabcdef8.cloudfront.net`
 
-The React portal now surfaces this value in the hero card so onboarding teams can copy or open the canonical entry point without digging through CloudFormation outputs or JSON helpers.
+The canonical domain is tracked in `config/published-cloudfront.json` and mirrored here so anyone with repository access can retrieve the production URL without opening the app.
 
 The REST API remains available directly via API Gateway if you need to integrate programmatically:
 
@@ -189,9 +189,7 @@ npm run publish:cloudfront-url -- <stack-name>
 - **`config/published-cloudfront.json`** is regenerated with the latest domain, distribution id, and timestamp. Commit this file (or surface it through your release notes) to broadcast the production URL.
 - The script always issues a `/*` invalidation for the previously published distribution, even when the stack reuses the same distribution id, so caches are busted after every deploy.
 
-The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment.
-
-The portal reads `/api/published-cloudfront` on load and renders the active domain with copy/open controls. This gives support teams and new joiners a self-serve place to confirm the production endpoint while candidates continue straight into the resume workflow.
+The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment. Keep this README (and `docs/cloudfront-url.md`) updated so support teams and new joiners can confirm the production endpoint without loading the app.
 
 Once the metadata is published, the API exposes two helper endpoints:
 

@@ -16,7 +16,7 @@ The **canonical production CloudFront domain** for ResumeForge lives in [`config
 - **Production CloudFront URL:** [`https://d3exampleabcdef8.cloudfront.net`](https://d3exampleabcdef8.cloudfront.net)
 - **Published:** 28 May 2024, 00:00 UTC
 
-The ResumeForge portal queries `/api/published-cloudfront` on load and renders this domain in the hero card with copy/open actions. Share that card (or this document) with new joiners so they can grab the right URL without installing the CLI helpers first.
+This document and the project README mirror the latest domain so onboarding teams can copy the canonical URL without installing the CLI helpers or loading the app.
 
 ## Updating the published URL
 
