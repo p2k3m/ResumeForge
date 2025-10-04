@@ -227,7 +227,9 @@ export async function setupTestServer({
 
   jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
     getSignedUrl: jest.fn((client, command, { expiresIn }) =>
-      Promise.resolve(`https://example.com/${command.input.Key}?expires=${expiresIn}`)
+      Promise.resolve(
+        `https://example.com/${command.input.Key}?X-Amz-Signature=mock-signature&X-Amz-Expires=${expiresIn}`
+      )
     ),
   }));
 

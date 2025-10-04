@@ -159,11 +159,19 @@ describe('targeted improvement routes', () => {
     expect(typeof response.body.selectionProbabilityDelta).toBe('number');
     expect(response.body.urlExpiresInSeconds).toBe(3600);
     expect(response.body.urls).toHaveLength(5);
+    const assetTypes = response.body.urls.map((entry) => entry.type).sort();
+    expect(assetTypes).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'original_upload',
+      'version1',
+      'version2',
+    ]);
     response.body.urls.forEach((entry) => {
       expect(entry).toEqual(
         expect.objectContaining({
           type: expect.any(String),
-          url: expect.stringContaining('https://'),
+          url: expect.stringMatching(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/),
         })
       );
     });
@@ -252,11 +260,19 @@ describe('targeted improvement routes', () => {
     );
     expect(response.body.urlExpiresInSeconds).toBe(3600);
     expect(response.body.urls).toHaveLength(5);
+    const assetTypes = response.body.urls.map((entry) => entry.type).sort();
+    expect(assetTypes).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'original_upload',
+      'version1',
+      'version2',
+    ]);
     response.body.urls.forEach((entry) => {
       expect(entry).toEqual(
         expect.objectContaining({
           type: expect.any(String),
-          url: expect.stringContaining('https://'),
+          url: expect.stringMatching(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/),
         })
       );
     });

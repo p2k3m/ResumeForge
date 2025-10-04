@@ -23,7 +23,9 @@ jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
 const getSignedUrlMock = jest
   .fn()
   .mockImplementation((client, command, { expiresIn }) =>
-    Promise.resolve(`https://example.com/${command.input.Key}?expires=${expiresIn}`)
+    Promise.resolve(
+      `https://example.com/${command.input.Key}?X-Amz-Signature=mock-signature&X-Amz-Expires=${expiresIn}`
+    )
   );
 jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: getSignedUrlMock
@@ -518,6 +520,31 @@ describe('/api/process-cv', () => {
       'version1',
       'version2'
     ]);
+  });
+
+  test('returns presigned PDF URLs with labeled asset types', async () => {
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.urlExpiresInSeconds).toBe(3600);
+
+    const assetTypes = res.body.urls.map((entry) => entry.type).sort();
+    expect(assetTypes).toEqual([
+      'cover_letter1',
+      'cover_letter2',
+      'original_upload',
+      'version1',
+      'version2',
+    ]);
+
+    res.body.urls.forEach((entry) => {
+      expect(entry.url).toMatch(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/);
+    });
   });
 
   test('uses provided template and ucmo', async () => {
