@@ -38,6 +38,11 @@ describe('ATSScoreDashboard', () => {
     }
   ]
 
+  const baselineMetrics = metrics.map((metric) => ({
+    ...metric,
+    score: Math.max(metric.score - 8, 0)
+  }))
+
   const baseMatch = {
     originalScore: 48,
     enhancedScore: 76,
@@ -51,10 +56,12 @@ describe('ATSScoreDashboard', () => {
       missingSkills: ['SQL', 'Roadmap execution'],
       addedSkills: ['Stakeholder communication']
     }
-    render(<ATSScoreDashboard metrics={metrics} match={match} />)
+    render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
 
     const cards = screen.getAllByTestId('ats-score-card')
     expect(cards).toHaveLength(metrics.length)
+    expect(screen.getAllByText('ATS Score Before')).not.toHaveLength(0)
+    expect(screen.getAllByText('ATS Score After')).not.toHaveLength(0)
     expect(screen.getByLabelText('match comparison')).toBeInTheDocument()
     expect(screen.getByTestId('original-score')).toHaveTextContent('48')
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76')
@@ -79,10 +86,18 @@ describe('ATSScoreDashboard', () => {
       missingSkills: ['SQL', 'Roadmap execution'],
       addedSkills: ['Stakeholder communication']
     }
-    const { rerender } = render(<ATSScoreDashboard metrics={metrics} match={match} />)
+    const { rerender } = render(
+      <ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />
+    )
 
     const updatedMatch = { ...match, enhancedScore: 90 }
-    rerender(<ATSScoreDashboard metrics={metrics} match={updatedMatch} />)
+    rerender(
+      <ATSScoreDashboard
+        metrics={metrics}
+        baselineMetrics={baselineMetrics}
+        match={updatedMatch}
+      />
+    )
 
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('90')
     const deltaBadge = screen.getByTestId('match-delta')
@@ -99,7 +114,7 @@ describe('ATSScoreDashboard', () => {
       addedSkills: ['Cross-functional leadership', 'Go-to-market strategy']
     }
 
-    render(<ATSScoreDashboard metrics={metrics} match={match} />)
+    render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
 
     expect(screen.getByTestId('original-match-status')).toHaveTextContent('Match')
     expect(screen.getByTestId('enhanced-match-status')).toHaveTextContent('Match')
@@ -129,7 +144,7 @@ describe('ATSScoreDashboard', () => {
       ]
     }
 
-    render(<ATSScoreDashboard metrics={metrics} match={match} />)
+    render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
 
     const recap = screen.getByTestId('improvement-recap-card')
     expect(recap).toBeInTheDocument()
@@ -148,7 +163,7 @@ describe('ATSScoreDashboard', () => {
 
   it('handles absent tips gracefully', () => {
     const minimalMetrics = [{ category: 'Structure', score: 50, ratingLabel: 'Fair' }]
-    render(<ATSScoreDashboard metrics={minimalMetrics} />)
+    render(<ATSScoreDashboard metrics={minimalMetrics} baselineMetrics={baselineMetrics} />)
 
     const card = screen.getByTestId('ats-score-card')
     expect(card).toBeInTheDocument()

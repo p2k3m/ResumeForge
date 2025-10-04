@@ -12028,6 +12028,7 @@ async function generateEnhancedDocumentsResponse({
     jobText: jobDescription,
   });
   const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
+  const baselineAtsScores = scoreBreakdownToArray(baselineScoreBreakdown);
 
   const selectionInsights = buildSelectionInsights({
     jobTitle: versionsContext.jobTitle,
@@ -12073,6 +12074,8 @@ async function generateEnhancedDocumentsResponse({
     modifiedTitle: modifiedTitle || applicantTitle,
     scoreBreakdown: finalScoreBreakdown,
     atsSubScores: finalAtsScores,
+    atsSubScoresBefore: baselineAtsScores,
+    atsSubScoresAfter: finalAtsScores,
     resumeText: combinedProfile,
     originalResumeText: originalResumeTextInput || resumeText,
     jobDescriptionText: jobDescription,
@@ -12087,6 +12090,7 @@ async function generateEnhancedDocumentsResponse({
     manualCertificates,
     selectionProbability: selectionInsights?.probability ?? null,
     selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
+    selectionProbabilityAfter: selectionInsights?.after?.probability ?? selectionInsights?.probability ?? null,
     selectionInsights,
     changeLog: normalizedChangeLogEntries,
     templateContext: {
