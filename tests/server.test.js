@@ -122,6 +122,7 @@ const {
   parseContent,
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
+  CHANGE_LOG_DYNAMO_LIMITS,
 } = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
 const mammothMock = (await import('mammoth')).default;
@@ -1277,5 +1278,73 @@ describe('change log persistence safeguards', () => {
     expect(entryMap.resumeAfterText.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
     expect(entryMap.resumeAfterText.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
     expect(entryMap.historyContext).toBeUndefined();
+  });
+
+  test('removes heavy fields from older entries when exceeding Dynamo size limits', async () => {
+    const largeResume = 'R'.repeat(CHANGE_LOG_FIELD_LIMITS.resume);
+    const largeDetail = 'D'.repeat(CHANGE_LOG_FIELD_LIMITS.detail);
+    const existingEntries = Array.from({ length: 30 }, (_, index) => ({
+      M: {
+        id: { S: `entry-${index}` },
+        detail: { S: largeDetail },
+        resumeBeforeText: { S: largeResume },
+        resumeAfterText: { S: largeResume },
+        acceptedAt: { S: `2024-01-01T00:00:${String(index).padStart(2, '0')}Z` },
+      },
+    }));
+
+    const updateCommands = [];
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-oversize' },
+              changeLog: { L: existingEntries },
+            },
+          });
+        case 'UpdateItemCommand':
+          updateCommands.push(cmd);
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-oversize',
+        linkedinProfileUrl: 'https://www.linkedin.com/in/example',
+        entry: {
+          id: 'new-entry',
+          detail: largeDetail,
+          resumeBeforeText: largeResume,
+          resumeAfterText: largeResume,
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(updateCommands).toHaveLength(1);
+
+    const updateCommand = updateCommands[0];
+    const { ExpressionAttributeValues } = updateCommand.input;
+    const dynamoChangeLog = ExpressionAttributeValues[':changeLog'];
+
+    const attributeSize = Buffer.byteLength(JSON.stringify(dynamoChangeLog));
+    expect(attributeSize).toBeLessThanOrEqual(CHANGE_LOG_DYNAMO_LIMITS.budget);
+
+    const [latestEntry, ...olderEntries] = dynamoChangeLog.L;
+    expect(latestEntry.M.id.S).toBe('new-entry');
+    expect(latestEntry.M.resumeBeforeText).toBeDefined();
+    expect(latestEntry.M.resumeAfterText).toBeDefined();
+
+    const oldestEntry = olderEntries[olderEntries.length - 1];
+    expect(oldestEntry.M.resumeBeforeText).toBeUndefined();
+    expect(oldestEntry.M.resumeAfterText).toBeUndefined();
+
+    setupDefaultDynamoMock();
   });
 });

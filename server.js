@@ -9312,12 +9312,18 @@ const MAX_CHANGE_LOG_DETAIL_LENGTH = 2000;
 const MAX_CHANGE_LOG_DIFF_LENGTH = 5000;
 const MAX_CHANGE_LOG_RESUME_TEXT_LENGTH = 10000;
 const MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH = 20000;
+const MAX_DYNAMO_ITEM_BYTES = 400 * 1024;
+const CHANGE_LOG_DYNAMO_SIZE_BUDGET = 350 * 1024;
 const CHANGE_LOG_FIELD_LIMITS = Object.freeze({
   detail: MAX_CHANGE_LOG_DETAIL_LENGTH,
   diff: MAX_CHANGE_LOG_DIFF_LENGTH,
   resume: MAX_CHANGE_LOG_RESUME_TEXT_LENGTH,
   history: MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH,
   suffix: CHANGE_LOG_TRUNCATION_SUFFIX,
+});
+const CHANGE_LOG_DYNAMO_LIMITS = Object.freeze({
+  maxItemBytes: MAX_DYNAMO_ITEM_BYTES,
+  budget: CHANGE_LOG_DYNAMO_SIZE_BUDGET,
 });
 
 function normalizeChangeLogString(value) {
@@ -9817,6 +9823,102 @@ function serializeChangeLogEntries(entries = []) {
       return { M: map };
     })
     .filter(Boolean);
+}
+
+function cloneSerializedChangeLogEntries(serializedEntries = []) {
+  if (!Array.isArray(serializedEntries)) {
+    return [];
+  }
+
+  return serializedEntries
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object' || !entry.M) {
+        return null;
+      }
+
+      const clonedMap = Object.entries(entry.M).reduce((acc, [key, value]) => {
+        if (value && typeof value === 'object') {
+          acc[key] = JSON.parse(JSON.stringify(value));
+        } else {
+          acc[key] = value;
+        }
+        return acc;
+      }, {});
+
+      return { M: clonedMap };
+    })
+    .filter(Boolean);
+}
+
+function calculateDynamoAttributeSize(attribute) {
+  try {
+    return Buffer.byteLength(JSON.stringify(attribute));
+  } catch (err) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+}
+
+function enforceChangeLogDynamoSize(serializedEntries = [], {
+  budget = CHANGE_LOG_DYNAMO_SIZE_BUDGET,
+  hardLimit = MAX_DYNAMO_ITEM_BYTES,
+} = {}) {
+  if (!Array.isArray(serializedEntries) || !serializedEntries.length) {
+    return [];
+  }
+
+  const safeBudget = Math.min(Math.max(0, budget || 0), hardLimit || MAX_DYNAMO_ITEM_BYTES);
+  const wrapper = { L: cloneSerializedChangeLogEntries(serializedEntries) };
+  let size = calculateDynamoAttributeSize(wrapper);
+
+  if (size <= safeBudget) {
+    return wrapper.L;
+  }
+
+  const trimmingStages = [
+    ['historyContext'],
+    ['resumeBeforeText', 'resumeAfterText'],
+    ['before', 'after'],
+    ['detail'],
+    ['summarySegments', 'itemizedChanges'],
+    ['addedItems', 'removedItems'],
+  ];
+
+  const recalculateSize = () => {
+    size = calculateDynamoAttributeSize(wrapper);
+    return size;
+  };
+
+  for (const fields of trimmingStages) {
+    if (wrapper.L.length === 0 || size <= safeBudget) {
+      break;
+    }
+
+    for (let index = wrapper.L.length - 1; index >= 0 && size > safeBudget; index -= 1) {
+      const entry = wrapper.L[index];
+      if (!entry || !entry.M) {
+        continue;
+      }
+
+      let changed = false;
+      for (const field of fields) {
+        if (entry.M[field]) {
+          delete entry.M[field];
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        recalculateSize();
+      }
+    }
+  }
+
+  while (wrapper.L.length && size > safeBudget) {
+    wrapper.L.pop();
+    recalculateSize();
+  }
+
+  return wrapper.L;
 }
 
 async function handleImprovementRequest(type, req, res) {
@@ -11963,7 +12065,9 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     }
   }
 
-  const serializedChangeLog = serializeChangeLogEntries(updatedChangeLog);
+  const serializedChangeLog = enforceChangeLogDynamoSize(
+    serializeChangeLogEntries(updatedChangeLog)
+  );
 
   const expressionAttributeValues = {
     ':jobId': { S: jobId },
@@ -13190,4 +13294,5 @@ export {
   JobDescriptionFetchBlockedError,
   extractContactDetails,
   CHANGE_LOG_FIELD_LIMITS,
+  CHANGE_LOG_DYNAMO_LIMITS,
 };
