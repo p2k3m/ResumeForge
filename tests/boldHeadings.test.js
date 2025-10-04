@@ -1,27 +1,14 @@
 import { jest } from '@jest/globals';
-import { generatePdf, parseContent, setChromiumLauncher } from '../server.js';
+import {
+  buildTemplateSectionContext,
+  generatePdf,
+  parseContent,
+  setChromiumLauncher
+} from '../server.js';
 import fs from 'fs/promises';
 import path from 'path';
 import Handlebars from '../lib/handlebars.js';
 import zlib from 'zlib';
-
-// Helper to convert token arrays into HTML strings, mirroring server logic
-function tokensToHtml(tokens) {
-  return tokens
-    .map((t) => {
-      const text = t.text || '';
-      if (t.type === 'link') return `<a href="${t.href}">${text}</a>`;
-      if (t.style === 'bolditalic') return `<strong><em>${text}</em></strong>`;
-      if (t.style === 'bold') return `<strong>${text}</strong>`;
-      if (t.style === 'italic') return `<em>${text}</em>`;
-      if (t.type === 'heading') return `<strong>${text}</strong>`;
-      if (t.type === 'newline') return '<br>';
-      if (t.type === 'tab') return '<span class="tab"></span>';
-      if (t.type === 'bullet') return '<span class="bullet">•</span> ';
-      return text;
-    })
-    .join('');
-}
 
 test('all headings including Skills are bold in HTML and PDF outputs', async () => {
   const input = 'Jane Doe\n# Skills\n- Testing';
@@ -29,12 +16,25 @@ test('all headings including Skills are bold in HTML and PDF outputs', async () 
 
   // Render HTML using the modern template
   const tplSrc = await fs.readFile(path.resolve('templates', 'modern.html'), 'utf8');
+  const sectionContext = buildTemplateSectionContext(data.sections);
+  const toRenderableSection = (entry = {}) => ({
+    heading: entry.heading,
+    key: entry.key,
+    items: entry.htmlItems,
+    tokens: entry.tokens,
+    presentation: entry.presentation,
+    sectionClass: entry.sectionClass,
+    headingClass: entry.headingClass,
+    listClass: entry.listClass,
+    itemClass: entry.itemClass,
+    textClass: entry.textClass,
+    markerClass: entry.markerClass,
+    showMarkers: entry.showMarkers,
+    originalIndex: entry.originalIndex
+  });
   const htmlData = {
     ...data,
-    sections: data.sections.map((sec) => ({
-      ...sec,
-      items: sec.items.map(tokensToHtml)
-    }))
+    sections: sectionContext.sections.map(toRenderableSection)
   };
   const html = Handlebars.compile(tplSrc)(htmlData);
   expect(html).toMatchSnapshot('html');
