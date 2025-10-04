@@ -650,6 +650,48 @@ const normalizeTemplateContext = (context) => {
   return ensureCoverTemplateContext(normalized, templateForCover)
 }
 
+const buildTemplateRequestContext = (templateContext, selectedTemplate) => {
+  const canonicalSelectedTemplate = canonicalizeTemplateId(selectedTemplate) || 'modern'
+  const baseContext =
+    templateContext && typeof templateContext === 'object'
+      ? { ...templateContext }
+      : {}
+
+  if (!baseContext.template1) {
+    baseContext.template1 = canonicalSelectedTemplate
+  }
+  if (!baseContext.selectedTemplate) {
+    baseContext.selectedTemplate = canonicalSelectedTemplate
+  }
+
+  const normalizedContext = normalizeTemplateContext(baseContext) || {
+    template1: canonicalSelectedTemplate,
+    template2: canonicalSelectedTemplate,
+    selectedTemplate: canonicalSelectedTemplate
+  }
+
+  const canonicalPrimaryTemplate =
+    canonicalizeTemplateId(normalizedContext.template1) || canonicalSelectedTemplate
+  const canonicalSecondaryTemplate =
+    canonicalizeTemplateId(normalizedContext.template2) || canonicalPrimaryTemplate
+  const canonicalTemplate =
+    canonicalizeTemplateId(normalizedContext.selectedTemplate) || canonicalPrimaryTemplate
+
+  const preparedContext = {
+    ...normalizedContext,
+    template1: canonicalPrimaryTemplate,
+    template2: canonicalSecondaryTemplate,
+    selectedTemplate: canonicalTemplate
+  }
+
+  return {
+    canonicalTemplate,
+    canonicalPrimaryTemplate,
+    canonicalSecondaryTemplate,
+    context: preparedContext
+  }
+}
+
 const formatTemplateName = (id) => {
   if (!id) return 'Custom Template'
   if (id === '2025') return 'Future Vision 2025'
@@ -2518,13 +2560,15 @@ function App() {
       if (manualCertificatesInput.trim()) {
         formData.append('manualCertificates', manualCertificatesInput.trim())
       }
-      const canonicalUploadTemplate =
-        canonicalizeTemplateId(selectedTemplate) || 'modern'
+      const {
+        canonicalTemplate: canonicalUploadTemplate,
+        canonicalPrimaryTemplate: primaryUploadTemplate,
+        canonicalSecondaryTemplate: secondaryUploadTemplate
+      } = buildTemplateRequestContext(templateContext, selectedTemplate)
+
       formData.append('template', canonicalUploadTemplate)
       formData.append('templateId', canonicalUploadTemplate)
-      formData.append('template1', canonicalUploadTemplate)
-      const secondaryUploadTemplate =
-        canonicalizeTemplateId(templateContext?.template2) || canonicalUploadTemplate
+      formData.append('template1', primaryUploadTemplate)
       formData.append('template2', secondaryUploadTemplate)
       if (userIdentifier) {
         formData.append('userId', userIdentifier)
@@ -3686,29 +3730,12 @@ function App() {
     setIsGeneratingDocs(true)
     setError('')
     try {
-      const canonicalTemplate = canonicalizeTemplateId(selectedTemplate) || 'modern'
-      const nextTemplateContext = normalizeTemplateContext(
-        templateContext && typeof templateContext === 'object'
-          ? { ...templateContext }
-          : { template1: canonicalTemplate }
-      ) || { template1: canonicalTemplate }
-      if (!nextTemplateContext.template1) {
-        nextTemplateContext.template1 = canonicalTemplate
-      }
-      nextTemplateContext.selectedTemplate =
-        canonicalizeTemplateId(nextTemplateContext.selectedTemplate) || nextTemplateContext.template1
-
-      const coverSyncedContext = ensureCoverTemplateContext(
-        nextTemplateContext,
-        canonicalTemplate
-      )
-
-      const canonicalPrimaryTemplate =
-        canonicalizeTemplateId(coverSyncedContext.template1) || canonicalTemplate
-      const canonicalSecondaryTemplate =
-        canonicalizeTemplateId(coverSyncedContext.template2) || canonicalPrimaryTemplate
-      coverSyncedContext.template1 = canonicalPrimaryTemplate
-      coverSyncedContext.template2 = canonicalSecondaryTemplate
+      const {
+        canonicalTemplate,
+        canonicalPrimaryTemplate,
+        canonicalSecondaryTemplate,
+        context: requestTemplateContext
+      } = buildTemplateRequestContext(templateContext, selectedTemplate)
 
       const payload = {
         jobId,
@@ -3723,7 +3750,7 @@ function App() {
         linkedinProfileUrl: trimmedLinkedIn,
         credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
-        templateContext: coverSyncedContext,
+        templateContext: requestTemplateContext,
         templateId: canonicalTemplate,
         template: canonicalTemplate,
         template1: canonicalPrimaryTemplate,
