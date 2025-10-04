@@ -154,6 +154,16 @@ function isCoverLetterType(type) {
   return COVER_LETTER_TYPES.has(type)
 }
 
+function getBaselineScoreFromMatch(matchData) {
+  if (!matchData || typeof matchData !== 'object') return null
+  const { atsScoreAfter, enhancedScore, atsScoreBefore, originalScore } = matchData
+  if (Number.isFinite(atsScoreAfter)) return atsScoreAfter
+  if (Number.isFinite(enhancedScore)) return enhancedScore
+  if (Number.isFinite(atsScoreBefore)) return atsScoreBefore
+  if (Number.isFinite(originalScore)) return originalScore
+  return null
+}
+
 function deriveCoverLetterStateFromFiles(files) {
   const drafts = {}
   const originals = {}
@@ -3527,15 +3537,7 @@ function App() {
 
       const id = suggestion.id
       const updatedResumeDraft = suggestion.updatedResume || resumeText
-      const baselineScore = Number.isFinite(match?.atsScoreAfter)
-        ? match.atsScoreAfter
-        : Number.isFinite(match?.enhancedScore)
-          ? match.enhancedScore
-          : Number.isFinite(match?.atsScoreBefore)
-            ? match.atsScoreBefore
-            : Number.isFinite(match?.originalScore)
-              ? match.originalScore
-              : null
+      const baselineScore = getBaselineScoreFromMatch(match)
       const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
       const changeLogEntry = buildChangeLogEntry(suggestion)
       const historySnapshot = {
@@ -4359,13 +4361,16 @@ function App() {
       setEnhanceAllSummaryText('')
     }
 
+    const shouldRescore =
+      wasAccepted && typeof revertResumeText === 'string' && revertResumeText.trim().length > 0
+
     setImprovementResults((prev) =>
       prev.map((item) =>
         item.id === id
           ? {
               ...item,
               accepted: false,
-              rescorePending: false,
+              rescorePending: shouldRescore,
               rescoreError: '',
               scoreDelta: null
             }
@@ -4382,6 +4387,47 @@ function App() {
       setMatch(revertMatch ? cloneData(revertMatch) : null)
       setScoreBreakdown(revertScoreBreakdown)
       setResumeSkills(revertResumeSkills)
+    }
+
+    if (shouldRescore) {
+      const revertBaselineScore = getBaselineScoreFromMatch(revertMatch)
+      const revertMissingSkills = Array.isArray(revertMatch?.missingSkills)
+        ? revertMatch.missingSkills
+        : []
+      try {
+        await rescoreAfterImprovement({
+          updatedResume: revertResumeText,
+          baselineScore: revertBaselineScore,
+          previousMissingSkills: revertMissingSkills
+        })
+        setImprovementResults((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  rescorePending: false,
+                  rescoreError: '',
+                  scoreDelta: null
+                }
+              : item
+          )
+        )
+      } catch (err) {
+        console.error('Improvement rescore failed after rejection', err)
+        setError(err.message || 'Unable to refresh ATS scores after rejecting the improvement.')
+        setImprovementResults((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  rescorePending: false,
+                  rescoreError: err.message || 'Unable to refresh ATS scores.',
+                  scoreDelta: null
+                }
+              : item
+          )
+        )
+      }
     }
 
     try {
