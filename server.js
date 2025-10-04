@@ -9005,6 +9005,26 @@ function stringifyTokens(tokens = []) {
     return '';
   }
 
+  const isEnhancementPlaceholder = (value = '') =>
+    typeof value === 'string' &&
+    (/^\{\{RF_ENH_[A-Za-z0-9_]+\}\}$/.test(value) ||
+      /^\{\{RFENH[A-Za-z0-9]+\}\}$/.test(value));
+
+  const formatWithStyle = (value = '', style) => {
+    if (!value) return '';
+    if (isEnhancementPlaceholder(value)) return value;
+    switch (style) {
+      case 'bolditalic':
+        return `***${value}***`;
+      case 'bold':
+        return `**${value}**`;
+      case 'italic':
+        return `_${value}_`;
+      default:
+        return value;
+    }
+  };
+
   let result = '';
   let bulletSeen = false;
 
@@ -9032,18 +9052,22 @@ function stringifyTokens(tokens = []) {
         result = result.replace(/[ \t]+$/g, '');
         result += ' |';
         break;
-      case 'link':
-        if (token.text) {
-          result += token.text;
-        } else if (token.href) {
-          result += token.href;
+      case 'link': {
+        const label = token.text || token.href || '';
+        if (token.href) {
+          const styledLabel = formatWithStyle(label, token.style);
+          result += `[${styledLabel}](${token.href})`;
+        } else {
+          result += formatWithStyle(label, token.style);
         }
         break;
-      default:
+      }
+      default: {
         if (typeof token.text === 'string') {
-          result += token.text;
+          result += formatWithStyle(token.text, token.style);
         }
         break;
+      }
     }
   });
 

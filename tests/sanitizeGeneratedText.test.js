@@ -144,10 +144,26 @@ describe('sanitizeGeneratedText', () => {
     const sanitized = sanitizeGeneratedText(input, { skipRequiredSections: true });
 
     expect(sanitized).toMatch(
-      /Senior Engineer \| Big Co \| 2022 - Present/
+      /\*\*Senior Engineer\*\* \| Big Co \| 2022 - Present/
     );
     expect(sanitized).toMatch(
       /Built analytics platform\nIncreased NPS by 20%/
     );
+  });
+
+  test('retains emphasis and link markup when sanitizing enhanced sections', () => {
+    const input = [
+      'Jordan Doe',
+      '# Summary',
+      '- **Lead Engineer** driving _innovation_ in [AI Platforms](https://example.com)',
+      '# Skills',
+      '- JavaScript'
+    ].join('\n');
+
+    const sanitized = sanitizeGeneratedText(input, { skipRequiredSections: true });
+
+    expect(sanitized).toContain('**Lead Engineer**');
+    expect(sanitized).toContain('_innovation_');
+    expect(sanitized).toContain('[https://example.com](https://example.com)');
   });
 });
