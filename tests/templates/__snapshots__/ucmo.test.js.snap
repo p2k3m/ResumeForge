@@ -42,6 +42,13 @@ exports[`ucmo template renders with contact bar and logo: html 1`] = `
     .tab { display:inline-block; width:1.5em; }
     .tab + p { margin-top: 0; }
     strong { font-weight: 700; }
+
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      margin-left: 0;
+    }
   </style>
 </head>
 <body>
