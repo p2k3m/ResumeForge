@@ -547,7 +547,7 @@ describe('/api/process-cv', () => {
     });
   });
 
-  test('uses provided template and ucmo', async () => {
+  test('uses provided templates in preferred order', async () => {
     generateContentMock.mockReset();
     generateContentMock.mockResolvedValue({
       response: { text: () => JSON.stringify({ cover_letter1: 'cl1', cover_letter2: 'cl2' }) }
@@ -564,8 +564,8 @@ describe('/api/process-cv', () => {
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
-    expect(resumeCalls[0][1]).toBe('ucmo');
-    expect(resumeCalls[1][1]).toBe('modern');
+    expect(resumeCalls[0][1]).toBe('modern');
+    expect(resumeCalls[1][1]).toBe('professional');
   });
 
   test('uses templates array', async () => {

@@ -2,37 +2,30 @@ import { selectTemplates, CV_TEMPLATES, CV_TEMPLATE_GROUPS } from '../server.js'
 import fs from 'fs/promises';
 import path from 'path';
 
-describe('selectTemplates enforces ucmo and distinct groups', () => {
-  test.each(CV_TEMPLATES)('includes ucmo when both templates are %s', (tpl) => {
-    const { template1, template2 } = selectTemplates({ template1: tpl, template2: tpl });
-    expect([template1, template2]).toContain('ucmo');
+describe('selectTemplates respects preferred templates and contrast', () => {
+  test.each(CV_TEMPLATES)('prioritises preferred template %s', (tpl) => {
+    const { template1, template2 } = selectTemplates({ preferredTemplate: tpl });
+    expect(template1).toBe(tpl);
+    expect(template2).not.toBe(template1);
+    expect(CV_TEMPLATES).toContain(template2);
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );
-    expect(template1).not.toBe(template2);
   });
 
-  test('overrides when neither input is ucmo', () => {
-    const { template1, template2 } = selectTemplates({
-      template1: 'modern',
-      template2: 'professional'
-    });
-    expect([template1, template2]).toContain('ucmo');
-    expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
-      CV_TEMPLATE_GROUPS[template2]
-    );
-    expect(template1).not.toBe(template2);
+  test('uses explicit template1 when no preference supplied', () => {
+    const { template1, template2 } = selectTemplates({ template1: 'vibrant' });
+    expect(template1).toBe('vibrant');
+    expect(template2).not.toBe('vibrant');
+    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['vibrant']);
   });
 
-  test('random selection yields ucmo and distinct groups', () => {
-    for (let i = 0; i < 20; i++) {
-      const { template1, template2 } = selectTemplates();
-      expect([template1, template2]).toContain('ucmo');
-      expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
-        CV_TEMPLATE_GROUPS[template2]
-      );
-      expect(template1).not.toBe(template2);
-    }
+  test('defaults to ucmo when nothing provided', () => {
+    const { template1, template2 } = selectTemplates();
+    expect(template1).toBe('ucmo');
+    expect(template2).not.toBe('ucmo');
+    expect(CV_TEMPLATES).toContain(template2);
+    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
   });
 
   test('heading styles are bold across templates', async () => {
