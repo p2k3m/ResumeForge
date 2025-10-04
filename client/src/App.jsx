@@ -1518,9 +1518,9 @@ function App() {
   const jdValidationComplete = Boolean(jobDescriptionText && jobDescriptionText.trim())
   const improvementsUnlocked = uploadComplete && scoreComplete && jdValidationComplete
   const improvementUnlockMessage = !uploadComplete
-    ? 'Upload your resume and job description to unlock improvements.'
+    ? 'Complete Step 1 by uploading your resume and JD to unlock scoring.'
     : !scoreComplete
-      ? 'Wait for the ATS scoring to finish before generating improvements.'
+      ? 'Finish Step 2 — we’re still calculating your ATS metrics.'
       : !jdValidationComplete
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
@@ -1941,22 +1941,22 @@ function App() {
     const baseSteps = [
       {
         key: 'upload',
-        label: 'Upload & Submit',
-        description: 'Attach your CV and target JD to kick off the analysis.'
+        label: 'Upload',
+        description: 'Attach your CV and target JD so we can start analysing.'
       },
       {
         key: 'score',
-        label: 'ATS Score',
-        description: 'Review the ATS breakdown and keyword coverage.'
+        label: 'Score',
+        description: 'Review the ATS breakdown and baseline selection chances.'
       },
       {
         key: 'improvements',
-        label: 'Improvement Selection',
-        description: 'Generate targeted rewrites and choose what to apply.'
+        label: 'Improve',
+        description: 'Apply targeted rewrites once you understand the current scores.'
       },
       {
         key: 'download',
-        label: 'Enhanced Download',
+        label: 'Download',
         description: 'Grab the upgraded CVs and tailored cover letters.'
       }
     ]
@@ -4739,13 +4739,13 @@ function App() {
                 </div>
                 {improvementsUnlocked && improvementResults.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
-                    Review your ATS results, then pick an improvement above to see tailored rewrites before generating downloads.
+                    Review the Step 2 ATS dashboard, then choose an improvement above to preview tailored rewrites before you generate downloads.
                   </div>
                 )}
               </div>
             ) : (
               <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
-                Run the ATS scoring first to populate your dashboard. Once the metrics are ready, you can unlock focused improvement options tailored to the analysis.
+                Complete Step 2 (Score) to populate your ATS dashboard. Once the metrics are ready, you can unlock focused improvement options tailored to the analysis.
               </div>
             )}
           </section>
