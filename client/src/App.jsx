@@ -1350,6 +1350,8 @@ function App() {
   const improvementLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
+  const profileInputRef = useRef(null)
+  const [linkedinRequired, setLinkedinRequired] = useState(false)
   const userIdentifier = useMemo(
     () => deriveUserIdentifier({ profileUrl }),
     [profileUrl]
@@ -3473,6 +3475,15 @@ function App() {
       setError('Upload your resume and job description before generating downloads.')
       return
     }
+    const trimmedLinkedIn = profileUrl.trim()
+    if (!trimmedLinkedIn) {
+      setLinkedinRequired(true)
+      setError('Add your LinkedIn profile URL before generating enhanced documents.')
+      if (profileInputRef.current) {
+        profileInputRef.current.focus()
+      }
+      return
+    }
     if (!improvementsUnlocked) {
       setError('Complete the initial scoring and improvement review before generating downloads.')
       return
@@ -3515,7 +3526,7 @@ function App() {
         jobDescriptionText,
         jobSkills,
         resumeSkills,
-        linkedinProfileUrl: profileUrl.trim(),
+        linkedinProfileUrl: trimmedLinkedIn,
         credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
         templateContext: coverSyncedContext,
@@ -3933,13 +3944,32 @@ function App() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              type="url"
-              placeholder="LinkedIn Profile URL"
-              value={profileUrl}
-              onChange={(e) => setProfileUrl(e.target.value)}
-              className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
+            <div className="space-y-1">
+              <input
+                ref={profileInputRef}
+                type="url"
+                placeholder="LinkedIn Profile URL"
+                value={profileUrl}
+                onChange={(e) => {
+                  const value = e.target.value
+                  setProfileUrl(value)
+                  if (linkedinRequired && value.trim()) {
+                    setLinkedinRequired(false)
+                  }
+                }}
+                aria-invalid={linkedinRequired ? 'true' : 'false'}
+                className={`w-full p-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                  linkedinRequired
+                    ? 'border-rose-400 focus:ring-rose-300'
+                    : 'border-purple-200'
+                }`}
+              />
+              {linkedinRequired && (
+                <p className="text-xs font-semibold text-rose-600">
+                  Add your LinkedIn profile URL to generate enhanced documents.
+                </p>
+              )}
+            </div>
             <input
               type="url"
               placeholder="Job Description URL (optional)"
