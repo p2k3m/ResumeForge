@@ -1207,6 +1207,29 @@ function uniqueValidCvTemplates(list = []) {
   return result;
 }
 
+function normalizeTemplateHistory(list = [], additional = []) {
+  const history = [];
+  if (Array.isArray(list)) {
+    list.forEach((item) => {
+      const canonical = canonicalizeCvTemplateId(item);
+      if (canonical && !history.includes(canonical)) {
+        history.push(canonical);
+      }
+    });
+  }
+  const additions = Array.isArray(additional) ? additional : [additional];
+  for (let i = additions.length - 1; i >= 0; i -= 1) {
+    const canonical = canonicalizeCvTemplateId(additions[i]);
+    if (!canonical) continue;
+    const existingIndex = history.indexOf(canonical);
+    if (existingIndex >= 0) {
+      history.splice(existingIndex, 1);
+    }
+    history.unshift(canonical);
+  }
+  return history;
+}
+
 function canonicalizeCoverTemplateId(templateId, fallback = CL_TEMPLATES[0]) {
   if (!templateId || typeof templateId !== 'string') {
     return fallback;
@@ -10242,6 +10265,16 @@ async function generateEnhancedDocumentsResponse({
     availableCoverTemplates = [...CL_TEMPLATES];
   }
 
+  const templateHistory = normalizeTemplateHistory(
+    templateContextInput.templateHistory,
+    [
+      template1,
+      templateContextInput.selectedTemplate,
+      templateContextInput.template1,
+      templateContextInput.template2,
+    ]
+  );
+
   const templateParamsConfig =
     templateParamConfig ?? parseTemplateParamsConfig(undefined);
 
@@ -11079,6 +11112,7 @@ async function generateEnhancedDocumentsResponse({
       templates: availableCvTemplates,
       coverTemplates: availableCoverTemplates,
       selectedTemplate: template1,
+      templateHistory,
     },
   };
 }
@@ -11442,6 +11476,13 @@ app.post(
         typeof req.body.templateContext === 'object' && req.body.templateContext
           ? req.body.templateContext
           : {};
+      templateContextInput.templateHistory = normalizeTemplateHistory(
+        templateContextInput.templateHistory,
+        [
+          templateContextInput.selectedTemplate,
+          templateContextInput.template1,
+        ]
+      );
       const selection = selectTemplates({
         defaultCvTemplate: templateContextInput.template1 || CV_TEMPLATES[0],
         defaultClTemplate: templateContextInput.coverTemplate1 || CL_TEMPLATES[0],
@@ -12699,6 +12740,7 @@ app.post(
       templates: availableCvTemplates,
       coverTemplates: availableCoverTemplates,
       selectedTemplate: template1,
+      templateHistory: normalizeTemplateHistory(req.body.templateHistory, [template1])
     };
     const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
@@ -12835,7 +12877,10 @@ app.post(
       selectionProbability: selectionInsights?.probability ?? null,
       selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
       selectionInsights,
-      templateContext: templateContextInput,
+      templateContext: {
+        ...templateContextInput,
+        templateHistory,
+      },
     };
 
     return res.json(fallbackResponse);

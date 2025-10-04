@@ -379,6 +379,32 @@ const normalizeTemplateContext = (context) => {
   if (primary) normalized.template1 = primary
   if (secondary) normalized.template2 = secondary
   if (selected) normalized.selectedTemplate = selected
+  const historyList = []
+  if (Array.isArray(context.templateHistory)) {
+    context.templateHistory.forEach((item) => {
+      const canonical = canonicalizeTemplateId(item)
+      if (canonical && !historyList.includes(canonical)) {
+        historyList.push(canonical)
+      }
+    })
+  }
+  const ensureHistory = (value) => {
+    const canonical = canonicalizeTemplateId(value)
+    if (!canonical) return
+    const index = historyList.indexOf(canonical)
+    if (index >= 0) {
+      historyList.splice(index, 1)
+    }
+    historyList.unshift(canonical)
+  }
+  ensureHistory(selected)
+  ensureHistory(primary)
+  ensureHistory(secondary)
+  if (historyList.length) {
+    normalized.templateHistory = historyList
+  } else if ('templateHistory' in normalized) {
+    delete normalized.templateHistory
+  }
   if (Array.isArray(context.templates)) {
     normalized.templates = Array.from(
       new Set(
@@ -1294,6 +1320,41 @@ function App() {
     ]
   }, [templateContext, selectedTemplate])
 
+  const templateHistorySummary = useMemo(() => {
+    const baseHistory = Array.isArray(templateContext?.templateHistory)
+      ? templateContext.templateHistory
+          .map((item) => canonicalizeTemplateId(item))
+          .filter(Boolean)
+      : []
+    if (!baseHistory.length) {
+      return ''
+    }
+    const history = [...baseHistory]
+    const prioritize = (value) => {
+      const canonical = canonicalizeTemplateId(value)
+      if (!canonical) return
+      const index = history.indexOf(canonical)
+      if (index >= 0) {
+        history.splice(index, 1)
+      }
+      history.unshift(canonical)
+    }
+    prioritize(templateContext?.selectedTemplate)
+    prioritize(selectedTemplate)
+    prioritize(templateContext?.template1)
+    prioritize(templateContext?.template2)
+
+    const labels = history
+      .map((tpl) => formatTemplateName(tpl))
+      .filter(Boolean)
+
+    if (labels.length <= 1) {
+      return ''
+    }
+
+    return formatReadableList(labels)
+  }, [selectedTemplate, templateContext])
+
   useEffect(() => {
     if (!templateContext) return
     const canonical = canonicalizeTemplateId(
@@ -1331,6 +1392,17 @@ function App() {
         } else {
           const filtered = currentList.filter((item) => item !== canonical)
           base.templates = [canonical, ...filtered]
+        }
+        const currentHistory = Array.isArray(prev?.templateHistory)
+          ? prev.templateHistory
+              .map((item) => canonicalizeTemplateId(item))
+              .filter(Boolean)
+          : []
+        if (!currentHistory.includes(canonical)) {
+          base.templateHistory = [canonical, ...currentHistory]
+        } else {
+          const filteredHistory = currentHistory.filter((item) => item !== canonical)
+          base.templateHistory = [canonical, ...filteredHistory]
         }
         return ensureCoverTemplateContext(base, canonical)
       })
@@ -3593,6 +3665,7 @@ function App() {
             selectedTemplate={selectedTemplate}
             onSelect={handleTemplateSelect}
             disabled={isProcessing}
+            historySummary={templateHistorySummary}
           />
 
           {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
