@@ -409,6 +409,23 @@ jobs:
                 fi
               fi
 
+              : >"$tmp_err"
+              if stack_status=$(aws cloudformation describe-stacks \
+                  --stack-name "$STACK_NAME" \
+                  --query "Stacks[0].StackStatus" \
+                  --output text 2>"$tmp_err"); then
+                stack_status=$(wait_for_terminal_stack_status "$stack_status")
+                echo "Stack reached terminal status after deleting obsolete change set: $stack_status"
+              else
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' no longer exists after deleting change set. Proceeding with retry."
+                else
+                  echo "$describe_err" >&2
+                  exit 1
+                fi
+              fi
+
               deploy_attempt=$((deploy_attempt + 1))
               sleep 15
               continue
