@@ -67,6 +67,10 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByTestId('ats-score-summary')).toHaveTextContent(
       'ATS score moved from 48% to 76% (+28 pts).'
     )
+    const snapshotMetrics = screen.getByTestId('score-summary-metrics')
+    const atsSnapshot = within(snapshotMetrics).getByTestId('ats-summary-card')
+    expect(within(atsSnapshot).getByTestId('ats-summary-before')).toHaveTextContent('48%')
+    expect(within(atsSnapshot).getByTestId('ats-summary-after')).toHaveTextContent('76%')
     expect(screen.getByLabelText('match comparison')).toBeInTheDocument()
     expect(screen.getByTestId('original-score')).toHaveTextContent('48%')
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76%')
@@ -188,6 +192,11 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByTestId('selection-summary')).toHaveTextContent(
       'Selection chance moved from 42% to 71% (+29 pts).'
     )
+    const summaryMetrics = screen.getByTestId('score-summary-metrics')
+    const selectionSnapshot = within(summaryMetrics).getByTestId('selection-summary-card')
+    expect(within(selectionSnapshot).getByTestId('selection-summary-before')).toHaveTextContent('42%')
+    expect(within(selectionSnapshot).getByTestId('selection-summary-after')).toHaveTextContent('71%')
+    expect(within(selectionSnapshot).getByTestId('selection-summary-delta')).toHaveTextContent('+29 pts')
     expect(screen.getByText('Selection % Before')).toBeInTheDocument()
     expect(screen.getByText('Selection % After')).toBeInTheDocument()
   })
