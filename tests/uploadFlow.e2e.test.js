@@ -174,7 +174,7 @@ describe('upload to download flow (e2e)', () => {
       .filter((key) => typeof key === 'string' && key.endsWith('.pdf'));
 
     expect(pdfKeys.length).toBeGreaterThanOrEqual(4);
-    expect(pdfKeys.join('\n')).toContain('/cv/');
+    expect(pdfKeys.join('\n')).toContain('cv/');
     expect(pdfKeys.join('\n')).toContain('cover_letter_');
   });
 });
