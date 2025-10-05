@@ -25,30 +25,6 @@ const RESUME_TEMPLATE_PREVIEWS = {
     highlight: 'bg-amber-500/30',
     chip: 'bg-amber-100 text-amber-700'
   },
-  creative: {
-    accent: 'from-fuchsia-500 via-violet-500 to-cyan-400',
-    container: 'border-fuchsia-200 bg-white',
-    sidebar: 'bg-gradient-to-b from-fuchsia-700/90 to-cyan-600/80',
-    line: 'bg-fuchsia-200/70',
-    highlight: 'bg-cyan-400/30',
-    chip: 'bg-fuchsia-100 text-fuchsia-700'
-  },
-  vibrant: {
-    accent: 'from-orange-400 via-pink-500 to-purple-600',
-    container: 'border-orange-200 bg-white',
-    sidebar: 'bg-gradient-to-b from-orange-600/90 to-purple-600/80',
-    line: 'bg-orange-200/70',
-    highlight: 'bg-purple-500/25',
-    chip: 'bg-orange-100 text-orange-700'
-  },
-  ucmo: {
-    accent: 'from-rose-900 via-rose-700 to-rose-500',
-    container: 'border-rose-300 bg-rose-50',
-    sidebar: 'bg-gradient-to-b from-rose-900/95 to-rose-700/85',
-    line: 'bg-rose-200/80',
-    highlight: 'bg-rose-500/30',
-    chip: 'bg-rose-100 text-rose-700'
-  },
   2025: {
     accent: 'from-sky-500 via-cyan-400 to-emerald-400',
     container: 'border-cyan-200 bg-slate-900/90 text-slate-50',

@@ -620,13 +620,13 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('templates', JSON.stringify(['ucmo', 'vibrant']))
+      .field('templates', JSON.stringify(['classic', 'ats']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
-    expect(resumeCalls[0][1]).toBe('ucmo');
-    expect(resumeCalls[1][1]).toBe('vibrant');
+    expect(resumeCalls[0][1]).toBe('classic');
+    expect(resumeCalls[1][1]).toBe('ats');
   });
 
   test('filters AI guidance lines', async () => {

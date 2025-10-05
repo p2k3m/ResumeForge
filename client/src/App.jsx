@@ -639,7 +639,11 @@ const jobFitToneStyles = {
   }
 }
 
-const TEMPLATE_ALIASES = {}
+const TEMPLATE_ALIASES = {
+  ucmo: 'classic',
+  vibrant: 'modern',
+  creative: 'modern'
+}
 
 const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_classic']
 
@@ -657,7 +661,7 @@ const COVER_TEMPLATE_ALIASES = {
   covermidnight: 'cover_classic'
 }
 
-const CLASSIC_STYLE_TEMPLATE_IDS = new Set(['classic', 'professional', 'ucmo'])
+const CLASSIC_STYLE_TEMPLATE_IDS = new Set(['classic', 'professional'])
 
 const RESUME_TO_COVER_TEMPLATE = {}
 
@@ -792,10 +796,9 @@ const normalizeTemplateContext = (context) => {
     new Set([primary, selected, secondary, ...baseTemplates].filter(Boolean))
   )
   if (enrichedTemplates.length) {
-    normalized.templates = [
-      'ucmo',
-      ...enrichedTemplates.filter((tpl) => tpl && tpl !== 'ucmo')
-    ]
+    normalized.templates = Array.from(
+      new Set(['modern', ...enrichedTemplates.filter(Boolean)])
+    )
   }
   const templateForCover = normalized.selectedTemplate || normalized.template1 || 'modern'
   return ensureCoverTemplateContext(normalized, templateForCover)
@@ -930,12 +933,12 @@ const BASE_TEMPLATE_OPTIONS = [
   {
     id: 'professional',
     name: 'Professional Edge',
-    description: 'Refined business styling with signature accents for leadership roles.'
+    description: 'Refined corporate styling with confident headings and balanced whitespace.'
   },
   {
-    id: 'vibrant',
-    name: 'Vibrant Fusion',
-    description: 'Playful dual-tone palette with energetic dividers and modern sans-serif headings.'
+    id: 'classic',
+    name: 'Classic Heritage',
+    description: 'Timeless serif typography with structured section framing.'
   },
   {
     id: 'ats',
@@ -946,21 +949,6 @@ const BASE_TEMPLATE_OPTIONS = [
     id: '2025',
     name: 'Future Vision 2025',
     description: 'Futuristic grid layout with crisp typography and subtle neon cues.'
-  },
-  {
-    id: 'ucmo',
-    name: 'Crimson Heritage',
-    description: 'Classic serif typography with deep crimson accents inspired by university letterhead design.'
-  },
-  {
-    id: 'classic',
-    name: 'Classic Heritage',
-    description: 'Timeless serif typography with elegant section framing.'
-  },
-  {
-    id: 'creative',
-    name: 'Creative Spotlight',
-    description: 'Gradient-rich storytelling layout with bold highlights.'
   }
 ]
 

@@ -11,10 +11,9 @@ describe('serverless bootstrap', () => {
     expect(response.text).toContain('id="portal-form"');
     expect(response.text).toContain('option value="modern"');
     expect(response.text).toContain('option value="professional"');
-    expect(response.text).toContain('option value="vibrant"');
+    expect(response.text).toContain('option value="classic"');
     expect(response.text).toContain('option value="ats"');
     expect(response.text).toContain('option value="2025"');
-    expect(response.text).toContain('option value="ucmo"');
     expect(response.text).toContain('name="templateId"');
   });
 

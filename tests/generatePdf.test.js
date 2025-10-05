@@ -15,7 +15,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import Handlebars from '../lib/handlebars.js';
 
-const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional', 'ucmo']);
+const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional']);
 
 const expectedCoverForTemplate = (templateId) =>
   CLASSIC_CV_TEMPLATES.has(templateId) ? 'cover_classic' : 'cover_modern';
@@ -282,18 +282,18 @@ describe('generatePdf and parsing', () => {
     }
   );
 
-  test('selectTemplates defaults to ucmo and contrasting style', () => {
+  test('selectTemplates defaults to modern and contrasting style', () => {
     const { template1, template2, coverTemplate1, coverTemplate2 } = selectTemplates();
-    expect(template1).toBe('ucmo');
-    expect(template2).not.toBe('ucmo');
-    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
+    expect(template1).toBe('modern');
+    expect(template2).not.toBe('modern');
+    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['modern']);
     expect(CV_TEMPLATES).toContain(template2);
     expect(coverTemplate1).toBe(expectedCoverForTemplate(template1));
     expect(coverTemplate2).toBe(expectedCoverForTemplate(template2));
   });
 
   test('explicit template preference becomes primary', () => {
-    const preferred = CV_TEMPLATES.find((tpl) => tpl !== 'ucmo') || CV_TEMPLATES[0];
+    const preferred = CV_TEMPLATES.find((tpl) => tpl !== 'modern') || CV_TEMPLATES[0];
     const { template1, template2, coverTemplate1 } = selectTemplates({ preferredTemplate: preferred });
     expect(template1).toBe(preferred);
     expect(template2).not.toBe(preferred);
@@ -658,33 +658,6 @@ describe('generatePdf and parsing', () => {
     expect(pdf).toHaveBeenCalledWith({ format: 'A4', printBackground: true });
     expect(close).toHaveBeenCalled();
     setChromiumLauncher(null);
-  });
-
-  test('ucmo template auto-populates extracted contact fields', async () => {
-    const input = [
-      'Jane Candidate',
-      'Email: jane@example.com',
-      'Phone: 555-123-4567',
-      'Springfield, MO',
-      'LinkedIn: linkedin.com/in/jane',
-      '# Experience',
-      '- Led initiatives',
-      '# Education',
-      '- BSc, Computer Science'
-    ].join('\n');
-    const setContent = jest.fn();
-    const pdf = jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4'));
-    const close = jest.fn();
-    const newPage = jest.fn().mockResolvedValue({ setContent, pdf });
-    setChromiumLauncher(async () => ({ newPage, close }));
-    await generatePdf(input, 'ucmo');
-    setChromiumLauncher(null);
-    expect(setContent).toHaveBeenCalled();
-    const html = setContent.mock.calls[0][0];
-    expect(html).toContain('555-123-4567');
-    expect(html).toContain('jane@example.com');
-    expect(html).toContain('Springfield, MO');
-    expect(html).toContain('linkedin.com/in/jane');
   });
 
   test('PDFKit fallback produces consistent line spacing for bullet lists', async () => {

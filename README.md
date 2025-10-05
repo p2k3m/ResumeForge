@@ -267,9 +267,9 @@ inside `dist/lambda`. Individual steps remain available through `npm run build:c
 
 Available template values:
 - `modern` – clean sans-serif look (default)
-- `ucmo` – classic serif styling
-- `professional` – centered header with subtle dividers
-- `vibrant` – bold color accents with contemporary typography
+- `professional` – refined corporate styling with confident headings
+- `classic` – timeless serif presentation with structured sections
+- `ats` – single-column format prioritising ATS parsing and clarity
 - `2025` – responsive grid layout with modern Inter font, blue accents, and spacious margins
 
 Any missing or invalid ID falls back to `modern`.
