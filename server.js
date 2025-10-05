@@ -12624,7 +12624,7 @@ async function generateEnhancedDocumentsResponse({
         applicantName,
         letterIndex: name === 'cover_letter1' ? 1 : 2,
       });
-      urlEntry.text = coverLetterFields;
+      urlEntry.text = coverLetterText;
       urlEntry.coverLetterFields = coverLetterFields;
     } else if (entry?.text) {
       urlEntry.text = entry.text;
