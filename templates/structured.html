@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resume</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: clamp(36px, 6vw, 72px);
+      font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
+      background: #f5f7fb;
+      color: #1f2937;
+    }
+
+    .sheet {
+      max-width: 880px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 28px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: 0 26px 52px rgba(15, 23, 42, 0.14);
+      padding: clamp(48px, 6vw, 64px);
+    }
+
+    header {
+      display: grid;
+      gap: 8px;
+      border-bottom: 2px solid rgba(148, 163, 184, 0.35);
+      padding-bottom: 28px;
+      margin-bottom: clamp(32px, 5vw, 44px);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 4vw, 3.4rem);
+      letter-spacing: -0.015em;
+      color: #0f172a;
+    }
+
+    header p {
+      margin: 0;
+      color: #4b5563;
+      font-size: 1rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    main {
+      display: grid;
+      gap: clamp(20px, 3vw, 32px);
+    }
+
+    section {
+      position: relative;
+      padding: clamp(22px, 3vw, 30px);
+      border-radius: 22px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(14, 165, 233, 0.04));
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+      display: grid;
+      gap: 16px;
+    }
+
+    section::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 0 0;
+      border-radius: inherit;
+      background: linear-gradient(120deg, rgba(13, 148, 136, 0.12), transparent 60%);
+      opacity: 0;
+      transition: opacity 200ms ease;
+      pointer-events: none;
+    }
+
+    section:hover::before {
+      opacity: 1;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 1.18rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #0f172a;
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    h2::after {
+      content: '';
+      flex: 1;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(13, 148, 136, 0.5), transparent);
+    }
+
+    ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+
+    li {
+      display: grid;
+      grid-template-columns: 16px 1fr;
+      gap: 12px;
+      line-height: 1.6;
+      color: #1f2937;
+      white-space: pre-wrap;
+    }
+
+    li::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      margin-top: 10px;
+      border-radius: 50%;
+      background: rgba(13, 148, 136, 0.8);
+      box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.18);
+    }
+
+    .section-list--contact,
+    .section-list--summary,
+    .section-list--skills,
+    .section-list--certifications {
+      display: grid;
+      gap: 8px;
+    }
+
+    .section-list--contact li,
+    .section-list--summary li,
+    .section-list--skills li,
+    .section-list--certifications li {
+      grid-template-columns: 1fr;
+      padding-left: 0;
+    }
+
+    .section-list--contact li::before,
+    .section-list--summary li::before,
+    .section-list--skills li::before,
+    .section-list--certifications li::before {
+      display: none;
+    }
+
+    .section-list--contact li,
+    .section-list--summary li,
+    .section-list--skills li,
+    .section-list--certifications li {
+      padding: 0;
+      color: #0f172a;
+    }
+
+    strong {
+      color: #0f172a;
+    }
+
+    em {
+      color: #475569;
+    }
+
+    @media (min-width: 940px) {
+      main {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+      }
+      section:nth-of-type(1),
+      section:nth-of-type(2) {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff;
+      }
+      .sheet {
+        max-width: none;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      section {
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <header>
+      <h1>{{name}}</h1>
+      <p>Structured ATS Resume</p>
+    </header>
+    <main>
+      {{#each sections}}
+      <section class="{{sectionClass}}">
+        {{#if heading}}
+        <h2 class="{{headingClass}}">{{heading}}</h2>
+        {{/if}}
+        {{#if items}}
+        <ul class="{{listClass}}">
+          {{#each items}}
+          <li class="{{../itemClass}}">{{{this}}}</li>
+          {{/each}}
+        </ul>
+        {{/if}}
+      </section>
+      {{/each}}
+    </main>
+  </div>
+</body>
+</html>
