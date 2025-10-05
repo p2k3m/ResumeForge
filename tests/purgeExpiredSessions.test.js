@@ -10,13 +10,13 @@ describe('purgeExpiredSessions', () => {
     const freshDate = '2024-01-15';
     const sessionId = 'session-abc123';
     const freshSessionId = 'session-fresh456';
-    const sessionPrefix = `candidate/cv/${oldDate}/${sessionId}/`;
-    const freshPrefix = `candidate/cv/${freshDate}/${freshSessionId}/`;
+    const sessionPrefix = `cv/candidate/${oldDate}/${sessionId}/`;
+    const freshPrefix = `cv/candidate/${freshDate}/${freshSessionId}/`;
 
     const listedObjects = [
-      buildS3Object(`${sessionPrefix}candidate.pdf`),
-      buildS3Object(`${sessionPrefix}generated/cv/candidate.pdf`),
-      buildS3Object(`${freshPrefix}candidate.pdf`),
+      buildS3Object(`${sessionPrefix}original.pdf`),
+      buildS3Object(`${sessionPrefix}enhanced_primary.pdf`),
+      buildS3Object(`${freshPrefix}original.pdf`),
     ];
 
     const deleteChunks = [];
@@ -43,14 +43,14 @@ describe('purgeExpiredSessions', () => {
             Items: [
               {
                 linkedinProfileUrl: { S: 'expired-hash' },
-                s3Key: { S: `${sessionPrefix}candidate.pdf` },
+                s3Key: { S: `${sessionPrefix}original.pdf` },
                 cv1Url: {
-                  S: `https://example.com/${sessionPrefix}generated/cv/candidate.pdf?X-Amz-Signature=mock-signature&X-Amz-Expires=100`,
+                  S: `https://example.com/${sessionPrefix}enhanced_primary.pdf?X-Amz-Signature=mock-signature&X-Amz-Expires=100`,
                 },
               },
               {
                 linkedinProfileUrl: { S: 'fresh-hash' },
-                s3Key: { S: `${freshPrefix}candidate.pdf` },
+                s3Key: { S: `${freshPrefix}original.pdf` },
               },
             ],
           });
@@ -75,8 +75,8 @@ describe('purgeExpiredSessions', () => {
     const deletedKeys = deleteChunks.flat().map((entry) => entry.Key);
     expect(deletedKeys).toEqual(
       expect.arrayContaining([
-        `${sessionPrefix}candidate.pdf`,
-        `${sessionPrefix}generated/cv/candidate.pdf`,
+        `${sessionPrefix}original.pdf`,
+        `${sessionPrefix}enhanced_primary.pdf`,
       ])
     );
 

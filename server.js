@@ -1680,19 +1680,19 @@ const SESSION_RETENTION_DAYS =
   Number.isFinite(parsedRetention) && parsedRetention > 0
     ? parsedRetention
     : 30;
-const SESSION_PREFIX = '';
+const SESSION_PREFIX = 'cv/';
 const SESSION_PATH_REGEX =
-  /^([^/]+)\/cv\/(\d{4}-\d{2}-\d{2})(?:\/([^/]+))?\//;
+  /^cv\/([^/]+)\/(\d{4}-\d{2}-\d{2})(?:\/([^/]+))?\//;
 
 function deriveSessionPrefix(match) {
   if (!match) return '';
-  const [, candidate, sessionDate, jobSegment] = match;
-  if (!candidate || !sessionDate) {
+  const [, ownerSegment, sessionDate, jobSegment] = match;
+  if (!ownerSegment || !sessionDate) {
     return '';
   }
   return jobSegment
-    ? `${candidate}/cv/${sessionDate}/${jobSegment}/`
-    : `${candidate}/cv/${sessionDate}/`;
+    ? `cv/${ownerSegment}/${sessionDate}/${jobSegment}/`
+    : `cv/${ownerSegment}/${sessionDate}/`;
 }
 
 function anonymizePersonalData(value) {
@@ -8939,6 +8939,104 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
+function sanitizeS3KeyComponent(value, { fallback = '', maxLength = 96 } = {}) {
+  const normalise = (input) => {
+    if (input === undefined || input === null) {
+      return '';
+    }
+    const raw = String(input).trim().toLowerCase();
+    if (!raw) {
+      return '';
+    }
+    let cleaned = raw.replace(/[^a-z0-9_-]+/g, '-').replace(/-+/g, '-');
+    cleaned = cleaned.replace(/^-|-$/g, '');
+    if (!cleaned) {
+      return '';
+    }
+    if (maxLength && cleaned.length > maxLength) {
+      return cleaned.slice(0, maxLength);
+    }
+    return cleaned;
+  };
+
+  let sanitized = normalise(value);
+  if (!sanitized && fallback) {
+    sanitized = normalise(fallback);
+  }
+  return sanitized;
+}
+
+function resolveDocumentOwnerSegment({ userId, sanitizedName } = {}) {
+  return (
+    sanitizeS3KeyComponent(userId) ||
+    sanitizeS3KeyComponent(sanitizedName) ||
+    'candidate'
+  );
+}
+
+function buildDocumentSessionPrefix({
+  ownerSegment,
+  dateSegment,
+  jobSegment,
+} = {}) {
+  const safeOwner = sanitizeS3KeyComponent(ownerSegment, { fallback: 'candidate' }) || 'candidate';
+  const safeDate = sanitizeS3KeyComponent(dateSegment, {
+    fallback: new Date().toISOString().slice(0, 10),
+  });
+  const safeJob = sanitizeS3KeyComponent(jobSegment);
+  let prefix = `cv/${safeOwner}/`;
+  if (safeDate) {
+    prefix += `${safeDate}/`;
+  }
+  if (safeJob) {
+    prefix += `${safeJob}/`;
+  }
+  return prefix;
+}
+
+function buildDocumentFileBaseName({ type, templateId, variant }) {
+  const templateSegment = sanitizeS3KeyComponent(templateId);
+  const variantSegment = sanitizeS3KeyComponent(variant, { fallback: type });
+
+  if (type === 'resume') {
+    return templateSegment
+      ? `enhanced_${templateSegment}`
+      : `enhanced_${variantSegment || 'resume'}`;
+  }
+
+  if (type === 'cover_letter') {
+    return templateSegment
+      ? `cover_letter_${templateSegment}`
+      : `cover_letter_${variantSegment || 'cover-letter'}`;
+  }
+
+  if (type === 'changelog') {
+    return 'changelog';
+  }
+
+  if (type === 'original') {
+    return 'original';
+  }
+
+  return variantSegment || sanitizeS3KeyComponent(type, { fallback: 'document' }) || 'document';
+}
+
+function ensureUniqueFileBase(baseName, usedNames) {
+  const safeBase = baseName || 'document';
+  if (!usedNames.has(safeBase)) {
+    usedNames.add(safeBase);
+    return safeBase;
+  }
+  let index = 2;
+  let candidate;
+  do {
+    candidate = `${safeBase}_${index}`;
+    index += 1;
+  } while (usedNames.has(candidate));
+  usedNames.add(candidate);
+  return candidate;
+}
+
 function sanitizeJobSegment(jobId) {
   if (typeof jobId !== 'string') return '';
   const normalized = jobId
@@ -11774,11 +11872,18 @@ async function handleImprovementRequest(type, req, res) {
       const sanitizedName = sanitizeName(applicantName) || 'candidate';
       const jobKeySegment = sanitizeJobSegment(jobIdInput);
       const dateSegment = new Date().toISOString().slice(0, 10);
+      const ownerSegment = resolveDocumentOwnerSegment({
+        userId: res.locals.userId,
+        sanitizedName,
+      });
       const prefix = originalUploadKey
         ? originalUploadKey.replace(/[^/]+$/, '')
-        : `${sanitizedName}/cv/${dateSegment}/${jobKeySegment ? `${jobKeySegment}/` : ''}`;
-      const effectiveOriginalUploadKey =
-        originalUploadKey || `${prefix}${sanitizedName}.pdf`;
+        : buildDocumentSessionPrefix({
+            ownerSegment,
+            dateSegment,
+            jobSegment: jobKeySegment,
+          });
+      const effectiveOriginalUploadKey = originalUploadKey || `${prefix}original.pdf`;
       const effectiveLogKey = logKey || `${prefix}logs/processing.jsonl`;
 
       let templateContextInput =
@@ -12542,10 +12647,19 @@ async function generateEnhancedDocumentsResponse({
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
 
+  const ownerSegmentForKeys = resolveDocumentOwnerSegment({
+    userId,
+    sanitizedName,
+  });
+  const jobSegmentForKeys = sanitizeJobSegment(jobId);
+  const generationDateSegment = new Date().toISOString().slice(0, 10);
   const prefix = originalUploadKey
     ? originalUploadKey.replace(/[^/]+$/, '')
-    : `${sanitizedName}/cv/${new Date().toISOString().slice(0, 10)}/`;
-  const generatedPrefix = `${prefix}generated/`;
+    : buildDocumentSessionPrefix({
+        ownerSegment: ownerSegmentForKeys,
+        dateSegment: generationDateSegment,
+        jobSegment: jobSegmentForKeys,
+      });
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
   });
@@ -12593,6 +12707,7 @@ async function generateEnhancedDocumentsResponse({
   const artifactTimestamp = new Date().toISOString();
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
+  const usedFileBaseNames = new Set();
   const recordDevice = existingRecord?.device?.S || '';
   const recordOs = existingRecord?.os?.S || '';
   const recordBrowser = existingRecord?.browser?.S || '';
@@ -12641,20 +12756,6 @@ async function generateEnhancedDocumentsResponse({
     if (!templateText) continue;
     const isCvDocument = name === 'version1' || name === 'version2';
     const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
-    let fileName;
-    if (name === 'version1') {
-      fileName = sanitizedName;
-    } else if (name === 'version2') {
-      fileName = `${sanitizedName}_2`;
-    } else {
-      fileName = name;
-    }
-    const subdir = isCvDocument
-      ? 'cv/'
-      : isCoverLetter
-        ? 'cover_letter/'
-        : '';
-    const key = `${generatedPrefix}${subdir}${fileName}.pdf`;
     const primaryTemplate = isCvDocument
       ? name === 'version1'
         ? template1
@@ -12664,6 +12765,14 @@ async function generateEnhancedDocumentsResponse({
           ? coverTemplate1
           : coverTemplate2
         : template1;
+    const documentType = isCvDocument ? 'resume' : isCoverLetter ? 'cover_letter' : name;
+    const baseName = buildDocumentFileBaseName({
+      type: documentType,
+      templateId: primaryTemplate,
+      variant: name,
+    });
+    const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
+    const key = `${prefix}${uniqueBaseName}.pdf`;
 
     const resolvedTemplateParams = resolveTemplateParamsConfig(
       templateParamsConfig,
@@ -12771,7 +12880,7 @@ async function generateEnhancedDocumentsResponse({
     urls.push(urlEntry);
   }
 
-  const textArtifactPrefix = `${generatedPrefix}artifacts/`;
+  const textArtifactPrefix = `${prefix}artifacts/`;
   const originalResumeForStorage =
     typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
       ? originalResumeTextInput
@@ -12812,7 +12921,7 @@ async function generateEnhancedDocumentsResponse({
     },
     {
       type: 'change_log',
-      fileName: 'change-log.json',
+      fileName: 'changelog.json',
       payload: {
         jobId,
         generatedAt: artifactTimestamp,
@@ -13317,11 +13426,17 @@ app.post(
       }
 
       const jobKeySegment = sanitizeJobSegment(jobId);
+      const ownerSegment = resolveDocumentOwnerSegment({
+        userId: res.locals.userId,
+        sanitizedName,
+      });
       const prefix = originalUploadKey
         ? originalUploadKey.replace(/[^/]+$/, '')
-        : jobKeySegment
-          ? `${sanitizedName}/cv/${date}/${jobKeySegment}/`
-          : `${sanitizedName}/cv/${date}/`;
+        : buildDocumentSessionPrefix({
+            ownerSegment,
+            dateSegment: date,
+            jobSegment: jobKeySegment,
+          });
       const logKey = `${prefix}logs/processing.jsonl`;
 
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_started' });
@@ -14217,10 +14332,13 @@ app.post(
   const anonymizedUserAgent = anonymizePersonalData(userAgent);
   const anonymizedCredly = anonymizePersonalData(submittedCredly);
   const jobKeySegment = sanitizeJobSegment(jobId);
-  const prefix = jobKeySegment
-    ? `${sanitizedName}/cv/${date}/${jobKeySegment}/`
-    : `${sanitizedName}/cv/${date}/`;
-  const finalUploadKey = `${prefix}${sanitizedName}${normalizedExt}`;
+  const ownerSegment = resolveDocumentOwnerSegment({ userId, sanitizedName });
+  const prefix = buildDocumentSessionPrefix({
+    ownerSegment,
+    dateSegment: date,
+    jobSegment: jobKeySegment,
+  });
+  const finalUploadKey = `${prefix}original${normalizedExt}`;
   const finalLogKey = `${prefix}logs/processing.jsonl`;
   const metadataKey = `${prefix}logs/log.json`;
 
