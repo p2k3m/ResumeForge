@@ -13068,6 +13068,7 @@ app.post(
 
     const submittedLinkedIn =
       typeof req.body.linkedinProfileUrl === 'string' ? req.body.linkedinProfileUrl.trim() : '';
+    const linkedinProfileUrl = submittedLinkedIn || '';
     const profileIdentifier =
       resolveProfileIdentifier({
         linkedinProfileUrl: submittedLinkedIn,
