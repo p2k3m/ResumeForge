@@ -20,9 +20,14 @@ This guide walks a candidate through ResumeForge end to end so every action has 
 - **Expected result:** The dashboard populates with a total ATS score, probability of selection, and contextual insights (e.g., “Add Kubernetes to align with JD requirements”). Errors surface inline with instructions to retry or adjust inputs.
 
 ## 4. Iterate on improvements
-- **What to do:** Use the **Improve** buttons on individual sections or click **Improve All** to accept every suggestion at once.
-- **Behind the scenes:** AI-generated rewrites are staged per section. Accepting a suggestion persists the change; rejecting it restores the original text. The system keeps a change log so every modification is transparent.
+- **What to do:** Use the **Improve** buttons on individual sections or click **Improve All** to accept every suggestion at once. Revisit sections as many times as needed before progressing.
+- **Behind the scenes:** AI-generated rewrites are staged per section. Accepting a suggestion persists the change; rejecting it restores the original text. The system keeps a change log so every modification is transparent and reversible.
 - **Expected result:** The résumé preview updates in real time while a changelog panel details what changed and why. The candidate can continue tweaking until satisfied, confident that each accepted change moves the ATS score upward.
+
+### Loop and reassess
+- **What to do:** After applying edits, trigger **Evaluate me against the JD** again to refresh the ATS dashboard before locking in downloads.
+- **Behind the scenes:** The analysis re-runs on the candidate’s latest accepted content, recalculating section and overall scores so the user can see how their choices shifted readiness.
+- **Expected result:** Each pass tightens alignment with the job description. Candidates decide when the scores and copy feel right, then proceed to export the final artefacts.
 
 ## 5. Download enhanced assets
 - **What to do:** Once satisfied, select the download buttons for the updated résumé(s) and tailored cover letter.
