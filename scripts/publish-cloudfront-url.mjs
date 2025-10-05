@@ -76,21 +76,35 @@ async function main() {
   const distributionChanged =
     previousDistributionId && previousDistributionId !== distributionId
 
+  const distributionIdsToInvalidate = new Set()
   if (previousDistributionId) {
-    const callerReference = `resumeforge-${Date.now()}`
-    console.log(
-      distributionChanged
-        ? urlChanged
-          ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating previous CloudFront distribution ${previousDistributionId} (/*)`
-          : `Invalidating previous CloudFront distribution ${previousDistributionId} (/*)`
-        : urlChanged
-          ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating CloudFront distribution ${previousDistributionId} for cache busting (/*)`
-          : `Invalidating CloudFront distribution ${previousDistributionId} for cache busting (/*)`
-    )
+    distributionIdsToInvalidate.add(previousDistributionId)
+  }
+  distributionIdsToInvalidate.add(distributionId)
+
+  for (const targetDistributionId of distributionIdsToInvalidate) {
+    const callerReference = `resumeforge-${Date.now()}-${targetDistributionId}`
+    const isPrevious = targetDistributionId === previousDistributionId
+    const isCurrent = targetDistributionId === distributionId
+
+    let message = `Invalidating CloudFront distribution ${targetDistributionId} (/*)`
+
+    if (isPrevious && distributionChanged) {
+      message = urlChanged
+        ? `Domain changed from ${previous.url} to ${urlOutput.OutputValue}; invalidating previous CloudFront distribution ${targetDistributionId} (/*)`
+        : `Invalidating previous CloudFront distribution ${targetDistributionId} (/*)`
+    } else if (isCurrent) {
+      message = urlChanged
+        ? `Domain changed from ${previous?.url ?? 'unpublished'} to ${urlOutput.OutputValue}; invalidating active CloudFront distribution ${targetDistributionId} for cache busting (/*)`
+        : `Invalidating active CloudFront distribution ${targetDistributionId} for cache busting (/*)`
+    }
+
+    console.log(message)
+
     try {
       await cloudFront.send(
         new CreateInvalidationCommand({
-          DistributionId: previousDistributionId,
+          DistributionId: targetDistributionId,
           InvalidationBatch: {
             CallerReference: callerReference,
             Paths: {
@@ -103,7 +117,7 @@ async function main() {
     } catch (err) {
       if (err?.name === 'NoSuchDistribution' || err?.Code === 'NoSuchDistribution') {
         console.warn(
-          `Skipping invalidation; distribution ${previousDistributionId} no longer exists.`
+          `Skipping invalidation; distribution ${targetDistributionId} no longer exists.`
         )
       } else {
         throw err

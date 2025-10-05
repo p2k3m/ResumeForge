@@ -22,7 +22,7 @@ This document and the project README mirror the latest domain so onboarding team
 
 1. Deploy the CloudFormation/SAM stack.
 2. Run `npm run print:cloudfront-url -- <stack-name>` to confirm the CloudFront domain that the deployment produced.
-3. When you are ready to publish that domain, run `npm run publish:cloudfront-url -- <stack-name>`. This both writes the latest distribution metadata to `config/published-cloudfront.json` and issues an invalidation for the previously published distribution so caches are purged immediately (even if the stack reuses the same distribution id).
+3. When you are ready to publish that domain, run `npm run publish:cloudfront-url -- <stack-name>`. This writes the latest distribution metadata to `config/published-cloudfront.json` and issues `/*` invalidations for both the previously published distribution (if one exists) and the active distribution so caches are purged immediately, even when the stack reuses the same distribution id.
 4. Commit the updated JSON file so the new domain is visible to the team.
 
 The script automatically invalidates the previously published distribution after every run and updates the helper endpoints that surface the active domain:
