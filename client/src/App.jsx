@@ -722,17 +722,86 @@ const buildTemplateRequestContext = (templateContext, selectedTemplate) => {
   const canonicalTemplate =
     canonicalizeTemplateId(normalizedContext.selectedTemplate) || canonicalPrimaryTemplate
 
+  const derivedCoverTemplate = deriveCoverTemplateFromResume(canonicalTemplate)
+  const canonicalCoverPrimaryTemplate =
+    canonicalizeCoverTemplateId(
+      normalizedContext.coverTemplate1,
+      canonicalizeCoverTemplateId(derivedCoverTemplate, DEFAULT_COVER_TEMPLATE)
+    ) || DEFAULT_COVER_TEMPLATE
+
+  let canonicalCoverSecondaryTemplate = canonicalizeCoverTemplateId(
+    normalizedContext.coverTemplate2,
+    canonicalCoverPrimaryTemplate
+  )
+
+  const coverTemplateCandidatesRaw = Array.isArray(normalizedContext.coverTemplates)
+    ? normalizedContext.coverTemplates
+    : []
+  const canonicalCoverTemplateCandidates = coverTemplateCandidatesRaw
+    .map((item) => canonicalizeCoverTemplateId(item))
+    .filter(Boolean)
+
+  if (
+    !canonicalCoverSecondaryTemplate ||
+    canonicalCoverSecondaryTemplate === canonicalCoverPrimaryTemplate
+  ) {
+    const fallbackCandidate =
+      canonicalCoverTemplateCandidates.find((tpl) => tpl !== canonicalCoverPrimaryTemplate) ||
+      COVER_TEMPLATE_IDS.find((tpl) => tpl !== canonicalCoverPrimaryTemplate) ||
+      canonicalCoverPrimaryTemplate
+    canonicalCoverSecondaryTemplate = fallbackCandidate
+  }
+
+  const canonicalCoverTemplate = canonicalCoverPrimaryTemplate || DEFAULT_COVER_TEMPLATE
+
+  const templateCandidatesRaw = Array.isArray(normalizedContext.templates)
+    ? normalizedContext.templates
+    : []
+  const canonicalTemplateCandidates = templateCandidatesRaw
+    .map((item) => canonicalizeTemplateId(item))
+    .filter(Boolean)
+
+  const canonicalTemplateList = Array.from(
+    new Set(
+      [
+        canonicalTemplate,
+        canonicalPrimaryTemplate,
+        canonicalSecondaryTemplate,
+        ...canonicalTemplateCandidates
+      ].filter(Boolean)
+    )
+  )
+
+  const canonicalCoverTemplateList = Array.from(
+    new Set(
+      [
+        canonicalCoverPrimaryTemplate,
+        canonicalCoverSecondaryTemplate,
+        ...canonicalCoverTemplateCandidates
+      ].filter(Boolean)
+    )
+  )
+
   const preparedContext = {
     ...normalizedContext,
     template1: canonicalPrimaryTemplate,
     template2: canonicalSecondaryTemplate,
-    selectedTemplate: canonicalTemplate
+    selectedTemplate: canonicalTemplate,
+    templates: canonicalTemplateList,
+    coverTemplate1: canonicalCoverPrimaryTemplate,
+    coverTemplate2: canonicalCoverSecondaryTemplate,
+    coverTemplates: canonicalCoverTemplateList
   }
 
   return {
     canonicalTemplate,
     canonicalPrimaryTemplate,
     canonicalSecondaryTemplate,
+    canonicalCoverTemplate,
+    canonicalCoverPrimaryTemplate,
+    canonicalCoverSecondaryTemplate,
+    canonicalTemplateList,
+    canonicalCoverTemplateList,
     context: preparedContext
   }
 }
@@ -2803,13 +2872,27 @@ function App() {
       const {
         canonicalTemplate: canonicalUploadTemplate,
         canonicalPrimaryTemplate: primaryUploadTemplate,
-        canonicalSecondaryTemplate: secondaryUploadTemplate
+        canonicalSecondaryTemplate: secondaryUploadTemplate,
+        canonicalCoverTemplate: canonicalUploadCoverTemplate,
+        canonicalCoverPrimaryTemplate: primaryCoverTemplate,
+        canonicalCoverSecondaryTemplate: secondaryCoverTemplate,
+        canonicalTemplateList,
+        canonicalCoverTemplateList
       } = buildTemplateRequestContext(templateContext, selectedTemplate)
 
       formData.append('template', canonicalUploadTemplate)
       formData.append('templateId', canonicalUploadTemplate)
       formData.append('template1', primaryUploadTemplate)
       formData.append('template2', secondaryUploadTemplate)
+      formData.append('coverTemplate', canonicalUploadCoverTemplate)
+      formData.append('coverTemplate1', primaryCoverTemplate)
+      formData.append('coverTemplate2', secondaryCoverTemplate)
+      if (canonicalTemplateList.length) {
+        formData.append('templates', JSON.stringify(canonicalTemplateList))
+      }
+      if (canonicalCoverTemplateList.length) {
+        formData.append('coverTemplates', JSON.stringify(canonicalCoverTemplateList))
+      }
       if (userIdentifier) {
         formData.append('userId', userIdentifier)
       }
@@ -4260,6 +4343,11 @@ function App() {
         canonicalTemplate,
         canonicalPrimaryTemplate,
         canonicalSecondaryTemplate,
+        canonicalCoverTemplate,
+        canonicalCoverPrimaryTemplate,
+        canonicalCoverSecondaryTemplate,
+        canonicalTemplateList,
+        canonicalCoverTemplateList,
         context: requestTemplateContext
       } = buildTemplateRequestContext(templateContext, selectedTemplate)
 
@@ -4281,6 +4369,11 @@ function App() {
         template: canonicalTemplate,
         template1: canonicalPrimaryTemplate,
         template2: canonicalSecondaryTemplate,
+        templates: canonicalTemplateList,
+        coverTemplate: canonicalCoverTemplate,
+        coverTemplate1: canonicalCoverPrimaryTemplate,
+        coverTemplate2: canonicalCoverSecondaryTemplate,
+        coverTemplates: canonicalCoverTemplateList,
         ...(userIdentifier ? { userId: userIdentifier } : {}),
         baseline: {
           table: cloneData(initialAnalysisSnapshot?.match?.table || []),
@@ -4490,6 +4583,11 @@ function App() {
         canonicalTemplate,
         canonicalPrimaryTemplate,
         canonicalSecondaryTemplate,
+        canonicalCoverTemplate,
+        canonicalCoverPrimaryTemplate,
+        canonicalCoverSecondaryTemplate,
+        canonicalTemplateList,
+        canonicalCoverTemplateList,
         context: requestTemplateContext
       } = buildTemplateRequestContext(templateContext, selectedTemplate)
 
@@ -4510,7 +4608,12 @@ function App() {
         templateId: canonicalTemplate,
         template: canonicalTemplate,
         template1: canonicalPrimaryTemplate,
-        template2: canonicalSecondaryTemplate
+        template2: canonicalSecondaryTemplate,
+        templates: canonicalTemplateList,
+        coverTemplate: canonicalCoverTemplate,
+        coverTemplate1: canonicalCoverPrimaryTemplate,
+        coverTemplate2: canonicalCoverSecondaryTemplate,
+        coverTemplates: canonicalCoverTemplateList
       }
       if (manualCertificatesInput.trim()) {
         payload.manualCertificates = manualCertificatesInput.trim()
