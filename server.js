@@ -11412,6 +11412,8 @@ async function handleImprovementRequest(type, req, res) {
   let existingChangeLog = [];
   let jobStatus = '';
   let sessionChangeLogKey = '';
+  let targetBucket = '';
+  let improvementMetadataKey = '';
 
   if (!isTestEnvironment) {
     dynamo = new DynamoDBClient({ region });
@@ -11792,9 +11794,9 @@ async function handleImprovementRequest(type, req, res) {
         return;
       }
 
-      let bucket = secrets.S3_BUCKET || storedBucket;
+      targetBucket = secrets.S3_BUCKET || storedBucket;
       const geminiApiKey = secrets.GEMINI_API_KEY;
-      if (!bucket) {
+      if (!targetBucket) {
         logStructured('error', 'targeted_improvement_bucket_missing', logContext);
         sendError(
           res,
@@ -11823,7 +11825,7 @@ async function handleImprovementRequest(type, req, res) {
           });
       const effectiveOriginalUploadKey = originalUploadKey || `${prefix}original.pdf`;
       const effectiveLogKey = logKey || `${prefix}logs/processing.jsonl`;
-      const improvementMetadataKey = `${prefix}logs/log.json`;
+      improvementMetadataKey = `${prefix}logs/log.json`;
 
       let templateContextInput =
         typeof payload.templateContext === 'object' && payload.templateContext
@@ -11858,7 +11860,7 @@ async function handleImprovementRequest(type, req, res) {
         s3: s3Client,
         dynamo,
         tableName,
-        bucket,
+        bucket: targetBucket,
         logKey: effectiveLogKey,
         jobId: jobIdInput,
         requestId,
@@ -11969,7 +11971,7 @@ async function handleImprovementRequest(type, req, res) {
 
     await updateStageMetadata({
       s3: s3Client,
-      bucket,
+      bucket: targetBucket,
       metadataKey: improvementMetadataKey,
       jobId: jobIdInput,
       stage: 'improve',
