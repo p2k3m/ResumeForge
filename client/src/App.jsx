@@ -2484,19 +2484,25 @@ function App() {
       : !downloadUrl
         ? 'Download link unavailable. Please regenerate the document.'
         : downloadError
-    const isDownloadDisabled = isDownloading || !downloadUrl || isExpired
+    const isDownloadUnavailable = isDownloading || !downloadUrl || isExpired
+    const isCoverLetterDownloadDisabled = isCoverLetter ? false : isDownloadUnavailable
     const downloadButtonClass = `${buttonClass} ${
-      isDownloading
-        ? 'opacity-80 cursor-wait'
-        : isDownloadDisabled
-          ? 'opacity-60 cursor-not-allowed'
-          : ''
+      isCoverLetter
+        ? ''
+        : isDownloading
+          ? 'opacity-80 cursor-wait'
+          : isDownloadUnavailable
+            ? 'opacity-60 cursor-not-allowed'
+            : ''
     }`
-    const downloadButtonLabel = isExpired
-      ? 'Link expired'
-      : isDownloading
-        ? 'Downloading…'
-        : presentation.linkLabel || 'Download'
+    const downloadButtonLabel = (() => {
+      if (isCoverLetter) {
+        return coverEdited ? 'Review edits & download' : 'Open editor to download'
+      }
+      if (isExpired) return 'Link expired'
+      if (isDownloading) return 'Downloading…'
+      return presentation.linkLabel || 'Download'
+    })()
     return (
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
@@ -2515,17 +2521,21 @@ function App() {
               }
               className={secondaryButtonClass}
             >
-              {isCoverLetter ? 'Review & Edit' : 'Preview'}
+              {isCoverLetter ? 'Preview & Edit' : 'Preview'}
             </button>
             <button
               type="button"
               onClick={() => {
-                if (!isDownloadDisabled) {
+                if (isCoverLetter) {
+                  openCoverLetterEditorModal(file)
+                  return
+                }
+                if (!isDownloadUnavailable) {
                   handleDownloadFile(file)
                 }
               }}
               className={downloadButtonClass}
-              disabled={isDownloadDisabled}
+              disabled={isCoverLetterDownloadDisabled}
             >
               {downloadButtonLabel}
             </button>
@@ -2539,14 +2549,14 @@ function App() {
             </p>
           )}
         </div>
-        {derivedDownloadError && (
+        {!isCoverLetter && derivedDownloadError && (
           <p className="text-xs font-semibold text-rose-600">{derivedDownloadError}</p>
         )}
         {isCoverLetter && (
           <p className={`text-xs ${coverEdited ? 'text-indigo-600 font-semibold' : 'text-purple-500'}`}>
             {coverEdited
-              ? 'Edits pending — download the updated PDF from the editor.'
-              : 'Open the editor to fine-tune the copy before downloading.'}
+              ? 'Edits pending — download the refreshed PDF from the editor after reviewing the changes.'
+              : 'Preview the draft and make tweaks in the editor before creating your PDF download.'}
           </p>
         )}
       </div>
