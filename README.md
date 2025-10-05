@@ -19,6 +19,8 @@ Every interaction is processed via the serverless Express Lambda/API Gateway sta
 
 > Onboarding a new teammate? Point them at [docs/onboarding.md](docs/onboarding.md) for a narrative walkthrough of the regular candidate flow.
 
+> Need the storage deep-dive? Share [docs/storage-model.md](docs/storage-model.md) with engineers and SystemOps to explain the S3 layout and download flow.
+
 ### Multi-stage, user-driven improvement
 
 ResumeForge is intentionally cyclical for regular users: upload a résumé, evaluate against the target job, accept or reject suggested edits, and immediately run the analysis again. Each evaluation pass uses the candidate's latest choices, so the updated ATS dashboard, probability of selection, and narrative insights always reflect their current draft. Because the candidate controls when to accept edits or trigger another analysis run, the improvement loop stays user-directed rather than automatic, making it easy to experiment with targeted changes before finalising downloads.
