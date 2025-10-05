@@ -167,14 +167,14 @@ https://<api-id>.execute-api.<region>.amazonaws.com/<stage>
 
 ### Publish the active CloudFront URL
 
-After each deployment, publish the fresh CloudFront domain so the team knows the canonical entry point for candidates. The helper script stores the URL in `config/published-cloudfront.json` and automatically invalidates the previously published distribution so caches stop serving stale assets. A human-readable snapshot of the latest URL also lives in [`docs/cloudfront-url.md`](docs/cloudfront-url.md) so you can surface the current domain in changelogs or onboarding docs without digging through JSON.
+After each deployment, publish the fresh CloudFront domain so the team knows the canonical entry point for candidates. The helper script stores the URL in `config/published-cloudfront.json` and automatically invalidates both the previously published distribution (if any) and the active distribution using a `/*` path so caches stop serving stale assets immediately. A human-readable snapshot of the latest URL also lives in [`docs/cloudfront-url.md`](docs/cloudfront-url.md) so you can surface the current domain in changelogs or onboarding docs without digging through JSON.
 
 ```bash
 npm run publish:cloudfront-url -- <stack-name>
 ```
 
 - **`config/published-cloudfront.json`** is regenerated with the latest domain, distribution id, and timestamp. Commit this file (or surface it through your release notes) to broadcast the production URL.
-- The script always issues a `/*` invalidation for the previously published distribution, even when the stack reuses the same distribution id, so caches are busted after every deploy.
+- The script always issues `/*` invalidations for both the previously published distribution (when one exists) and the active distribution, even when the stack reuses the same distribution id, so caches are busted after every deploy.
 
 The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment. Keep this README (and `docs/cloudfront-url.md`) updated so support teams and new joiners can confirm the production endpoint without loading the app.
 
