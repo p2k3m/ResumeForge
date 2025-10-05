@@ -2412,11 +2412,47 @@ function App() {
     outputFiles.forEach((file) => {
       if (!file || typeof file !== 'object') return
       const presentation = getDownloadPresentation(file)
-      const templateMeta = downloadTemplateMetadata[file.type] || null
+      const resolvedTemplateMeta = (() => {
+        if (file.templateMeta && typeof file.templateMeta === 'object') {
+          const candidateName =
+            typeof file.templateMeta.name === 'string'
+              ? file.templateMeta.name.trim()
+              : ''
+          const candidateId =
+            typeof file.templateMeta.id === 'string'
+              ? file.templateMeta.id.trim()
+              : ''
+          if (candidateName || candidateId) {
+            return {
+              ...file.templateMeta,
+              id: candidateId,
+              name: candidateName ||
+                (presentation.category === 'cover'
+                  ? formatCoverTemplateName(candidateId)
+                  : formatTemplateName(candidateId))
+            }
+          }
+        }
+        const rawTemplateId =
+          (typeof file.templateId === 'string' && file.templateId.trim()) ||
+          (typeof file.template === 'string' && file.template.trim()) ||
+          ''
+        const rawTemplateName =
+          typeof file.templateName === 'string' ? file.templateName.trim() : ''
+        if (rawTemplateName || rawTemplateId) {
+          const derivedName =
+            rawTemplateName ||
+            (presentation.category === 'cover'
+              ? formatCoverTemplateName(rawTemplateId)
+              : formatTemplateName(rawTemplateId))
+          return { id: rawTemplateId, name: derivedName }
+        }
+        return downloadTemplateMetadata[file.type] || null
+      })()
       const entry = {
         ...file,
         presentation,
-        templateMeta,
+        templateMeta: resolvedTemplateMeta,
         generatedAt: file.generatedAt || downloadGeneratedAt || ''
       }
       if (presentation.category === 'resume') {

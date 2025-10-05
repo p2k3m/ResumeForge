@@ -78,6 +78,36 @@ function ensureAxiosResponseInterceptor(client) {
 
 const axiosResponseInterceptor = ensureAxiosResponseInterceptor(axios);
 
+const COVER_TEMPLATE_DISPLAY_NAMES = {
+  cover_modern: 'Modern Cover Letter',
+  cover_classic: 'Classic Cover Letter',
+};
+
+function formatTemplateDisplayName(templateId) {
+  if (!templateId) {
+    return '';
+  }
+  if (templateId === '2025') {
+    return 'Future Vision 2025';
+  }
+  return templateId
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatCoverTemplateDisplayName(templateId) {
+  if (!templateId) {
+    return 'Cover Letter';
+  }
+  return (
+    COVER_TEMPLATE_DISPLAY_NAMES[templateId] ||
+    formatTemplateDisplayName(templateId) ||
+    'Cover Letter'
+  );
+}
+
 axiosResponseInterceptor?.use(
   (response) => response,
   (error) => {
@@ -12560,6 +12590,7 @@ async function generateEnhancedDocumentsResponse({
   const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
   const downloadsRestricted = allowedOriginsForDownloads.length === 0;
   const urls = [];
+  const artifactTimestamp = new Date().toISOString();
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
   const recordDevice = existingRecord?.device?.S || '';
@@ -12588,7 +12619,15 @@ async function generateEnhancedDocumentsResponse({
       const expiresAt = new Date(
         Date.now() + URL_EXPIRATION_SECONDS * 1000
       ).toISOString();
-      urls.push({ type: 'original_upload', url: originalSignedUrl, expiresAt });
+      urls.push({
+        type: 'original_upload',
+        url: originalSignedUrl,
+        expiresAt,
+        generatedAt: artifactTimestamp,
+        templateId: 'original',
+        templateName: 'Original Upload',
+        templateType: 'resume',
+      });
     } catch (err) {
       logStructured('warn', 'generation_original_url_failed', {
         ...logContext,
@@ -12694,7 +12733,21 @@ async function generateEnhancedDocumentsResponse({
     const expiresAt = new Date(
       Date.now() + URL_EXPIRATION_SECONDS * 1000
     ).toISOString();
-    const urlEntry = { type: name, url: signedUrl, expiresAt };
+    const urlEntry = {
+      type: name,
+      url: signedUrl,
+      expiresAt,
+      generatedAt: artifactTimestamp,
+    };
+    if (primaryTemplate) {
+      const templateType = isCoverLetter ? 'cover' : 'resume';
+      const templateName = isCoverLetter
+        ? formatCoverTemplateDisplayName(primaryTemplate)
+        : formatTemplateDisplayName(primaryTemplate);
+      urlEntry.templateId = primaryTemplate;
+      urlEntry.templateName = templateName;
+      urlEntry.templateType = templateType;
+    }
     if (isCoverLetter) {
       const coverLetterText =
         typeof entry?.text === 'string' ? entry.text : '';
@@ -12719,7 +12772,6 @@ async function generateEnhancedDocumentsResponse({
   }
 
   const textArtifactPrefix = `${generatedPrefix}artifacts/`;
-  const artifactTimestamp = new Date().toISOString();
   const originalResumeForStorage =
     typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
       ? originalResumeTextInput
