@@ -12521,7 +12521,8 @@ async function generateEnhancedDocumentsResponse({
       variant: name,
     });
     const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
-    const key = `${generatedPrefix}${uniqueBaseName}.pdf`;
+    const subdirectory = isCoverLetter ? 'cover_letter/' : '';
+    const key = `${generatedPrefix}${subdirectory}${uniqueBaseName}.pdf`;
 
     const resolvedTemplateParams = resolveTemplateParamsConfig(
       templateParamsConfig,

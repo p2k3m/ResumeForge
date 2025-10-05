@@ -376,16 +376,22 @@ ownload URLs expire after one hour:
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). The change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/artifacts/`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
+S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/generated/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). Cover letters are stored inside `generated/cover_letter/` so they are easy to filter. The change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/generated/artifacts/`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
 cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/
-├── original.pdf
-├── enhanced_modern_classic.pdf
-├── enhanced_elegant_slate.pdf
-├── cover_letter_refined.pdf
-├── cover_letter_refined_2.pdf
-└── artifacts/
+├── generated/
+│   ├── original.pdf
+│   ├── enhanced_modern_classic.pdf
+│   ├── enhanced_elegant_slate.pdf
+│   ├── cover_letter/
+│   │   ├── cover_letter_refined.pdf
+│   │   └── cover_letter_refined_2.pdf
+│   └── artifacts/
+│       ├── original.json
+│       ├── version1.json
+│       ├── version2.json
+│       └── changelog.json
     ├── original.json
     ├── version1.json
     ├── version2.json
