@@ -20,12 +20,29 @@ describe('selectTemplates respects preferred templates and contrast', () => {
   });
 
   test('uses explicit template1 when no preference supplied', () => {
-    const { template1, template2, coverTemplate1 } = selectTemplates({
+    const { template1, template2, coverTemplate1, coverTemplates } = selectTemplates({
       template1: 'vibrant',
     });
     expect(template1).toBe('vibrant');
     expect(template2).not.toBe('vibrant');
     expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['vibrant']);
+    expect(coverTemplate1).toBe('cover_modern');
+    expect(coverTemplates[0]).toBe('cover_modern');
+  });
+
+  test('derives cover template from resume style when not provided', () => {
+    const { coverTemplate1, coverTemplates } = selectTemplates({
+      template1: 'classic',
+    });
+    expect(coverTemplate1).toBe('cover_classic');
+    expect(coverTemplates[0]).toBe('cover_classic');
+  });
+
+  test('respects explicit cover template selection', () => {
+    const { coverTemplate1 } = selectTemplates({
+      template1: 'classic',
+      coverTemplate1: 'cover_modern',
+    });
     expect(coverTemplate1).toBe('cover_modern');
   });
 

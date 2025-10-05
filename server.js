@@ -1544,17 +1544,24 @@ function selectTemplates({
   const derivedCoverFromPrimary = deriveCoverTemplateFromCv(primaryTemplate);
   const derivedCoverFromSecondary = deriveCoverTemplateFromCv(secondaryTemplate);
   const coverFallbackCandidates = [
-    ...parseTemplateArray(clTemplates),
     coverTemplate1,
     coverTemplate2,
-    defaultClTemplate,
+    ...parseTemplateArray(clTemplates),
     derivedCoverFromPreferred,
     derivedCoverFromPrimary,
     derivedCoverFromSecondary,
+    defaultClTemplate,
   ];
   let parsedCoverTemplates = uniqueValidCoverTemplates(coverFallbackCandidates);
   if (!parsedCoverTemplates.length) {
     parsedCoverTemplates = uniqueValidCoverTemplates([
+      derivedCoverFromPrimary,
+      derivedCoverFromSecondary,
+      ...CL_TEMPLATES,
+    ]);
+  } else {
+    parsedCoverTemplates = uniqueValidCoverTemplates([
+      ...parsedCoverTemplates,
       derivedCoverFromPrimary,
       derivedCoverFromSecondary,
       ...CL_TEMPLATES,
