@@ -1,7 +1,7 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with the pasted job description text. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains processing metadata, keeping the monthly infrastructure cost negligible for small user counts.
+ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with the pasted job description text. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains only lightweight session metadata, keeping the monthly infrastructure cost negligible for small user counts. The runtime follows the AWS best-practice flow of **API Gateway → Lambda → S3**, using environment variables for secrets and shifting change-log/audit data out of DynamoDB and into S3.
 
 ## User flow
 
@@ -68,7 +68,7 @@ Because the configuration is loaded and cached once, the service reuses the same
 ### Privacy and data handling
 
 - DynamoDB stores candidate names, LinkedIn URLs, IP addresses, and user agents exactly as submitted (only trimmed for whitespace) so ongoing sessions can be resumed without any anonymisation or background cleanup processes.
-- Generated PDFs, cover letters, and change logs are stored in S3 only for the active session that produced them. Old keys are overwritten as users regenerate documents, so the bucket naturally keeps just the current versions without relying on scheduled deletion jobs.
+- Generated PDFs, cover letters, and the canonical change log (`logs/change-log.json`) are stored in S3 only for the active session that produced them. Old keys are overwritten as users regenerate documents, so the bucket naturally keeps just the current versions without relying on scheduled deletion jobs.
 
 ### Required parameters for AWS deployment
 
@@ -382,7 +382,7 @@ ownload URLs expire after one hour:
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/runs/<request-id>/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). Each generation run receives its own folder so regenerated resumes and cover letters never overwrite prior artifacts. The change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/runs/<request-id>/artifacts/`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
+S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/runs/<request-id>/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). Each generation run receives its own folder so regenerated resumes and cover letters never overwrite prior artifacts. The run-specific change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/runs/<request-id>/artifacts/`, while the canonical session history is written to `cv/<candidate>/<ISO-date>/<session-id>/logs/change-log.json`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
 cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/
