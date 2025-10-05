@@ -7,7 +7,7 @@ ResumeForge generates tailored cover letters and enhanced CV versions by combini
 
 | Step | User action | System response | Expected user outcome |
 | --- | --- | --- | --- |
-| 1. Upload résumé | Candidate drops a CV (PDF/DOC/DOCX) into the React portal. | File streams directly to S3 at `resume-forge-data/<candidate>/cv/<date>/…`; DynamoDB stores hashed personal data (IP, device, LinkedIn, Credly) and detected file type. Non-CV uploads trigger a validation error with remediation text. | The candidate immediately knows whether the résumé is valid and, if not, how to fix it before continuing. |
+| 1. Upload résumé | Candidate drops a CV (PDF/DOC/DOCX) into the React portal. | File streams directly to S3 at `resume-forge-data/cv/<candidate>/<date>/<job-id>/original.pdf`; DynamoDB stores hashed personal data (IP, device, LinkedIn, Credly) and detected file type. Non-CV uploads trigger a validation error with remediation text. | The candidate immediately knows whether the résumé is valid and, if not, how to fix it before continuing. |
 | 2. Provide job description | Candidate enters the job post URL or pastes the full job description text into the portal. | The backend fetches the JD when the URL is accessible; if the site blocks automated access the flow stops instantly, displays the paste box, and requires the candidate to provide the text manually. | The user either sees the JD captured automatically or receives a clear prompt to paste it before continuing, guaranteeing the analysis always runs on the actual JD content. |
 | 3. Run ATS analysis | Candidate clicks **Evaluate me against the JD**. | Lambda analyses the CV + JD, generating ATS scores (Layout & Searchability, Readability, Impact, Crispness, Other Metrics) and alignment data (designation deltas, experience gaps, skill/task matches, certifications, highlights). | The dashboard surfaces quantified fit, missing elements, and probability of selection so the candidate understands current readiness. |
 | 4. Apply improvements | Candidate uses **Improve** on specific sections or **Improve All**. | AI suggestions rewrite summaries, add skills, realign designations, adjust experience narratives, and highlight certifications. Accept/reject toggles persist the chosen edits. | The résumé content evolves in-app with an audit trail explaining each enhancement, keeping the candidate in control. |
@@ -64,7 +64,7 @@ Because the configuration is loaded and cached once, the service reuses the same
 ### Privacy, GDPR, and data retention
 
 - DynamoDB inserts now hash candidate names, LinkedIn URLs, IP addresses, and user agents with SHA-256 (plus the optional `PII_HASH_SECRET` salt) before persisting them. The table retains browser, OS, and device metadata for aggregate analytics without storing raw personally identifiable information.
-- An EventBridge rule can invoke the Lambda on a schedule to remove generated sessions from S3 that are older than `SESSION_RETENTION_DAYS` (30 days by default). The scheduled handler deletes entire `<candidate>/cv/<ISO-date>/<session-id>/...` prefixes so no PDFs or logs linger past the retention window.
+- An EventBridge rule can invoke the Lambda on a schedule to remove generated sessions from S3 that are older than `SESSION_RETENTION_DAYS` (30 days by default). The scheduled handler deletes entire `cv/<candidate>/<ISO-date>/<session-id>/...` prefixes so no PDFs or logs linger past the retention window.
 
 Implementation snippet:
 
@@ -366,17 +366,17 @@ ownload URLs expire after one hour:
   "urls": [
     {
       "type": "original_upload",
-      "url": "https://<bucket>.s3.<region>.amazonaws.com/jane_doe/cv/2025-01-15/jane_doe.pdf?X-Amz-Expires=3600&...",
+      "url": "https://<bucket>.s3.<region>.amazonaws.com/cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/original.pdf?X-Amz-Expires=3600&...",
       "expiresAt": "2025-01-15T12:00:00.000Z"
     },
     {
       "type": "cover_letter1",
-      "url": "https://<bucket>.s3.<region>.amazonaws.com/jane_doe/cv/2025-01-15/generated/cover_letter/cover_letter1.pdf?X-Amz-Expires=3600&...",
+      "url": "https://<bucket>.s3.<region>.amazonaws.com/cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/cover_letter_refined.pdf?X-Amz-Expires=3600&...",
       "expiresAt": "2025-01-15T12:00:00.000Z"
     },
     {
       "type": "version1",
-      "url": "https://<bucket>.s3.<region>.amazonaws.com/jane_doe/cv/2025-01-15/generated/cv/Jane_Doe.pdf?X-Amz-Expires=3600&...",
+      "url": "https://<bucket>.s3.<region>.amazonaws.com/cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/enhanced_modern_classic.pdf?X-Amz-Expires=3600&...",
       "expiresAt": "2025-01-15T12:00:00.000Z"
     }
   ],
@@ -395,18 +395,20 @@ ownload URLs expire after one hour:
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `<candidate>/cv/<ISO-date>/<session-id>/generated/<subdir>/<file>.pdf`, where `<subdir>` is `cover_letter/` or `cv/` depending on the file type. The original upload remains stored at `<candidate>/cv/<ISO-date>/<session-id>/<candidate>.pdf` to guarantee the untouched résumé is always available. The API now returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
+S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). The change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/artifacts/`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
-jane_doe/cv/2025-01-15/
-├── jane_doe.pdf
-└── generated/
-    ├── cover_letter/
-    │   ├── cover_letter1.pdf
-    │   └── cover_letter2.pdf
-    └── cv/
-        ├── Jane_Doe.pdf
-        └── Jane_Doe_2.pdf
+cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/
+├── original.pdf
+├── enhanced_modern_classic.pdf
+├── enhanced_elegant_slate.pdf
+├── cover_letter_refined.pdf
+├── cover_letter_refined_2.pdf
+└── artifacts/
+    ├── original.json
+    ├── version1.json
+    ├── version2.json
+    └── changelog.json
 ```
 
 Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters or CVs are produced, the server responds with HTTP 500 and an error message.
