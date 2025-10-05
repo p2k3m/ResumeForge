@@ -43,6 +43,8 @@ describe('ATSScoreCard', () => {
     expect(screen.getByTestId('metric-score')).toHaveTextContent('N/A')
     expect(screen.getByTestId('metric-score-before')).toHaveTextContent('N/A')
     expect(screen.queryAllByText('%')).toHaveLength(0)
-    expect(screen.queryByTestId('metric-tip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('metric-tip')).toHaveTextContent(
+      /Keep mirroring the JD skill keywords in upcoming drafts/i
+    )
   })
 })

@@ -1,4 +1,5 @@
 import InfoTooltip from './InfoTooltip.jsx'
+import { buildMetricTip } from '../utils/actionableAdvice.js'
 
 const badgeThemes = {
   EXCELLENT:
@@ -105,7 +106,12 @@ function ATSScoreCard({ metric, accentClass = defaultAccent, improvement }) {
     ? normalizeLabel(metric.beforeRatingLabel)
     : null
   const deltaText = metric?.deltaText || formatScoreDelta(beforeScore, afterScore)
-  const tip = metric?.tip ?? metric?.tips?.[0] ?? ''
+  const explicitTip = typeof metric?.tip === 'string' ? metric.tip.trim() : ''
+  const listTips = Array.isArray(metric?.tips)
+    ? metric.tips.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean)
+    : []
+  const fallbackTip = buildMetricTip(metric)
+  const tip = explicitTip || listTips[0] || fallbackTip || ''
   const category = metric?.category ?? 'Metric'
   const metricDescription = describeMetric(metric)
 
