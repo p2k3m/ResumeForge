@@ -310,10 +310,9 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
         <select id="templateId" name="templateId">
           <option value="modern">Modern</option>
           <option value="professional">Professional</option>
-          <option value="vibrant">Vibrant</option>
+          <option value="classic">Classic</option>
           <option value="ats">ATS</option>
           <option value="2025">2025</option>
-          <option value="ucmo">UCMO</option>
         </select>
         <p style="margin: 0; font-size: 0.95rem; color: #4a5568;">Template downloads are temporarily disabled in fallback mode.</p>
         <button type="button" disabled title="Build the client app to enable downloads">Download preview (unavailable)</button>
@@ -1335,21 +1334,16 @@ const upload = multer({
 
 const uploadResume = upload.single('resume');
 
-const CV_TEMPLATE_ALIASES = {};
+const CV_TEMPLATE_ALIASES = {
+  ucmo: 'classic',
+  vibrant: 'modern',
+  creative: 'modern'
+};
 
-const CV_TEMPLATES = [
-  'modern',
-  'professional',
-  'classic',
-  'creative',
-  'vibrant',
-  'ats',
-  '2025',
-  'ucmo'
-];
+const CV_TEMPLATES = ['modern', 'professional', 'classic', 'ats', '2025'];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
-const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional', 'ucmo']);
+const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional']);
 const USER_TEMPLATE_ITEM_TYPE = 'USER_TEMPLATE_PREFERENCE';
 const USER_TEMPLATE_PREFIX = 'user_template#';
 const TEMPLATE_IDS = [...CV_TEMPLATES, ...LEGACY_CV_TEMPLATES]; // Backwards compatibility
@@ -1360,18 +1354,14 @@ const CV_TEMPLATE_GROUPS = {
   modern: 'modern',
   professional: 'professional',
   classic: 'classic',
-  creative: 'creative',
-  vibrant: 'creative',
   ats: 'ats',
-  2025: 'futuristic',
-  ucmo: 'classic'
+  2025: 'futuristic'
 };
 
 // Predefined contrasting template pairs used when no explicit templates are provided
 const CONTRASTING_PAIRS = [
-  ['modern', 'creative'],
-  ['professional', 'vibrant'],
-  ['classic', 'ats'],
+  ['modern', 'classic'],
+  ['professional', 'ats'],
   ['2025', 'modern']
 ];
 
@@ -1667,18 +1657,10 @@ function selectTemplates({
       canonicalPreferred,
       ...availableCvTemplates.filter((tpl) => tpl !== canonicalPreferred),
     ];
-  } else if (availableCvTemplates.includes('ucmo')) {
-    availableCvTemplates = [
-      'ucmo',
-      ...availableCvTemplates.filter((tpl) => tpl !== 'ucmo'),
-    ];
   }
 
   const primaryTemplate =
-    canonicalPreferred ||
-    availableCvTemplates[0] ||
-    canonicalizeCvTemplateId('ucmo') ||
-    CV_TEMPLATES[0];
+    canonicalPreferred || availableCvTemplates[0] || CV_TEMPLATES[0];
 
   const chooseSecondary = (current, pool) => {
     const contrasting = pool.find(
@@ -1696,7 +1678,6 @@ function selectTemplates({
       preferredTemplate,
       canonicalPreferred,
       ...availableCvTemplates.filter((tpl) => tpl !== primaryTemplate),
-      primaryTemplate !== 'ucmo' ? 'ucmo' : null,
     ].filter(Boolean)
   ).filter((tpl) => tpl !== primaryTemplate);
 
@@ -1724,14 +1705,6 @@ function selectTemplates({
       ])
     );
     secondaryTemplate = chooseSecondary(primaryTemplate, extendedPool);
-    if (secondaryTemplate === primaryTemplate && primaryTemplate !== 'ucmo') {
-      const ucmoCandidate = extendedPool.find((tpl) => tpl === 'ucmo');
-      if (ucmoCandidate) secondaryTemplate = ucmoCandidate;
-    }
-  }
-
-  if (!secondaryTemplate && primaryTemplate !== 'ucmo' && CV_TEMPLATES.includes('ucmo')) {
-    secondaryTemplate = 'ucmo';
   }
 
   const derivedCoverFromPreferred = deriveCoverTemplateFromCv(
@@ -4381,75 +4354,6 @@ async function rewriteSectionsWithGemini(
   return fallbackResult;
 }
 
-function buildUcmoGeminiLayoutPrompt({
-  name = '',
-  sections = [],
-  contact = {},
-  contactLines = [],
-} = {}) {
-  const normalizedSections = Array.isArray(sections)
-    ? sections
-        .map((sec) => {
-          const heading = normalizeHeading(sec.heading || '');
-          const items = Array.isArray(sec.items)
-            ? sec.items
-                .map((tokens) => stringifyTokens(tokens || []).trim())
-                .filter(Boolean)
-            : [];
-          return {
-            heading,
-            items,
-          };
-        })
-        .filter((sec) => sec.heading || sec.items.length)
-    : [];
-
-  const normalizedContact = {};
-  if (contact && typeof contact === 'object') {
-    Object.entries(contact).forEach(([key, value]) => {
-      if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (trimmed) {
-          normalizedContact[key] = trimmed;
-        }
-      }
-    });
-  }
-
-  const lines = Array.isArray(contactLines)
-    ? contactLines
-        .map((line) => (typeof line === 'string' ? line.trim() : ''))
-        .filter(Boolean)
-    : [];
-
-  const context = {
-    university: 'University of Central Missouri',
-    name: name || '',
-    contact: normalizedContact,
-    contactLines: lines,
-    sections: normalizedSections,
-  };
-
-  return [
-    'You are a front-end developer for the University of Central Missouri Career Services team.',
-    'Design a printable résumé layout that mirrors their signature styling using crimson (#990000) accents and serif typography.',
-    'Return ONLY fully self-contained HTML markup (no Markdown) that includes a <html> root element.',
-    'Layout requirements:',
-    '- Create a top bar using a <table> with id="top" that places contact information on the left and the university logo image (https://resumeforge.s3.amazonaws.com/ucmo-logo.png) on the right.',
-    '- Feature the candidate name prominently beneath the top bar.',
-    '- Render each provided section heading as an uppercase heading with its items beneath it.',
-    '- Preserve the wording of every bullet/item exactly as provided.',
-    '',
-    'CANDIDATE DATA:',
-    JSON.stringify(context, null, 2),
-  ].join('\n');
-}
-
-function sanitizeUcmoGeminiMarkup(markup) {
-  if (!markup) return '';
-  return String(markup).replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
-}
-
 async function generateProjectSummary(
   jobDescription = '',
   resumeSkills = [],
@@ -6212,42 +6116,6 @@ let generatePdf = async function (
     }
   }
   let html;
-  if (templateId === 'ucmo' && generativeModel?.generateContent) {
-    try {
-      const prompt = buildUcmoGeminiLayoutPrompt({
-        name: data.name,
-        sections: data.sections,
-        contact: templateParams,
-        contactLines: options?.contactLines,
-      });
-      logStructured('debug', 'pdf_ucmo_gemini_layout_prompt', {
-        requestedTemplateId,
-        templateId,
-        promptLength: prompt.length,
-      });
-      const result = await generativeModel.generateContent(prompt);
-      const markup = sanitizeUcmoGeminiMarkup(result?.response?.text?.());
-      if (markup && /<html/i.test(markup)) {
-        html = markup;
-        logStructured('info', 'pdf_ucmo_gemini_layout_applied', {
-          requestedTemplateId,
-          templateId,
-          markupLength: markup.length,
-        });
-      } else {
-        logStructured('warn', 'pdf_ucmo_gemini_layout_empty', {
-          requestedTemplateId,
-          templateId,
-        });
-      }
-    } catch (err) {
-      logStructured('warn', 'pdf_ucmo_gemini_layout_failed', {
-        requestedTemplateId,
-        templateId,
-        error: serializeError(err),
-      });
-    }
-  }
   if (!html) {
     const templatePath = path.resolve('templates', `${templateId}.html`);
     logStructured('debug', 'pdf_template_loading', {
@@ -6441,48 +6309,6 @@ let generatePdf = async function (
       margin: 64,
       lineGap: 6,
       paragraphGap: 12
-    },
-    ucmo: {
-      ...baseStyle,
-      font: 'Times-Roman',
-      bold: 'Times-Bold',
-      italic: 'Times-Italic',
-      headingColor: '#900021',
-      bulletColor: '#900021',
-      textColor: '#2d3748',
-      nameColor: '#900021',
-      headingUppercase: true,
-      headingFontSize: 15,
-      nameFontSize: 30,
-      bodyFontSize: 12,
-      margin: 64,
-      lineGap: 6,
-      paragraphGap: 12
-    },
-    vibrant: {
-      ...baseStyle,
-      headingColor: '#ff6b6b',
-      bulletColor: '#4ecdc4',
-      textColor: '#333333',
-      nameColor: '#ff6b6b',
-      headingFontSize: 18,
-      nameFontSize: 32,
-      bodyFontSize: 12,
-      lineGap: 7,
-      paragraphGap: 12,
-      headingUppercase: true
-    },
-    creative: {
-      ...baseStyle,
-      headingColor: '#2563eb',
-      bulletColor: '#2563eb',
-      textColor: '#1f2937',
-      nameColor: '#2563eb',
-      headingFontSize: 16,
-      nameFontSize: 30,
-      bodyFontSize: 11,
-      lineGap: 7,
-      paragraphGap: 11
     },
     portal: {
       ...baseStyle,
@@ -6745,7 +6571,7 @@ let generatePdf = async function (
       if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
     } catch {}
     if (robotoAvailable) {
-      ['modern', 'vibrant', 'creative', 'portal', 'professional', 'cover_modern'].forEach((tpl) => {
+      ['modern', 'professional', 'classic', 'ats', '2025', 'cover_modern'].forEach((tpl) => {
         if (styleMap[tpl]) {
           styleMap[tpl].font = 'Roboto';
           styleMap[tpl].bold = 'Roboto-Bold';

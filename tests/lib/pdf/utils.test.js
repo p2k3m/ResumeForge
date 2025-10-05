@@ -5,11 +5,8 @@ describe('resolveTemplateParams', () => {
     modern: 'Inter',
     professional: 'Garamond',
     classic: 'Times New Roman',
-    creative: 'Futura',
     ats: 'Arial',
-    '2025': 'Sora',
-    ucmo: 'Crimson Text',
-    vibrant: 'Lato'
+    '2025': 'Sora'
   };
 
   const baseConfig = {

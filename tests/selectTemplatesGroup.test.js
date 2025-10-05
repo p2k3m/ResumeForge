@@ -13,7 +13,7 @@ describe('selectTemplates respects preferred templates and contrast', () => {
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );
-    const expectedCover = ['classic', 'professional', 'ucmo'].includes(template1)
+    const expectedCover = ['classic', 'professional'].includes(template1)
       ? 'cover_classic'
       : 'cover_modern';
     expect(coverTemplate1).toBe(expectedCover);
@@ -21,11 +21,11 @@ describe('selectTemplates respects preferred templates and contrast', () => {
 
   test('uses explicit template1 when no preference supplied', () => {
     const { template1, template2, coverTemplate1, coverTemplates } = selectTemplates({
-      template1: 'vibrant',
+      template1: 'ats',
     });
-    expect(template1).toBe('vibrant');
-    expect(template2).not.toBe('vibrant');
-    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['vibrant']);
+    expect(template1).toBe('ats');
+    expect(template2).not.toBe('ats');
+    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ats']);
     expect(coverTemplate1).toBe('cover_modern');
     expect(coverTemplates[0]).toBe('cover_modern');
   });
@@ -46,13 +46,13 @@ describe('selectTemplates respects preferred templates and contrast', () => {
     expect(coverTemplate1).toBe('cover_modern');
   });
 
-  test('defaults to ucmo when nothing provided', () => {
+  test('defaults to modern when nothing provided', () => {
     const { template1, template2, coverTemplate1 } = selectTemplates();
-    expect(template1).toBe('ucmo');
-    expect(template2).not.toBe('ucmo');
+    expect(template1).toBe('modern');
+    expect(template2).not.toBe('modern');
     expect(CV_TEMPLATES).toContain(template2);
-    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
-    expect(coverTemplate1).toBe('cover_classic');
+    expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['modern']);
+    expect(coverTemplate1).toBe('cover_modern');
   });
 
   test('heading styles are bold across templates', async () => {
