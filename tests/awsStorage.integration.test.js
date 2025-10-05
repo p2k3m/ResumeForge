@@ -1,9 +1,6 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
-import crypto from 'crypto';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
-
-const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
 const MANUAL_JOB_DESCRIPTION = `
 Join our platform engineering team to build resilient infrastructure and developer tooling.
@@ -67,7 +64,7 @@ describe('AWS integrations for /api/process-cv', () => {
     );
     expect(dynamoPut).toBeTruthy();
     expect(dynamoPut[0].input.Item.linkedinProfileUrl.S).toBe(
-      hash('https://linkedin.com/in/example')
+      'https://linkedin.com/in/example'
     );
     expect(dynamoPut[0].input.Item.status.S).toBe('uploaded');
 

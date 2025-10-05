@@ -12,7 +12,5 @@
   CLOUDFRONT_ORIGINS: [
     'http://localhost:3000',
     'http://localhost:5173'
-  ],
-  // Optional: salt used when hashing PII before persisting to DynamoDB.
-  PII_HASH_SECRET: 'local-dev-secret'
+  ]
 }

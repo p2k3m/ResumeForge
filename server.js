@@ -937,9 +937,6 @@ function buildRuntimeConfig() {
       fileConfig.CLOUDFRONT_ORIGINS ||
       fileConfig.ALLOWED_ORIGINS
   );
-  const piiHashSecret =
-    readEnvValue('PII_HASH_SECRET') ?? fileConfig.PII_HASH_SECRET ?? '';
-
   const missing = [];
   if (!s3Bucket) missing.push('S3_BUCKET');
   if (!geminiApiKey) missing.push('GEMINI_API_KEY');
@@ -953,16 +950,12 @@ function buildRuntimeConfig() {
   process.env.AWS_REGION = region;
   process.env.S3_BUCKET = s3Bucket;
   process.env.GEMINI_API_KEY = geminiApiKey;
-  if (piiHashSecret && !process.env.PII_HASH_SECRET) {
-    process.env.PII_HASH_SECRET = piiHashSecret;
-  }
 
   return Object.freeze({
     AWS_REGION: region,
     S3_BUCKET: s3Bucket,
     GEMINI_API_KEY: geminiApiKey,
     CLOUDFRONT_ORIGINS: allowedOrigins,
-    PII_HASH_SECRET: piiHashSecret || '',
   });
 }
 
@@ -1665,18 +1658,12 @@ errorLogBucket =
   runtimeConfigSnapshot?.S3_BUCKET ||
   process.env.S3_BUCKET ||
   readEnvValue('S3_BUCKET');
-const piiHashSecret =
-  runtimeConfigSnapshot?.PII_HASH_SECRET || process.env.PII_HASH_SECRET || '';
-
 function anonymizePersonalData(value) {
-  if (!value) return '';
-  const hash = crypto.createHash('sha256');
-  hash.update(String(value));
-  if (piiHashSecret) {
-    hash.update(piiHashSecret);
+  if (value === undefined || value === null) return '';
+  if (typeof value === 'string') {
+    return value.trim();
   }
-  // GDPR: store irreversible hashes so DynamoDB never contains raw identifiers.
-  return hash.digest('hex');
+  return String(value);
 }
 
 function buildCopySource(bucket, key) {
@@ -11239,7 +11226,7 @@ async function handleImprovementRequest(type, req, res) {
       userId: res.locals.userId,
       jobId: jobIdInput,
     }) || jobIdInput;
-  const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
+  const storedLinkedIn = anonymizePersonalData(profileIdentifier);
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
   let dynamo = null;
   let existingRecord = {};
@@ -11271,7 +11258,7 @@ async function handleImprovementRequest(type, req, res) {
       const record = await dynamo.send(
         new GetItemCommand({
           TableName: tableName,
-          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
         })
       );
       const item = record.Item || {};
@@ -11688,7 +11675,7 @@ async function handleImprovementRequest(type, req, res) {
         templateParamConfig,
         applicantName,
         sanitizedName,
-        anonymizedLinkedIn,
+        storedLinkedIn,
         originalUploadKey: effectiveOriginalUploadKey,
         selection,
         geminiApiKey,
@@ -11928,7 +11915,7 @@ async function generateEnhancedDocumentsResponse({
   templateParamConfig,
   applicantName,
   sanitizedName,
-  anonymizedLinkedIn,
+  storedLinkedIn,
   originalUploadKey,
   selection,
   geminiApiKey,
@@ -12810,7 +12797,7 @@ async function generateEnhancedDocumentsResponse({
       await dynamo.send(
         new UpdateItemCommand({
           TableName: tableName,
-          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
           UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
           ExpressionAttributeNames: expressionAttributeNames,
           ExpressionAttributeValues: expressionAttributeValues,
@@ -12995,7 +12982,7 @@ app.post(
         userId: res.locals.userId,
         jobId: jobIdInput,
       }) || jobIdInput;
-    const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
+    const storedLinkedIn = anonymizePersonalData(profileIdentifier);
 
     const credlyProfileUrl =
       typeof req.body.credlyProfileUrl === 'string' ? req.body.credlyProfileUrl.trim() : '';
@@ -13113,7 +13100,7 @@ app.post(
         const record = await dynamo.send(
           new GetItemCommand({
             TableName: tableName,
-            Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+            Key: { linkedinProfileUrl: { S: storedLinkedIn } },
           })
         );
         const item = record.Item || {};
@@ -13370,7 +13357,7 @@ app.post(
         templateParamConfig,
         applicantName,
         sanitizedName,
-        anonymizedLinkedIn,
+        storedLinkedIn,
         originalUploadKey,
         selection,
         geminiApiKey,
@@ -13521,7 +13508,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       userId: res.locals.userId,
       jobId,
     }) || jobId;
-  const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
+  const storedLinkedIn = anonymizePersonalData(profileIdentifier);
   const dynamo = new DynamoDBClient({ region });
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
 
@@ -13545,7 +13532,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     const record = await dynamo.send(
       new GetItemCommand({
         TableName: tableName,
-        Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+        Key: { linkedinProfileUrl: { S: storedLinkedIn } },
         ProjectionExpression: 'jobId, changeLog',
       })
     );
@@ -13638,7 +13625,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     await dynamo.send(
       new UpdateItemCommand({
         TableName: tableName,
-        Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+        Key: { linkedinProfileUrl: { S: storedLinkedIn } },
         UpdateExpression: updateExpression,
         ExpressionAttributeValues: expressionAttributeValues,
         ConditionExpression: 'jobId = :jobId',
@@ -14075,11 +14062,11 @@ app.post(
   }
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName) || 'candidate';
-  const anonymizedApplicantName = anonymizePersonalData(applicantName);
-  const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
-  const anonymizedIp = anonymizePersonalData(ipAddress);
-  const anonymizedUserAgent = anonymizePersonalData(userAgent);
-  const anonymizedCredly = anonymizePersonalData(submittedCredly);
+  const storedApplicantName = anonymizePersonalData(applicantName);
+  const storedLinkedIn = anonymizePersonalData(profileIdentifier);
+  const storedIpAddress = anonymizePersonalData(ipAddress);
+  const storedUserAgent = anonymizePersonalData(userAgent);
+  const storedCredlyProfile = anonymizePersonalData(submittedCredly);
   const jobKeySegment = sanitizeJobSegment(jobId);
   const ownerSegment = resolveDocumentOwnerSegment({ userId, sanitizedName });
   const prefix = buildDocumentSessionPrefix({
@@ -14164,19 +14151,19 @@ app.post(
     const putItemPayload = {
       TableName: tableName,
       Item: {
-        linkedinProfileUrl: { S: anonymizedLinkedIn },
-        candidateName: { S: anonymizedApplicantName },
+        linkedinProfileUrl: { S: storedLinkedIn },
+        candidateName: { S: storedApplicantName },
         timestamp: { S: timestamp },
         uploadedAt: { S: timestamp },
         requestId: { S: safeRequestId },
         jobId: { S: jobId },
-        credlyProfileUrl: { S: anonymizedCredly },
+        credlyProfileUrl: { S: storedCredlyProfile },
         cv1Url: { S: '' },
         cv2Url: { S: '' },
         coverLetter1Url: { S: '' },
         coverLetter2Url: { S: '' },
-        ipAddress: { S: anonymizedIp },
-        userAgent: { S: anonymizedUserAgent },
+        ipAddress: { S: storedIpAddress },
+        userAgent: { S: storedUserAgent },
         os: { S: os },
         browser: { S: browser },
         device: { S: device },
@@ -14209,35 +14196,35 @@ app.post(
     version: 1,
     jobId,
     uploadedAt: timestamp,
-    applicantHash: anonymizedApplicantName,
+    applicantName: storedApplicantName,
     links: {
-      linkedinProfileUrlHash: anonymizedLinkedIn,
-      credlyProfileUrlHash: anonymizedCredly,
+      linkedinProfileUrl: storedLinkedIn,
+      credlyProfileUrl: storedCredlyProfile,
     },
-      client: {
-        ipAddressHash: anonymizedIp,
-        userAgentHash: anonymizedUserAgent,
-        os,
-        browser,
-        device,
-        location: {
-          label: locationLabel,
-          city: locationMeta.city || '',
-          region: locationMeta.region || '',
-          country: locationMeta.country || '',
-        },
+    client: {
+      ipAddress: storedIpAddress,
+      userAgent: storedUserAgent,
+      os,
+      browser,
+      device,
+      location: {
+        label: locationLabel,
+        city: locationMeta.city || '',
+        region: locationMeta.region || '',
+        country: locationMeta.country || '',
       },
-      storage: {
-        bucket,
-        initialUploadKey,
-        finalUploadKey,
-        logKey,
-        metadataKey,
-        fileType: storedFileType,
-      },
-      requestContext: {
-        requestId: safeRequestId || undefined,
-      },
+    },
+    storage: {
+      bucket,
+      initialUploadKey,
+      finalUploadKey,
+      logKey,
+      metadataKey,
+      fileType: storedFileType,
+    },
+    requestContext: {
+      requestId: safeRequestId || undefined,
+    },
     templates: {
       resume: [template1, template2].filter(Boolean),
       cover: [coverTemplate1, coverTemplate2].filter(Boolean),
@@ -14542,7 +14529,7 @@ app.post(
       await dynamo.send(
         new UpdateItemCommand({
           TableName: tableName,
-          Key: { linkedinProfileUrl: { S: anonymizedLinkedIn } },
+          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
           UpdateExpression:
             'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
           ExpressionAttributeValues: {
@@ -14609,7 +14596,7 @@ app.post(
       templateParamConfig,
       applicantName,
       sanitizedName,
-      anonymizedLinkedIn,
+      storedLinkedIn,
       originalUploadKey,
       selection,
       geminiApiKey: secrets.GEMINI_API_KEY,

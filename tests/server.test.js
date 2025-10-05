@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
-import crypto from 'crypto';
 
 process.env.S3_BUCKET = 'test-bucket';
 process.env.GEMINI_API_KEY = 'test-key';
@@ -131,8 +130,6 @@ const mammothMock = (await import('mammoth')).default;
 const axios = (await import('axios')).default;
 axios.get = jest.fn();
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
-
-const hash = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
 
 const MANUAL_JOB_DESCRIPTION = `
 We are seeking a Software Engineer to design, build, and ship scalable web services.
@@ -286,15 +283,13 @@ describe('/api/process-cv', () => {
     );
     expect(putCall).toBeTruthy();
     expect(putCall[0].input.TableName).toBe('ResumeForge');
-    expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
-      hash(res2.body.jobId)
+    expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(res2.body.jobId);
+    expect(putCall[0].input.Item.candidateName.S).toBe(
+      res2.body.applicantName.trim()
     );
-    expect(putCall[0].input.Item.candidateName.S).toBe(hash(res2.body.applicantName));
-    expect(putCall[0].input.Item.ipAddress.S).toBe(hash('203.0.113.42'));
+    expect(putCall[0].input.Item.ipAddress.S).toBe('203.0.113.42');
     expect(putCall[0].input.Item.userAgent.S).toBe(
-      hash(
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
-      )
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1'
     );
     expect(putCall[0].input.Item.os.S).toBe('iOS');
     expect(putCall[0].input.Item.device.S).toBe('iPhone');
