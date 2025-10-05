@@ -11805,7 +11805,6 @@ async function handleImprovementRequest(type, req, res) {
         return;
       }
 
-      const s3 = s3Client;
       const applicantName = extractName(updatedResumeText);
       const sanitizedName = sanitizeName(applicantName) || 'candidate';
       const jobKeySegment = sanitizeJobSegment(jobIdInput);
@@ -11856,7 +11855,7 @@ async function handleImprovementRequest(type, req, res) {
 
       const enhancedDocs = await generateEnhancedDocumentsResponse({
         res,
-        s3,
+        s3: s3Client,
         dynamo,
         tableName,
         bucket,
@@ -11969,7 +11968,7 @@ async function handleImprovementRequest(type, req, res) {
     }
 
     await updateStageMetadata({
-      s3,
+      s3: s3Client,
       bucket,
       metadataKey: improvementMetadataKey,
       jobId: jobIdInput,
