@@ -258,12 +258,13 @@ describe('/api/process-cv', () => {
     const tempDelete = s3Commands.find((cmd) => cmd.type === 'DeleteObjectCommand');
     expect(tempDelete).toBeTruthy();
 
+    const candidatePrefix = `cv/${sanitized}/`;
     const generatedPdfKeys = s3Commands
       .filter(
         (cmd) =>
           cmd.type === 'PutObjectCommand' &&
           typeof cmd.key === 'string' &&
-          cmd.key.includes('/generated/')
+          cmd.key.includes(candidatePrefix)
       )
       .filter((cmd) => cmd.key.endsWith('.pdf'));
     expect(generatedPdfKeys).toHaveLength(4);
@@ -273,9 +274,11 @@ describe('/api/process-cv', () => {
         (cmd) =>
           cmd.type === 'PutObjectCommand' &&
           typeof cmd.key === 'string' &&
-          cmd.key.includes('/generated/')
+          cmd.key.includes(candidatePrefix)
       )
-      .filter((cmd) => cmd.key.endsWith('.json'));
+      .filter(
+        (cmd) => cmd.key.endsWith('.json') && !cmd.key.includes('/logs/')
+      );
     expect(generatedJsonKeys).toHaveLength(4);
 
     const putCall = mockDynamoSend.mock.calls.find(
@@ -302,8 +305,8 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.locationCountry.S).toBe('IN');
     expect(putCall[0].input.Item.credlyProfileUrl.S).toBe('');
     expect(putCall[0].input.Item.s3Bucket.S).toBe('test-bucket');
-    expect(putCall[0].input.Item.s3Key.S).toContain(`${sanitized}/cv/`);
-    expect(putCall[0].input.Item.s3Url.S).toContain(`${sanitized}/cv/`);
+    expect(putCall[0].input.Item.s3Key.S).toContain(`cv/${sanitized}/`);
+    expect(putCall[0].input.Item.s3Url.S).toContain(`cv/${sanitized}/`);
     expect(putCall[0].input.Item.fileType.S).toMatch(/pdf/);
     expect(putCall[0].input.Item.status.S).toBe('uploaded');
     expect(putCall[0].input.Item.cv1Url.S).toBe('');
