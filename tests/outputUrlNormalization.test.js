@@ -37,4 +37,22 @@ describe('ensureOutputFileUrls', () => {
 
     expect(entry.typeUrl).toBe('https://example.com/resume.pdf#version2');
   });
+
+  it('filters out entries that do not resolve to a downloadable url', () => {
+    const normalized = ensureOutputFileUrls([
+      { type: 'version1', url: '   ' },
+      { type: 'version2', typeUrl: '#version2' },
+      { type: 'version3', downloadUrl: 'https://example.com/v3.pdf ' },
+    ]);
+
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0]).toEqual(
+      expect.objectContaining({
+        type: 'version3',
+        url: 'https://example.com/v3.pdf',
+        fileUrl: 'https://example.com/v3.pdf',
+        typeUrl: 'https://example.com/v3.pdf#version3',
+      })
+    );
+  });
 });

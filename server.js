@@ -781,44 +781,51 @@ function ensureOutputFileUrls(entries) {
       for (const key of OUTPUT_URL_KEYS) {
         const value = normalized[key];
         if (typeof value === 'string' && value.trim()) {
-          primaryUrl = value.trim();
+          const trimmed = value.trim();
+          primaryUrl = trimmed;
+          normalized[key] = trimmed;
           if (!normalized.url) {
-            normalized.url = primaryUrl;
+            normalized.url = trimmed;
           }
           if (!normalized.fileUrl) {
-            normalized.fileUrl = primaryUrl;
+            normalized.fileUrl = trimmed;
           }
           break;
         }
       }
 
       if (!primaryUrl && typeof normalized.typeUrl === 'string' && normalized.typeUrl.trim()) {
-        const { base, fragment } = parseTypeUrl(normalized.typeUrl);
-        if (base) {
-          primaryUrl = base;
+        const parsed = parseTypeUrl(normalized.typeUrl);
+        if (parsed.base) {
+          primaryUrl = parsed.base;
         }
-        if (fragment) {
-          typeFromUrl = fragment;
+        if (parsed.fragment) {
+          typeFromUrl = parsed.fragment;
           if (!normalized.type) {
-            normalized.type = fragment;
+            normalized.type = parsed.fragment;
           }
         }
       }
 
       if (!primaryUrl && typeof normalized.url === 'string') {
-        primaryUrl = normalized.url.trim();
+        const trimmed = normalized.url.trim();
+        if (trimmed) {
+          primaryUrl = trimmed;
+          normalized.url = trimmed;
+        }
       }
       if (!primaryUrl && typeof normalized.fileUrl === 'string') {
-        primaryUrl = normalized.fileUrl.trim();
+        const trimmed = normalized.fileUrl.trim();
+        if (trimmed) {
+          primaryUrl = trimmed;
+          normalized.fileUrl = trimmed;
+        }
       }
 
       if (primaryUrl) {
-        if (!normalized.url) {
-          normalized.url = primaryUrl;
-        }
-        if (!normalized.fileUrl) {
-          normalized.fileUrl = primaryUrl;
-        }
+        const trimmedPrimary = primaryUrl.trim();
+        normalized.url = trimmedPrimary;
+        normalized.fileUrl = trimmedPrimary;
 
         const typeFragmentSource =
           (typeof normalized.type === 'string' && normalized.type.trim()) ||
@@ -827,9 +834,20 @@ function ensureOutputFileUrls(entries) {
           'download';
 
         const parsedExisting = parseTypeUrl(normalized.typeUrl);
-        const typeUrlBase = parsedExisting.base || primaryUrl;
+        const typeUrlBase = parsedExisting.base || trimmedPrimary;
         const fragment = parsedExisting.fragment || typeFragmentSource;
         normalized.typeUrl = `${typeUrlBase}#${encodeURIComponent(fragment)}`;
+      }
+
+      if (typeof normalized.fileUrl === 'string') {
+        normalized.fileUrl = normalized.fileUrl.trim();
+      }
+      if (typeof normalized.typeUrl === 'string') {
+        normalized.typeUrl = normalized.typeUrl.trim();
+      }
+
+      if (!normalized.fileUrl || !normalized.typeUrl) {
+        return null;
       }
 
       return normalized;
@@ -11834,6 +11852,21 @@ async function handleImprovementRequest(type, req, res) {
       assetUrls = ensureOutputFileUrls(
         Array.isArray(enhancedDocs.urls) ? enhancedDocs.urls : []
       );
+      if (assetUrls.length === 0) {
+        logStructured('error', 'targeted_improvement_no_valid_urls', {
+          ...logContext,
+          requestedUrlCount: Array.isArray(enhancedDocs.urls)
+            ? enhancedDocs.urls.length
+            : 0,
+        });
+        sendError(
+          res,
+          500,
+          'IMPROVEMENT_DOCUMENT_UNAVAILABLE',
+          'Unable to prepare download links for the applied improvement.'
+        );
+        return;
+      }
       templateContextOutput = enhancedDocs.templateContext;
       assetUrlExpiry =
         assetUrls.length > 0
@@ -12863,6 +12896,29 @@ async function generateEnhancedDocumentsResponse({
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
 
   const normalizedUrls = ensureOutputFileUrls(urls);
+
+  if (normalizedUrls.length === 0) {
+    await logEvent({
+      s3,
+      bucket,
+      key: logKey,
+      jobId,
+      event: 'generation_no_valid_urls',
+      level: 'error',
+      message: 'No downloadable artifacts were produced.',
+    });
+    logStructured('error', 'generation_urls_missing', {
+      ...logContext,
+      requestedUrlCount: urls.length,
+    });
+    sendError(
+      res,
+      500,
+      'AI_RESPONSE_INVALID',
+      'Unable to prepare download links for the generated documents.'
+    );
+    return null;
+  }
 
   if (dynamo) {
     const findArtifactKey = (type) =>

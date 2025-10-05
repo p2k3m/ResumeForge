@@ -19,13 +19,12 @@ jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   DeleteObjectCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectCommand' })),
 }));
 
-const getSignedUrlMock = jest
-  .fn()
-  .mockImplementation((client, command, { expiresIn }) =>
-    Promise.resolve(
-      `https://example.com/${command.input.Key}?X-Amz-Signature=mock-signature&X-Amz-Expires=${expiresIn}`
-    )
+const defaultSignedUrlImplementation = (client, command, { expiresIn }) =>
+  Promise.resolve(
+    `https://example.com/${command.input.Key}?X-Amz-Signature=mock-signature&X-Amz-Expires=${expiresIn}`
   );
+
+const getSignedUrlMock = jest.fn().mockImplementation(defaultSignedUrlImplementation);
 jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: getSignedUrlMock
 }));
@@ -528,6 +527,29 @@ describe('/api/process-cv', () => {
         expect(entry.templateType).toBe('cover');
       }
     });
+  });
+
+  test('returns a structured error when download URLs cannot be generated', async () => {
+    getSignedUrlMock.mockImplementation(() => Promise.resolve('   '));
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: expect.objectContaining({
+          code: 'AI_RESPONSE_INVALID',
+          message: 'Unable to prepare download links for the generated documents.',
+          details: {},
+        }),
+      })
+    );
+
+    getSignedUrlMock.mockImplementation(defaultSignedUrlImplementation);
   });
 
   test('cover letter urls include structured metadata', async () => {
