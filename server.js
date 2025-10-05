@@ -8747,6 +8747,106 @@ async function streamToString(stream) {
   return chunks.join('');
 }
 
+function pruneStageMetadataValue(value) {
+  if (Array.isArray(value)) {
+    const sanitized = value
+      .map((item) => pruneStageMetadataValue(item))
+      .filter((item) => item !== undefined);
+    return sanitized.length ? sanitized : undefined;
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const entries = Object.entries(value).reduce((acc, [key, val]) => {
+      const sanitized = pruneStageMetadataValue(val);
+      if (sanitized !== undefined) {
+        acc[key] = sanitized;
+      }
+      return acc;
+    }, {});
+    return Object.keys(entries).length ? entries : undefined;
+  }
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return undefined;
+  }
+  return value;
+}
+
+async function updateStageMetadata({
+  s3,
+  bucket,
+  metadataKey,
+  jobId,
+  stage,
+  data = {},
+  logContext = {},
+}) {
+  if (!s3 || !bucket || !metadataKey || !stage) {
+    return false;
+  }
+
+  const context = { ...logContext, stage, metadataKey };
+
+  try {
+    let existingPayload = {};
+    try {
+      const existing = await s3.send(
+        new GetObjectCommand({ Bucket: bucket, Key: metadataKey })
+      );
+      const raw = await streamToString(existing.Body);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          existingPayload = parsed;
+        }
+      }
+    } catch (err) {
+      if (err?.name !== 'NoSuchKey' && err?.$metadata?.httpStatusCode !== 404) {
+        throw err;
+      }
+    }
+
+    const sanitizedStage = pruneStageMetadataValue({ ...data });
+    const nextStages = {
+      ...(existingPayload.stages && typeof existingPayload.stages === 'object'
+        ? existingPayload.stages
+        : {}),
+    };
+    if (sanitizedStage && Object.keys(sanitizedStage).length) {
+      nextStages[stage] = sanitizedStage;
+    } else {
+      delete nextStages[stage];
+    }
+
+    const nextPayload = {
+      version: 2,
+      ...(existingPayload.jobId || jobId
+        ? { jobId: jobId || existingPayload.jobId }
+        : {}),
+      stages: pruneStageMetadataValue(nextStages) || {},
+      updatedAt: new Date().toISOString(),
+    };
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: metadataKey,
+        Body: JSON.stringify(nextPayload, null, 2),
+        ContentType: 'application/json',
+      })
+    );
+
+    return true;
+  } catch (err) {
+    logStructured('warn', 'stage_metadata_update_failed', {
+      ...context,
+      error: serializeError(err),
+    });
+    return false;
+  }
+}
+
 async function readJsonFromS3({ s3, bucket, key }) {
   if (!s3 || !bucket || !key) {
     return null;
@@ -11724,6 +11824,7 @@ async function handleImprovementRequest(type, req, res) {
           });
       const effectiveOriginalUploadKey = originalUploadKey || `${prefix}original.pdf`;
       const effectiveLogKey = logKey || `${prefix}logs/processing.jsonl`;
+      const improvementMetadataKey = `${prefix}logs/log.json`;
 
       let templateContextInput =
         typeof payload.templateContext === 'object' && payload.templateContext
@@ -11866,6 +11967,21 @@ async function handleImprovementRequest(type, req, res) {
     if (templateContextOutput) {
       responsePayload.templateContext = templateContextOutput;
     }
+
+    await updateStageMetadata({
+      s3,
+      bucket,
+      metadataKey: improvementMetadataKey,
+      jobId: jobIdInput,
+      stage: 'improve',
+      data: {
+        completedAt: new Date().toISOString(),
+        improvementType: type,
+        confidence: result.confidence,
+        missingSkillsResolved: missingSkills.length,
+      },
+      logContext,
+    });
 
     return res.json(responsePayload);
   } catch (err) {
@@ -12059,6 +12175,9 @@ async function generateEnhancedDocumentsResponse({
     changeLogKey: existingRecord?.sessionChangeLogKey?.S,
     originalUploadKey,
   });
+  const stageMetadataKey = originalUploadKey
+    ? `${originalUploadKey.replace(/[^/]+$/, '')}logs/log.json`
+    : '';
 
   const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
     ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
@@ -12574,14 +12693,6 @@ async function generateEnhancedDocumentsResponse({
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
   const usedFileBaseNames = new Set();
-  const recordDevice = existingRecord?.device?.S || '';
-  const recordOs = existingRecord?.os?.S || '';
-  const recordBrowser = existingRecord?.browser?.S || '';
-  const recordLocation = existingRecord?.location?.S || '';
-  const recordLocationCity = existingRecord?.locationCity?.S || '';
-  const recordLocationRegion = existingRecord?.locationRegion?.S || '';
-  const recordLocationCountry = existingRecord?.locationCountry?.S || '';
-
   if (downloadsRestricted) {
     logStructured('info', 'generation_downloads_restricted', {
       ...logContext,
@@ -12843,6 +12954,7 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
+  const textArtifactTypes = Object.keys(textArtifactKeys);
   await logEvent({
     s3,
     bucket,
@@ -12850,7 +12962,7 @@ async function generateEnhancedDocumentsResponse({
     jobId,
     event: 'generation_text_artifacts_uploaded',
     metadata: {
-      artifacts: Object.keys(textArtifactKeys),
+      textArtifactCount: textArtifactTypes.length,
     },
   });
 
@@ -12895,11 +13007,14 @@ async function generateEnhancedDocumentsResponse({
     return null;
   }
 
+  let generationCompletedAt = null;
+
   if (dynamo) {
     const findArtifactKey = (type) =>
       uploadedArtifacts.find((artifact) => artifact.type === type)?.key || '';
 
     const nowIso = new Date().toISOString();
+    generationCompletedAt = nowIso;
     const updateExpressionParts = [
       '#status = :status',
       'generatedAt = :generatedAt',
@@ -12915,15 +13030,6 @@ async function generateEnhancedDocumentsResponse({
     };
 
     const activityMetadata = {
-      device: recordDevice,
-      os: recordOs,
-      browser: recordBrowser,
-      location: {
-        label: recordLocation,
-        city: recordLocationCity,
-        region: recordLocationRegion,
-        country: recordLocationCountry,
-      },
       templates: {
         primary: template1 || '',
         secondary: template2 || '',
@@ -12932,8 +13038,9 @@ async function generateEnhancedDocumentsResponse({
       },
       artifacts: {
         originalUploadKey: originalUploadKey || '',
-        generated: uploadedArtifacts,
-        text: textArtifactKeys,
+        generatedCount: uploadedArtifacts.length,
+        textArtifactCount: textArtifactTypes.length,
+        urlCount: normalizedUrls.length,
       },
     };
 
@@ -13064,6 +13171,21 @@ async function generateEnhancedDocumentsResponse({
   });
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
+
+  await updateStageMetadata({
+    s3,
+    bucket,
+    metadataKey: stageMetadataKey,
+    jobId,
+    stage: 'download',
+    data: {
+      completedAt: generationCompletedAt || new Date().toISOString(),
+      artifactCount: uploadedArtifacts.length,
+      textArtifactCount: textArtifactTypes.length,
+      urlCount: normalizedUrls.length,
+    },
+    logContext,
+  });
 
   const atsScoreBefore = Number.isFinite(originalMatchResult.score)
     ? originalMatchResult.score
@@ -14466,67 +14588,25 @@ app.post(
       event: 'dynamodb_initial_record_written'
     });
 
-  const metadataPayload = {
-    version: 1,
-    jobId,
-    uploadedAt: timestamp,
-    applicantName: storedApplicantName,
-    links: {
-      linkedinProfileUrl: storedLinkedIn,
-      credlyProfileUrl: storedCredlyProfile,
-    },
-    client: {
-      ipAddress: storedIpAddress,
-      userAgent: storedUserAgent,
-      os,
-      browser,
-      device,
-      location: {
-        label: locationLabel,
-        city: locationMeta.city || '',
-        region: locationMeta.region || '',
-        country: locationMeta.country || '',
-      },
-    },
-    storage: {
+    const stageMetadataUpdated = await updateStageMetadata({
+      s3,
       bucket,
-      initialUploadKey,
-      finalUploadKey,
-      logKey,
       metadataKey,
-      fileType: storedFileType,
-    },
-    requestContext: {
-      requestId: safeRequestId || undefined,
-    },
-    templates: {
-      resume: [template1, template2].filter(Boolean),
-      cover: [coverTemplate1, coverTemplate2].filter(Boolean),
-    },
-  };
+      jobId,
+      stage: 'upload',
+      data: {
+        uploadedAt: timestamp,
+        fileType: storedFileType,
+        storage: {
+          bucket,
+          key: originalUploadKey,
+          initialKey: initialUploadKey,
+        },
+      },
+      logContext,
+    });
 
-    if (submittedCredly) {
-      metadataPayload.links.credlyProfileUrl = submittedCredly;
-    } else {
-      delete metadataPayload.links.credlyProfileUrl;
-    }
-
-    if (!metadataPayload.requestContext.requestId) {
-      delete metadataPayload.requestContext.requestId;
-    }
-    if (!Object.keys(metadataPayload.requestContext).length) {
-      delete metadataPayload.requestContext;
-    }
-
-    try {
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: metadataKey,
-          Body: JSON.stringify(metadataPayload, null, 2),
-          ContentType: 'application/json',
-        })
-      );
+    if (stageMetadataUpdated) {
       logStructured('info', 'upload_metadata_written', {
         ...logContext,
         bucket,
@@ -14539,12 +14619,11 @@ app.post(
         jobId,
         event: 'uploaded_metadata',
       });
-    } catch (metadataErr) {
+    } else {
       logStructured('warn', 'upload_metadata_write_failed', {
         ...logContext,
         bucket,
         key: metadataKey,
-        error: serializeError(metadataErr),
       });
     }
   } catch (err) {
@@ -14778,6 +14857,10 @@ app.post(
     const normalizedScore = Number.isFinite(originalMatch?.score)
       ? Number(originalMatch.score)
       : 0;
+    const scoringCompletedAt = new Date().toISOString();
+    const scoringMetadataKey = originalUploadKey
+      ? `${originalUploadKey.replace(/[^/]+$/, '')}logs/log.json`
+      : '';
 
     const scoringUpdate = {
       normalizedMissingSkills,
@@ -14808,7 +14891,7 @@ app.post(
             'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
           ExpressionAttributeValues: {
             ':status': { S: 'scored' },
-            ':completedAt': { S: new Date().toISOString() },
+            ':completedAt': { S: scoringCompletedAt },
             ':missing': {
               L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
                 S: skill,
@@ -14834,6 +14917,25 @@ app.post(
         key: logKey,
         jobId,
         event: 'scoring_metadata_updated',
+        metadata: {
+          score: scoringUpdate.normalizedScore,
+          missingSkillsCount: scoringUpdate.normalizedMissingSkills.length,
+          addedSkillsCount: scoringUpdate.normalizedAddedSkills.length,
+        },
+      });
+      await updateStageMetadata({
+        s3,
+        bucket,
+        metadataKey: scoringMetadataKey,
+        jobId,
+        stage: 'scoring',
+        data: {
+          completedAt: scoringCompletedAt,
+          score: scoringUpdate.normalizedScore,
+          missingSkillsCount: scoringUpdate.normalizedMissingSkills.length,
+          addedSkillsCount: scoringUpdate.normalizedAddedSkills.length,
+        },
+        logContext,
       });
     } catch (updateErr) {
       logStructured('error', 'process_cv_status_update_failed', {
