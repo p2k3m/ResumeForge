@@ -10726,7 +10726,7 @@ async function handleImprovementRequest(type, req, res) {
     const jobTitleInput = typeof payload.jobTitle === 'string' ? payload.jobTitle.trim() : '';
     const updatedDesignationTitle =
       type === 'change-designation' || type === 'enhance-all'
-        ? extractDesignationLine(updatedResumeText) || jobTitleInput || baselineDesignationTitle
+        ? jobTitleInput || extractDesignationLine(updatedResumeText) || baselineDesignationTitle
         : sectionContext.key === 'designation' && sectionContext.afterText
           ? sectionContext.afterText
           : baselineDesignationTitle;
