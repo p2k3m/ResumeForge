@@ -712,14 +712,101 @@ function loadRuntimeConfigFile() {
   return runtimeConfigFileCache;
 }
 
+function normalizeErrorDetails(details) {
+  if (details === undefined) {
+    return undefined;
+  }
+  if (details instanceof Error) {
+    return {
+      message: details.message,
+      ...(details.code ? { code: details.code } : {}),
+    };
+  }
+  if (Array.isArray(details)) {
+    return { items: details };
+  }
+  if (details === null) {
+    return {};
+  }
+  if (typeof details === 'object') {
+    return details;
+  }
+  if (typeof details === 'string') {
+    const trimmed = details.trim();
+    return trimmed ? { message: trimmed } : {};
+  }
+  return { value: details };
+}
+
+const OUTPUT_URL_KEYS = ['fileUrl', 'url', 'downloadUrl', 'href', 'link', 'signedUrl'];
+
+function ensureOutputFileUrls(entries) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  return entries
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const normalized = { ...entry };
+      let primaryUrl = '';
+
+      for (const key of OUTPUT_URL_KEYS) {
+        const value = normalized[key];
+        if (typeof value === 'string' && value.trim()) {
+          primaryUrl = value.trim();
+          if (!normalized.url) {
+            normalized.url = primaryUrl;
+          }
+          if (!normalized.fileUrl) {
+            normalized.fileUrl = primaryUrl;
+          }
+          break;
+        }
+      }
+
+      if (!primaryUrl && typeof normalized.url === 'string') {
+        primaryUrl = normalized.url.trim();
+      }
+      if (!primaryUrl && typeof normalized.fileUrl === 'string') {
+        primaryUrl = normalized.fileUrl.trim();
+      }
+
+      if (primaryUrl) {
+        if (!normalized.url) {
+          normalized.url = primaryUrl;
+        }
+        if (!normalized.fileUrl) {
+          normalized.fileUrl = primaryUrl;
+        }
+
+        const typeFragmentSource =
+          (typeof normalized.type === 'string' && normalized.type.trim()) ||
+          (typeof normalized.templateType === 'string' && normalized.templateType.trim()) ||
+          'download';
+
+        if (typeof normalized.typeUrl !== 'string' || !normalized.typeUrl.trim()) {
+          normalized.typeUrl = `${primaryUrl}#${encodeURIComponent(typeFragmentSource)}`;
+        } else if (!normalized.typeUrl.includes('#')) {
+          normalized.typeUrl = `${normalized.typeUrl}#${encodeURIComponent(typeFragmentSource)}`;
+        }
+      }
+
+      return normalized;
+    })
+    .filter((entry) => entry && typeof entry === 'object');
+}
+
 function sendError(res, status, code, message, details) {
+  const normalizedDetails = normalizeErrorDetails(details);
   const error = {
     code,
     message,
+    details: normalizedDetails !== undefined ? normalizedDetails : {},
   };
-  if (details !== undefined) {
-    error.details = details;
-  }
   if (res.locals.requestId) {
     error.requestId = res.locals.requestId;
   }
@@ -11700,7 +11787,9 @@ async function handleImprovementRequest(type, req, res) {
         return;
       }
 
-      assetUrls = Array.isArray(enhancedDocs.urls) ? enhancedDocs.urls : [];
+      assetUrls = ensureOutputFileUrls(
+        Array.isArray(enhancedDocs.urls) ? enhancedDocs.urls : []
+      );
       templateContextOutput = enhancedDocs.templateContext;
       assetUrlExpiry =
         assetUrls.length > 0
@@ -12729,6 +12818,8 @@ async function generateEnhancedDocumentsResponse({
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
 
+  const normalizedUrls = ensureOutputFileUrls(urls);
+
   if (dynamo) {
     const findArtifactKey = (type) =>
       uploadedArtifacts.find((artifact) => artifact.type === type)?.key || '';
@@ -12889,7 +12980,7 @@ async function generateEnhancedDocumentsResponse({
   logStructured('info', 'generation_completed', {
     ...logContext,
     enhancedScore: bestMatch.score,
-    outputs: urls.length,
+    outputs: normalizedUrls.length,
   });
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
@@ -12903,8 +12994,8 @@ async function generateEnhancedDocumentsResponse({
     success: true,
     requestId,
     jobId,
-    urlExpiresInSeconds: urls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
-    urls,
+    urlExpiresInSeconds: normalizedUrls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
+    urls: normalizedUrls,
     applicantName,
     originalScore: atsScoreBefore,
     enhancedScore: atsScoreAfter,

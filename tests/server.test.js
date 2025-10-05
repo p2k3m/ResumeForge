@@ -361,6 +361,7 @@ describe('/api/process-cv', () => {
     expect(failed.body.success).toBe(false);
     expect(failed.body.error.code).toBe('JOB_DESCRIPTION_REQUIRED');
     expect(failed.body.error.message).toBe('manualJobDescription required');
+    expect(failed.body.error.details).toEqual({});
 
     const manual = await request(app)
       .post('/api/process-cv')
@@ -1154,7 +1155,27 @@ describe('/api/process-cv', () => {
     });
   });
 
+});
+
+describe('/api/generate-enhanced-docs', () => {
+  test('responds with structured details when jobId is missing', async () => {
+    const response = await request(app).post('/api/generate-enhanced-docs').send({
+      resumeText: 'Sample resume text',
+      jobDescriptionText: 'A detailed description of the role.',
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({
+      success: false,
+      error: expect.objectContaining({
+        code: 'JOB_ID_REQUIRED',
+        message: 'jobId is required to generate enhanced documents.',
+        requestId: expect.any(String),
+        details: {},
+      }),
+    });
   });
+});
 
   describe('classifyDocument', () => {
   test('identifies resumes by section structure', async () => {
