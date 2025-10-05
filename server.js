@@ -740,6 +740,29 @@ function normalizeErrorDetails(details) {
 
 const OUTPUT_URL_KEYS = ['fileUrl', 'url', 'downloadUrl', 'href', 'link', 'signedUrl'];
 
+function parseTypeUrl(value) {
+  if (typeof value !== 'string') {
+    return { base: '', fragment: '' };
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { base: '', fragment: '' };
+  }
+  const hashIndex = trimmed.indexOf('#');
+  if (hashIndex === -1) {
+    return { base: trimmed, fragment: '' };
+  }
+  const base = trimmed.slice(0, hashIndex).trim();
+  const rawFragment = trimmed.slice(hashIndex + 1);
+  let fragment = rawFragment;
+  try {
+    fragment = decodeURIComponent(rawFragment);
+  } catch {
+    fragment = rawFragment;
+  }
+  return { base: base || trimmed.slice(0, hashIndex), fragment: fragment.trim() };
+}
+
 function ensureOutputFileUrls(entries) {
   if (!Array.isArray(entries)) {
     return [];
@@ -753,6 +776,7 @@ function ensureOutputFileUrls(entries) {
 
       const normalized = { ...entry };
       let primaryUrl = '';
+      let typeFromUrl = '';
 
       for (const key of OUTPUT_URL_KEYS) {
         const value = normalized[key];
@@ -765,6 +789,19 @@ function ensureOutputFileUrls(entries) {
             normalized.fileUrl = primaryUrl;
           }
           break;
+        }
+      }
+
+      if (!primaryUrl && typeof normalized.typeUrl === 'string' && normalized.typeUrl.trim()) {
+        const { base, fragment } = parseTypeUrl(normalized.typeUrl);
+        if (base) {
+          primaryUrl = base;
+        }
+        if (fragment) {
+          typeFromUrl = fragment;
+          if (!normalized.type) {
+            normalized.type = fragment;
+          }
         }
       }
 
@@ -785,14 +822,14 @@ function ensureOutputFileUrls(entries) {
 
         const typeFragmentSource =
           (typeof normalized.type === 'string' && normalized.type.trim()) ||
+          typeFromUrl ||
           (typeof normalized.templateType === 'string' && normalized.templateType.trim()) ||
           'download';
 
-        if (typeof normalized.typeUrl !== 'string' || !normalized.typeUrl.trim()) {
-          normalized.typeUrl = `${primaryUrl}#${encodeURIComponent(typeFragmentSource)}`;
-        } else if (!normalized.typeUrl.includes('#')) {
-          normalized.typeUrl = `${normalized.typeUrl}#${encodeURIComponent(typeFragmentSource)}`;
-        }
+        const parsedExisting = parseTypeUrl(normalized.typeUrl);
+        const typeUrlBase = parsedExisting.base || primaryUrl;
+        const fragment = parsedExisting.fragment || typeFragmentSource;
+        normalized.typeUrl = `${typeUrlBase}#${encodeURIComponent(fragment)}`;
       }
 
       return normalized;
@@ -14947,4 +14984,5 @@ export {
   CHANGE_LOG_FIELD_LIMITS,
   CHANGE_LOG_DYNAMO_LIMITS,
   mapCoverLetterFields,
+  ensureOutputFileUrls,
 };
