@@ -22,6 +22,7 @@ import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 import { normalizeOutputFiles } from './utils/normalizeOutputFiles.js'
 import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
+import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Could not enhance CV; your formatting remained untouched.'
@@ -1509,6 +1510,18 @@ function App() {
   const [baselineScoreBreakdown, setBaselineScoreBreakdown] = useState([])
   const [resumeText, setResumeText] = useState('')
   const [jobDescriptionText, setJobDescriptionText] = useState('')
+  const parsedJobDescription = useMemo(
+    () => parseJobDescriptionText(jobDescriptionText),
+    [jobDescriptionText]
+  )
+  const parsedJobTitle = useMemo(() => {
+    const candidateTitle = typeof parsedJobDescription?.title === 'string'
+      ? parsedJobDescription.title.trim()
+      : ''
+    if (!candidateTitle) return ''
+    if (/^job description$/i.test(candidateTitle)) return ''
+    return candidateTitle
+  }, [parsedJobDescription])
   const [jobSkills, setJobSkills] = useState([])
   const [resumeSkills, setResumeSkills] = useState([])
   const [knownCertificates, setKnownCertificates] = useState([])
@@ -4450,7 +4463,8 @@ function App() {
         typeof match?.modifiedTitle === 'string' ? match.modifiedTitle.trim() : ''
       const matchOriginalTitle =
         typeof match?.originalTitle === 'string' ? match.originalTitle.trim() : ''
-      const targetJobTitle = selectionTargetTitle || matchModifiedTitle || matchOriginalTitle
+      const targetJobTitle =
+        selectionTargetTitle || parsedJobTitle || matchModifiedTitle || matchOriginalTitle
       const currentResumeTitle = matchModifiedTitle || matchOriginalTitle
 
       const payload = {
