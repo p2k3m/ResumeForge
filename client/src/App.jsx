@@ -288,6 +288,41 @@ function extractFileNameFromUrl(downloadUrl) {
   }
 }
 
+function isSameOriginUrl(downloadUrl) {
+  if (!downloadUrl || typeof downloadUrl !== 'string') return false
+  try {
+    const parsed = new URL(downloadUrl, typeof window !== 'undefined' ? window.location.href : undefined)
+    if (typeof window === 'undefined' || !window?.location) {
+      return false
+    }
+    return parsed.origin === window.location.origin
+  } catch (err) {
+    return false
+  }
+}
+
+function openUrlInNewTab(downloadUrl) {
+  if (!downloadUrl || typeof downloadUrl !== 'string') return false
+  try {
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.rel = 'noopener noreferrer'
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    return true
+  } catch (err) {
+    try {
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+      return true
+    } catch (openErr) {
+      console.warn('Failed to open download URL in a new tab', openErr)
+      return false
+    }
+  }
+}
+
 function sanitizeFileNameSegment(segment) {
   if (!segment || typeof segment !== 'string') {
     return 'document'
@@ -2779,7 +2814,7 @@ function App() {
         return
       }
       const stateKeyBase = getDownloadStateKey(file)
-      const downloadUrl = typeof file.url === 'string' ? file.url : ''
+      const downloadUrl = typeof file.url === 'string' ? file.url.trim() : ''
       if (!downloadUrl) {
         setError('Download link is unavailable. Please regenerate the document.')
         if (stateKeyBase) {
@@ -2803,7 +2838,29 @@ function App() {
         [stateKey]: { status: 'loading', error: '' }
       }))
       try {
-        const response = await fetch(downloadUrl)
+        const normalizedDownloadUrl = downloadUrl
+        const shouldStreamInBrowser = (() => {
+          if (normalizedDownloadUrl.startsWith('blob:') || normalizedDownloadUrl.startsWith('data:')) {
+            return true
+          }
+          return isSameOriginUrl(normalizedDownloadUrl)
+        })()
+
+        if (!shouldStreamInBrowser) {
+          const opened = openUrlInNewTab(normalizedDownloadUrl)
+          if (!opened) {
+            throw new Error('Direct download open failed')
+          }
+          setDownloadStates((prev) => ({
+            ...prev,
+            [stateKey]: { status: 'idle', error: '' }
+          }))
+          setPendingDownloadFile(null)
+          resetUiAfterDownload()
+          return
+        }
+
+        const response = await fetch(normalizedDownloadUrl)
         if (!response.ok) {
           throw new Error(`Download failed with status ${response.status}`)
         }
