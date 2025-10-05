@@ -8732,7 +8732,7 @@ function buildDocumentSessionPrefix({
     fallback: new Date().toISOString().slice(0, 10),
   });
   const safeJob = sanitizeS3KeyComponent(jobSegment);
-  let prefix = `${safeOwner}/cv/`;
+  let prefix = `cv/${safeOwner}/`;
   if (safeDate) {
     prefix += `${safeDate}/`;
   }
@@ -12408,7 +12408,7 @@ async function generateEnhancedDocumentsResponse({
         dateSegment: generationDateSegment,
         jobSegment: jobSegmentForKeys,
       });
-  const generatedPrefix = `${prefix}generated/`;
+  const generatedPrefix = `${prefix}`;
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
   });
@@ -12521,8 +12521,7 @@ async function generateEnhancedDocumentsResponse({
       variant: name,
     });
     const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
-    const subdirectory = isCoverLetter ? 'cover_letter/' : '';
-    const key = `${generatedPrefix}${subdirectory}${uniqueBaseName}.pdf`;
+    const key = `${generatedPrefix}${uniqueBaseName}.pdf`;
 
     const resolvedTemplateParams = resolveTemplateParamsConfig(
       templateParamsConfig,
