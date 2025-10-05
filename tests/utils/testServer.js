@@ -36,10 +36,65 @@ export async function setupTestServer({
   process.env.AWS_REGION = 'us-integration-1';
   process.env.CLOUDFRONT_ORIGINS = allowedOrigins ?? '';
 
-  const mockS3Send = jest.fn().mockImplementation(() => Promise.resolve({}));
-  if (s3Impl) {
-    mockS3Send.mockImplementation(s3Impl);
-  }
+  const s3Store = new Map();
+
+  const defaultS3Impl = async (command = {}) => {
+    const { __type, input = {} } = command;
+    switch (__type) {
+      case 'PutObjectCommand': {
+        const key = `${input.Bucket}/${input.Key}`;
+        const body =
+          typeof input.Body === 'string' || Buffer.isBuffer(input.Body)
+            ? Buffer.from(input.Body)
+            : Buffer.from(JSON.stringify(input.Body ?? {}));
+        s3Store.set(key, {
+          Body: body,
+          ContentType: input.ContentType,
+        });
+        return {};
+      }
+      case 'CopyObjectCommand': {
+        const source = String(input.CopySource || '');
+        const [sourceBucket, ...rest] = source.split('/');
+        const sourceKey = decodeURIComponent(rest.join('/'));
+        const entry = s3Store.get(`${sourceBucket}/${sourceKey}`);
+        if (!entry) {
+          const err = new Error('NoSuchKey');
+          err.name = 'NoSuchKey';
+          err.$metadata = { httpStatusCode: 404 };
+          throw err;
+        }
+        s3Store.set(`${input.Bucket}/${input.Key}`, {
+          Body: Buffer.from(entry.Body),
+          ContentType: entry.ContentType,
+        });
+        return {};
+      }
+      case 'DeleteObjectCommand': {
+        s3Store.delete(`${input.Bucket}/${input.Key}`);
+        return {};
+      }
+      case 'GetObjectCommand': {
+        const entry = s3Store.get(`${input.Bucket}/${input.Key}`);
+        if (!entry) {
+          const err = new Error('NoSuchKey');
+          err.name = 'NoSuchKey';
+          err.$metadata = { httpStatusCode: 404 };
+          throw err;
+        }
+        return { Body: entry.Body };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const mockS3Send = jest.fn().mockImplementation((command) => {
+    if (s3Impl) {
+      return s3Impl(command, { store: s3Store });
+    }
+    return defaultS3Impl(command);
+  });
 
   const dynamoStore = new Map();
 

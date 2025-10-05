@@ -54,10 +54,44 @@ describe('AWS integrations for /api/process-cv', () => {
     const rawUploadKey = relocatedUpload.key;
     expect(rawUploadKey).toContain('cv/');
 
-    const metadataCall = commandSummaries.find((command) =>
-      typeof command.key === 'string' && command.key.endsWith('log.json')
+    const metadataWrites = mocks.mockS3Send.mock.calls.filter(
+      ([command]) =>
+        command.__type === 'PutObjectCommand' &&
+        typeof command.input?.Key === 'string' &&
+        command.input.Key.endsWith('logs/log.json')
     );
-    expect(metadataCall).toBeTruthy();
+    expect(metadataWrites.length).toBeGreaterThan(0);
+    const latestMetadataCall = metadataWrites[metadataWrites.length - 1];
+    const metadataPayload = JSON.parse(latestMetadataCall[0].input.Body.toString());
+    expect(metadataPayload).not.toHaveProperty('client');
+    expect(metadataPayload).not.toHaveProperty('templates');
+    expect(metadataPayload).toEqual(
+      expect.objectContaining({
+        version: 2,
+        jobId: expect.any(String),
+        stages: expect.objectContaining({
+          upload: expect.objectContaining({
+            uploadedAt: expect.any(String),
+            fileType: expect.any(String),
+            storage: expect.objectContaining({
+              bucket: 'integration-bucket',
+              key: expect.stringContaining('original'),
+            }),
+          }),
+          scoring: expect.objectContaining({
+            completedAt: expect.any(String),
+            score: expect.any(Number),
+            missingSkillsCount: expect.any(Number),
+          }),
+          download: expect.objectContaining({
+            completedAt: expect.any(String),
+            artifactCount: expect.any(Number),
+            textArtifactCount: expect.any(Number),
+            urlCount: expect.any(Number),
+          }),
+        }),
+      })
+    );
 
     const generatedPdf = commandSummaries.find(
       (command) =>
