@@ -374,20 +374,23 @@ ownload URLs expire after one hour:
 
 `originalScore` represents the percentage match between the job description and the uploaded resume. `enhancedScore` is the best match achieved by the generated resumes. `table` details how each job skill matched, `addedSkills` shows skills newly matched in the enhanced resume, and `missingSkills` lists skills from the job description still absent.
 
-S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). Consistent file names keep cover letters (`cover_letter_<template>.pdf`) easy to filter without relying on nested folders. The change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/artifacts/`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
+S3 keys follow the pattern `cv/<candidate>/<ISO-date>/<session-id>/runs/<request-id>/<document>.pdf`, where `<document>` identifies the variant (`original.pdf`, `enhanced_<template>.pdf`, `cover_letter_<template>.pdf`). Each generation run receives its own folder so regenerated resumes and cover letters never overwrite prior artifacts. The change log and extracted text live alongside the PDFs under `cv/<candidate>/<ISO-date>/<session-id>/runs/<request-id>/artifacts/`. The API returns presigned download URLs along with an ISO 8601 timestamp (`expiresAt`) that indicates when each link will expire.
 
 ```
 cv/jane_doe/2025-01-15/1fb6e8c6-7b2f-46dc-89c9-1dd2efdd8793/
 ├── original.pdf
-├── enhanced_modern_classic.pdf
-├── enhanced_elegant_slate.pdf
-├── cover_letter_refined.pdf
-├── cover_letter_refined_2.pdf
-└── artifacts/
-    ├── original.json
-    ├── version1.json
-    ├── version2.json
-    └── changelog.json
+├── logs/
+│   └── processing.jsonl
+└── runs/7c86e7bf-f3d8-4ed8-98d8-65b3b2d0d5cb/
+    ├── enhanced_modern_classic.pdf
+    ├── enhanced_elegant_slate.pdf
+    ├── cover_letter_refined.pdf
+    ├── cover_letter_refined_2.pdf
+    └── artifacts/
+        ├── original.json
+        ├── version1.json
+        ├── version2.json
+        └── changelog.json
 ```
 
 Each entry in `urls` points to a PDF stored in Amazon S3. If no cover letters or CVs are produced, the server responds with HTTP 500 and an error message.
