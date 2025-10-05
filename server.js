@@ -9393,26 +9393,26 @@ function mapCoverLetterFields({
           contactLines: [],
         };
 
-  const detectedContact = extractContactDetails(normalizedText, explicitContact.linkedin);
+  const detectedContactRaw = extractContactDetails(normalizedText, explicitContact.linkedin);
 
   const combinedContact = {
-    email: explicitContact.email || detectedContact.email || '',
-    phone: explicitContact.phone || detectedContact.phone || '',
-    linkedin: explicitContact.linkedin || detectedContact.linkedin || '',
-    cityState: explicitContact.cityState || detectedContact.cityState || '',
+    email: explicitContact.email || detectedContactRaw.email || '',
+    phone: explicitContact.phone || detectedContactRaw.phone || '',
+    linkedin: explicitContact.linkedin || detectedContactRaw.linkedin || '',
+    cityState: explicitContact.cityState || detectedContactRaw.cityState || '',
   };
 
   const contactSources = {
-    email: explicitContact.email ? 'provided' : detectedContact.email ? 'detected' : '',
-    phone: explicitContact.phone ? 'provided' : detectedContact.phone ? 'detected' : '',
+    email: explicitContact.email ? 'provided' : detectedContactRaw.email ? 'detected' : '',
+    phone: explicitContact.phone ? 'provided' : detectedContactRaw.phone ? 'detected' : '',
     linkedin: explicitContact.linkedin
       ? 'provided'
-      : detectedContact.linkedin
+      : detectedContactRaw.linkedin
         ? 'detected'
         : '',
     location: explicitContact.cityState
       ? 'provided'
-      : detectedContact.cityState
+      : detectedContactRaw.cityState
         ? 'detected'
         : '',
   };
@@ -9420,7 +9420,9 @@ function mapCoverLetterFields({
   const contactLines = dedupeContactLines(
     [
       ...explicitContact.contactLines,
-      ...(Array.isArray(detectedContact.contactLines) ? detectedContact.contactLines : []),
+      ...(Array.isArray(detectedContactRaw.contactLines)
+        ? detectedContactRaw.contactLines
+        : []),
       combinedContact.email ? `Email: ${combinedContact.email}` : '',
       combinedContact.phone ? `Phone: ${combinedContact.phone}` : '',
       combinedContact.linkedin ? `LinkedIn: ${combinedContact.linkedin}` : '',
@@ -9435,7 +9437,7 @@ function mapCoverLetterFields({
 
   const jobSummary = summarizeJobDescriptionForCover(jobDescription);
   const jobFocus = summarizeJobFocus(jobDescription);
-  const jobSummarySentences = jobSummary
+  const jobSummarySentences = jobSummary && normalizedText
     ? jobSummary
         .split(/(?<=[.!?])\s+/)
         .map((sentence) => sentence.trim())
@@ -9494,12 +9496,12 @@ function mapCoverLetterFields({
           : [],
       },
       detected: {
-        email: detectedContact.email || '',
-        phone: detectedContact.phone || '',
-        linkedin: detectedContact.linkedin || '',
-        location: detectedContact.cityState || '',
-        lines: Array.isArray(detectedContact.contactLines)
-          ? detectedContact.contactLines
+        email: detectedContactRaw.email || explicitContact.email || '',
+        phone: detectedContactRaw.phone || explicitContact.phone || '',
+        linkedin: detectedContactRaw.linkedin || explicitContact.linkedin || '',
+        location: detectedContactRaw.cityState || explicitContact.cityState || '',
+        lines: Array.isArray(detectedContactRaw.contactLines)
+          ? detectedContactRaw.contactLines
           : [],
       },
       sources: contactSources,
