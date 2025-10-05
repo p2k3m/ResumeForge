@@ -13066,8 +13066,22 @@ app.post(
       );
     }
 
+    const rawLinkedInBody =
+      typeof req.body.linkedinProfileUrl === 'string'
+        ? req.body.linkedinProfileUrl.trim()
+        : '';
+    const rawLinkedInQuery =
+      typeof req.query?.linkedinProfileUrl === 'string'
+        ? req.query.linkedinProfileUrl.trim()
+        : '';
+    const linkedinProfileUrlInput = rawLinkedInBody || rawLinkedInQuery || '';
+    const linkedinProfileUrl = linkedinProfileUrlInput
+      ? normalizeUrl(linkedinProfileUrlInput)
+      : '';
+
     const profileIdentifier =
       resolveProfileIdentifier({
+        linkedinProfileUrl,
         userId: res.locals.userId,
         jobId: jobIdInput,
       }) || jobIdInput;
@@ -13261,7 +13275,6 @@ app.post(
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_started' });
 
       const linkedinData = { experience: [], education: [], certifications: [] };
-      const linkedinProfileUrl = '';
 
       let credlyCertifications = [];
       let credlyStatus = {
@@ -13891,6 +13904,18 @@ app.post(
   }
 
   const { credlyProfileUrl } = req.body;
+  const rawLinkedInBody =
+    typeof req.body.linkedinProfileUrl === 'string'
+      ? req.body.linkedinProfileUrl.trim()
+      : '';
+  const rawLinkedInQuery =
+    typeof req.query?.linkedinProfileUrl === 'string'
+      ? req.query.linkedinProfileUrl.trim()
+      : '';
+  const linkedinProfileUrlInput = rawLinkedInBody || rawLinkedInQuery || '';
+  const linkedinProfileUrl = linkedinProfileUrlInput
+    ? normalizeUrl(linkedinProfileUrlInput)
+    : '';
   const manualJobDescriptionInput =
     typeof req.body.manualJobDescription === 'string'
       ? req.body.manualJobDescription
@@ -13902,10 +13927,11 @@ app.post(
   const submittedCredly =
     typeof credlyProfileUrl === 'string' ? credlyProfileUrl.trim() : '';
   const profileIdentifier =
-    resolveProfileIdentifier({ userId, jobId }) || jobId;
+    resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId }) || jobId;
   logStructured('info', 'process_cv_started', {
     ...logContext,
     credlyHost: getUrlHost(submittedCredly),
+    linkedinHost: getUrlHost(linkedinProfileUrl),
     manualJobDescriptionProvided: hasManualJobDescription,
   });
   const bodyTemplate =
