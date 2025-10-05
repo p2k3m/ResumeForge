@@ -1,32 +1,30 @@
 /**
  * @jest-environment jsdom
  */
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import TemplateSelector from '../components/TemplateSelector.jsx'
 
 describe('TemplateSelector', () => {
   const options = [
     { id: 'modern', name: 'Modern Minimal', description: 'Minimal layout with ATS-safe spacing.' },
-    { id: 'professional', name: 'Professional Blue', description: 'Conservative layout with blue dividers.' }
+    {
+      id: 'professional',
+      name: 'Professional Blue',
+      description: 'Conservative layout with blue dividers.'
+    }
   ]
 
-  it('highlights the selected template and updates when a new template is chosen', () => {
+  it('reflects the selected template and updates when a new template is chosen', () => {
     const handleSelect = jest.fn()
-    render(
-      <TemplateSelector
-        options={options}
-        selectedTemplate="modern"
-        onSelect={handleSelect}
-      />
+    render(<TemplateSelector options={options} selectedTemplate="modern" onSelect={handleSelect} />)
+
+    const dropdown = screen.getByRole('combobox', { name: /Template Style/i })
+    expect(dropdown).toHaveValue('modern')
+    expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
+      /Minimal layout with ATS-safe spacing\./i
     )
 
-    const modernButton = screen.getByRole('radio', { name: /Modern Minimal/i })
-    expect(within(modernButton).getByText(/Selected/i)).toBeInTheDocument()
-
-    const professionalButton = screen.getByRole('radio', { name: /Professional Blue/i })
-    expect(within(professionalButton).queryByText(/Selected/i)).toBeNull()
-
-    fireEvent.click(professionalButton)
+    fireEvent.change(dropdown, { target: { value: 'professional' } })
     expect(handleSelect).toHaveBeenCalledWith('professional')
   })
 
@@ -39,8 +37,6 @@ describe('TemplateSelector', () => {
       />
     )
 
-    expect(
-      screen.getByText(/You tried Professional, Modern, and Classic/i)
-    ).toBeInTheDocument()
+    expect(screen.getByText(/You tried Professional, Modern, and Classic/i)).toBeInTheDocument()
   })
 })
