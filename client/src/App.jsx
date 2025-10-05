@@ -6061,15 +6061,19 @@ function App() {
                   : 'Great news — no manual fixes were required. Generate polished CV and cover letter downloads tailored to the JD.'}
               </p>
             </header>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              <button
-                type="button"
-                onClick={handleGenerateEnhancedDocs}
-                disabled={isProcessing || improvementBusy || isGeneratingDocs}
-                className="inline-flex items-center justify-center rounded-full bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-purple-300"
-              >
-                {isGeneratingDocs ? 'Generating enhanced documents…' : 'Generate enhanced CV & cover letters'}
-              </button>
+            <div className="space-y-6">
+              {renderTemplateSelection('downloads')}
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <button
+                  type="button"
+                  onClick={handleGenerateEnhancedDocs}
+                  disabled={isProcessing || improvementBusy || isGeneratingDocs}
+                  className="inline-flex items-center justify-center rounded-full bg-purple-600 px-5 py-3 text-sm font-semibold text-white shadow transition hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-purple-300"
+                >
+                  {isGeneratingDocs ? 'Generating enhanced documents…' : 'Generate enhanced CV & cover letters'}
+                </button>
+              </div>
             </div>
           </section>
         )}
