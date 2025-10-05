@@ -16,6 +16,11 @@ function TemplateSelector({
   const selectId = `${idPrefix}-select`
   const selectedOption = options.find((option) => option.id === selectedTemplate) || null
 
+  const handleChange = (event) => {
+    if (disabled || event.target.disabled) return
+    onSelect?.(event.target.value)
+  }
+
   return (
     <div className="space-y-3">
       <div>
@@ -43,7 +48,7 @@ function TemplateSelector({
           aria-labelledby={labelId}
           aria-describedby={[descriptionId, historyId].filter(Boolean).join(' ') || undefined}
           value={selectedTemplate || ''}
-          onChange={(event) => onSelect?.(event.target.value)}
+          onChange={handleChange}
           disabled={disabled}
           data-testid={selectId}
         >
