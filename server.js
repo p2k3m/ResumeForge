@@ -9402,6 +9402,21 @@ function mapCoverLetterFields({
     cityState: explicitContact.cityState || detectedContact.cityState || '',
   };
 
+  const contactSources = {
+    email: explicitContact.email ? 'provided' : detectedContact.email ? 'detected' : '',
+    phone: explicitContact.phone ? 'provided' : detectedContact.phone ? 'detected' : '',
+    linkedin: explicitContact.linkedin
+      ? 'provided'
+      : detectedContact.linkedin
+        ? 'detected'
+        : '',
+    location: explicitContact.cityState
+      ? 'provided'
+      : detectedContact.cityState
+        ? 'detected'
+        : '',
+  };
+
   const contactLines = dedupeContactLines(
     [
       ...explicitContact.contactLines,
@@ -9420,9 +9435,29 @@ function mapCoverLetterFields({
 
   const jobSummary = summarizeJobDescriptionForCover(jobDescription);
   const jobFocus = summarizeJobFocus(jobDescription);
+  const jobSummarySentences = jobSummary
+    ? jobSummary
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => sentence.trim())
+        .filter(Boolean)
+    : [];
 
   const normalizedJobDescription =
     typeof jobDescription === 'string' ? jobDescription.replace(/\s+/g, ' ').trim() : '';
+
+  const normalizedJobSentences = normalizedJobDescription
+    ? normalizedJobDescription
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => sentence.trim())
+        .filter(Boolean)
+    : [];
+
+  const motivationSentences = motivationParagraph
+    ? motivationParagraph
+        .split(/(?<=[.!?])\s+/)
+        .map((sentence) => sentence.trim())
+        .filter(Boolean)
+    : [];
 
   return {
     raw: normalizedText,
@@ -9431,10 +9466,12 @@ function mapCoverLetterFields({
     body: bodyParagraphs,
     motivation: {
       paragraph: motivationParagraph,
+      sentences: motivationSentences,
       keywords: motivationKeywords,
       matchedSkills,
       bodyIndex: motivationBodyIndex,
       originalIndex: bodyIndexEntry?.originalIndex ?? -1,
+      hasMotivation: motivationParagraph.length > 0,
     },
     closing: {
       paragraph: closingInfo.paragraph || '',
@@ -9447,6 +9484,25 @@ function mapCoverLetterFields({
       linkedin: combinedContact.linkedin,
       location: combinedContact.cityState,
       lines: contactLines,
+      provided: {
+        email: explicitContact.email,
+        phone: explicitContact.phone,
+        linkedin: explicitContact.linkedin,
+        location: explicitContact.cityState,
+        lines: Array.isArray(explicitContact.contactLines)
+          ? explicitContact.contactLines
+          : [],
+      },
+      detected: {
+        email: detectedContact.email || '',
+        phone: detectedContact.phone || '',
+        linkedin: detectedContact.linkedin || '',
+        location: detectedContact.cityState || '',
+        lines: Array.isArray(detectedContact.contactLines)
+          ? detectedContact.contactLines
+          : [],
+      },
+      sources: contactSources,
     },
     job: {
       title: jobTitle || '',
@@ -9454,6 +9510,8 @@ function mapCoverLetterFields({
       matchedSkills,
       summary: jobSummary,
       focus: jobFocus,
+      summarySentences: jobSummarySentences,
+      descriptionSentences: normalizedJobSentences,
       skillSummary: formatSkillList(normalizedSkills, 3),
       description: normalizedJobDescription,
     },
