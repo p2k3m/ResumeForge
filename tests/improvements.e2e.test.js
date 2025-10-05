@@ -302,6 +302,14 @@ describe('targeted improvement endpoints (integration)', () => {
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
       expect(response.body.type).toBe(type);
+      expect(typeof response.body.originalTitle).toBe('string');
+      expect(typeof response.body.modifiedTitle).toBe('string');
+      expect(response.body.originalTitle).toBe(basePayload.currentTitle);
+      if (type === 'change-designation' || type === 'enhance-all') {
+        expect(response.body.modifiedTitle).toBe(basePayload.jobTitle);
+      } else {
+        expect(response.body.modifiedTitle).toBe(response.body.originalTitle);
+      }
       expect(typeof response.body.confidence).toBe('number');
       expect(Array.isArray(response.body.missingSkills)).toBe(true);
       expect(Array.isArray(response.body.improvementSummary)).toBe(true);

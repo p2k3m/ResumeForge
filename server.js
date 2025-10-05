@@ -10940,6 +10940,8 @@ async function handleImprovementRequest(type, req, res) {
       confidence: result.confidence,
       updatedResume: result.updatedResume,
       missingSkills,
+      originalTitle: baselineDesignationTitle || '',
+      modifiedTitle: updatedDesignationTitle || '',
       improvementSummary: buildImprovementSummary(
         normalizedBeforeExcerpt,
         normalizedAfterExcerpt,
