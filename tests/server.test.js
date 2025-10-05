@@ -361,7 +361,9 @@ describe('/api/process-cv', () => {
     expect(failed.body.success).toBe(false);
     expect(failed.body.error.code).toBe('JOB_DESCRIPTION_REQUIRED');
     expect(failed.body.error.message).toBe('manualJobDescription required');
-    expect(failed.body.error.details).toEqual({});
+    expect(failed.body.error.details).toEqual({
+      field: 'manualJobDescription'
+    });
 
     const manual = await request(app)
       .post('/api/process-cv')
