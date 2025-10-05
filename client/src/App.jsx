@@ -1665,7 +1665,6 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 }
 
 function App() {
-  const [credlyUrl, setCredlyUrl] = useState('')
   const [manualJobDescription, setManualJobDescription] = useState('')
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
@@ -3326,7 +3325,6 @@ function App() {
       if (manualText) {
         formData.append('manualJobDescription', manualText)
       }
-      if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       if (manualCertificatesInput.trim()) {
         formData.append('manualCertificates', manualCertificatesInput.trim())
       }
@@ -3616,7 +3614,6 @@ function App() {
     }
   }, [
     API_BASE_URL,
-    credlyUrl,
     cvFile,
     manualCertificatesInput,
     manualJobDescription,
@@ -4809,7 +4806,6 @@ function App() {
         jobDescriptionText,
         jobSkills,
         resumeSkills,
-        credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
         templateContext: requestTemplateContext,
         templateId: canonicalTemplate,
@@ -4958,7 +4954,6 @@ function App() {
     }
   }, [
     API_BASE_URL,
-    credlyUrl,
     hasAcceptedImprovement,
     improvementsRequireAcceptance,
     improvementsUnlocked,
@@ -5583,13 +5578,6 @@ function App() {
                 <JobDescriptionPreview text={manualJobDescription} />
               )}
             </div>
-            <input
-              type="url"
-              placeholder="Credly Profile URL (optional)"
-              value={credlyUrl}
-              onChange={(e) => setCredlyUrl(e.target.value)}
-              className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
             <div className="space-y-2">
               <label className="text-sm font-semibold text-purple-700" htmlFor="manual-certificates">
                 Manual Certificates
