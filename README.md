@@ -59,7 +59,7 @@ Because the configuration is loaded and cached once, the service reuses the same
 
 ### Privacy and data handling
 
-- DynamoDB stores candidate names, LinkedIn URLs, IP addresses, and user agents exactly as submitted so ongoing sessions can be resumed without any background cleanup processes.
+- DynamoDB stores candidate names, LinkedIn URLs, IP addresses, and user agents exactly as submitted (only trimmed for whitespace) so ongoing sessions can be resumed without any anonymisation or background cleanup processes.
 - Generated PDFs, cover letters, and change logs are stored in S3 only for the active session that produced them. Old keys are overwritten as users regenerate documents, so the bucket naturally keeps just the current versions without relying on scheduled deletion jobs.
 
 ### Required parameters for AWS deployment

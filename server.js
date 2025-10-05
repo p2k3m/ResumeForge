@@ -561,9 +561,9 @@ function resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId } = {}) {
 function resolveProfileIdentifierHash(context) {
   const identifier = resolveProfileIdentifier(context);
   if (identifier) {
-    return anonymizePersonalData(identifier);
+    return normalizePersonalData(identifier);
   }
-  return anonymizePersonalData(createIdentifier());
+  return normalizePersonalData(createIdentifier());
 }
 
 const scheduleTask =
@@ -1307,10 +1307,13 @@ function normalizeTemplateHistory(list = [], additional = []) {
 }
 
 function buildUserTemplatePreferenceKey(userId) {
-  if (!userId) return { key: '', hash: '' };
-  const hash = anonymizePersonalData(userId);
-  if (!hash) return { key: '', hash: '' };
-  return { key: `${USER_TEMPLATE_PREFIX}${hash}`, hash };
+  if (!userId) return { key: '', normalized: '' };
+  const normalizedUserId = normalizePersonalData(userId);
+  if (!normalizedUserId) return { key: '', normalized: '' };
+  return {
+    key: `${USER_TEMPLATE_PREFIX}${normalizedUserId}`,
+    normalized: normalizedUserId,
+  };
 }
 
 async function loadUserTemplatePreference({
@@ -1322,7 +1325,7 @@ async function loadUserTemplatePreference({
   if (!dynamo || !tableName || !userId) {
     return undefined;
   }
-  const { key, hash } = buildUserTemplatePreferenceKey(userId);
+  const { key, normalized } = buildUserTemplatePreferenceKey(userId);
   if (!key) {
     return undefined;
   }
@@ -1349,7 +1352,7 @@ async function loadUserTemplatePreference({
       ...logContext,
       error: serializeError(err),
       userPreferenceKey: key,
-      userIdHash: hash,
+      userIdValue: normalized,
     });
     return undefined;
   }
@@ -1369,7 +1372,7 @@ async function persistUserTemplatePreference({
   if (!canonical) {
     return;
   }
-  const { key, hash } = buildUserTemplatePreferenceKey(userId);
+  const { key, normalized } = buildUserTemplatePreferenceKey(userId);
   if (!key) {
     return;
   }
@@ -1380,12 +1383,12 @@ async function persistUserTemplatePreference({
         TableName: tableName,
         Key: { linkedinProfileUrl: { S: key } },
         UpdateExpression:
-          'SET itemType = :itemType, templatePreference = :template, updatedAt = :updatedAt, userIdHash = :userIdHash',
+          'SET itemType = :itemType, templatePreference = :template, updatedAt = :updatedAt, userIdValue = :userIdValue',
         ExpressionAttributeValues: {
           ':itemType': { S: USER_TEMPLATE_ITEM_TYPE },
           ':template': { S: canonical },
           ':updatedAt': { S: nowIso },
-          ':userIdHash': { S: hash },
+          ':userIdValue': { S: normalized },
         },
       })
     );
@@ -1399,7 +1402,7 @@ async function persistUserTemplatePreference({
       ...logContext,
       error: serializeError(err),
       userPreferenceKey: key,
-      userIdHash: hash,
+      userIdValue: normalized,
     });
   }
 }
@@ -1658,7 +1661,7 @@ errorLogBucket =
   runtimeConfigSnapshot?.S3_BUCKET ||
   process.env.S3_BUCKET ||
   readEnvValue('S3_BUCKET');
-function anonymizePersonalData(value) {
+function normalizePersonalData(value) {
   if (value === undefined || value === null) return '';
   if (typeof value === 'string') {
     return value.trim();
@@ -11234,7 +11237,7 @@ async function handleImprovementRequest(type, req, res) {
       userId: res.locals.userId,
       jobId: jobIdInput,
     }) || jobIdInput;
-  const storedLinkedIn = anonymizePersonalData(profileIdentifier);
+  const storedLinkedIn = normalizePersonalData(profileIdentifier);
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
   let dynamo = null;
   let existingRecord = {};
@@ -12996,7 +12999,7 @@ app.post(
         userId: res.locals.userId,
         jobId: jobIdInput,
       }) || jobIdInput;
-    const storedLinkedIn = anonymizePersonalData(profileIdentifier);
+    const storedLinkedIn = normalizePersonalData(profileIdentifier);
 
     const credlyProfileUrl =
       typeof req.body.credlyProfileUrl === 'string' ? req.body.credlyProfileUrl.trim() : '';
@@ -13526,7 +13529,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       userId: res.locals.userId,
       jobId,
     }) || jobId;
-  const storedLinkedIn = anonymizePersonalData(profileIdentifier);
+  const storedLinkedIn = normalizePersonalData(profileIdentifier);
   const dynamo = new DynamoDBClient({ region });
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
 
@@ -14083,11 +14086,11 @@ app.post(
   }
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName) || 'candidate';
-  const storedApplicantName = anonymizePersonalData(applicantName);
-  const storedLinkedIn = anonymizePersonalData(profileIdentifier);
-  const storedIpAddress = anonymizePersonalData(ipAddress);
-  const storedUserAgent = anonymizePersonalData(userAgent);
-  const storedCredlyProfile = anonymizePersonalData(submittedCredly);
+  const storedApplicantName = normalizePersonalData(applicantName);
+  const storedLinkedIn = normalizePersonalData(profileIdentifier);
+  const storedIpAddress = normalizePersonalData(ipAddress);
+  const storedUserAgent = normalizePersonalData(userAgent);
+  const storedCredlyProfile = normalizePersonalData(submittedCredly);
   const jobKeySegment = sanitizeJobSegment(jobId);
   const ownerSegment = resolveDocumentOwnerSegment({ userId, sanitizedName });
   const prefix = buildDocumentSessionPrefix({
