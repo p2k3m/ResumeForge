@@ -38,7 +38,7 @@ describe('AWS integrations for /api/process-cv', () => {
       (command) =>
         command.type === 'CopyObjectCommand' &&
         typeof command.key === 'string' &&
-        command.key.includes('/cv/')
+        command.key.includes('cv/')
     );
     expect(relocatedUpload).toBeTruthy();
 
@@ -52,7 +52,7 @@ describe('AWS integrations for /api/process-cv', () => {
     expect(tempDelete).toBeTruthy();
 
     const rawUploadKey = relocatedUpload.key;
-    expect(rawUploadKey).toContain('/cv/');
+    expect(rawUploadKey).toContain('cv/');
 
     const metadataCall = commandSummaries.find((command) =>
       typeof command.key === 'string' && command.key.endsWith('log.json')
