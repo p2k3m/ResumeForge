@@ -297,6 +297,52 @@ function ATSScoreDashboard({
   const selectionProbabilityDescription =
     'Compares shortlist odds before and after enhancements using ATS scores, keyword coverage, and credential alignment.'
 
+  const snapshotSegments = (() => {
+    const segments = []
+    const formatPercent = (value) => (typeof value === 'number' ? `${value}%` : '—')
+
+    if (originalScoreValue !== null || enhancedScoreValue !== null) {
+      segments.push({
+        id: 'ats',
+        label: 'ATS Score',
+        beforeValue: originalScoreValue,
+        afterValue: enhancedScoreValue,
+        beforeLabel: 'Before',
+        afterLabel: 'After',
+        delta: typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number' ? matchDelta : null,
+        beforeTone: 'text-indigo-700',
+        afterTone: 'text-emerald-700',
+        beforeBadgeClass: 'bg-indigo-500/10 text-indigo-700',
+        afterBadgeClass: 'bg-emerald-500/10 text-emerald-700',
+        format: formatPercent
+      })
+    }
+
+    if (hasSelectionProbability) {
+      segments.push({
+        id: 'selection',
+        label: 'Selection Chance',
+        beforeValue: selectionProbabilityBeforeValue,
+        afterValue: selectionProbabilityAfterValue,
+        beforeLabel: 'Before',
+        afterLabel: 'After',
+        delta:
+          typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
+            ? selectionProbabilityDelta
+            : null,
+        beforeMeaning: selectionProbabilityBeforeMeaning ? `${selectionProbabilityBeforeMeaning} Outlook` : null,
+        afterMeaning: selectionProbabilityAfterMeaning ? `${selectionProbabilityAfterMeaning} Outlook` : null,
+        beforeTone: 'text-indigo-700',
+        afterTone: 'text-emerald-700',
+        beforeBadgeClass: 'bg-indigo-500/10 text-indigo-700',
+        afterBadgeClass: 'bg-emerald-500/10 text-emerald-700',
+        format: formatPercent
+      })
+    }
+
+    return segments
+  })()
+
   const missingSkills = normalizeSkills(match?.missingSkills)
   const addedSkills = normalizeSkills(match?.addedSkills)
 
@@ -432,6 +478,68 @@ function ATSScoreDashboard({
                 <p className="mt-1 text-sm text-purple-800" data-testid="selection-summary">
                   {selectionProbabilitySummary}
                 </p>
+              )}
+              {snapshotSegments.length > 0 && (
+                <div
+                  className={`mt-4 grid gap-3 ${snapshotSegments.length > 1 ? 'sm:grid-cols-2' : 'sm:grid-cols-1'}`}
+                  data-testid="score-summary-metrics"
+                >
+                  {snapshotSegments.map((segment) => (
+                    <div
+                      key={segment.id}
+                      className="rounded-2xl border border-purple-200/70 bg-white/70 p-4"
+                      data-testid={`${segment.id}-summary-card`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-purple-500">
+                          {segment.label}
+                        </p>
+                        {segment.delta && (
+                          <span
+                            className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700"
+                            data-testid={`${segment.id}-summary-delta`}
+                          >
+                            {segment.delta}
+                          </span>
+                        )}
+                      </div>
+                      <dl className="mt-3 grid grid-cols-2 gap-4">
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
+                            {segment.beforeLabel}
+                          </dt>
+                          <dd
+                            className={`mt-2 text-2xl font-black ${segment.beforeTone}`}
+                            data-testid={`${segment.id}-summary-before`}
+                          >
+                            {segment.format(segment.beforeValue)}
+                          </dd>
+                          {segment.beforeMeaning && (
+                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] ${segment.beforeBadgeClass}`}>
+                              {segment.beforeMeaning}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
+                            {segment.afterLabel}
+                          </dt>
+                          <dd
+                            className={`mt-2 text-2xl font-black ${segment.afterTone}`}
+                            data-testid={`${segment.id}-summary-after`}
+                          >
+                            {segment.format(segment.afterValue)}
+                          </dd>
+                          {segment.afterMeaning && (
+                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] ${segment.afterBadgeClass}`}>
+                              {segment.afterMeaning}
+                            </span>
+                          )}
+                        </div>
+                      </dl>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
