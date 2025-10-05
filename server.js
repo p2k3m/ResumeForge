@@ -3260,24 +3260,88 @@ function fallbackImprovement(type, context) {
   if (type === 'align-experience') {
     const section = extractSectionContent(resumeText, EXPERIENCE_SECTION_PATTERN);
     const headingLabel = section.heading.replace(/^#\s*/, '') || 'Work Experience';
-    const before = section.content.join('\n').trim();
-    const focusPhrase = fallbackSkillText
-      ? `${fallbackSkillText} initiatives`
-      : 'role priorities';
-    const bullet = `- Highlighted ${jobTitle || 'role'} achievements demonstrating ownership of ${focusPhrase}.`;
-    const newContent = [...section.content, bullet];
+    const baseContent = sanitizeSectionLines(section.content);
+    const before = baseContent.join('\n').trim();
+    const focusDescriptor = (() => {
+      if (jobTitle && fallbackSkillText) {
+        return `${jobTitle} priorities across ${fallbackSkillText}`;
+      }
+      if (jobTitle) {
+        return `${jobTitle} responsibilities`;
+      }
+      if (fallbackSkillText) {
+        return `${fallbackSkillText} priorities`;
+      }
+      return 'the job description priorities';
+    })();
+    const updatedContent = [...baseContent];
+    let firstBulletIndex = updatedContent.findIndex((line) => /^[-•*]/.test(line.trim()));
+    let bulletMarker = '-';
+
+    if (firstBulletIndex >= 0) {
+      const originalLine = updatedContent[firstBulletIndex] || '';
+      const trimmed = originalLine.trim();
+      const markerMatch = trimmed.match(/^([•*-])/);
+      bulletMarker = markerMatch ? markerMatch[1] : '-';
+      const body = trimmed.replace(/^([•*-])\s*/, '').replace(/\s*[.?!]+$/, '');
+      const rewrittenLine = `${bulletMarker} ${body} — emphasised ownership of ${focusDescriptor}.`;
+      updatedContent[firstBulletIndex] = rewrittenLine;
+    } else {
+      const synthesizedLine = `${bulletMarker} Delivered on ${focusDescriptor} with measurable outcomes.`;
+      updatedContent.push(synthesizedLine);
+      firstBulletIndex = updatedContent.length - 1;
+    }
+
+    const additionLine = `${bulletMarker} Partnered with stakeholders to deliver on ${focusDescriptor}, showcasing measurable outcomes.`;
+    const additionLineKey = additionLine.trim().toLowerCase();
+    const hasAddition = updatedContent.some((line) => line && line.trim().toLowerCase() === additionLineKey);
+    if (!hasAddition) {
+      const insertIndex = firstBulletIndex >= 0 ? firstBulletIndex + 1 : updatedContent.length;
+      updatedContent.splice(insertIndex, 0, additionLine);
+    }
+
+    const sanitizedContent = sanitizeSectionLines(updatedContent);
+    const after = sanitizedContent.join('\n').trim();
     const updatedResume = replaceSectionContent(
       resumeText,
       EXPERIENCE_SECTION_PATTERN,
-      newContent,
+      sanitizedContent,
       { headingLabel }
     );
+    const beforeLines = extractDiffLines(before);
+    const afterLines = extractDiffLines(after);
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const explanation = `Rewrote experience bullets to highlight ownership of ${focusDescriptor}.`;
+    const changeDetails = [
+      {
+        key: 'experience',
+        section: headingLabel,
+        label: headingLabel,
+        before,
+        after,
+        reasons: [explanation],
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: headingLabel,
+            added: addedItems,
+            removed: removedItems,
+            reasons: [explanation],
+          },
+        ],
+      },
+    ];
     return {
       updatedResume,
       beforeExcerpt: before,
-      afterExcerpt: bullet,
-      explanation: 'Added an accomplishment bullet that mirrors the job description focus.',
-      confidence: 0.32,
+      afterExcerpt: after,
+      explanation,
+      confidence: 0.38,
+      changeDetails,
     };
   }
 

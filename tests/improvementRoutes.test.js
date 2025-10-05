@@ -278,6 +278,48 @@ describe('targeted improvement routes', () => {
     });
   });
 
+  it('falls back to deterministic align-experience rewrite when AI generation fails', async () => {
+    generateContentMock.mockRejectedValueOnce(new Error('Model unavailable'));
+    primePdfGeneration();
+
+    const response = await request(app).post('/api/align-experience').send({
+      jobId: 'job-123',
+      linkedinProfileUrl: 'https://linkedin.com/in/example',
+      resumeText: baseResume,
+      jobDescription,
+      jobSkills: ['Leadership', 'Cloud Architecture', 'JavaScript'],
+      resumeSkills: ['JavaScript'],
+      missingSkills: ['Leadership', 'Cloud Architecture'],
+      jobTitle: 'Lead Software Engineer',
+      currentTitle: 'Senior Software Engineer',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.updatedResume).toContain(
+      'Built scalable services — emphasised ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.'
+    );
+    expect(response.body.updatedResume).toContain(
+      'Partnered with stakeholders to deliver on Lead Software Engineer priorities across Leadership and Cloud Architecture, showcasing measurable outcomes.'
+    );
+    expect(response.body.explanation).toBe(
+      'Rewrote experience bullets to highlight ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.'
+    );
+    expect(Array.isArray(response.body.improvementSummary)).toBe(true);
+    expect(response.body.improvementSummary[0]).toEqual(
+      expect.objectContaining({
+        section: 'Work Experience',
+        added: expect.arrayContaining([
+          'Built scalable services — emphasised ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.',
+          'Partnered with stakeholders to deliver on Lead Software Engineer priorities across Leadership and Cloud Architecture, showcasing measurable outcomes.'
+        ]),
+        removed: expect.arrayContaining(['Built scalable services.']),
+        reason: expect.arrayContaining([
+          'Rewrote experience bullets to highlight ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.'
+        ]),
+      })
+    );
+  });
+
   it('validates required fields for improvement requests', async () => {
     const response = await request(app)
       .post('/api/add-missing-skills')
