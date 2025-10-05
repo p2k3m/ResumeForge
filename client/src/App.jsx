@@ -23,6 +23,7 @@ import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 import { normalizeOutputFiles } from './utils/normalizeOutputFiles.js'
 import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
 import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
+import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Could not enhance CV; your formatting remained untouched.'
@@ -1233,6 +1234,18 @@ function buildChangeLogEntry(suggestion) {
       return a.item.localeCompare(b.item, undefined, { sensitivity: 'base' })
     })
 
+  const categoryChangelog = buildCategoryChangeLog({
+    summarySegments,
+    detail: detailText,
+    addedItems,
+    removedItems,
+    itemizedChanges,
+    before: beforeExcerpt,
+    after: afterExcerpt,
+    scoreDelta: suggestion?.scoreDelta,
+    suggestionType: suggestion?.type
+  })
+
   return {
     id: suggestion?.id,
     label,
@@ -1246,6 +1259,7 @@ function buildChangeLogEntry(suggestion) {
     addedItems,
     removedItems,
     itemizedChanges,
+    categoryChangelog,
     scoreDelta:
       typeof suggestion?.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
         ? suggestion.scoreDelta
@@ -5539,6 +5553,7 @@ function App() {
                         addedItems={entry.addedItems}
                         removedItems={entry.removedItems}
                         itemizedChanges={entry.itemizedChanges}
+                        categoryChangelog={entry.categoryChangelog}
                       />
                     )}
                   </li>
