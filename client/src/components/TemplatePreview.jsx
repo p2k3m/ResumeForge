@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from 'react'
+
 const cx = (...classes) => classes.filter(Boolean).join(' ')
 
 const RESUME_TEMPLATE_PREVIEWS = {
@@ -82,10 +84,129 @@ function TemplatePreview({
   resumeTemplateDescription,
   coverTemplateId,
   coverTemplateName,
-  coverTemplateDescription
+  coverTemplateDescription,
+  availableResumeTemplates = [],
+  availableCoverTemplates = [],
+  onResumeTemplateApply,
+  onCoverTemplateApply,
+  isApplying = false
 }) {
-  const resumeStyle = RESUME_TEMPLATE_PREVIEWS[resumeTemplateId] || DEFAULT_RESUME_PREVIEW
-  const coverStyle = COVER_TEMPLATE_PREVIEWS[coverTemplateId] || DEFAULT_COVER_PREVIEW
+  const normalizedResumeTemplates = useMemo(() => {
+    const registry = new Map()
+    availableResumeTemplates.forEach((option) => {
+      if (!option || typeof option !== 'object') return
+      const id = option.id
+      if (!id) return
+      if (registry.has(id)) return
+      registry.set(id, {
+        id,
+        name: option.name || resumeTemplateName || id,
+        description: option.description || ''
+      })
+    })
+    if (resumeTemplateId && !registry.has(resumeTemplateId)) {
+      registry.set(resumeTemplateId, {
+        id: resumeTemplateId,
+        name: resumeTemplateName || resumeTemplateId,
+        description: resumeTemplateDescription || ''
+      })
+    }
+    return Array.from(registry.values())
+  }, [
+    availableResumeTemplates,
+    resumeTemplateDescription,
+    resumeTemplateId,
+    resumeTemplateName
+  ])
+
+  const normalizedCoverTemplates = useMemo(() => {
+    const registry = new Map()
+    availableCoverTemplates.forEach((option) => {
+      if (!option || typeof option !== 'object') return
+      const id = option.id
+      if (!id) return
+      if (registry.has(id)) return
+      registry.set(id, {
+        id,
+        name: option.name || coverTemplateName || id,
+        description: option.description || ''
+      })
+    })
+    if (coverTemplateId && !registry.has(coverTemplateId)) {
+      registry.set(coverTemplateId, {
+        id: coverTemplateId,
+        name: coverTemplateName || coverTemplateId,
+        description: coverTemplateDescription || ''
+      })
+    }
+    return Array.from(registry.values())
+  }, [
+    availableCoverTemplates,
+    coverTemplateDescription,
+    coverTemplateId,
+    coverTemplateName
+  ])
+
+  const [previewResumeTemplateId, setPreviewResumeTemplateId] = useState(
+    resumeTemplateId || normalizedResumeTemplates[0]?.id || ''
+  )
+  const [previewCoverTemplateId, setPreviewCoverTemplateId] = useState(
+    coverTemplateId || normalizedCoverTemplates[0]?.id || ''
+  )
+
+  useEffect(() => {
+    if (!resumeTemplateId) return
+    setPreviewResumeTemplateId(resumeTemplateId)
+  }, [resumeTemplateId])
+
+  useEffect(() => {
+    if (!coverTemplateId) return
+    setPreviewCoverTemplateId(coverTemplateId)
+  }, [coverTemplateId])
+
+  const previewResumeOption = useMemo(() => {
+    return (
+      normalizedResumeTemplates.find((option) => option.id === previewResumeTemplateId) ||
+      normalizedResumeTemplates[0] || {
+        id: resumeTemplateId,
+        name: resumeTemplateName,
+        description: resumeTemplateDescription
+      }
+    )
+  }, [
+    normalizedResumeTemplates,
+    previewResumeTemplateId,
+    resumeTemplateDescription,
+    resumeTemplateId,
+    resumeTemplateName
+  ])
+
+  const previewCoverOption = useMemo(() => {
+    return (
+      normalizedCoverTemplates.find((option) => option.id === previewCoverTemplateId) ||
+      normalizedCoverTemplates[0] || {
+        id: coverTemplateId,
+        name: coverTemplateName,
+        description: coverTemplateDescription
+      }
+    )
+  }, [
+    coverTemplateDescription,
+    coverTemplateId,
+    coverTemplateName,
+    normalizedCoverTemplates,
+    previewCoverTemplateId
+  ])
+
+  const resumeStyle =
+    RESUME_TEMPLATE_PREVIEWS[previewResumeOption?.id] || DEFAULT_RESUME_PREVIEW
+  const coverStyle =
+    COVER_TEMPLATE_PREVIEWS[previewCoverOption?.id] || DEFAULT_COVER_PREVIEW
+
+  const isPreviewingDifferentResume =
+    previewResumeOption?.id && resumeTemplateId && previewResumeOption.id !== resumeTemplateId
+  const isPreviewingDifferentCover =
+    previewCoverOption?.id && coverTemplateId && previewCoverOption.id !== coverTemplateId
 
   return (
     <section className="rounded-3xl border border-purple-100 bg-white/80 shadow-xl p-6 space-y-6" aria-label="Template previews">
@@ -106,15 +227,47 @@ function TemplatePreview({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">CV Template</p>
-              <h3 className="text-xl font-bold text-purple-800">{resumeTemplateName}</h3>
-              {resumeTemplateDescription && (
-                <p className="mt-1 text-sm text-purple-600">{resumeTemplateDescription}</p>
+              <h3 className="text-xl font-bold text-purple-800">{previewResumeOption?.name}</h3>
+              {previewResumeOption?.description && (
+                <p className="mt-1 text-sm text-purple-600">{previewResumeOption.description}</p>
+              )}
+              {isPreviewingDifferentResume && (
+                <p className="mt-2 text-xs font-semibold text-purple-500">
+                  Selected style: {resumeTemplateName}
+                </p>
               )}
             </div>
             <span className={cx('px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide', resumeStyle.chip)}>
               CV
             </span>
           </div>
+          {normalizedResumeTemplates.length > 1 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Preview CV templates">
+              {normalizedResumeTemplates.map((option) => {
+                const isActive = option.id === previewResumeOption?.id
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={cx(
+                      'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
+                      isActive
+                        ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
+                        : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                    )}
+                    onClick={() => setPreviewResumeTemplateId(option.id)}
+                  >
+                    {option.name}
+                    {option.id === resumeTemplateId && (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
+                        Selected
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <div
             className={cx(
               'relative overflow-hidden rounded-3xl border shadow-inner',
@@ -156,15 +309,30 @@ function TemplatePreview({
             </div>
             <div className={cx('absolute inset-y-20 left-0 w-20 rounded-r-3xl', resumeStyle.sidebar)} />
           </div>
+          {isPreviewingDifferentResume && onResumeTemplateApply && (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => onResumeTemplateApply(previewResumeOption.id)}
+              disabled={isApplying}
+            >
+              {isApplying ? 'Updating…' : 'Use this CV style'}
+            </button>
+          )}
         </div>
 
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Cover Letter</p>
-              <h3 className="text-xl font-bold text-purple-800">{coverTemplateName}</h3>
-              {coverTemplateDescription && (
-                <p className="mt-1 text-sm text-purple-600">{coverTemplateDescription}</p>
+              <h3 className="text-xl font-bold text-purple-800">{previewCoverOption?.name}</h3>
+              {previewCoverOption?.description && (
+                <p className="mt-1 text-sm text-purple-600">{previewCoverOption.description}</p>
+              )}
+              {isPreviewingDifferentCover && (
+                <p className="mt-2 text-xs font-semibold text-purple-500">
+                  Selected style: {coverTemplateName}
+                </p>
               )}
             </div>
             <span
@@ -176,6 +344,33 @@ function TemplatePreview({
               Cover
             </span>
           </div>
+          {normalizedCoverTemplates.length > 1 && (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Preview cover letter templates">
+              {normalizedCoverTemplates.map((option) => {
+                const isActive = option.id === previewCoverOption?.id
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={cx(
+                      'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
+                      isActive
+                        ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
+                        : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                    )}
+                    onClick={() => setPreviewCoverTemplateId(option.id)}
+                  >
+                    {option.name}
+                    {option.id === coverTemplateId && (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
+                        Selected
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <div
             className={cx(
               'relative overflow-hidden rounded-3xl border shadow-inner',
@@ -202,11 +397,21 @@ function TemplatePreview({
               <div className={cx('h-3 w-28 rounded-full', coverStyle.line)} />
             </div>
           </div>
+          {isPreviewingDifferentCover && onCoverTemplateApply && (
+            <button
+              type="button"
+              className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => onCoverTemplateApply(previewCoverOption.id)}
+              disabled={isApplying}
+            >
+              {isApplying ? 'Updating…' : 'Use this cover style'}
+            </button>
+          )}
         </div>
       </div>
 
       <p className="text-xs text-purple-500">
-        Previews update instantly when you switch templates so you always know what your documents will look like.
+        Tap through the template chips to see how different styles will look with your CV before you commit to a download.
       </p>
     </section>
   )
