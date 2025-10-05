@@ -2664,6 +2664,11 @@ function App() {
           coverTemplateId={selectedCoverTemplate}
           coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
           coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
+          availableResumeTemplates={availableTemplateOptions}
+          availableCoverTemplates={availableCoverTemplateOptions}
+          onResumeTemplateApply={handleTemplateSelect}
+          onCoverTemplateApply={handleCoverTemplateSelect}
+          isApplying={isProcessing}
         />
       </>
     )
