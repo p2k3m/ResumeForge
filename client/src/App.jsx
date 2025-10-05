@@ -8,6 +8,7 @@ import TemplatePreview from './components/TemplatePreview.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
+import DashboardStage from './components/DashboardStage.jsx'
 import JobDescriptionPreview from './components/JobDescriptionPreview.jsx'
 import summaryIcon from './assets/icon-summary.svg'
 import skillsIcon from './assets/icon-skills.svg'
@@ -5505,48 +5506,47 @@ function App() {
           {error && <p className="text-red-600 text-center font-semibold">{error}</p>}
         </section>
 
-        <section className="space-y-6 rounded-3xl border border-purple-200/70 bg-white/85 p-6 shadow-xl">
-          <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 2 · Score</p>
-              <h2 className="text-2xl font-bold text-purple-900">Review current ATS chances</h2>
-              <p className="text-sm text-purple-700/80">
-                We surface your baseline ATS outlook before any enhancements so you can decide what to improve next.
-              </p>
-            </div>
+        <DashboardStage
+          stageLabel="Score Stage"
+          title="Score Overview"
+          description="Monitor baseline ATS alignment and rerun scoring after each accepted update."
+          accent="indigo"
+          actions={
             <button
               type="button"
               onClick={handleScoreSubmit}
               disabled={rescoreDisabled}
-              className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
+              className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
                 rescoreDisabled
-                  ? 'bg-purple-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700'
+                  ? 'bg-indigo-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
               }`}
               aria-busy={isProcessing ? 'true' : 'false'}
             >
               {isProcessing ? 'Scoring…' : scoreDashboardReady ? 'Rescore CV' : 'Run ATS scoring'}
             </button>
-          </header>
+          }
+        >
           {scoreDashboardReady ? (
-            <ATSScoreDashboard
-              metrics={scoreBreakdown}
-              baselineMetrics={baselineScoreBreakdown}
-              match={match}
-              metricActionMap={metricImprovementActionMap}
-              onImproveMetric={handleImprovementClick}
-              improvementState={metricImprovementState}
-            />
+            <>
+              <ATSScoreDashboard
+                metrics={scoreBreakdown}
+                baselineMetrics={baselineScoreBreakdown}
+                match={match}
+                metricActionMap={metricImprovementActionMap}
+                onImproveMetric={handleImprovementClick}
+                improvementState={metricImprovementState}
+              />
+              {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
+            </>
           ) : (
-            <div className="rounded-3xl border border-dashed border-purple-300/80 bg-white/70 p-6 text-sm text-purple-700">
+            <div className="rounded-3xl border border-dashed border-indigo-200/80 bg-white/70 p-6 text-sm text-indigo-700">
               {isProcessing
                 ? 'Scoring in progress. Sit tight while we calculate your ATS metrics and current chances.'
                 : 'Upload your resume and job description to generate your ATS scores automatically.'}
             </div>
           )}
-        </section>
-
-        {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
+        </DashboardStage>
 
         {selectionInsights && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
@@ -5860,13 +5860,17 @@ function App() {
         )}
 
         {improvementResults.length > 0 && (
-          <section className="space-y-4">
-            <h2 className="text-2xl font-bold text-purple-900">Suggested Edits</h2>
-            <div className="rounded-2xl border border-purple-200 bg-gradient-to-r from-purple-50 to-indigo-50 p-4 text-sm text-purple-700">
-              These skills and highlights were added to match the JD. Please prepare for the interview accordingly.
+          <DashboardStage
+            stageLabel="Suggestions Stage"
+            title="Review AI Suggestions"
+            description="Work through targeted improvements and accept the updates you like."
+          >
+            <div className="rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
+              These skills and highlights were added to match the JD. Use the cards below to accept, reject, or preview each
+              update.
             </div>
             {enhanceAllSummaryText && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+              <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-sm text-emerald-900">
                 <p className="text-sm font-semibold text-emerald-700">Enhance All applied automatically</p>
                 <p className="mt-1 leading-relaxed">
                   We rolled out every recommended fix in one pass. Combined updates — {enhanceAllSummaryText}
@@ -5883,22 +5887,21 @@ function App() {
                 />
               ))}
             </div>
-          </section>
+          </DashboardStage>
         )}
 
         {changeLog.length > 0 && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold text-purple-900">Change Log</h2>
-                <p className="text-sm text-purple-700/80">
-                  Track every accepted enhancement and why it strengthens your selection chances.
-                </p>
-              </div>
-              <span className="text-xs font-semibold text-purple-600 bg-white/70 border border-purple-200 rounded-full px-3 py-1">
+          <DashboardStage
+            stageLabel="Change Log Stage"
+            title="Track accepted changes"
+            description="Review every applied enhancement and download previous versions when needed."
+            accent="slate"
+            actions={
+              <span className="text-xs font-semibold text-slate-600 border border-slate-200 rounded-full bg-white/70 px-3 py-1">
                 {changeLog.length} update{changeLog.length === 1 ? '' : 's'}
               </span>
-            </div>
+            }
+          >
             <ul className="space-y-3">
               {changeLog.map((entry) => {
                 const historyEntry = resumeHistoryMap.get(entry.id)
@@ -5914,12 +5917,12 @@ function App() {
                 return (
                   <li
                     key={entry.id}
-                    className="rounded-2xl border border-purple-200 bg-white/85 shadow-sm p-4 space-y-2"
+                    className="rounded-2xl border border-slate-200/70 bg-white/85 shadow-sm p-4 space-y-2"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
-                        <p className="text-base font-semibold text-purple-900">{entry.title}</p>
-                        <p className="text-sm text-purple-700/90 leading-relaxed">{entry.detail}</p>
+                        <p className="text-base font-semibold text-slate-900">{entry.title}</p>
+                        <p className="text-sm text-slate-700/90 leading-relaxed">{entry.detail}</p>
                       </div>
                       <span
                         className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
@@ -5934,7 +5937,7 @@ function App() {
                         <button
                           type="button"
                           onClick={() => handleDownloadPreviousVersion(entry.id)}
-                          className="px-3 py-1.5 rounded-full border border-purple-200 text-xs font-semibold text-purple-700 hover:border-purple-300 hover:text-purple-900 transition"
+                          className="px-3 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 transition"
                         >
                           Download previous version
                         </button>
@@ -5972,7 +5975,7 @@ function App() {
                 )
               })}
             </ul>
-          </section>
+          </DashboardStage>
         )}
 
         {resumeComparisonData && (
