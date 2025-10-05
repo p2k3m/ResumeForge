@@ -193,7 +193,6 @@ describe('/api/process-cv', () => {
       .set('X-Vercel-IP-Country', 'IN')
       .set('X-Vercel-IP-Country-Region', 'MH')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res1.status).toBe(200);
     expect(res1.body.success).toBe(true);
@@ -225,7 +224,6 @@ describe('/api/process-cv', () => {
       .set('X-Vercel-IP-Country', 'IN')
       .set('X-Vercel-IP-Country-Region', 'MH')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res2.status).toBe(200);
     expect(res2.body.success).toBe(true);
@@ -286,7 +284,7 @@ describe('/api/process-cv', () => {
     expect(putCall).toBeTruthy();
     expect(putCall[0].input.TableName).toBe('ResumeForge');
     expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(
-      hash('http://linkedin.com/in/example')
+      hash(res2.body.jobId)
     );
     expect(putCall[0].input.Item.candidateName.S).toBe(hash(res2.body.applicantName));
     expect(putCall[0].input.Item.ipAddress.S).toBe(hash('203.0.113.42'));
@@ -353,7 +351,6 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(failed.status).toBe(400);
@@ -365,7 +362,6 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('manualJobDescription', 'Manual JD text outlining requirements and responsibilities.')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -379,7 +375,6 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field(
         'manualJobDescription',
         'Senior Engineer<script>alert("x")</script><div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a>'
@@ -431,7 +426,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(200);
@@ -457,7 +451,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -481,7 +474,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
@@ -497,7 +489,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(200);
@@ -522,7 +513,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const coverLetterEntry = res.body.urls.find((entry) => entry.type === 'cover_letter1');
@@ -567,7 +557,6 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('template1', 'modern')
       .field('template2', 'professional')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
@@ -588,7 +577,6 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .field('templates', JSON.stringify(['ucmo', 'vibrant']))
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -641,7 +629,6 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
         .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
       expect(res.status).toBe(200);
@@ -704,7 +691,6 @@ describe('/api/process-cv', () => {
       await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
         .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
       const prompt = prompts[0];
@@ -759,7 +745,6 @@ describe('/api/process-cv', () => {
       await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
         .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
       expect(texts.some((t) => /Built a portfolio site using React/i.test(t))).toBe(true);
@@ -813,7 +798,6 @@ describe('/api/process-cv', () => {
       await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
         .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
       const resumeText = texts.find((t) => /# Projects/.test(t));
@@ -857,7 +841,6 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     const coverCalls = serverModule.generatePdf.mock.calls.filter(
@@ -897,7 +880,6 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
         .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
       expect(res.status).toBe(200);
@@ -929,7 +911,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(500);
@@ -984,7 +965,6 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
         .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
       expect(res.status).toBe(200);
@@ -1078,8 +1058,7 @@ describe('/api/process-cv', () => {
   test('missing file', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example');
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
@@ -1097,7 +1076,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('text'), 'resume.txt');
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
@@ -1120,7 +1098,6 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(400);
@@ -1145,7 +1122,6 @@ describe('/api/process-cv', () => {
   test('missing job description text', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
@@ -1298,7 +1274,6 @@ describe('change log persistence safeguards', () => {
       .post('/api/change-log')
       .send({
         jobId: 'job-123',
-        linkedinProfileUrl: 'https://www.linkedin.com/in/example',
         entry: {
           id: 'entry-1',
           detail: longDetail,
@@ -1362,7 +1337,6 @@ describe('change log persistence safeguards', () => {
       .post('/api/change-log')
       .send({
         jobId: 'job-oversize',
-        linkedinProfileUrl: 'https://www.linkedin.com/in/example',
         entry: {
           id: 'new-entry',
           detail: largeDetail,
@@ -1437,7 +1411,6 @@ describe('change log persistence safeguards', () => {
       .post('/api/change-log')
       .send({
         jobId: 'job-321',
-        linkedinProfileUrl: 'https://www.linkedin.com/in/example',
         entry: entryPayload,
       });
 
