@@ -27,6 +27,9 @@ import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 const CV_GENERATION_ERROR_MESSAGE =
   'Could not enhance CV; your formatting remained untouched.'
 
+const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
+  'Please wait for the current ATS score refresh to finish before applying another improvement.'
+
 const improvementActions = [
   {
     key: 'improve-summary',
@@ -1550,6 +1553,7 @@ function App() {
   const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
   const [resumeHistory, setResumeHistory] = useState([])
   const improvementLockRef = useRef(false)
+  const scoreUpdateLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
   const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
@@ -3774,175 +3778,185 @@ function App() {
         return false
       }
 
-      const id = suggestion.id
-      const updatedResumeDraft = suggestion.updatedResume || resumeText
-      const baselineScore = getBaselineScoreFromMatch(match)
-      const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
-      const changeLogEntry = buildChangeLogEntry(suggestion)
-      const historySnapshot = {
-        id: changeLogEntry?.id || id,
-        suggestionId: id,
-        title: suggestion?.title || 'Improvement Applied',
-        type: suggestion?.type || 'custom',
-        timestamp: Date.now(),
-        resumeBefore: resumeText,
-        resumeAfter: updatedResumeDraft,
-        matchBefore: match ? cloneData(match) : null,
-        scoreBreakdownBefore: Array.isArray(scoreBreakdown) ? cloneData(scoreBreakdown) : [],
-        resumeSkillsBefore: Array.isArray(resumeSkills) ? cloneData(resumeSkills) : [],
-        changeLogBefore: Array.isArray(changeLog) ? cloneData(changeLog) : [],
-        detail: changeLogEntry?.detail || '',
-        changeLabel: changeLogEntry?.label || ''
+      if (scoreUpdateLockRef.current) {
+        setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
+        return false
       }
-      setResumeHistory((prev) => {
-        const filtered = Array.isArray(prev) ? prev.filter((entry) => entry.id !== historySnapshot.id) : []
-        return [historySnapshot, ...filtered]
-      })
 
-      let previousChangeLog = null
-
-      setImprovementResults((prev) =>
-        prev.map((item) =>
-          item.id === id
-            ? { ...item, accepted: true, rescorePending: true, rescoreError: '' }
-            : item
-        )
-      )
-
-      const normalizedOriginalTitle =
-        typeof suggestion.originalTitle === 'string' ? suggestion.originalTitle.trim() : ''
-      const normalizedModifiedTitle =
-        typeof suggestion.modifiedTitle === 'string' ? suggestion.modifiedTitle.trim() : ''
-
-      if (normalizedOriginalTitle || normalizedModifiedTitle) {
-        setMatch((prev) => {
-          const base = prev ? { ...prev } : {}
-          const currentOriginal = typeof prev?.originalTitle === 'string' ? prev.originalTitle : ''
-          const currentModified = typeof prev?.modifiedTitle === 'string' ? prev.modifiedTitle : ''
-
-          const shouldUpdateOriginal =
-            normalizedOriginalTitle && normalizedOriginalTitle !== currentOriginal
-          const shouldUpdateModified =
-            normalizedModifiedTitle && normalizedModifiedTitle !== currentModified
-
-          if (!shouldUpdateOriginal && !shouldUpdateModified) {
-            return prev
-          }
-
-          if (shouldUpdateOriginal) {
-            base.originalTitle = normalizedOriginalTitle
-          }
-          if (shouldUpdateModified) {
-            base.modifiedTitle = normalizedModifiedTitle
-          }
-
-          return base
+      scoreUpdateLockRef.current = true
+      try {
+        const id = suggestion.id
+        const updatedResumeDraft = suggestion.updatedResume || resumeText
+        const baselineScore = getBaselineScoreFromMatch(match)
+        const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
+        const changeLogEntry = buildChangeLogEntry(suggestion)
+        const historySnapshot = {
+          id: changeLogEntry?.id || id,
+          suggestionId: id,
+          title: suggestion?.title || 'Improvement Applied',
+          type: suggestion?.type || 'custom',
+          timestamp: Date.now(),
+          resumeBefore: resumeText,
+          resumeAfter: updatedResumeDraft,
+          matchBefore: match ? cloneData(match) : null,
+          scoreBreakdownBefore: Array.isArray(scoreBreakdown) ? cloneData(scoreBreakdown) : [],
+          resumeSkillsBefore: Array.isArray(resumeSkills) ? cloneData(resumeSkills) : [],
+          changeLogBefore: Array.isArray(changeLog) ? cloneData(changeLog) : [],
+          detail: changeLogEntry?.detail || '',
+          changeLabel: changeLogEntry?.label || ''
+        }
+        setResumeHistory((prev) => {
+          const filtered = Array.isArray(prev) ? prev.filter((entry) => entry.id !== historySnapshot.id) : []
+          return [historySnapshot, ...filtered]
         })
-      }
 
-      if (updatedResumeDraft) {
-        setResumeText(updatedResumeDraft)
-      }
+        let previousChangeLog = null
 
-      let persistedEntryPayload = null
-      if (changeLogEntry) {
-        const entryPayload = { ...changeLogEntry }
-        if (typeof historySnapshot.resumeBefore === 'string') {
-          entryPayload.resumeBeforeText = historySnapshot.resumeBefore
-        }
-        if (typeof historySnapshot.resumeAfter === 'string') {
-          entryPayload.resumeAfterText = historySnapshot.resumeAfter
-        }
-        const historyContextPayload = {}
-        if (historySnapshot.matchBefore && typeof historySnapshot.matchBefore === 'object') {
-          historyContextPayload.matchBefore = cloneData(historySnapshot.matchBefore)
-        }
-        if (Array.isArray(historySnapshot.scoreBreakdownBefore)) {
-          historyContextPayload.scoreBreakdownBefore = cloneData(
-            historySnapshot.scoreBreakdownBefore
+        setImprovementResults((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, accepted: true, rescorePending: true, rescoreError: '' }
+              : item
           )
+        )
+
+        const normalizedOriginalTitle =
+          typeof suggestion.originalTitle === 'string' ? suggestion.originalTitle.trim() : ''
+        const normalizedModifiedTitle =
+          typeof suggestion.modifiedTitle === 'string' ? suggestion.modifiedTitle.trim() : ''
+
+        if (normalizedOriginalTitle || normalizedModifiedTitle) {
+          setMatch((prev) => {
+            const base = prev ? { ...prev } : {}
+            const currentOriginal = typeof prev?.originalTitle === 'string' ? prev.originalTitle : ''
+            const currentModified = typeof prev?.modifiedTitle === 'string' ? prev.modifiedTitle : ''
+
+            const shouldUpdateOriginal =
+              normalizedOriginalTitle && normalizedOriginalTitle !== currentOriginal
+            const shouldUpdateModified =
+              normalizedModifiedTitle && normalizedModifiedTitle !== currentModified
+
+            if (!shouldUpdateOriginal && !shouldUpdateModified) {
+              return prev
+            }
+
+            if (shouldUpdateOriginal) {
+              base.originalTitle = normalizedOriginalTitle
+            }
+            if (shouldUpdateModified) {
+              base.modifiedTitle = normalizedModifiedTitle
+            }
+
+            return base
+          })
         }
-        if (Array.isArray(historySnapshot.resumeSkillsBefore)) {
-          historyContextPayload.resumeSkillsBefore = historySnapshot.resumeSkillsBefore
-            .map((item) => (typeof item === 'string' ? item.trim() : ''))
-            .filter(Boolean)
+
+        if (updatedResumeDraft) {
+          setResumeText(updatedResumeDraft)
         }
-        if (Object.keys(historyContextPayload).length > 0) {
-          entryPayload.historyContext = historyContextPayload
-        }
-        persistedEntryPayload = entryPayload
-        setChangeLog((prev) => {
-          previousChangeLog = prev
-          if (prev.some((entry) => entry.id === entryPayload.id)) {
-            return prev.map((entry) => (entry.id === entryPayload.id ? { ...entry, ...entryPayload } : entry))
+
+        let persistedEntryPayload = null
+        if (changeLogEntry) {
+          const entryPayload = { ...changeLogEntry }
+          if (typeof historySnapshot.resumeBefore === 'string') {
+            entryPayload.resumeBeforeText = historySnapshot.resumeBefore
           }
-          return [entryPayload, ...prev]
-        })
+          if (typeof historySnapshot.resumeAfter === 'string') {
+            entryPayload.resumeAfterText = historySnapshot.resumeAfter
+          }
+          const historyContextPayload = {}
+          if (historySnapshot.matchBefore && typeof historySnapshot.matchBefore === 'object') {
+            historyContextPayload.matchBefore = cloneData(historySnapshot.matchBefore)
+          }
+          if (Array.isArray(historySnapshot.scoreBreakdownBefore)) {
+            historyContextPayload.scoreBreakdownBefore = cloneData(
+              historySnapshot.scoreBreakdownBefore
+            )
+          }
+          if (Array.isArray(historySnapshot.resumeSkillsBefore)) {
+            historyContextPayload.resumeSkillsBefore = historySnapshot.resumeSkillsBefore
+              .map((item) => (typeof item === 'string' ? item.trim() : ''))
+              .filter(Boolean)
+          }
+          if (Object.keys(historyContextPayload).length > 0) {
+            entryPayload.historyContext = historyContextPayload
+          }
+          persistedEntryPayload = entryPayload
+          setChangeLog((prev) => {
+            previousChangeLog = prev
+            if (prev.some((entry) => entry.id === entryPayload.id)) {
+              return prev.map((entry) => (entry.id === entryPayload.id ? { ...entry, ...entryPayload } : entry))
+            }
+            return [entryPayload, ...prev]
+          })
+
+          try {
+            await persistChangeLogEntry(entryPayload)
+          } catch (err) {
+            console.error('Persisting change log entry failed', err)
+            setError(err.message || 'Unable to store the change log entry.')
+            setChangeLog(previousChangeLog || [])
+          }
+        }
 
         try {
-          await persistChangeLogEntry(entryPayload)
-        } catch (err) {
-          console.error('Persisting change log entry failed', err)
-          setError(err.message || 'Unable to store the change log entry.')
-          setChangeLog(previousChangeLog || [])
-        }
-      }
+          const result = await rescoreAfterImprovement({
+            updatedResume: updatedResumeDraft,
+            baselineScore,
+            previousMissingSkills,
+            rescoreSummary: suggestion.rescoreSummary
+          })
+          const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
 
-      try {
-        const result = await rescoreAfterImprovement({
-          updatedResume: updatedResumeDraft,
-          baselineScore,
-          previousMissingSkills,
-          rescoreSummary: suggestion.rescoreSummary
-        })
-        const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
+          if (changeLogEntry && Number.isFinite(deltaValue)) {
+            setChangeLog((prev) =>
+              prev.map((entry) =>
+                entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
+              )
+            )
+            try {
+              const payloadWithDelta = persistedEntryPayload
+                ? { ...persistedEntryPayload, scoreDelta: deltaValue }
+                : { ...changeLogEntry, scoreDelta: deltaValue }
+              await persistChangeLogEntry(payloadWithDelta)
+            } catch (err) {
+              console.error('Updating change log entry failed', err)
+              setError(err.message || 'Unable to update the change log entry.')
+            }
+          }
 
-        if (changeLogEntry && Number.isFinite(deltaValue)) {
-          setChangeLog((prev) =>
-            prev.map((entry) =>
-              entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
+          setImprovementResults((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    rescorePending: false,
+                    scoreDelta: deltaValue,
+                    rescoreError: ''
+                  }
+                : item
             )
           )
-          try {
-            const payloadWithDelta = persistedEntryPayload
-              ? { ...persistedEntryPayload, scoreDelta: deltaValue }
-              : { ...changeLogEntry, scoreDelta: deltaValue }
-            await persistChangeLogEntry(payloadWithDelta)
-          } catch (err) {
-            console.error('Updating change log entry failed', err)
-            setError(err.message || 'Unable to update the change log entry.')
-          }
+        } catch (err) {
+          console.error('Improvement rescore failed', err)
+          setError(err.message || 'Unable to update scores after applying improvement.')
+          setImprovementResults((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    rescorePending: false,
+                    rescoreError: err.message || 'Unable to refresh ATS scores.'
+                  }
+                : item
+            )
+          )
         }
 
-        setImprovementResults((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  rescorePending: false,
-                  scoreDelta: deltaValue,
-                  rescoreError: ''
-                }
-              : item
-          )
-        )
-      } catch (err) {
-        console.error('Improvement rescore failed', err)
-        setError(err.message || 'Unable to update scores after applying improvement.')
-        setImprovementResults((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  rescorePending: false,
-                  rescoreError: err.message || 'Unable to refresh ATS scores.'
-                }
-              : item
-          )
-        )
+        return true
+      } finally {
+        scoreUpdateLockRef.current = false
       }
-
-      return true
     },
     [
       match,
@@ -4547,9 +4561,11 @@ function App() {
       setImprovementResults((prev) => [suggestion, ...prev])
 
       if (type === 'enhance-all') {
-        await applyImprovementSuggestion(suggestion)
-        const summaryText = (enhanceAllSummary || explanation).trim()
-        setEnhanceAllSummaryText(summaryText)
+        const applied = await applyImprovementSuggestion(suggestion)
+        if (applied) {
+          const summaryText = (enhanceAllSummary || explanation).trim()
+          setEnhanceAllSummaryText(summaryText)
+        }
       }
     } catch (err) {
       console.error('Improvement request failed', err)
@@ -4573,6 +4589,11 @@ function App() {
     }
 
     const wasAccepted = targetSuggestion.accepted === true
+
+    if (wasAccepted && scoreUpdateLockRef.current) {
+      setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
+      return
+    }
 
     const previousEnhanceAllSummaryText = enhanceAllSummaryText
     const previousImprovementResults = cloneData(improvementResults)
@@ -4654,88 +4675,100 @@ function App() {
     const shouldRescore =
       wasAccepted && typeof revertResumeText === 'string' && revertResumeText.trim().length > 0
 
-    setImprovementResults((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              accepted: false,
-              rescorePending: shouldRescore,
-              rescoreError: '',
-              scoreDelta: null
-            }
-          : item
-      )
-    )
+    const releaseLock = wasAccepted
 
-    setChangeLog((prev) => prev.filter((entry) => entry.id !== id))
-
-    setResumeHistory((prev) => prev.filter((entry) => entry.id !== id))
-
-    if (wasAccepted) {
-      setResumeText(revertResumeText)
-      setMatch(revertMatch ? cloneData(revertMatch) : null)
-      setScoreBreakdown(revertScoreBreakdown)
-      setResumeSkills(revertResumeSkills)
-    }
-
-    if (shouldRescore) {
-      const revertBaselineScore = getBaselineScoreFromMatch(revertMatch)
-      const revertMissingSkills = Array.isArray(revertMatch?.missingSkills)
-        ? revertMatch.missingSkills
-        : []
-      try {
-        await rescoreAfterImprovement({
-          updatedResume: revertResumeText,
-          baselineScore: revertBaselineScore,
-          previousMissingSkills: revertMissingSkills
-        })
-        setImprovementResults((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  rescorePending: false,
-                  rescoreError: '',
-                  scoreDelta: null
-                }
-              : item
-          )
-        )
-      } catch (err) {
-        console.error('Improvement rescore failed after rejection', err)
-        setError(err.message || 'Unable to refresh ATS scores after rejecting the improvement.')
-        setImprovementResults((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  rescorePending: false,
-                  rescoreError: err.message || 'Unable to refresh ATS scores.',
-                  scoreDelta: null
-                }
-              : item
-          )
-        )
-      }
+    if (releaseLock) {
+      scoreUpdateLockRef.current = true
     }
 
     try {
-      await removeChangeLogEntry(id)
-    } catch (err) {
-      console.error('Removing change log entry failed', err)
-      setError(err.message || 'Unable to remove the change log entry.')
-      setChangeLog(previousChangeLogState || [])
-      setImprovementResults(previousImprovementResults || [])
-      setResumeHistory(previousResumeHistoryValue || [])
-      if (targetSuggestion?.type === 'enhance-all') {
-        setEnhanceAllSummaryText(previousEnhanceAllSummaryText)
-      }
+      setImprovementResults((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                accepted: false,
+                rescorePending: shouldRescore,
+                rescoreError: '',
+                scoreDelta: null
+              }
+            : item
+        )
+      )
+
+      setChangeLog((prev) => prev.filter((entry) => entry.id !== id))
+
+      setResumeHistory((prev) => prev.filter((entry) => entry.id !== id))
+
       if (wasAccepted) {
-        setResumeText(previousResumeTextValue)
-        setMatch(previousMatchValue ? cloneData(previousMatchValue) : null)
-        setScoreBreakdown(previousScoreBreakdownValue)
-        setResumeSkills(previousResumeSkillsValue)
+        setResumeText(revertResumeText)
+        setMatch(revertMatch ? cloneData(revertMatch) : null)
+        setScoreBreakdown(revertScoreBreakdown)
+        setResumeSkills(revertResumeSkills)
+      }
+
+      if (shouldRescore) {
+        const revertBaselineScore = getBaselineScoreFromMatch(revertMatch)
+        const revertMissingSkills = Array.isArray(revertMatch?.missingSkills)
+          ? revertMatch.missingSkills
+          : []
+        try {
+          await rescoreAfterImprovement({
+            updatedResume: revertResumeText,
+            baselineScore: revertBaselineScore,
+            previousMissingSkills: revertMissingSkills
+          })
+          setImprovementResults((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    rescorePending: false,
+                    rescoreError: '',
+                    scoreDelta: null
+                  }
+                : item
+            )
+          )
+        } catch (err) {
+          console.error('Improvement rescore failed after rejection', err)
+          setError(err.message || 'Unable to refresh ATS scores after rejecting the improvement.')
+          setImprovementResults((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    rescorePending: false,
+                    rescoreError: err.message || 'Unable to refresh ATS scores.',
+                    scoreDelta: null
+                  }
+                : item
+            )
+          )
+        }
+      }
+
+      try {
+        await removeChangeLogEntry(id)
+      } catch (err) {
+        console.error('Removing change log entry failed', err)
+        setError(err.message || 'Unable to remove the change log entry.')
+        setChangeLog(previousChangeLogState || [])
+        setImprovementResults(previousImprovementResults || [])
+        setResumeHistory(previousResumeHistoryValue || [])
+        if (targetSuggestion?.type === 'enhance-all') {
+          setEnhanceAllSummaryText(previousEnhanceAllSummaryText)
+        }
+        if (wasAccepted) {
+          setResumeText(previousResumeTextValue)
+          setMatch(previousMatchValue ? cloneData(previousMatchValue) : null)
+          setScoreBreakdown(previousScoreBreakdownValue)
+          setResumeSkills(previousResumeSkillsValue)
+        }
+      }
+    } finally {
+      if (releaseLock) {
+        scoreUpdateLockRef.current = false
       }
     }
   }
