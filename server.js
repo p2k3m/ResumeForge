@@ -1156,6 +1156,7 @@ const CV_TEMPLATES = [
 ];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
+const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional', 'ucmo']);
 const USER_TEMPLATE_ITEM_TYPE = 'USER_TEMPLATE_PREFERENCE';
 const USER_TEMPLATE_PREFIX = 'user_template#';
 const TEMPLATE_IDS = [...CV_TEMPLATES, ...LEGACY_CV_TEMPLATES]; // Backwards compatibility
@@ -1377,6 +1378,17 @@ function canonicalizeCoverTemplateId(templateId, fallback = CL_TEMPLATES[0]) {
   return fallback;
 }
 
+function deriveCoverTemplateFromCv(templateId) {
+  const canonical = canonicalizeCvTemplateId(templateId, '');
+  if (!canonical) {
+    return CL_TEMPLATES[0];
+  }
+  if (CLASSIC_CV_TEMPLATES.has(canonical)) {
+    return 'cover_classic';
+  }
+  return 'cover_modern';
+}
+
 function uniqueValidCoverTemplates(list = []) {
   const seen = new Set();
   const result = [];
@@ -1526,25 +1538,45 @@ function selectTemplates({
     secondaryTemplate = 'ucmo';
   }
 
-  let parsedCoverTemplates = uniqueValidCoverTemplates([
+  const derivedCoverFromPreferred = deriveCoverTemplateFromCv(
+    canonicalPreferred || template1 || primaryTemplate
+  );
+  const derivedCoverFromPrimary = deriveCoverTemplateFromCv(primaryTemplate);
+  const derivedCoverFromSecondary = deriveCoverTemplateFromCv(secondaryTemplate);
+  const coverFallbackCandidates = [
     ...parseTemplateArray(clTemplates),
     coverTemplate1,
     coverTemplate2,
     defaultClTemplate,
-  ]);
+    derivedCoverFromPreferred,
+    derivedCoverFromPrimary,
+    derivedCoverFromSecondary,
+  ];
+  let parsedCoverTemplates = uniqueValidCoverTemplates(coverFallbackCandidates);
   if (!parsedCoverTemplates.length) {
-    parsedCoverTemplates = [...CL_TEMPLATES];
+    parsedCoverTemplates = uniqueValidCoverTemplates([
+      derivedCoverFromPrimary,
+      derivedCoverFromSecondary,
+      ...CL_TEMPLATES,
+    ]);
   }
   const coverPrimaryFallback =
-    parsedCoverTemplates[0] || defaultClTemplate || CL_TEMPLATES[0];
+    parsedCoverTemplates[0] ||
+    derivedCoverFromPrimary ||
+    defaultClTemplate ||
+    CL_TEMPLATES[0];
   coverTemplate1 = canonicalizeCoverTemplateId(
     coverTemplate1 || coverPrimaryFallback,
     coverPrimaryFallback
   );
+  const coverSecondaryFallbackCandidates = [
+    ...parsedCoverTemplates.filter((tpl) => tpl !== coverTemplate1),
+    derivedCoverFromSecondary,
+    derivedCoverFromPrimary !== coverTemplate1 ? derivedCoverFromPrimary : null,
+    ...CL_TEMPLATES.filter((tpl) => tpl !== coverTemplate1),
+  ].filter(Boolean);
   const coverSecondaryFallback =
-    parsedCoverTemplates.find((tpl) => tpl !== coverTemplate1) ||
-    CL_TEMPLATES.find((tpl) => tpl !== coverTemplate1) ||
-    coverTemplate1;
+    coverSecondaryFallbackCandidates[0] || coverPrimaryFallback;
   coverTemplate2 = canonicalizeCoverTemplateId(
     coverTemplate2 || coverSecondaryFallback,
     coverSecondaryFallback

@@ -4486,6 +4486,13 @@ function App() {
         selectionTargetTitle || parsedJobTitle || matchModifiedTitle || matchOriginalTitle
       const currentResumeTitle = matchModifiedTitle || matchOriginalTitle
 
+      const {
+        canonicalTemplate,
+        canonicalPrimaryTemplate,
+        canonicalSecondaryTemplate,
+        context: requestTemplateContext
+      } = buildTemplateRequestContext(templateContext, selectedTemplate)
+
       const payload = {
         jobId,
         linkedinProfileUrl: profileUrl.trim(),
@@ -4498,7 +4505,12 @@ function App() {
         resumeSkills,
         missingSkills: match?.missingSkills || [],
         knownCertificates,
-        manualCertificates: manualCertificatesData
+        manualCertificates: manualCertificatesData,
+        templateContext: cloneData(requestTemplateContext),
+        templateId: canonicalTemplate,
+        template: canonicalTemplate,
+        template1: canonicalPrimaryTemplate,
+        template2: canonicalSecondaryTemplate
       }
       if (manualCertificatesInput.trim()) {
         payload.manualCertificates = manualCertificatesInput.trim()
@@ -4527,6 +4539,26 @@ function App() {
       }
 
       const data = await response.json()
+      const urlsValue = normalizeOutputFiles(data.urls, {
+        defaultExpiresAt: data?.urlExpiresAt,
+        defaultExpiresInSeconds: data?.urlExpiresInSeconds
+      })
+      if (urlsValue.length) {
+        setOutputFiles(urlsValue)
+        const {
+          drafts: improvementCoverDrafts,
+          originals: improvementCoverOriginals
+        } = deriveCoverLetterStateFromFiles(urlsValue)
+        setCoverLetterDrafts(improvementCoverDrafts)
+        setCoverLetterOriginals(improvementCoverOriginals)
+        setDownloadStates({})
+      }
+      const templateContextValue = normalizeTemplateContext(
+        data && typeof data.templateContext === 'object' ? data.templateContext : null
+      )
+      if (templateContextValue) {
+        setTemplateContext(templateContextValue)
+      }
       const improvementSummary = Array.isArray(data.improvementSummary)
         ? data.improvementSummary
         : []

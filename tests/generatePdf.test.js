@@ -15,6 +15,11 @@ import fs from 'fs/promises';
 import path from 'path';
 import Handlebars from '../lib/handlebars.js';
 
+const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional', 'ucmo']);
+
+const expectedCoverForTemplate = (templateId) =>
+  CLASSIC_CV_TEMPLATES.has(templateId) ? 'cover_classic' : 'cover_modern';
+
 function escapeHtml(str = '') {
   return str
     .replace(/&/g, '&amp;')
@@ -283,18 +288,18 @@ describe('generatePdf and parsing', () => {
     expect(template2).not.toBe('ucmo');
     expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ucmo']);
     expect(CV_TEMPLATES).toContain(template2);
-    expect(coverTemplate1).not.toBe(coverTemplate2);
-    expect(CL_TEMPLATES).toContain(coverTemplate1);
-    expect(CL_TEMPLATES).toContain(coverTemplate2);
+    expect(coverTemplate1).toBe(expectedCoverForTemplate(template1));
+    expect(coverTemplate2).toBe(expectedCoverForTemplate(template2));
   });
 
   test('explicit template preference becomes primary', () => {
     const preferred = CV_TEMPLATES.find((tpl) => tpl !== 'ucmo') || CV_TEMPLATES[0];
-    const { template1, template2 } = selectTemplates({ preferredTemplate: preferred });
+    const { template1, template2, coverTemplate1 } = selectTemplates({ preferredTemplate: preferred });
     expect(template1).toBe(preferred);
     expect(template2).not.toBe(preferred);
     expect(CV_TEMPLATES).toContain(template2);
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(CV_TEMPLATE_GROUPS[template2]);
+    expect(coverTemplate1).toBe(expectedCoverForTemplate(template1));
   });
 
   test('script tags render as text', () => {
