@@ -4586,12 +4586,13 @@ function App() {
         link.click()
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
+        resetUiAfterDownload()
       } catch (err) {
         console.error('Unable to download previous resume version', err)
         setError('Unable to download the previous version. Please try again.')
       }
     },
-    [changeLog, resumeHistoryMap, setError]
+    [changeLog, resetUiAfterDownload, resumeHistoryMap, setError]
   )
 
   const handleRevertChange = useCallback(
