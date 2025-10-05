@@ -366,8 +366,12 @@ describe('targeted improvement endpoints (integration)', () => {
           expect.objectContaining({
             type: expect.any(String),
             url: expect.stringMatching(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/),
+            fileUrl: expect.stringMatching(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/),
+            typeUrl: expect.stringMatching(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600#.+$/),
           })
         );
+        const fragment = entry.typeUrl.slice(entry.typeUrl.indexOf('#') + 1);
+        expect(decodeURIComponent(fragment)).toBe(entry.type);
       });
     }
 

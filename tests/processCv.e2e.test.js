@@ -29,8 +29,13 @@ describe('end-to-end CV processing', () => {
         expect.objectContaining({
           type: expect.any(String),
           url: expect.stringContaining('https://'),
+          fileUrl: expect.stringContaining('https://'),
+          typeUrl: expect.stringContaining('https://'),
         })
       );
+      expect(entry.typeUrl).toContain('#');
+      const fragment = entry.typeUrl.slice(entry.typeUrl.indexOf('#') + 1);
+      expect(decodeURIComponent(fragment)).toBe(entry.type);
     });
     expect(typeof response.body.applicantName).toBe('string');
     expect(typeof response.body.originalScore).toBe('number');

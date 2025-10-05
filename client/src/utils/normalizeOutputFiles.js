@@ -1,4 +1,4 @@
-const URL_KEYS = ['url', 'downloadUrl', 'href', 'link', 'signedUrl']
+const URL_KEYS = ['url', 'fileUrl', 'typeUrl', 'downloadUrl', 'href', 'link', 'signedUrl']
 const EXPIRES_AT_KEYS = [
   'expiresAt',
   'expiryAt',
