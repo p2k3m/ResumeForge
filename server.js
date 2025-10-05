@@ -3262,17 +3262,17 @@ function fallbackImprovement(type, context) {
     const headingLabel = section.heading.replace(/^#\s*/, '') || 'Work Experience';
     const baseContent = sanitizeSectionLines(section.content);
     const before = baseContent.join('\n').trim();
-    const focusDescriptor = (() => {
+    const responsibilityDescriptor = (() => {
       if (jobTitle && fallbackSkillText) {
-        return `${jobTitle} priorities across ${fallbackSkillText}`;
+        return `${jobTitle} responsibilities across ${fallbackSkillText}`;
       }
       if (jobTitle) {
         return `${jobTitle} responsibilities`;
       }
       if (fallbackSkillText) {
-        return `${fallbackSkillText} priorities`;
+        return `${fallbackSkillText} responsibilities`;
       }
-      return 'the job description priorities';
+      return 'key responsibilities from the job description';
     })();
     const updatedContent = [...baseContent];
     let firstBulletIndex = updatedContent.findIndex((line) => /^[-•*]/.test(line.trim()));
@@ -3284,20 +3284,35 @@ function fallbackImprovement(type, context) {
       const markerMatch = trimmed.match(/^([•*-])/);
       bulletMarker = markerMatch ? markerMatch[1] : '-';
       const body = trimmed.replace(/^([•*-])\s*/, '').replace(/\s*[.?!]+$/, '');
-      const rewrittenLine = `${bulletMarker} ${body} — emphasised ownership of ${focusDescriptor}.`;
+      const rewrittenLine = `${bulletMarker} ${body} — reframed to show ownership of ${responsibilityDescriptor}.`;
       updatedContent[firstBulletIndex] = rewrittenLine;
     } else {
-      const synthesizedLine = `${bulletMarker} Delivered on ${focusDescriptor} with measurable outcomes.`;
+      const synthesizedLine = `${bulletMarker} Delivered on ${responsibilityDescriptor} with measurable outcomes.`;
       updatedContent.push(synthesizedLine);
       firstBulletIndex = updatedContent.length - 1;
     }
 
-    const additionLine = `${bulletMarker} Partnered with stakeholders to deliver on ${focusDescriptor}, showcasing measurable outcomes.`;
+    const responsibilitiesLine = `${bulletMarker} Highlighted ${responsibilityDescriptor} so recruiters instantly see JD-aligned responsibilities.`;
+    const additionLine = `${bulletMarker} Delivered ${fallbackSkillText || 'priority'} initiatives to mirror JD responsibilities with measurable outcomes.`;
+    const responsibilitiesLineKey = responsibilitiesLine.trim().toLowerCase();
     const additionLineKey = additionLine.trim().toLowerCase();
+    const hasResponsibilities = updatedContent.some(
+      (line) => line && line.trim().toLowerCase() === responsibilitiesLineKey
+    );
     const hasAddition = updatedContent.some((line) => line && line.trim().toLowerCase() === additionLineKey);
+    let insertIndex = firstBulletIndex >= 0 ? firstBulletIndex + 1 : updatedContent.length;
+    let additionInsertIndex = insertIndex;
+    if (!hasResponsibilities) {
+      updatedContent.splice(insertIndex, 0, responsibilitiesLine);
+      additionInsertIndex = insertIndex + 1;
+    } else {
+      const existingIndex = updatedContent.findIndex(
+        (line) => line && line.trim().toLowerCase() === responsibilitiesLineKey
+      );
+      additionInsertIndex = existingIndex >= 0 ? existingIndex + 1 : insertIndex;
+    }
     if (!hasAddition) {
-      const insertIndex = firstBulletIndex >= 0 ? firstBulletIndex + 1 : updatedContent.length;
-      updatedContent.splice(insertIndex, 0, additionLine);
+      updatedContent.splice(additionInsertIndex, 0, additionLine);
     }
 
     const sanitizedContent = sanitizeSectionLines(updatedContent);
@@ -3314,7 +3329,9 @@ function fallbackImprovement(type, context) {
     const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
     const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
     const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
-    const explanation = `Rewrote experience bullets to highlight ownership of ${focusDescriptor}.`;
+    const explanation = jobTitle
+      ? `Rewrote experience bullets to surface ${jobTitle} responsibilities and highlight the JD-aligned additions.`
+      : 'Rewrote experience bullets to surface JD-aligned responsibilities and highlight the additions.';
     const changeDetails = [
       {
         key: 'experience',

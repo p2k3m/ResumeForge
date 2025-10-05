@@ -296,25 +296,29 @@ describe('targeted improvement routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.updatedResume).toContain(
-      'Built scalable services — emphasised ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.'
+      'Built scalable services — reframed to show ownership of Lead Software Engineer responsibilities across Leadership and Cloud Architecture.'
     );
     expect(response.body.updatedResume).toContain(
-      'Partnered with stakeholders to deliver on Lead Software Engineer priorities across Leadership and Cloud Architecture, showcasing measurable outcomes.'
+      'Highlighted Lead Software Engineer responsibilities across Leadership and Cloud Architecture so recruiters instantly see JD-aligned responsibilities.'
+    );
+    expect(response.body.updatedResume).toContain(
+      'Delivered Leadership and Cloud Architecture initiatives to mirror JD responsibilities with measurable outcomes.'
     );
     expect(response.body.explanation).toBe(
-      'Rewrote experience bullets to highlight ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.'
+      'Rewrote experience bullets to surface Lead Software Engineer responsibilities and highlight the JD-aligned additions.'
     );
     expect(Array.isArray(response.body.improvementSummary)).toBe(true);
     expect(response.body.improvementSummary[0]).toEqual(
       expect.objectContaining({
         section: 'Work Experience',
         added: expect.arrayContaining([
-          'Built scalable services — emphasised ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.',
-          'Partnered with stakeholders to deliver on Lead Software Engineer priorities across Leadership and Cloud Architecture, showcasing measurable outcomes.'
+          'Built scalable services — reframed to show ownership of Lead Software Engineer responsibilities across Leadership and Cloud Architecture.',
+          'Highlighted Lead Software Engineer responsibilities across Leadership and Cloud Architecture so recruiters instantly see JD-aligned responsibilities.',
+          'Delivered Leadership and Cloud Architecture initiatives to mirror JD responsibilities with measurable outcomes.'
         ]),
         removed: expect.arrayContaining(['Built scalable services.']),
         reason: expect.arrayContaining([
-          'Rewrote experience bullets to highlight ownership of Lead Software Engineer priorities across Leadership and Cloud Architecture.'
+          'Rewrote experience bullets to surface Lead Software Engineer responsibilities and highlight the JD-aligned additions.'
         ]),
       })
     );
