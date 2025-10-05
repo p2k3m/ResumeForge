@@ -73,25 +73,24 @@ describe('AWS integrations for /api/process-cv', () => {
           upload: expect.objectContaining({
             uploadedAt: expect.any(String),
             fileType: expect.any(String),
-            storage: expect.objectContaining({
-              bucket: 'integration-bucket',
-              key: expect.stringContaining('original'),
-            }),
           }),
           scoring: expect.objectContaining({
             completedAt: expect.any(String),
             score: expect.any(Number),
-            missingSkillsCount: expect.any(Number),
           }),
           download: expect.objectContaining({
             completedAt: expect.any(String),
             artifactCount: expect.any(Number),
-            textArtifactCount: expect.any(Number),
-            urlCount: expect.any(Number),
           }),
         }),
       })
     );
+
+    expect(metadataPayload.stages.upload).not.toHaveProperty('storage');
+    expect(metadataPayload.stages.scoring).not.toHaveProperty('missingSkillsCount');
+    expect(metadataPayload.stages.scoring).not.toHaveProperty('addedSkillsCount');
+    expect(metadataPayload.stages.download).not.toHaveProperty('textArtifactCount');
+    expect(metadataPayload.stages.download).not.toHaveProperty('urlCount');
 
     const generatedPdf = commandSummaries.find(
       (command) =>
