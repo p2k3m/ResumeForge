@@ -1642,6 +1642,7 @@ function App() {
   const [isCoverLetterDownloading, setIsCoverLetterDownloading] = useState(false)
   const [coverLetterDownloadError, setCoverLetterDownloadError] = useState('')
   const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
+  const [coverLetterReviewState, setCoverLetterReviewState] = useState({})
   const [resumeHistory, setResumeHistory] = useState([])
   const improvementLockRef = useRef(false)
   const scoreUpdateLockRef = useRef(false)
@@ -2252,6 +2253,10 @@ function App() {
     setDownloadStates({})
   }, [outputFiles])
 
+  useEffect(() => {
+    setCoverLetterReviewState({})
+  }, [outputFiles])
+
   const handleCoverLetterTextChange = useCallback(
     (type, value) => {
       if (!isCoverLetterType(type)) return
@@ -2261,6 +2266,16 @@ function App() {
     },
     []
   )
+
+  const markCoverLetterPreviewed = useCallback((type) => {
+    if (!isCoverLetterType(type)) return
+    setCoverLetterReviewState((prev) => {
+      if (prev?.[type]) {
+        return prev
+      }
+      return { ...prev, [type]: true }
+    })
+  }, [])
 
   const resetCoverLetterDraft = useCallback(
     (type) => {
@@ -2342,6 +2357,7 @@ function App() {
     (file) => {
       if (!file || !isCoverLetterType(file.type)) return
       const presentation = file.presentation || getDownloadPresentation(file)
+      markCoverLetterPreviewed(file.type)
       setCoverLetterEditor({
         type: file.type,
         label: presentation.label,
@@ -2351,7 +2367,7 @@ function App() {
       setCoverLetterDownloadError('')
       setCoverLetterClipboardStatus('')
     },
-    [setCoverLetterEditor, setCoverLetterDownloadError, setCoverLetterClipboardStatus]
+    [markCoverLetterPreviewed, setCoverLetterEditor, setCoverLetterDownloadError, setCoverLetterClipboardStatus]
   )
 
   const closeCoverLetterEditor = useCallback(() => {
@@ -2383,6 +2399,11 @@ function App() {
         setError('Unable to download this document. Please try again.')
         return
       }
+      const presentation = file.presentation || getDownloadPresentation(file)
+      if (presentation.category === 'cover' && isCoverLetterType(file.type)) {
+        openCoverLetterEditorModal({ ...file, presentation })
+        return
+      }
       if (typeof window === 'undefined' || typeof document === 'undefined') {
         setError('Download is not supported in this environment.')
         return
@@ -2399,7 +2420,6 @@ function App() {
         }
         return
       }
-      const presentation = file.presentation || getDownloadPresentation(file)
       const stateKey = stateKeyBase || downloadUrl
       setDownloadStates((prev) => ({
         ...prev,
@@ -2441,7 +2461,7 @@ function App() {
         }
       }
     },
-    [setError]
+    [openCoverLetterEditorModal, setError]
   )
 
   const renderDownloadCard = useCallback((file) => {
@@ -2474,6 +2494,7 @@ function App() {
       ? coverLetterOriginals[file.type] ?? getCoverLetterTextFromFile(file)
       : ''
     const coverEdited = isCoverLetter && coverDraftText && coverDraftText !== coverOriginalText
+    const hasPreviewedCoverLetter = isCoverLetter ? Boolean(coverLetterReviewState[file.type]) : false
     const downloadStateKey = getDownloadStateKey(file)
     const resolvedStateKey = downloadStateKey || (typeof file.url === 'string' ? file.url : '')
     const downloadState = resolvedStateKey ? downloadStates[resolvedStateKey] : undefined
@@ -2497,7 +2518,10 @@ function App() {
     }`
     const downloadButtonLabel = (() => {
       if (isCoverLetter) {
-        return coverEdited ? 'Review edits & download' : 'Open editor to download'
+        if (!hasPreviewedCoverLetter) {
+          return 'Preview to personalise'
+        }
+        return coverEdited ? 'Review edits & download' : 'Download from editor'
       }
       if (isExpired) return 'Link expired'
       if (isDownloading) return 'Downloading…'
@@ -2526,16 +2550,12 @@ function App() {
             <button
               type="button"
               onClick={() => {
-                if (isCoverLetter) {
-                  openCoverLetterEditorModal(file)
-                  return
-                }
-                if (!isDownloadUnavailable) {
+                if (isCoverLetter || !isDownloadUnavailable) {
                   handleDownloadFile(file)
                 }
               }}
               className={downloadButtonClass}
-              disabled={isCoverLetterDownloadDisabled}
+              disabled={isCoverLetter ? false : isCoverLetterDownloadDisabled}
             >
               {downloadButtonLabel}
             </button>
@@ -2553,10 +2573,20 @@ function App() {
           <p className="text-xs font-semibold text-rose-600">{derivedDownloadError}</p>
         )}
         {isCoverLetter && (
-          <p className={`text-xs ${coverEdited ? 'text-indigo-600 font-semibold' : 'text-purple-500'}`}>
+          <p
+            className={`text-xs ${
+              coverEdited
+                ? 'text-indigo-600 font-semibold'
+                : hasPreviewedCoverLetter
+                  ? 'text-purple-500'
+                  : 'text-amber-600 font-semibold'
+            }`}
+          >
             {coverEdited
               ? 'Edits pending — download the refreshed PDF from the editor after reviewing the changes.'
-              : 'Preview the draft and make tweaks in the editor before creating your PDF download.'}
+              : hasPreviewedCoverLetter
+                ? 'Download the tailored PDF from the editor once you are happy with the text.'
+                : 'Preview and personalise the cover letter in the editor before generating your PDF download.'}
           </p>
         )}
       </div>
@@ -2566,6 +2596,7 @@ function App() {
     openCoverLetterEditorModal,
     coverLetterDrafts,
     coverLetterOriginals,
+    coverLetterReviewState,
     downloadStates,
     handleDownloadFile
   ])
