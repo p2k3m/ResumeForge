@@ -32,6 +32,9 @@ const CV_GENERATION_ERROR_MESSAGE =
 const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
   'Please wait for the current ATS score refresh to finish before applying another improvement.'
 
+const POST_DOWNLOAD_INVITE_MESSAGE =
+  'Download complete! Upload another resume or job description, or try a different template to compare results.'
+
 const improvementActions = [
   {
     key: 'improve-summary',
@@ -2663,14 +2666,14 @@ function App() {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(blobUrl)
-      setCoverLetterClipboardStatus('Updated PDF downloaded.')
+      resetUiAfterDownload()
     } catch (err) {
       console.error('Cover letter PDF generation failed', err)
       setCoverLetterDownloadError('Could not generate PDF, please try again')
     } finally {
       setIsCoverLetterDownloading(false)
     }
-  }, [coverLetterEditor, coverLetterDrafts])
+  }, [coverLetterEditor, coverLetterDrafts, resetUiAfterDownload])
 
   const openCoverLetterEditorModal = useCallback(
     (file) => {
@@ -2825,6 +2828,7 @@ function App() {
           [stateKey]: { status: 'idle', error: '' }
         }))
         setPendingDownloadFile(null)
+        resetUiAfterDownload()
       } catch (err) {
         console.error('Download failed', err)
         setError('Unable to download this document. Please try again.')
@@ -2849,7 +2853,8 @@ function App() {
       setError,
       setPendingDownloadFile,
       previewFile,
-      openDownloadPreview
+      openDownloadPreview,
+      resetUiAfterDownload
     ]
   )
 
@@ -3270,6 +3275,24 @@ function App() {
     setEnhanceAllSummaryText('')
     setIsCoverLetterDownloading(false)
   }, [updateOutputFiles])
+
+  const resetUiAfterDownload = useCallback(
+    (message = POST_DOWNLOAD_INVITE_MESSAGE) => {
+      resetAnalysisState()
+      setPendingDownloadFile(null)
+      setManualJobDescription('')
+      setManualJobDescriptionRequired(false)
+      setManualCertificatesInput('')
+      setCvFile(null)
+      setSelectedTemplate('modern')
+      lastAutoScoreSignatureRef.current = ''
+      const inviteMessage = typeof message === 'string' ? message.trim() : ''
+      if (inviteMessage) {
+        setQueuedMessage(inviteMessage)
+      }
+    },
+    [resetAnalysisState]
+  )
 
   useEffect(() => {
     const context = analysisContextRef.current || {}
