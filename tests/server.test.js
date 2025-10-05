@@ -551,6 +551,45 @@ describe('/api/process-cv', () => {
     });
   });
 
+  test('cover letter urls include structured metadata', async () => {
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    const coverLetterEntry = res.body.urls.find((entry) => entry.type === 'cover_letter1');
+    expect(coverLetterEntry).toBeTruthy();
+    expect(coverLetterEntry.text).toEqual(
+      expect.objectContaining({
+        raw: expect.any(String),
+        contact: expect.objectContaining({
+          email: expect.any(String),
+          phone: expect.any(String),
+          linkedin: expect.any(String),
+          location: expect.any(String),
+          lines: expect.any(Array),
+        }),
+        job: expect.objectContaining({
+          title: expect.any(String),
+          skills: expect.any(Array),
+          summary: expect.any(String),
+          focus: expect.any(String),
+          matchedSkills: expect.any(Array),
+        }),
+        motivation: expect.objectContaining({
+          paragraph: expect.any(String),
+          keywords: expect.any(Array),
+          matchedSkills: expect.any(Array),
+        }),
+        metadata: expect.objectContaining({
+          paragraphCount: expect.any(Number),
+          letterIndex: expect.any(Number),
+        }),
+      })
+    );
+  });
+
   test('uses provided templates in preferred order', async () => {
     generateContentMock.mockReset();
     generateContentMock.mockResolvedValue({
