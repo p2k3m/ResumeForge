@@ -9370,11 +9370,49 @@ function mapCoverLetterFields({
     )
   );
 
-  const contactLinesInput = Array.isArray(contactDetails?.contactLines)
-    ? contactDetails.contactLines
-    : [];
-  const contactLines = dedupeContactLines(contactLinesInput).map((line) =>
-    (typeof line === 'string' ? line.trim() : '').replace(/\s+/g, ' ')
+  const explicitContact =
+    contactDetails && typeof contactDetails === 'object'
+      ? {
+          email: typeof contactDetails.email === 'string' ? contactDetails.email.trim() : '',
+          phone: typeof contactDetails.phone === 'string' ? contactDetails.phone.trim() : '',
+          linkedin:
+            typeof contactDetails.linkedin === 'string'
+              ? normalizeUrl(contactDetails.linkedin) || contactDetails.linkedin.trim()
+              : '',
+          cityState:
+            typeof contactDetails.cityState === 'string' ? contactDetails.cityState.trim() : '',
+          contactLines: Array.isArray(contactDetails.contactLines)
+            ? contactDetails.contactLines.filter((line) => typeof line === 'string')
+            : [],
+        }
+      : {
+          email: '',
+          phone: '',
+          linkedin: '',
+          cityState: '',
+          contactLines: [],
+        };
+
+  const detectedContact = extractContactDetails(normalizedText, explicitContact.linkedin);
+
+  const combinedContact = {
+    email: explicitContact.email || detectedContact.email || '',
+    phone: explicitContact.phone || detectedContact.phone || '',
+    linkedin: explicitContact.linkedin || detectedContact.linkedin || '',
+    cityState: explicitContact.cityState || detectedContact.cityState || '',
+  };
+
+  const contactLines = dedupeContactLines(
+    [
+      ...explicitContact.contactLines,
+      ...(Array.isArray(detectedContact.contactLines) ? detectedContact.contactLines : []),
+      combinedContact.email ? `Email: ${combinedContact.email}` : '',
+      combinedContact.phone ? `Phone: ${combinedContact.phone}` : '',
+      combinedContact.linkedin ? `LinkedIn: ${combinedContact.linkedin}` : '',
+      combinedContact.cityState ? `Location: ${combinedContact.cityState}` : '',
+    ]
+      .map((line) => (typeof line === 'string' ? line.trim().replace(/\s+/g, ' ') : ''))
+      .filter(Boolean)
   );
 
   const bodyIndexEntry =
@@ -9382,6 +9420,9 @@ function mapCoverLetterFields({
 
   const jobSummary = summarizeJobDescriptionForCover(jobDescription);
   const jobFocus = summarizeJobFocus(jobDescription);
+
+  const normalizedJobDescription =
+    typeof jobDescription === 'string' ? jobDescription.replace(/\s+/g, ' ').trim() : '';
 
   return {
     raw: normalizedText,
@@ -9401,10 +9442,10 @@ function mapCoverLetterFields({
       signature: closingInfo.signature || '',
     },
     contact: {
-      email: contactDetails?.email || '',
-      phone: contactDetails?.phone || '',
-      linkedin: contactDetails?.linkedin || '',
-      location: contactDetails?.cityState || '',
+      email: combinedContact.email,
+      phone: combinedContact.phone,
+      linkedin: combinedContact.linkedin,
+      location: combinedContact.cityState,
       lines: contactLines,
     },
     job: {
@@ -9414,6 +9455,7 @@ function mapCoverLetterFields({
       summary: jobSummary,
       focus: jobFocus,
       skillSummary: formatSkillList(normalizedSkills, 3),
+      description: normalizedJobDescription,
     },
     metadata: {
       paragraphCount: paragraphs.length,
