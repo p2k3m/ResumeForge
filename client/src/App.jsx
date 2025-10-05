@@ -3796,6 +3796,37 @@ function App() {
         )
       )
 
+      const normalizedOriginalTitle =
+        typeof suggestion.originalTitle === 'string' ? suggestion.originalTitle.trim() : ''
+      const normalizedModifiedTitle =
+        typeof suggestion.modifiedTitle === 'string' ? suggestion.modifiedTitle.trim() : ''
+
+      if (normalizedOriginalTitle || normalizedModifiedTitle) {
+        setMatch((prev) => {
+          const base = prev ? { ...prev } : {}
+          const currentOriginal = typeof prev?.originalTitle === 'string' ? prev.originalTitle : ''
+          const currentModified = typeof prev?.modifiedTitle === 'string' ? prev.modifiedTitle : ''
+
+          const shouldUpdateOriginal =
+            normalizedOriginalTitle && normalizedOriginalTitle !== currentOriginal
+          const shouldUpdateModified =
+            normalizedModifiedTitle && normalizedModifiedTitle !== currentModified
+
+          if (!shouldUpdateOriginal && !shouldUpdateModified) {
+            return prev
+          }
+
+          if (shouldUpdateOriginal) {
+            base.originalTitle = normalizedOriginalTitle
+          }
+          if (shouldUpdateModified) {
+            base.modifiedTitle = normalizedModifiedTitle
+          }
+
+          return base
+        })
+      }
+
       if (updatedResumeDraft) {
         setResumeText(updatedResumeDraft)
       }
@@ -3911,6 +3942,7 @@ function App() {
       setChangeLog,
       setError,
       setImprovementResults,
+      setMatch,
       setResumeText
     ]
   )
@@ -4465,6 +4497,8 @@ function App() {
         const meaningfulBase = explanation && !/^applied deterministic improvements/i.test(explanation)
         explanation = meaningfulBase ? `${explanation} ${enhanceAllSummary}` : enhanceAllSummary
       }
+      const originalTitle = typeof data.originalTitle === 'string' ? data.originalTitle.trim() : ''
+      const modifiedTitle = typeof data.modifiedTitle === 'string' ? data.modifiedTitle.trim() : ''
       const suggestion = {
         id: `${type}-${Date.now()}`,
         type,
@@ -4476,6 +4510,8 @@ function App() {
         updatedResume: data.updatedResume || resumeText,
         confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
         accepted: null,
+        originalTitle,
+        modifiedTitle,
         improvementSummary,
         rescoreSummary: normalizeRescoreSummary(data.rescore),
         scoreDelta: null,
