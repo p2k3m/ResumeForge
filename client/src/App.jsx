@@ -1858,6 +1858,21 @@ function App() {
   }, [cvFile, handleScoreSubmit, isProcessing, manualJobDescription, scoreComplete])
 
   useEffect(() => {
+    if (!cvFile) {
+      return
+    }
+    if (manualJobDescription.trim()) {
+      return
+    }
+    setManualJobDescriptionRequired((prev) => {
+      if (!prev) {
+        manualJobDescriptionRef.current?.focus?.()
+      }
+      return true
+    })
+  }, [cvFile, manualJobDescription])
+
+  useEffect(() => {
     if (manualJobDescriptionRequired && manualJobDescription.trim()) {
       setManualJobDescriptionRequired(false)
     }
