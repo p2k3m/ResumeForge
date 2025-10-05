@@ -75,6 +75,7 @@ function ChangeComparisonView({
   addedItems = [],
   removedItems = [],
   itemizedChanges = [],
+  categoryChangelog = [],
   variant = 'compact',
   className = ''
 }) {
@@ -93,6 +94,8 @@ function ChangeComparisonView({
     const regex = patternSources.length ? new RegExp(`(${patternSources.join('|')})`, 'gi') : null
     return { addedSet, removedSet, regex }
   }, [addedItems, removedItems])
+
+  const hasCategoryChangelog = Array.isArray(categoryChangelog) && categoryChangelog.length > 0
 
   const renderHighlighted = (text) => {
     if (!text) return null
@@ -229,6 +232,70 @@ function ChangeComparisonView({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {hasCategoryChangelog && (
+        <div className="space-y-3 rounded-2xl border border-blue-100 bg-white/75 p-4">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-500">ATS Change Summary</p>
+            <p className="text-sm text-blue-700/80">
+              See why each core category shifted and which items were touched.
+            </p>
+          </div>
+          <ul className="space-y-3">
+            {categoryChangelog.map((category) => {
+              if (!category) return null
+              const added = Array.isArray(category.added) ? category.added : []
+              const removed = Array.isArray(category.removed) ? category.removed : []
+              const reasons = Array.isArray(category.reasons) ? category.reasons : []
+              const hasChips = added.length > 0 || removed.length > 0
+              return (
+                <li
+                  key={category.key || category.label}
+                  className="rounded-xl border border-blue-200 bg-white/85 p-3 text-sm text-slate-700"
+                >
+                  <div className="space-y-1">
+                    <p className="font-semibold text-slate-900">{category.label || 'Category'}</p>
+                    {typeof category.description === 'string' && category.description.trim() && (
+                      <p className="text-xs font-medium text-blue-500/80">
+                        {category.description}
+                      </p>
+                    )}
+                    {reasons.length > 0 && (
+                      <ul className="list-disc space-y-1 pl-5 text-xs text-slate-600">
+                        {reasons.map((reason, index) => (
+                          <li key={`${category.key || category.label}-reason-${index}`}>{reason}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {hasChips && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {added.map((item) => (
+                        <span
+                          key={`category-added-${category.key || category.label}-${item}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-1 text-xs font-semibold text-emerald-700"
+                        >
+                          <span aria-hidden="true">＋</span>
+                          {item}
+                        </span>
+                      ))}
+                      {removed.map((item) => (
+                        <span
+                          key={`category-removed-${category.key || category.label}-${item}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50/80 px-3 py-1 text-xs font-semibold text-rose-700"
+                        >
+                          <span aria-hidden="true">–</span>
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
         </div>
       )}
 
