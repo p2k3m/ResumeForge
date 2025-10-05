@@ -3,8 +3,7 @@ import { formatMatchMessage } from './formatMatchMessage.js'
 import { buildApiUrl, resolveApiBase } from './resolveApiBase.js'
 import ATSScoreDashboard from './components/ATSScoreDashboard.jsx'
 import InfoTooltip from './components/InfoTooltip.jsx'
-import TemplateSelector from './components/TemplateSelector.jsx'
-import TemplatePreview from './components/TemplatePreview.jsx'
+import TemplatePicker from './components/TemplatePicker.jsx'
 import DeltaSummaryPanel from './components/DeltaSummaryPanel.jsx'
 import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
@@ -2757,48 +2756,23 @@ function App() {
   }, [])
 
   const renderTemplateSelection = (context = 'improvements') => {
-    const resumeSelectorIdPrefix =
-      context === 'downloads' ? 'download-resume-template-selector' : 'resume-template-selector'
-    const coverSelectorIdPrefix =
-      context === 'downloads' ? 'download-cover-template-selector' : 'cover-template-selector'
-
     return (
-      <>
-        <TemplateSelector
-          idPrefix={resumeSelectorIdPrefix}
-          title="CV Template Style"
-          description="Choose the CV aesthetic that mirrors your personality and the JD tone."
-          options={availableTemplateOptions}
-          selectedTemplate={selectedTemplate}
-          onSelect={handleTemplateSelect}
-          disabled={isProcessing}
-          historySummary={templateHistorySummary}
-        />
-
-        <TemplateSelector
-          idPrefix={coverSelectorIdPrefix}
-          title="Cover Letter Template"
-          description="Align your letter visuals with your selected CV or explore a bold alternative."
-          options={availableCoverTemplateOptions}
-          selectedTemplate={selectedCoverTemplate}
-          onSelect={handleCoverTemplateSelect}
-          disabled={isProcessing}
-        />
-
-        <TemplatePreview
-          resumeTemplateId={selectedTemplate}
-          resumeTemplateName={formatTemplateName(selectedTemplate)}
-          resumeTemplateDescription={selectedTemplateOption?.description || ''}
-          coverTemplateId={selectedCoverTemplate}
-          coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
-          coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
-          availableResumeTemplates={availableTemplateOptions}
-          availableCoverTemplates={availableCoverTemplateOptions}
-          onResumeTemplateApply={handleTemplateSelect}
-          onCoverTemplateApply={handleCoverTemplateSelect}
-          isApplying={isProcessing}
-        />
-      </>
+      <TemplatePicker
+        context={context}
+        resumeOptions={availableTemplateOptions}
+        resumeHistorySummary={templateHistorySummary}
+        selectedResumeTemplateId={selectedTemplate}
+        selectedResumeTemplateName={formatTemplateName(selectedTemplate)}
+        selectedResumeTemplateDescription={selectedTemplateOption?.description || ''}
+        onResumeTemplateSelect={handleTemplateSelect}
+        coverOptions={availableCoverTemplateOptions}
+        selectedCoverTemplateId={selectedCoverTemplate}
+        selectedCoverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
+        selectedCoverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
+        onCoverTemplateSelect={handleCoverTemplateSelect}
+        disabled={isProcessing}
+        isApplying={isProcessing}
+      />
     )
   }
 
