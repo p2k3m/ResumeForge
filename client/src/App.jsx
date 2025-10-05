@@ -1710,6 +1710,7 @@ function App() {
   const [selectionInsights, setSelectionInsights] = useState(null)
   const [improvementResults, setImprovementResults] = useState([])
   const [changeLog, setChangeLog] = useState([])
+  const [activeDashboardStage, setActiveDashboardStage] = useState('score')
   const [activeImprovement, setActiveImprovement] = useState('')
   const [error, setError] = useState('')
   const [queuedMessage, setQueuedMessage] = useState('')
@@ -1733,6 +1734,24 @@ function App() {
   const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
   const [coverLetterReviewState, setCoverLetterReviewState] = useState({})
   const [resumeHistory, setResumeHistory] = useState([])
+
+  useEffect(() => {
+    setActiveDashboardStage((currentStage) => {
+      if (currentStage === 'suggestions' && improvementResults.length === 0) {
+        if (changeLog.length > 0) {
+          return 'changelog'
+        }
+        return 'score'
+      }
+      if (currentStage === 'changelog' && changeLog.length === 0) {
+        if (improvementResults.length > 0) {
+          return 'suggestions'
+        }
+        return 'score'
+      }
+      return currentStage
+    })
+  }, [improvementResults.length, changeLog.length])
   const updateOutputFiles = useCallback((files, options = {}) => {
     setOutputFiles(files)
     let nextTimestamp = ''
@@ -5361,6 +5380,14 @@ function App() {
 
   const jobDescriptionReady = hasManualJobDescriptionInput
   const rescoreDisabled = !cvFile || isProcessing || !jobDescriptionReady
+  const metricsCount = Array.isArray(scoreBreakdown) ? scoreBreakdown.length : 0
+  const suggestionsCount = improvementResults.length
+  const changeLogCount = changeLog.length
+  const dashboardStageOptions = [
+    { key: 'score', label: 'Scores', count: metricsCount, ready: scoreDashboardReady },
+    { key: 'suggestions', label: 'Suggestions', count: suggestionsCount, ready: suggestionsCount > 0 },
+    { key: 'changelog', label: 'Change Log', count: changeLogCount, ready: changeLogCount > 0 }
+  ]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-purple-200 to-purple-300 flex flex-col items-center p-4 md:p-8">
@@ -5506,47 +5533,229 @@ function App() {
           {error && <p className="text-red-600 text-center font-semibold">{error}</p>}
         </section>
 
-        <DashboardStage
-          stageLabel="Score Stage"
-          title="Score Overview"
-          description="Monitor baseline ATS alignment and rerun scoring after each accepted update."
-          accent="indigo"
-          actions={
-            <button
-              type="button"
-              onClick={handleScoreSubmit}
-              disabled={rescoreDisabled}
-              className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
-                rescoreDisabled
-                  ? 'bg-indigo-300 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
-              }`}
-              aria-busy={isProcessing ? 'true' : 'false'}
+        <section className="space-y-5" aria-label="Improvement dashboard">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
+            {dashboardStageOptions.map((stage) => {
+              const isActive = activeDashboardStage === stage.key
+              const badgeLabel =
+                stage.key === 'score'
+                  ? stage.ready
+                    ? 'Ready'
+                    : 'Pending'
+                  : stage.count > 99
+                    ? '99+'
+                    : String(stage.count ?? 0)
+              const badgeTone = isActive
+                ? 'bg-white/20 text-white'
+                : stage.ready
+                  ? 'bg-purple-100 text-purple-700'
+                  : 'bg-slate-100 text-slate-500'
+              return (
+                <button
+                  key={stage.key}
+                  type="button"
+                  onClick={() => setActiveDashboardStage(stage.key)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
+                    isActive
+                      ? 'border-purple-600 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30'
+                      : 'border-slate-200 bg-white/80 text-slate-600 hover:border-purple-300 hover:text-purple-700'
+                  }`}
+                  aria-pressed={isActive ? 'true' : 'false'}
+                >
+                  <span>{stage.label}</span>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}>
+                    {badgeLabel}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {activeDashboardStage === 'score' && (
+            <DashboardStage
+              stageLabel="Score Stage"
+              title="Score Overview"
+              description="Monitor baseline ATS alignment and rerun scoring after each accepted update."
+              accent="indigo"
+              actions={
+                <button
+                  type="button"
+                  onClick={handleScoreSubmit}
+                  disabled={rescoreDisabled}
+                  className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                    rescoreDisabled
+                      ? 'bg-indigo-300 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                  }`}
+                  aria-busy={isProcessing ? 'true' : 'false'}
+                >
+                  {isProcessing ? 'Scoring…' : scoreDashboardReady ? 'Rescore CV' : 'Run ATS scoring'}
+                </button>
+              }
             >
-              {isProcessing ? 'Scoring…' : scoreDashboardReady ? 'Rescore CV' : 'Run ATS scoring'}
-            </button>
-          }
-        >
-          {scoreDashboardReady ? (
-            <>
-              <ATSScoreDashboard
-                metrics={scoreBreakdown}
-                baselineMetrics={baselineScoreBreakdown}
-                match={match}
-                metricActionMap={metricImprovementActionMap}
-                onImproveMetric={handleImprovementClick}
-                improvementState={metricImprovementState}
-              />
-              {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
-            </>
-          ) : (
-            <div className="rounded-3xl border border-dashed border-indigo-200/80 bg-white/70 p-6 text-sm text-indigo-700">
-              {isProcessing
-                ? 'Scoring in progress. Sit tight while we calculate your ATS metrics and current chances.'
-                : 'Upload your resume and job description to generate your ATS scores automatically.'}
-            </div>
+              {scoreDashboardReady ? (
+                <>
+                  <ATSScoreDashboard
+                    metrics={scoreBreakdown}
+                    baselineMetrics={baselineScoreBreakdown}
+                    match={match}
+                    metricActionMap={metricImprovementActionMap}
+                    onImproveMetric={handleImprovementClick}
+                    improvementState={metricImprovementState}
+                  />
+                  {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
+                </>
+              ) : (
+                <div className="rounded-3xl border border-dashed border-indigo-200/80 bg-white/70 p-6 text-sm text-indigo-700">
+                  {isProcessing
+                    ? 'Scoring in progress. Sit tight while we calculate your ATS metrics and current chances.'
+                    : 'Upload your resume and job description to generate your ATS scores automatically.'}
+                </div>
+              )}
+            </DashboardStage>
           )}
-        </DashboardStage>
+
+          {activeDashboardStage === 'suggestions' && (
+            <DashboardStage
+              stageLabel="Suggestions Stage"
+              title="Review AI Suggestions"
+              description="Work through targeted improvements and accept the updates you like."
+            >
+              {improvementResults.length > 0 ? (
+                <>
+                  <div className="rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
+                    These skills and highlights were added to match the JD. Use the cards below to accept, reject, or preview each
+                    update.
+                  </div>
+                  {enhanceAllSummaryText && (
+                    <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+                      <p className="text-sm font-semibold text-emerald-700">Enhance All applied automatically</p>
+                      <p className="mt-1 leading-relaxed">
+                        We rolled out every recommended fix in one pass. Combined updates — {enhanceAllSummaryText}
+                      </p>
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {improvementResults.map((item) => (
+                      <ImprovementCard
+                        key={item.id}
+                        suggestion={item}
+                        onReject={() => handleRejectImprovement(item.id)}
+                        onPreview={() => handlePreviewImprovement(item)}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+                  {improvementsUnlocked
+                    ? 'Review the Step 2 ATS dashboard, then choose an improvement above to preview tailored rewrites before you generate downloads.'
+                    : 'Complete Step 2 (Score) to populate your ATS dashboard. Once the metrics are ready, you can unlock focused improvement options tailored to the analysis.'}
+                </div>
+              )}
+            </DashboardStage>
+          )}
+
+          {activeDashboardStage === 'changelog' && (
+            <DashboardStage
+              stageLabel="Change Log Stage"
+              title="Track accepted changes"
+              description="Review every applied enhancement and download previous versions when needed."
+              accent="slate"
+              actions={
+                <span
+                  className={`text-xs font-semibold rounded-full border px-3 py-1 ${
+                    changeLogCount > 0
+                      ? 'border-slate-200 bg-white/70 text-slate-600'
+                      : 'border-slate-200 bg-white/50 text-slate-400'
+                  }`}
+                >
+                  {changeLogCount} update{changeLogCount === 1 ? '' : 's'}
+                </span>
+              }
+            >
+              {changeLog.length > 0 ? (
+                <ul className="space-y-3">
+                  {changeLog.map((entry) => {
+                    const historyEntry = resumeHistoryMap.get(entry.id)
+                    const reverted = Boolean(entry.reverted)
+                    const revertedAtLabel = (() => {
+                      if (!reverted) return ''
+                      const timestamp = entry.revertedAt ? new Date(entry.revertedAt) : null
+                      if (!timestamp || Number.isNaN(timestamp.getTime())) {
+                        return 'Reverted'
+                      }
+                      return `Reverted ${timestamp.toLocaleString()}`
+                    })()
+                    return (
+                      <li
+                        key={entry.id}
+                        className="rounded-2xl border border-slate-200/70 bg-white/85 shadow-sm p-4 space-y-2"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-base font-semibold text-slate-900">{entry.title}</p>
+                            <p className="text-sm text-slate-700/90 leading-relaxed">{entry.detail}</p>
+                          </div>
+                          <span
+                            className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
+                              changeLabelStyles[entry.label] || changeLabelStyles.fixed
+                            }`}
+                          >
+                            {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
+                          </span>
+                        </div>
+                        {historyEntry && (
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadPreviousVersion(entry.id)}
+                              className="px-3 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 transition"
+                            >
+                              Download previous version
+                            </button>
+                            {!reverted && (
+                              <button
+                                type="button"
+                                onClick={() => handleRevertChange(entry.id)}
+                                className="px-3 py-1.5 rounded-full border border-rose-200 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:text-rose-700 transition"
+                              >
+                                Undo change
+                              </button>
+                            )}
+                            {reverted && (
+                              <span className="text-xs font-semibold text-rose-600">{revertedAtLabel}</span>
+                            )}
+                          </div>
+                        )}
+                        {(entry.before ||
+                          entry.after ||
+                          (entry.summarySegments && entry.summarySegments.length > 0) ||
+                          (entry.addedItems && entry.addedItems.length > 0) ||
+                          (entry.removedItems && entry.removedItems.length > 0) ||
+                          (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
+                          <ChangeComparisonView
+                            before={entry.before}
+                            after={entry.after}
+                            summarySegments={entry.summarySegments}
+                            addedItems={entry.addedItems}
+                            removedItems={entry.removedItems}
+                            itemizedChanges={entry.itemizedChanges}
+                            categoryChangelog={entry.categoryChangelog}
+                          />
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-4 text-sm text-slate-600">
+                  Accept improvements to build your change history and compare every revision.
+                </div>
+              )}
+            </DashboardStage>
+          )}
+        </section>
 
         {selectionInsights && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
@@ -5858,126 +6067,6 @@ function App() {
             )}
           </section>
         )}
-
-        {improvementResults.length > 0 && (
-          <DashboardStage
-            stageLabel="Suggestions Stage"
-            title="Review AI Suggestions"
-            description="Work through targeted improvements and accept the updates you like."
-          >
-            <div className="rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
-              These skills and highlights were added to match the JD. Use the cards below to accept, reject, or preview each
-              update.
-            </div>
-            {enhanceAllSummaryText && (
-              <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-sm text-emerald-900">
-                <p className="text-sm font-semibold text-emerald-700">Enhance All applied automatically</p>
-                <p className="mt-1 leading-relaxed">
-                  We rolled out every recommended fix in one pass. Combined updates — {enhanceAllSummaryText}
-                </p>
-              </div>
-            )}
-            <div className="space-y-4">
-              {improvementResults.map((item) => (
-                <ImprovementCard
-                  key={item.id}
-                  suggestion={item}
-                  onReject={() => handleRejectImprovement(item.id)}
-                  onPreview={() => handlePreviewImprovement(item)}
-                />
-              ))}
-            </div>
-          </DashboardStage>
-        )}
-
-        {changeLog.length > 0 && (
-          <DashboardStage
-            stageLabel="Change Log Stage"
-            title="Track accepted changes"
-            description="Review every applied enhancement and download previous versions when needed."
-            accent="slate"
-            actions={
-              <span className="text-xs font-semibold text-slate-600 border border-slate-200 rounded-full bg-white/70 px-3 py-1">
-                {changeLog.length} update{changeLog.length === 1 ? '' : 's'}
-              </span>
-            }
-          >
-            <ul className="space-y-3">
-              {changeLog.map((entry) => {
-                const historyEntry = resumeHistoryMap.get(entry.id)
-                const reverted = Boolean(entry.reverted)
-                const revertedAtLabel = (() => {
-                  if (!reverted) return ''
-                  const timestamp = entry.revertedAt ? new Date(entry.revertedAt) : null
-                  if (!timestamp || Number.isNaN(timestamp.getTime())) {
-                    return 'Reverted'
-                  }
-                  return `Reverted ${timestamp.toLocaleString()}`
-                })()
-                return (
-                  <li
-                    key={entry.id}
-                    className="rounded-2xl border border-slate-200/70 bg-white/85 shadow-sm p-4 space-y-2"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="text-base font-semibold text-slate-900">{entry.title}</p>
-                        <p className="text-sm text-slate-700/90 leading-relaxed">{entry.detail}</p>
-                      </div>
-                      <span
-                        className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
-                          changeLabelStyles[entry.label] || changeLabelStyles.fixed
-                        }`}
-                      >
-                        {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
-                      </span>
-                    </div>
-                    {historyEntry && (
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadPreviousVersion(entry.id)}
-                          className="px-3 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 transition"
-                        >
-                          Download previous version
-                        </button>
-                        {!reverted && (
-                          <button
-                            type="button"
-                            onClick={() => handleRevertChange(entry.id)}
-                            className="px-3 py-1.5 rounded-full border border-rose-200 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:text-rose-700 transition"
-                          >
-                            Undo change
-                          </button>
-                        )}
-                        {reverted && (
-                          <span className="text-xs font-semibold text-rose-600">{revertedAtLabel}</span>
-                        )}
-                      </div>
-                    )}
-                    {(entry.before ||
-                      entry.after ||
-                      (entry.summarySegments && entry.summarySegments.length > 0) ||
-                      (entry.addedItems && entry.addedItems.length > 0) ||
-                      (entry.removedItems && entry.removedItems.length > 0) ||
-                      (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
-                      <ChangeComparisonView
-                        before={entry.before}
-                        after={entry.after}
-                        summarySegments={entry.summarySegments}
-                        addedItems={entry.addedItems}
-                        removedItems={entry.removedItems}
-                        itemizedChanges={entry.itemizedChanges}
-                        categoryChangelog={entry.categoryChangelog}
-                      />
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </DashboardStage>
-        )}
-
         {resumeComparisonData && (
           <section className="space-y-4">
             <div className="space-y-1">
