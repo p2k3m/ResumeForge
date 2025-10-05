@@ -3216,20 +3216,56 @@ function fallbackImprovement(type, context) {
     const newContent = existing
       ? section.content
       : [...section.content.filter(Boolean), bullet];
+    const sanitizedContent = sanitizeSectionLines(newContent);
+    const after = sanitizedContent.join('\n').trim();
     const updatedResume = replaceSectionContent(
       resumeText,
       SKILLS_SECTION_PATTERN,
-      newContent,
+      sanitizedContent,
       { headingLabel: 'Skills', insertIndex: 2 }
     );
+    const explanation = existing
+      ? 'Skills section already covers the requested keywords.'
+      : 'Added missing job keywords into the skills section.';
+    const beforeLines = extractDiffLines(before, {
+      sectionTokens: ['Skills', 'skills'],
+    });
+    const afterLines = extractDiffLines(after, {
+      sectionTokens: ['Skills', 'skills'],
+    });
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const reasons = explanation ? [explanation] : [];
+    const changeDetails = [
+      {
+        key: 'skills',
+        section: 'Skills',
+        label: 'Skills',
+        before,
+        after,
+        reasons,
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: 'Skills',
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons,
+            reasons,
+          },
+        ],
+      },
+    ];
     return {
       updatedResume,
       beforeExcerpt: before,
       afterExcerpt: existing ? before : bullet,
-      explanation: existing
-        ? 'Skills section already covers the requested keywords.'
-        : 'Added missing job keywords into the skills section.',
+      explanation,
       confidence: existing ? 0.25 : 0.33,
+      changeDetails,
     };
   }
 
@@ -3405,20 +3441,56 @@ function fallbackImprovement(type, context) {
       ? baseContent
       : [...baseContent.filter(Boolean), certificateLine];
     const sanitizedContent = newContent.length ? sanitizeSectionLines(newContent) : [];
+    const targetContent = sanitizedContent.length ? sanitizedContent : [certificateLine];
+    const after = targetContent.join('\n').trim();
     const updatedResume = replaceSectionContent(
       resumeText,
       CERTIFICATIONS_SECTION_PATTERN,
-      sanitizedContent.length ? sanitizedContent : [certificateLine],
+      targetContent,
       { headingLabel, insertIndex: 3 }
     );
+    const explanation = alreadyPresent
+      ? 'Certifications section already lists the supplied credential.'
+      : `Highlighted ${targetCertificate.name} so the credential is prominent for screeners.`;
+    const beforeLines = extractDiffLines(before, {
+      sectionTokens: [headingLabel || 'Certifications', 'certifications'],
+    });
+    const afterLines = extractDiffLines(after, {
+      sectionTokens: [headingLabel || 'Certifications', 'certifications'],
+    });
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const reasons = explanation ? [explanation] : [];
+    const changeDetails = [
+      {
+        key: 'certifications',
+        section: headingLabel || 'Certifications',
+        label: headingLabel || 'Certifications',
+        before,
+        after,
+        reasons,
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: headingLabel || 'Certifications',
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons,
+            reasons,
+          },
+        ],
+      },
+    ];
     return {
       updatedResume,
       beforeExcerpt: before,
       afterExcerpt: alreadyPresent ? before : certificateLine,
-      explanation: alreadyPresent
-        ? 'Certifications section already lists the supplied credential.'
-        : `Highlighted ${targetCertificate.name} so the credential is prominent for screeners.`,
+      explanation,
       confidence: alreadyPresent ? 0.26 : 0.32,
+      changeDetails,
     };
   }
 
@@ -3467,20 +3539,56 @@ function fallbackImprovement(type, context) {
       ? baseContent
       : [...baseContent.filter(Boolean), addition];
     const sanitizedContent = newContent.length ? sanitizeSectionLines(newContent) : [];
+    const targetContent = sanitizedContent.length ? sanitizedContent : [addition];
+    const after = targetContent.join('\n').trim();
     const updatedResume = replaceSectionContent(
       resumeText,
       HIGHLIGHTS_SECTION_PATTERN,
-      sanitizedContent.length ? sanitizedContent : [addition],
+      targetContent,
       { headingLabel, insertIndex: 2 }
     );
+    const explanation = alreadyPresent
+      ? 'Highlights already underscore the job-aligned achievements.'
+      : 'Reinforced highlights so top wins echo the job metrics.';
+    const beforeLines = extractDiffLines(before, {
+      sectionTokens: [headingLabel || 'Highlights', 'highlights'],
+    });
+    const afterLines = extractDiffLines(after, {
+      sectionTokens: [headingLabel || 'Highlights', 'highlights'],
+    });
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const reasons = explanation ? [explanation] : [];
+    const changeDetails = [
+      {
+        key: 'highlights',
+        section: headingLabel || 'Highlights',
+        label: headingLabel || 'Highlights',
+        before,
+        after,
+        reasons,
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: headingLabel || 'Highlights',
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons,
+            reasons,
+          },
+        ],
+      },
+    ];
     return {
       updatedResume,
       beforeExcerpt: before,
       afterExcerpt: alreadyPresent ? before : addition,
-      explanation: alreadyPresent
-        ? 'Highlights already underscore the job-aligned achievements.'
-        : 'Reinforced highlights so top wins echo the job metrics.',
+      explanation,
       confidence: alreadyPresent ? 0.25 : 0.31,
+      changeDetails,
     };
   }
 
@@ -9753,25 +9861,144 @@ function assignJobContext(req, res, next) {
   next();
 }
 
-function extractDiffLines(text = '') {
+const LIST_SECTION_TOKENS = new Set([
+  'skills',
+  'skill',
+  'competencies',
+  'competency',
+  'certifications',
+  'certification',
+  'licensesandcertifications',
+  'licensescertifications',
+  'licensescertification',
+  'highlights',
+  'highlight',
+  'careerhighlights',
+  'professionalhighlights',
+  'projecthighlights',
+]);
+
+const AND_SPLIT_SECTION_TOKENS = new Set([
+  'skills',
+  'skill',
+  'competencies',
+  'competency',
+  'certifications',
+  'certification',
+  'licensesandcertifications',
+  'licensescertifications',
+  'licensescertification',
+]);
+
+function normalizeSectionToken(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+}
+
+function expandListSegments(value, { treatAndAsSeparator = false } = {}) {
+  const segments = [];
+  const queue = [value];
+  const commaRegex = /[,;|]/;
+  const andRegex = /\s+(?:and|&)\s+/i;
+
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current) continue;
+    const trimmed = current.trim();
+    if (!trimmed) continue;
+
+    let splitPerformed = false;
+
+    if (commaRegex.test(trimmed)) {
+      const parts = trimmed
+        .split(commaRegex)
+        .map((part) => part.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      if (parts.length > 1) {
+        parts.forEach((part) => queue.push(part));
+        splitPerformed = true;
+      }
+    }
+
+    if (
+      !splitPerformed &&
+      treatAndAsSeparator &&
+      !/[.!?]/.test(trimmed) &&
+      andRegex.test(trimmed)
+    ) {
+      const parts = trimmed
+        .split(andRegex)
+        .map((part) => part.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+      if (parts.length > 1) {
+        parts.forEach((part) => queue.push(part));
+        splitPerformed = true;
+      }
+    }
+
+    if (!splitPerformed) {
+      segments.push(trimmed);
+    }
+  }
+
+  return segments;
+}
+
+function extractDiffLines(text = '', options = {}) {
+  const sectionTokens = [];
+  if (Array.isArray(options.sectionTokens)) {
+    sectionTokens.push(...options.sectionTokens);
+  }
+  if (typeof options.sectionKey === 'string') {
+    sectionTokens.push(options.sectionKey);
+  }
+  const normalizedTokens = sectionTokens
+    .map((token) => normalizeSectionToken(token))
+    .filter(Boolean);
+
+  const treatAsList =
+    typeof options.treatAsList === 'boolean'
+      ? options.treatAsList
+      : normalizedTokens.some((token) => LIST_SECTION_TOKENS.has(token));
+
+  const treatAndAsSeparator =
+    typeof options.treatAndAsSeparator === 'boolean'
+      ? options.treatAndAsSeparator
+      : normalizedTokens.some((token) => AND_SPLIT_SECTION_TOKENS.has(token));
+
   const seen = new Set();
   const lines = [];
-  text
+  const rawLines = String(text || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .forEach((line) => {
-      const normalized = line.replace(/^[•*-]\s*/, '').replace(/\s+/g, ' ').trim();
-      if (!normalized) {
+    .filter(Boolean);
+
+  rawLines.forEach((line) => {
+    const normalized = line.replace(/^[•*-]\s*/, '').replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return;
+    }
+
+    const segments = treatAsList
+      ? expandListSegments(normalized, { treatAndAsSeparator })
+      : [normalized];
+
+    segments.forEach((segment) => {
+      const cleaned = segment.replace(/\s+/g, ' ').trim();
+      if (!cleaned) {
         return;
       }
-      const key = normalized.toLowerCase();
+      const key = cleaned.toLowerCase();
       if (seen.has(key)) {
         return;
       }
       seen.add(key);
-      lines.push(normalized);
+      lines.push(cleaned);
     });
+  });
+
   return lines;
 }
 
@@ -9820,6 +10047,12 @@ function buildImprovementSummary(
   const normalizeToken = (value) =>
     typeof value === 'string' ? value.replace(/[^a-z0-9]/gi, '').toLowerCase() : '';
 
+  const collectSectionTokens = (...values) =>
+    values
+      .flat()
+      .map((value) => (typeof value === 'string' ? value : ''))
+      .filter(Boolean);
+
   const primaryLabel = typeof primaryConfig?.label === 'string' ? primaryConfig.label : '';
   const primaryKey = typeof primaryConfig?.key === 'string' ? primaryConfig.key : '';
   const normalizedPrimaryLabel = normalizeToken(primaryLabel);
@@ -9829,8 +10062,13 @@ function buildImprovementSummary(
     const fallbackSectionLabel = typeof sectionName === 'string' ? sectionName : '';
     const added = [];
     const removed = [];
-    const beforeLines = extractDiffLines(beforeText);
-    const afterLines = extractDiffLines(afterText);
+    const tokenCandidates = collectSectionTokens(
+      fallbackSectionLabel,
+      primaryLabel,
+      primaryKey
+    );
+    const beforeLines = extractDiffLines(beforeText, { sectionTokens: tokenCandidates });
+    const afterLines = extractDiffLines(afterText, { sectionTokens: tokenCandidates });
     const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
     const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
 
@@ -9860,8 +10098,14 @@ function buildImprovementSummary(
     const entriesWithMeta = changeDetails.map((detail) => {
       const before = typeof detail?.before === 'string' ? detail.before : '';
       const after = typeof detail?.after === 'string' ? detail.after : '';
-      const beforeLines = extractDiffLines(before);
-      const afterLines = extractDiffLines(after);
+      const tokenCandidates = collectSectionTokens(
+        detail?.section,
+        detail?.label,
+        detail?.key,
+        detail?.sectionTokens
+      );
+      const beforeLines = extractDiffLines(before, { sectionTokens: tokenCandidates });
+      const afterLines = extractDiffLines(after, { sectionTokens: tokenCandidates });
       const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
       const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
       const added = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
