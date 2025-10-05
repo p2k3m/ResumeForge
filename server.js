@@ -153,7 +153,7 @@ axiosResponseInterceptor?.use(
 );
 
 const CV_GENERATION_ERROR_MESSAGE =
-  'Could not enhance CV; your formatting remained untouched.';
+  'Could not generate PDF, please try again';
 
 let chromium;
 let puppeteerCore;
@@ -12269,7 +12269,7 @@ async function generateEnhancedDocumentsResponse({
       level: 'error',
       message: 'Unable to construct resume variants from extracted content',
     });
-    sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
+    sendError(res, 500, 'AI_RESPONSE_INVALID', CV_GENERATION_ERROR_MESSAGE);
     return null;
   }
 
@@ -12716,9 +12716,9 @@ async function generateEnhancedDocumentsResponse({
       jobId,
       event: 'generation_no_outputs',
       level: 'error',
-      message: 'AI response invalid',
+      message: CV_GENERATION_ERROR_MESSAGE,
     });
-    sendError(res, 500, 'AI_RESPONSE_INVALID', 'AI response invalid');
+    sendError(res, 500, 'AI_RESPONSE_INVALID', CV_GENERATION_ERROR_MESSAGE);
     return null;
   }
 
