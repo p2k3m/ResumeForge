@@ -11978,8 +11978,6 @@ async function handleImprovementRequest(type, req, res) {
       data: {
         completedAt: new Date().toISOString(),
         improvementType: type,
-        confidence: result.confidence,
-        missingSkillsResolved: missingSkills.length,
       },
       logContext,
     });
@@ -13182,8 +13180,6 @@ async function generateEnhancedDocumentsResponse({
     data: {
       completedAt: generationCompletedAt || new Date().toISOString(),
       artifactCount: uploadedArtifacts.length,
-      textArtifactCount: textArtifactTypes.length,
-      urlCount: normalizedUrls.length,
     },
     logContext,
   });
@@ -14608,11 +14604,6 @@ app.post(
       data: {
         uploadedAt: timestamp,
         fileType: storedFileType,
-        storage: {
-          bucket,
-          key: originalUploadKey,
-          initialKey: initialUploadKey,
-        },
       },
       logContext,
     });
@@ -14939,15 +14930,13 @@ app.post(
         bucket,
         metadataKey: scoringMetadataKey,
         jobId,
-        stage: 'scoring',
-        data: {
-          completedAt: scoringCompletedAt,
-          score: scoringUpdate.normalizedScore,
-          missingSkillsCount: scoringUpdate.normalizedMissingSkills.length,
-          addedSkillsCount: scoringUpdate.normalizedAddedSkills.length,
-        },
-        logContext,
-      });
+      stage: 'scoring',
+      data: {
+        completedAt: scoringCompletedAt,
+        score: scoringUpdate.normalizedScore,
+      },
+      logContext,
+    });
     } catch (updateErr) {
       logStructured('error', 'process_cv_status_update_failed', {
         ...logContext,
