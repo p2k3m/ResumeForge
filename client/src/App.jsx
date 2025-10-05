@@ -1726,6 +1726,7 @@ function App() {
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
+  const hasManualJobDescriptionInput = Boolean(manualJobDescription && manualJobDescription.trim())
   const improvementCount = improvementResults.length
   const downloadCount = outputFiles.length
   const changeCount = changeLog.length
@@ -1734,8 +1735,8 @@ function App() {
   const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
   const hasAnalysisData =
     scoreMetricCount > 0 || hasMatch || improvementCount > 0 || downloadCount > 0 || changeCount > 0
-  const uploadComplete =
-    (hasCvFile && (isProcessing || Boolean(queuedText))) || hasAnalysisData || Boolean(queuedText)
+  const uploadReady = hasCvFile && hasManualJobDescriptionInput
+  const uploadComplete = uploadReady || hasAnalysisData || Boolean(queuedText)
   const scoreComplete = scoreMetricCount > 0
   const jdValidationComplete = Boolean(jobDescriptionText && jobDescriptionText.trim())
   const improvementsUnlocked = uploadComplete && scoreComplete && jdValidationComplete
@@ -2226,7 +2227,13 @@ function App() {
       switch (step.key) {
         case 'upload':
           if (!uploadComplete) {
-            note = hasCvFile ? 'Ready to submit for scoring.' : 'Waiting for your resume upload.'
+            if (!hasCvFile) {
+              note = 'Waiting for your resume upload.'
+            } else if (!hasManualJobDescriptionInput) {
+              note = 'Paste the job description to continue.'
+            } else {
+              note = 'Ready to submit for scoring.'
+            }
           } else if (isProcessing && !hasAnalysisData) {
             note = 'Uploading & parsing your documents…'
           } else if (queuedText) {
@@ -2267,6 +2274,7 @@ function App() {
     downloadCount,
     hasAnalysisData,
     hasCvFile,
+    hasManualJobDescriptionInput,
     improvementBusy,
     improvementCount,
     isProcessing,
@@ -5101,7 +5109,6 @@ function App() {
 
   const handlePreviewReject = useCallback(() => handlePreviewDecision('reject'), [handlePreviewDecision])
 
-  const hasManualJobDescriptionInput = Boolean(manualJobDescription && manualJobDescription.trim())
   const jobDescriptionReady = hasManualJobDescriptionInput
   const rescoreDisabled = !cvFile || isProcessing || !jobDescriptionReady
 
