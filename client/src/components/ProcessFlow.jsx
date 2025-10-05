@@ -22,6 +22,12 @@ const statusThemes = {
   }
 }
 
+const noteToneStyles = {
+  warning: 'text-rose-600 font-semibold',
+  success: 'text-emerald-600 font-semibold',
+  info: 'text-indigo-600 font-medium'
+}
+
 function ProcessFlow({ steps }) {
   const items = Array.isArray(steps) ? steps.filter(Boolean) : []
   if (items.length === 0) {
@@ -62,7 +68,7 @@ function ProcessFlow({ steps }) {
                 <p className={`text-sm leading-relaxed ${theme.description}`}>{step.description}</p>
               )}
               {step.note && step.note.trim() && (
-                <p className="text-xs font-medium text-indigo-600">{step.note}</p>
+                <p className={`text-xs ${noteToneStyles[step.noteTone] || noteToneStyles.info}`}>{step.note}</p>
               )}
             </li>
           )

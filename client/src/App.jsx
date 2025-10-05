@@ -1855,6 +1855,58 @@ function App() {
     helper: 'Highlight the certifications that strengthen your case for this role.'
   }
 
+  const resumeExperienceMissing = useMemo(() => {
+    const experience = selectionInsights?.experience || null
+    const message = typeof experience?.message === 'string' ? experience.message : ''
+    const rawStatus = typeof experience?.status === 'string' ? experience.status : ''
+    const status = rawStatus.toLowerCase()
+    const candidateYears =
+      typeof experience?.candidateYears === 'number' && Number.isFinite(experience.candidateYears)
+        ? experience.candidateYears
+        : null
+    const placeholderDetected =
+      typeof resumeText === 'string' &&
+      /work experience[\s\S]{0,200}information not provided/i.test(resumeText)
+
+    if (placeholderDetected) {
+      return true
+    }
+
+    if (message && /not detected/i.test(message)) {
+      return true
+    }
+
+    if ((status === 'gap' || status === 'unknown') && (candidateYears === null || candidateYears <= 0)) {
+      return true
+    }
+
+    return false
+  }, [selectionInsights, resumeText])
+
+  const coverLetterContentMissing = useMemo(() => {
+    if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
+      return false
+    }
+
+    const hasCoverLetterFiles = outputFiles.some((file) => isCoverLetterType(file?.type))
+    if (!hasCoverLetterFiles) {
+      return false
+    }
+
+    const coverLetterTypes = Array.from(COVER_LETTER_TYPES)
+    const hasContent = coverLetterTypes.some((type) => {
+      const draftValue = typeof coverLetterDrafts?.[type] === 'string' ? coverLetterDrafts[type].trim() : ''
+      if (draftValue) {
+        return true
+      }
+      const originalValue =
+        typeof coverLetterOriginals?.[type] === 'string' ? coverLetterOriginals[type].trim() : ''
+      return Boolean(originalValue)
+    })
+
+    return !hasContent
+  }, [coverLetterDrafts, coverLetterOriginals, outputFiles])
+
   useEffect(() => {
     if (!userIdentifier) {
       return
@@ -2350,53 +2402,91 @@ function App() {
       }
 
       let note = ''
+      let noteTone = ''
       switch (step.key) {
         case 'upload':
           if (!uploadComplete) {
             if (!hasCvFile) {
               note = 'Waiting for your resume upload.'
+              noteTone = 'info'
             } else if (!hasManualJobDescriptionInput) {
-              note = 'Paste the job description to continue.'
+              note = 'You must supply the JD before we can continue.'
+              noteTone = 'warning'
             } else {
               note = 'Ready to submit for scoring.'
+              noteTone = 'info'
             }
           } else if (isProcessing && !hasAnalysisData) {
             note = 'Uploading & parsing your documents…'
+            noteTone = 'info'
           } else if (queuedText) {
             note = queuedText
+            noteTone = 'info'
           } else if (hasAnalysisData) {
             note = 'Upload complete.'
+            noteTone = 'success'
           }
           break
         case 'score':
           if (isProcessing && !scoreComplete) {
             note = 'Scanning resume against the JD…'
+            noteTone = 'info'
+          } else if (resumeExperienceMissing) {
+            const prefix = scoreComplete ? 'ATS dashboard ready. ' : ''
+            note = `${prefix}CV missing Experience section — would you like to auto-generate it now? Run “Improve Experience” to draft ATS-aligned bullets.`
+            noteTone = 'warning'
           } else if (scoreComplete) {
             note = 'ATS dashboard ready.'
+            noteTone = 'success'
           } else if (hasAnalysisData) {
             note = 'Waiting for ATS metrics…'
+            noteTone = 'info'
           }
           break
         case 'improvements':
           if (improvementBusy) {
             note = 'Generating AI rewrite…'
+            noteTone = 'info'
+          } else if (resumeExperienceMissing) {
+            const suggestionText =
+              improvementCount > 0
+                ? ` ${improvementCount} suggestion${improvementCount === 1 ? '' : 's'} ready.`
+                : ''
+            note = `CV missing Experience section — would you like to auto-generate it now? Run “Improve Experience” to draft ATS-aligned bullets.${suggestionText}`
+            noteTone = 'warning'
           } else if (improvementCount > 0) {
             note = `${improvementCount} suggestion${improvementCount === 1 ? '' : 's'} ready.`
+            noteTone = 'info'
           }
           break
         case 'download':
           if (downloadCount > 0) {
             note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} available.`
+            noteTone = 'success'
+            if (coverLetterContentMissing) {
+              note =
+                'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
+              noteTone = 'warning'
+            }
+          } else if (coverLetterContentMissing) {
+            note =
+              'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
+            noteTone = 'warning'
           }
           break
         default:
           break
       }
 
-      return { ...step, status, note }
+      if (note && !noteTone) {
+        noteTone = 'info'
+      }
+
+      return { ...step, status, note, noteTone }
     })
   }, [
     changeCount,
+    coverLetterContentMissing,
     downloadCount,
     hasAnalysisData,
     hasCvFile,
@@ -2405,6 +2495,7 @@ function App() {
     improvementCount,
     isProcessing,
     queuedText,
+    resumeExperienceMissing,
     scoreComplete,
     uploadComplete
   ])
