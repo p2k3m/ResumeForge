@@ -506,6 +506,16 @@ describe('/api/process-cv', () => {
 
     res.body.urls.forEach((entry) => {
       expect(entry.url).toMatch(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/);
+      expect(entry.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(entry.templateName).toEqual(expect.any(String));
+      expect(entry.templateName.trim().length).toBeGreaterThan(0);
+      expect(entry.templateId).toEqual(expect.any(String));
+      expect(entry.templateId.trim().length).toBeGreaterThan(0);
+      if (entry.type === 'original_upload' || entry.type === 'version1' || entry.type === 'version2') {
+        expect(entry.templateType).toBe('resume');
+      } else if (entry.type === 'cover_letter1' || entry.type === 'cover_letter2') {
+        expect(entry.templateType).toBe('cover');
+      }
     });
   });
 
