@@ -194,6 +194,23 @@ function isCoverLetterType(type) {
   return COVER_LETTER_TYPES.has(type)
 }
 
+function extractCoverLetterRawText(input) {
+  if (!input) return ''
+  if (typeof input === 'string') return input
+  if (typeof input === 'object') {
+    if (typeof input.raw === 'string') return input.raw
+    if (Array.isArray(input.paragraphs) && input.paragraphs.length) {
+      return input.paragraphs.join('\n\n')
+    }
+  }
+  return ''
+}
+
+function getCoverLetterTextFromFile(file) {
+  if (!file || typeof file !== 'object') return ''
+  return extractCoverLetterRawText(file.text)
+}
+
 function getBaselineScoreFromMatch(matchData) {
   if (!matchData || typeof matchData !== 'object') return null
   const { atsScoreAfter, enhancedScore, atsScoreBefore, originalScore } = matchData
@@ -214,7 +231,7 @@ function deriveCoverLetterStateFromFiles(files) {
     if (!file || typeof file !== 'object') return
     const type = file.type
     if (!isCoverLetterType(type)) return
-    const text = typeof file.text === 'string' ? file.text : ''
+    const text = getCoverLetterTextFromFile(file)
     drafts[type] = text
     originals[type] = text
   })
@@ -2454,7 +2471,7 @@ function App() {
     const isCoverLetter = presentation.category === 'cover' && isCoverLetterType(file.type)
     const coverDraftText = isCoverLetter ? coverLetterDrafts[file.type] ?? '' : ''
     const coverOriginalText = isCoverLetter
-      ? coverLetterOriginals[file.type] ?? (typeof file.text === 'string' ? file.text : '')
+      ? coverLetterOriginals[file.type] ?? getCoverLetterTextFromFile(file)
       : ''
     const coverEdited = isCoverLetter && coverDraftText && coverDraftText !== coverOriginalText
     const downloadStateKey = getDownloadStateKey(file)
@@ -5897,10 +5914,10 @@ function App() {
           const type = coverLetterEditor.type
           const draftText =
             coverLetterDrafts[type] ??
-            (typeof coverLetterEditor.file?.text === 'string' ? coverLetterEditor.file.text : '')
+            getCoverLetterTextFromFile(coverLetterEditor.file)
           const originalText =
             coverLetterOriginals[type] ??
-            (typeof coverLetterEditor.file?.text === 'string' ? coverLetterEditor.file.text : '')
+            getCoverLetterTextFromFile(coverLetterEditor.file)
           const hasChanges = draftText !== originalText
           const wordCount = draftText.trim()
             ? draftText

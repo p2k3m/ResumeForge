@@ -9184,6 +9184,247 @@ function formatSkillList(skills = [], limit = 3) {
   return `${limited.slice(0, -1).join(', ')}, and ${limited[limited.length - 1]}`;
 }
 
+const COVER_LETTER_MOTIVATION_KEYWORDS = Object.freeze([
+  'excited',
+  'thrilled',
+  'eager',
+  'keen',
+  'motivated',
+  'passionate',
+  'passion',
+  'inspired',
+  'drawn',
+  'compelled',
+  'delighted',
+  'interested',
+  'honored',
+  'privileged',
+  'enthusiastic',
+  'appeal',
+  'opportunity',
+  'align',
+]);
+
+const COVER_LETTER_CLOSING_PATTERN =
+  /^(?:thank you(?: for (?:your )?(?:time|consideration))?|thanks(?: so much)?|sincerely|best(?: regards| wishes)?|regards|kind regards|warm regards|with appreciation|with gratitude|respectfully|yours truly|yours faithfully|yours sincerely)/i;
+
+function summarizeJobDescriptionForCover(jobDescription = '', maxLength = 360) {
+  if (typeof jobDescription !== 'string') {
+    return '';
+  }
+  const cleaned = jobDescription
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) {
+    return '';
+  }
+  const sentenceSplit = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  let summary = sentenceSplit.slice(0, 3).join(' ');
+  if (!summary) {
+    summary = cleaned;
+  }
+  if (summary.length > maxLength) {
+    summary = summary.slice(0, maxLength);
+    summary = summary.replace(/\s+\S*$/, '').trim();
+    if (summary.length && !summary.endsWith('…')) {
+      summary = `${summary}…`;
+    }
+  }
+  return summary;
+}
+
+function splitCoverLetterParagraphs(text = '') {
+  if (typeof text !== 'string') {
+    return [];
+  }
+  return text
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+}
+
+function findCoverLetterGreeting(paragraphs = []) {
+  for (let index = 0; index < paragraphs.length; index += 1) {
+    const paragraph = paragraphs[index];
+    const firstLine = paragraph.split('\n')[0]?.trim() || '';
+    if (/^(dear|hello|hi)\b/i.test(firstLine)) {
+      return { index, paragraph };
+    }
+  }
+  return { index: -1, paragraph: '' };
+}
+
+function findCoverLetterClosing(paragraphs = [], applicantName = '') {
+  const normalizedName = typeof applicantName === 'string' ? applicantName.trim() : '';
+  for (let index = paragraphs.length - 1; index >= 0; index -= 1) {
+    const paragraph = paragraphs[index];
+    const lines = paragraph
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (!lines.length) {
+      continue;
+    }
+    const closingLineIndex = lines.findIndex((line) => COVER_LETTER_CLOSING_PATTERN.test(line));
+    if (closingLineIndex === -1) {
+      continue;
+    }
+    let signature = lines.slice(closingLineIndex + 1).join(' ').trim();
+    let endIndex = index;
+    if (!signature && index + 1 < paragraphs.length) {
+      const nextLines = paragraphs[index + 1]
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (nextLines.length && nextLines.join(' ').length <= 120) {
+        signature = nextLines.join(' ');
+        endIndex = index + 1;
+      }
+    }
+    if (!signature && normalizedName) {
+      signature = normalizedName;
+    }
+    const salutation = lines[closingLineIndex];
+    return {
+      index,
+      endIndex,
+      paragraph,
+      salutation,
+      signature,
+    };
+  }
+
+  if (normalizedName) {
+    const lastParagraph = paragraphs[paragraphs.length - 1] || '';
+    if (lastParagraph.toLowerCase().includes(normalizedName.toLowerCase())) {
+      return {
+        index: paragraphs.length - 1,
+        endIndex: paragraphs.length - 1,
+        paragraph: '',
+        salutation: '',
+        signature: normalizedName,
+      };
+    }
+    return { index: -1, endIndex: -1, paragraph: '', salutation: '', signature: normalizedName };
+  }
+
+  return { index: -1, endIndex: -1, paragraph: '', salutation: '', signature: '' };
+}
+
+function mapCoverLetterFields({
+  text = '',
+  contactDetails = {},
+  jobTitle = '',
+  jobDescription = '',
+  jobSkills = [],
+  applicantName = '',
+  letterIndex = 1,
+} = {}) {
+  const rawText = typeof text === 'string' ? text : '';
+  const normalizedText = rawText.replace(/\r\n/g, '\n');
+  const paragraphs = splitCoverLetterParagraphs(normalizedText);
+  const greetingInfo = findCoverLetterGreeting(paragraphs);
+  const closingInfo = findCoverLetterClosing(paragraphs, applicantName);
+
+  const bodyParagraphs = [];
+  const bodyParagraphMap = [];
+  paragraphs.forEach((paragraph, index) => {
+    if (index === greetingInfo.index) {
+      return;
+    }
+    if (closingInfo.index !== -1 && index >= closingInfo.index && index <= closingInfo.endIndex) {
+      return;
+    }
+    bodyParagraphs.push(paragraph);
+    bodyParagraphMap.push({ paragraph, originalIndex: index });
+  });
+
+  const motivationRegex = new RegExp(
+    COVER_LETTER_MOTIVATION_KEYWORDS.map((word) => `\\b${word}\\w*\\b`).join('|'),
+    'i'
+  );
+  let motivationBodyIndex = bodyParagraphs.findIndex((paragraph) => motivationRegex.test(paragraph));
+  if (motivationBodyIndex === -1 && bodyParagraphs.length) {
+    motivationBodyIndex = 0;
+  }
+  const motivationParagraph =
+    motivationBodyIndex !== -1 ? bodyParagraphs[motivationBodyIndex] : '';
+  const motivationKeywords = motivationParagraph
+    ? COVER_LETTER_MOTIVATION_KEYWORDS.filter((keyword) =>
+        new RegExp(`\\b${keyword}\\w*\\b`, 'i').test(motivationParagraph)
+      )
+    : [];
+
+  const normalizedSkills = Array.isArray(jobSkills)
+    ? jobSkills
+        .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+        .filter(Boolean)
+    : [];
+  const letterLower = normalizedText.toLowerCase();
+  const matchedSkills = Array.from(
+    new Set(
+      normalizedSkills.filter((skill) => letterLower.includes(skill.toLowerCase()))
+    )
+  );
+
+  const contactLinesInput = Array.isArray(contactDetails?.contactLines)
+    ? contactDetails.contactLines
+    : [];
+  const contactLines = dedupeContactLines(contactLinesInput).map((line) =>
+    (typeof line === 'string' ? line.trim() : '').replace(/\s+/g, ' ')
+  );
+
+  const bodyIndexEntry =
+    motivationBodyIndex !== -1 ? bodyParagraphMap[motivationBodyIndex] : null;
+
+  const jobSummary = summarizeJobDescriptionForCover(jobDescription);
+  const jobFocus = summarizeJobFocus(jobDescription);
+
+  return {
+    raw: normalizedText,
+    paragraphs,
+    greeting: greetingInfo.paragraph || '',
+    body: bodyParagraphs,
+    motivation: {
+      paragraph: motivationParagraph,
+      keywords: motivationKeywords,
+      matchedSkills,
+      bodyIndex: motivationBodyIndex,
+      originalIndex: bodyIndexEntry?.originalIndex ?? -1,
+    },
+    closing: {
+      paragraph: closingInfo.paragraph || '',
+      salutation: closingInfo.salutation || '',
+      signature: closingInfo.signature || '',
+    },
+    contact: {
+      email: contactDetails?.email || '',
+      phone: contactDetails?.phone || '',
+      linkedin: contactDetails?.linkedin || '',
+      location: contactDetails?.cityState || '',
+      lines: contactLines,
+    },
+    job: {
+      title: jobTitle || '',
+      skills: normalizedSkills,
+      matchedSkills,
+      summary: jobSummary,
+      focus: jobFocus,
+      skillSummary: formatSkillList(normalizedSkills, 3),
+    },
+    metadata: {
+      paragraphCount: paragraphs.length,
+      bodyParagraphCount: bodyParagraphs.length,
+      hasGreeting: greetingInfo.index !== -1,
+      hasClosing: closingInfo.index !== -1 || Boolean(closingInfo.signature),
+      letterIndex,
+    },
+  };
+}
+
 function buildFallbackCoverLetters({
   applicantName = '',
   jobTitle = '',
@@ -12330,9 +12571,31 @@ async function generateEnhancedDocumentsResponse({
     ).toISOString();
     const urlEntry = { type: name, url: signedUrl, expiresAt };
     if (entry?.text) {
-      urlEntry.text = entry.text;
+      if (isCoverLetter) {
+        urlEntry.text = mapCoverLetterFields({
+          text: entry.text,
+          contactDetails,
+          jobTitle: versionsContext.jobTitle,
+          jobDescription,
+          jobSkills,
+          applicantName,
+          letterIndex: name === 'cover_letter1' ? 1 : 2,
+        });
+      } else {
+        urlEntry.text = entry.text;
+      }
     } else if (name !== 'original_upload') {
-      urlEntry.text = '';
+      urlEntry.text = isCoverLetter
+        ? mapCoverLetterFields({
+            text: '',
+            contactDetails,
+            jobTitle: versionsContext.jobTitle,
+            jobDescription,
+            jobSkills,
+            applicantName,
+            letterIndex: name === 'cover_letter1' ? 1 : 2,
+          })
+        : '';
     }
     urls.push(urlEntry);
   }
@@ -14596,4 +14859,5 @@ export {
   buildTemplateContactEntries,
   CHANGE_LOG_FIELD_LIMITS,
   CHANGE_LOG_DYNAMO_LIMITS,
+  mapCoverLetterFields,
 };
