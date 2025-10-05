@@ -59,6 +59,16 @@ describe('AWS integrations for /api/process-cv', () => {
     );
     expect(metadataCall).toBeTruthy();
 
+    const generatedPdf = commandSummaries.find(
+      (command) =>
+        command.type === 'PutObjectCommand' &&
+        typeof command.key === 'string' &&
+        command.key.endsWith('.pdf') &&
+        command.key.includes('cv/')
+    );
+    expect(generatedPdf).toBeTruthy();
+    expect(generatedPdf.key).toContain('/runs/');
+
     const dynamoPut = mocks.mockDynamoSend.mock.calls.find(
       ([command]) => command.__type === 'PutItemCommand'
     );

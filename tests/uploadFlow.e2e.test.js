@@ -176,5 +176,6 @@ describe('upload to download flow (e2e)', () => {
     expect(pdfKeys.length).toBeGreaterThanOrEqual(4);
     expect(pdfKeys.join('\n')).toContain('cv/');
     expect(pdfKeys.join('\n')).toContain('cover_letter_');
+    expect(pdfKeys.join('\n')).toContain('/runs/');
   });
 });

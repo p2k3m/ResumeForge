@@ -265,6 +265,9 @@ describe('/api/process-cv', () => {
       )
       .filter((cmd) => cmd.key.endsWith('.pdf'));
     expect(generatedPdfKeys).toHaveLength(4);
+    generatedPdfKeys.forEach((cmd) => {
+      expect(cmd.key).toContain('/runs/');
+    });
 
     const generatedJsonKeys = s3Commands
       .filter(
@@ -277,6 +280,9 @@ describe('/api/process-cv', () => {
         (cmd) => cmd.key.endsWith('.json') && !cmd.key.includes('/logs/')
       );
     expect(generatedJsonKeys).toHaveLength(4);
+    generatedJsonKeys.forEach((cmd) => {
+      expect(cmd.key).toContain('/runs/');
+    });
 
     const putCall = mockDynamoSend.mock.calls.find(
       ([cmd]) => cmd.__type === 'PutItemCommand'

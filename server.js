@@ -8712,6 +8712,7 @@ function buildDocumentSessionPrefix({
   ownerSegment,
   dateSegment,
   jobSegment,
+  sessionSegment,
 } = {}) {
   const safeOwner =
     sanitizeS3KeyComponent(ownerSegment, { fallback: 'candidate' }) || 'candidate';
@@ -8719,14 +8720,18 @@ function buildDocumentSessionPrefix({
     fallback: new Date().toISOString().slice(0, 10),
   });
   const safeJob = sanitizeS3KeyComponent(jobSegment);
-  let prefix = `cv/${safeOwner}/`;
+  const safeSession = sanitizeS3KeyComponent(sessionSegment);
+  const segments = ['cv', safeOwner];
   if (safeDate) {
-    prefix += `${safeDate}/`;
+    segments.push(safeDate);
   }
   if (safeJob) {
-    prefix += `${safeJob}/`;
+    segments.push(safeJob);
   }
-  return prefix;
+  if (safeSession) {
+    segments.push(safeSession);
+  }
+  return `${segments.join('/')}/`;
 }
 
 function buildDocumentFileBaseName({ type, templateId, variant }) {
@@ -11219,6 +11224,9 @@ async function handleImprovementRequest(type, req, res) {
   captureUserContext(req, res);
   const requestId = res.locals.requestId;
   const logContext = { requestId, jobId: jobIdInput, type };
+  const improvementSessionSegment =
+    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
   const profileIdentifier =
     resolveProfileIdentifier({
@@ -11617,6 +11625,7 @@ async function handleImprovementRequest(type, req, res) {
             ownerSegment,
             dateSegment,
             jobSegment: jobKeySegment,
+            sessionSegment: improvementSessionSegment,
           });
       const effectiveOriginalUploadKey = originalUploadKey || `${prefix}original.pdf`;
       const effectiveLogKey = logKey || `${prefix}logs/processing.jsonl`;
@@ -11938,6 +11947,10 @@ async function generateEnhancedDocumentsResponse({
   const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
     ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
     : [];
+
+  const generationRunSegment =
+    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
   const resumeExperience = extractExperience(resumeText);
   const linkedinExperience = extractExperience(linkedinData.experience || []);
@@ -12394,8 +12407,9 @@ async function generateEnhancedDocumentsResponse({
         ownerSegment: ownerSegmentForKeys,
         dateSegment: generationDateSegment,
         jobSegment: jobSegmentForKeys,
+        sessionSegment: generationRunSegment,
       });
-  const generatedPrefix = `${prefix}`;
+  const generatedPrefix = `${prefix}runs/${generationRunSegment}/`;
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
   });
@@ -13045,6 +13059,9 @@ app.post(
     res.locals.jobId = jobId;
     const requestId = res.locals.requestId;
     const logContext = { requestId, jobId, route: 'generate-enhanced-docs' };
+    const generationSessionSegment =
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
     captureUserContext(req, res);
 
@@ -13172,6 +13189,7 @@ app.post(
             ownerSegment,
             dateSegment: date,
             jobSegment: jobKeySegment,
+            sessionSegment: generationSessionSegment,
           });
       const logKey = `${prefix}logs/processing.jsonl`;
 
@@ -13692,6 +13710,9 @@ app.post(
   const logContext = userId
     ? { requestId, jobId, userId }
     : { requestId, jobId };
+  const sessionSegment =
+    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
   const date = new Date().toISOString().slice(0, 10);
   const s3 = s3Client;
   let bucket;
@@ -14073,6 +14094,7 @@ app.post(
     ownerSegment,
     dateSegment: date,
     jobSegment: jobKeySegment,
+    sessionSegment,
   });
   const finalUploadKey = `${prefix}original${normalizedExt}`;
   const finalLogKey = `${prefix}logs/processing.jsonl`;
