@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import TemplateSelector from '../TemplateSelector.jsx'
 
 describe('TemplateSelector', () => {
@@ -10,49 +10,33 @@ describe('TemplateSelector', () => {
     { id: 'professional', name: 'Professional Blue', description: 'Classic layout.' }
   ]
 
-  it('renders options and highlights the selected template', () => {
+  it('renders options and reflects the selected template', () => {
     const { rerender } = render(
-      <TemplateSelector
-        options={options}
-        selectedTemplate="modern"
-        onSelect={jest.fn()}
-      />
+      <TemplateSelector options={options} selectedTemplate="modern" onSelect={jest.fn()} />
     )
 
-    const selectedBadge = within(
-      screen.getByTestId('template-selector-option-modern')
-    ).getByText(/selected/i)
-    expect(selectedBadge).toBeInTheDocument()
-    expect(
-      within(screen.getByTestId('template-selector-option-professional')).queryByText(/selected/i)
-    ).not.toBeInTheDocument()
-
-    rerender(
-      <TemplateSelector
-        options={options}
-        selectedTemplate="professional"
-        onSelect={jest.fn()}
-      />
+    const select = screen.getByRole('combobox', { name: /Template Style/i })
+    expect(select).toHaveValue('modern')
+    expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
+      /Two-column balance\./i
     )
 
-    const newlySelectedBadge = within(
-      screen.getByTestId('template-selector-option-professional')
-    ).getByText(/selected/i)
-    expect(newlySelectedBadge).toBeInTheDocument()
+    rerender(<TemplateSelector options={options} selectedTemplate="professional" onSelect={jest.fn()} />)
+
+    expect(select).toHaveValue('professional')
+    expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
+      /Classic layout\./i
+    )
   })
 
   it('invokes onSelect when a template is chosen', () => {
     const handleSelect = jest.fn()
     render(
-      <TemplateSelector
-        options={options}
-        selectedTemplate="modern"
-        onSelect={handleSelect}
-      />
+      <TemplateSelector options={options} selectedTemplate="modern" onSelect={handleSelect} />
     )
 
-    const optionButton = screen.getByTestId('template-selector-option-professional')
-    fireEvent.click(optionButton)
+    const select = screen.getByRole('combobox', { name: /Template Style/i })
+    fireEvent.change(select, { target: { value: 'professional' } })
 
     expect(handleSelect).toHaveBeenCalledWith('professional')
   })
@@ -68,9 +52,9 @@ describe('TemplateSelector', () => {
       />
     )
 
-    const optionButton = screen.getByTestId('template-selector-option-professional')
-    expect(optionButton).toBeDisabled()
-    fireEvent.click(optionButton)
+    const select = screen.getByRole('combobox', { name: /Template Style/i })
+    expect(select).toBeDisabled()
+    fireEvent.change(select, { target: { value: 'professional' } })
     expect(handleSelect).not.toHaveBeenCalled()
   })
 })

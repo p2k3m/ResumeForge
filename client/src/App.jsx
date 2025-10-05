@@ -1717,6 +1717,7 @@ function App() {
   const [previewActionBusy, setPreviewActionBusy] = useState(false)
   const [previewActiveAction, setPreviewActiveAction] = useState('')
   const [previewFile, setPreviewFile] = useState(null)
+  const [pendingDownloadFile, setPendingDownloadFile] = useState(null)
   const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
   const [jobId, setJobId] = useState('')
   const [templateContext, setTemplateContext] = useState(null)
@@ -2597,12 +2598,17 @@ function App() {
   }, [])
 
   const openDownloadPreview = useCallback(
-    (file) => {
+    (file, { requireDownloadConfirmation = false } = {}) => {
       if (!file) return
       const presentation = file.presentation || getDownloadPresentation(file)
       if (presentation.category === 'cover' && isCoverLetterType(file.type)) {
         openCoverLetterEditorModal({ ...file, presentation })
         return
+      }
+      if (requireDownloadConfirmation) {
+        setPendingDownloadFile({ ...file, presentation })
+      } else {
+        setPendingDownloadFile(null)
       }
       setPreviewFile({ ...file, presentation })
     },
@@ -2611,6 +2617,7 @@ function App() {
 
   const closeDownloadPreview = useCallback(() => {
     setPreviewFile(null)
+    setPendingDownloadFile(null)
   }, [])
 
   const handleDownloadFile = useCallback(
@@ -2666,6 +2673,7 @@ function App() {
           ...prev,
           [stateKey]: { status: 'idle', error: '' }
         }))
+        setPendingDownloadFile(null)
       } catch (err) {
         console.error('Download failed', err)
         setError('Unable to download this document. Please try again.')
@@ -2681,12 +2689,14 @@ function App() {
         } catch (openErr) {
           console.warn('Fallback open failed', openErr)
         }
+        setPendingDownloadFile(null)
       }
     },
     [
       downloadGeneratedAt,
       downloadTemplateMetadata,
-      setError
+      setError,
+      setPendingDownloadFile
     ]
   )
 
@@ -2759,12 +2769,11 @@ function App() {
       if (isCoverLetter) {
         if (isExpired) return 'Link expired'
         if (isDownloading) return 'Downloading…'
-        if (coverEdited) return 'Download edited PDF'
-        return presentation.linkLabel || 'Download'
+        return 'Preview before download'
       }
       if (isExpired) return 'Link expired'
       if (isDownloading) return 'Downloading…'
-      return presentation.linkLabel || 'Download'
+      return 'Preview & Download'
     })()
     return (
       <div key={file.type} className={cardClass}>
@@ -2795,9 +2804,14 @@ function App() {
                 const canDownload = isCoverLetter
                   ? Boolean(downloadUrl) && !isExpired
                   : !isDownloadUnavailable
-                if (canDownload) {
-                  handleDownloadFile(file)
+                if (!canDownload) {
+                  return
                 }
+                if (isCoverLetter) {
+                  openCoverLetterEditorModal(file)
+                  return
+                }
+                openDownloadPreview(file, { requireDownloadConfirmation: true })
               }}
               className={downloadButtonClass}
               disabled={isCoverLetterDownloadDisabled}
@@ -2830,8 +2844,8 @@ function App() {
             {coverEdited
               ? 'Edits pending — download the refreshed PDF once you are happy with the text.'
               : hasPreviewedCoverLetter
-                ? 'Download the tailored PDF or revisit the editor to tweak the copy.'
-                : 'Preview and personalise the cover letter in the editor, or download it directly when ready.'}
+                ? 'Download the tailored PDF from the editor or revisit it to tweak the copy.'
+                : 'Open the editor to preview, personalise, and download your cover letter.'}
           </p>
         )}
       </div>
@@ -2842,8 +2856,7 @@ function App() {
     coverLetterDrafts,
     coverLetterOriginals,
     coverLetterReviewState,
-    downloadStates,
-    handleDownloadFile
+    downloadStates
   ])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
@@ -6090,50 +6103,119 @@ function App() {
           </section>
         )}
 
-        {previewFile && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4 py-6"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`Preview for ${previewFile.presentation?.label || 'generated file'}`}
-            onClick={closeDownloadPreview}
-          >
-            <div
-              className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl border border-purple-200/70 overflow-hidden"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4">
-                <div>
-                  <h3 className="text-xl font-semibold text-purple-900">
-                    {previewFile.presentation?.label || 'Generated document preview'}
-                  </h3>
-                  <p className="text-sm text-purple-700/90">
-                    Review this PDF before downloading to confirm the enhancements look right.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeDownloadPreview}
-                  className="text-sm font-semibold text-purple-700 hover:text-purple-900"
+        {previewFile &&
+          (() => {
+            const previewDownloadStateKey = getDownloadStateKey(previewFile)
+            const previewResolvedStateKey =
+              previewDownloadStateKey || (typeof previewFile.url === 'string' ? previewFile.url : '')
+            const previewDownloadState = previewResolvedStateKey
+              ? downloadStates[previewResolvedStateKey]
+              : undefined
+            const previewIsDownloading = previewDownloadState?.status === 'loading'
+            const previewDownloadError = previewDownloadState?.error || ''
+            const pendingDownloadKey = pendingDownloadFile
+              ? getDownloadStateKey(pendingDownloadFile)
+              : ''
+            const previewRequiresConfirmation = Boolean(
+              pendingDownloadFile &&
+                ((pendingDownloadKey && pendingDownloadKey === previewDownloadStateKey) ||
+                  (pendingDownloadFile.url && pendingDownloadFile.url === previewFile.url))
+            )
+            const expiryDate = previewFile.expiresAt ? new Date(previewFile.expiresAt) : null
+            const expiryValid = expiryDate && !Number.isNaN(expiryDate.getTime())
+            const previewExpired = Boolean(expiryValid && expiryDate.getTime() <= Date.now())
+            const previewHasUrl = typeof previewFile.url === 'string' && previewFile.url
+            const previewButtonDisabled = previewIsDownloading || previewExpired || !previewHasUrl
+
+            const downloadButtonLabel = (() => {
+              if (previewExpired) return 'Link expired'
+              if (!previewHasUrl) return 'Link unavailable'
+              return previewIsDownloading ? 'Downloading…' : 'Download PDF'
+            })()
+
+            return (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4 py-6"
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Preview for ${previewFile.presentation?.label || 'generated file'}`}
+                onClick={closeDownloadPreview}
+              >
+                <div
+                  className="w-full max-w-5xl rounded-3xl bg-white shadow-2xl border border-purple-200/70 overflow-hidden"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  Close
-                </button>
-              </div>
-              <div className="bg-slate-50 px-6 py-6">
-                <div className="h-[70vh] w-full overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-inner">
-                  <iframe
-                    src={`${previewFile.url}#toolbar=0&navpanes=0`}
-                    title={previewFile.presentation?.label || 'Document preview'}
-                    className="h-full w-full"
-                  />
+                  <div className="flex items-start justify-between gap-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4">
+                    <div>
+                      <h3 className="text-xl font-semibold text-purple-900">
+                        {previewFile.presentation?.label || 'Generated document preview'}
+                      </h3>
+                      <p className="text-sm text-purple-700/90">
+                        Review this PDF before downloading to confirm the enhancements look right.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeDownloadPreview}
+                      className="text-sm font-semibold text-purple-700 hover:text-purple-900"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="bg-slate-50 px-6 py-6">
+                    <div className="h-[70vh] w-full overflow-hidden rounded-2xl border border-purple-100 bg-white shadow-inner">
+                      <iframe
+                        src={previewHasUrl ? `${previewFile.url}#toolbar=0&navpanes=0` : undefined}
+                        title={previewFile.presentation?.label || 'Document preview'}
+                        className="h-full w-full"
+                      />
+                    </div>
+                    <p className="mt-3 text-xs text-purple-600">
+                      Trouble viewing? Download the PDF instead to open it in your preferred reader.
+                    </p>
+                  </div>
+                  <div className="border-t border-purple-100 bg-white/80 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs text-purple-600 space-y-1">
+                      <p>
+                        {previewRequiresConfirmation
+                          ? 'Looks good? Confirm this preview before downloading your PDF.'
+                          : 'Happy with the updates? Download the PDF once you have reviewed it.'}
+                      </p>
+                      {previewDownloadError && (
+                        <span className="block font-semibold text-rose-600">
+                          {previewDownloadError}
+                        </span>
+                      )}
+                      {!previewHasUrl && (
+                        <span className="block font-semibold text-rose-600">
+                          Download link unavailable. Please regenerate the document.
+                        </span>
+                      )}
+                      {previewExpired && (
+                        <span className="block font-semibold text-rose-600">
+                          This link has expired. Regenerate the documents to refresh the download.
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleDownloadFile(previewFile)
+                      }}
+                      disabled={previewButtonDisabled}
+                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                        previewButtonDisabled
+                          ? 'bg-purple-300 cursor-not-allowed'
+                          : 'bg-purple-600 hover:bg-purple-700'
+                      }`}
+                    >
+                      {downloadButtonLabel}
+                    </button>
+                  </div>
                 </div>
-                <p className="mt-3 text-xs text-purple-600">
-                  Trouble viewing? Download the PDF instead to open it in your preferred reader.
-                </p>
               </div>
-            </div>
-          </div>
-        )}
+            )
+          })()}
 
         {coverLetterEditor && (() => {
           const type = coverLetterEditor.type

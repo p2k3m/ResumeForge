@@ -11,57 +11,56 @@ function TemplateSelector({
   if (!options.length) return null
 
   const labelId = `${idPrefix}-label`
+  const descriptionId = description ? `${idPrefix}-description` : undefined
+  const historyId = historySummary ? `${idPrefix}-history` : undefined
+  const selectId = `${idPrefix}-select`
+  const selectedOption = options.find((option) => option.id === selectedTemplate) || null
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div>
-        <p className="text-sm font-semibold text-purple-700" id={labelId}>
+        <label className="text-sm font-semibold text-purple-700" id={labelId} htmlFor={selectId}>
           {title}
-        </p>
-        {description && <p className="text-xs text-purple-600">{description}</p>}
+        </label>
+        {description && (
+          <p className="text-xs text-purple-600" id={descriptionId}>
+            {description}
+          </p>
+        )}
       </div>
       {historySummary && (
-        <p className="text-xs text-purple-500">
+        <p className="text-xs text-purple-500" id={historyId}>
           You tried {historySummary}
         </p>
       )}
-      <div
-        id={idPrefix}
-        role="radiogroup"
-        className="grid grid-cols-1 md:grid-cols-2 gap-3"
-        data-testid={idPrefix}
-        aria-labelledby={labelId}
-      >
-        {options.map((option) => {
-          const isSelected = option.id === selectedTemplate
-          const stateClass = isSelected
-            ? 'border-purple-500 bg-purple-50 shadow-md'
-            : 'border-purple-200 bg-white'
-
-          return (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              aria-disabled={disabled || undefined}
-              onClick={() => onSelect?.(option.id)}
-              disabled={disabled}
-              className={`text-left rounded-2xl border p-4 transition transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-purple-400 ${stateClass} ${
-                disabled ? 'cursor-not-allowed opacity-60' : ''
-              }`}
-              data-testid={`${idPrefix}-option-${option.id}`}
-            >
-              <h3 className="text-lg font-semibold text-purple-800">{option.name}</h3>
-              <p className="text-sm text-purple-600">{option.description}</p>
-              {isSelected && (
-                <span className="mt-2 inline-block text-xs font-semibold text-purple-500 uppercase">
-                  Selected
-                </span>
-              )}
-            </button>
-          )
-        })}
+      <div>
+        <select
+          id={selectId}
+          name={selectId}
+          className={`w-full rounded-2xl border border-purple-200 bg-white px-4 py-3 text-sm text-purple-900 shadow-sm transition focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-300 ${
+            disabled ? 'cursor-not-allowed bg-purple-50 text-purple-400' : ''
+          }`}
+          aria-labelledby={labelId}
+          aria-describedby={[descriptionId, historyId].filter(Boolean).join(' ') || undefined}
+          value={selectedTemplate || ''}
+          onChange={(event) => onSelect?.(event.target.value)}
+          disabled={disabled}
+          data-testid={selectId}
+        >
+          <option value="" disabled>
+            Select a template
+          </option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.name}
+            </option>
+          ))}
+        </select>
+        {selectedOption && (
+          <p className="mt-2 text-xs text-purple-600" data-testid={`${idPrefix}-selected-description`}>
+            {selectedOption.description}
+          </p>
+        )}
       </div>
     </div>
   )
