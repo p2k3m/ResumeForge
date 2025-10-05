@@ -65,7 +65,7 @@ describe('resume lifecycle coverage', () => {
   ];
 
   test.each(FORMATS)('processes %s resumes end-to-end', async ({ label, fileName, setupOptions }) => {
-    const { app, mocks } = await setupTestServer({
+    const { app, mocks, serverModule } = await setupTestServer({
       ...setupOptions,
       allowedOrigins: 'https://app.resumeforge.test',
     });
@@ -90,6 +90,12 @@ describe('resume lifecycle coverage', () => {
     expect(typeof uploadResponse.body.enhancedScore).toBe('number');
     expect(typeof uploadResponse.body.atsScoreBefore).toBe('number');
     expect(typeof uploadResponse.body.atsScoreAfter).toBe('number');
+    expect(uploadResponse.body.enhancedScore).toBeGreaterThanOrEqual(
+      uploadResponse.body.originalScore
+    );
+    expect(uploadResponse.body.atsScoreAfter).toBeGreaterThanOrEqual(
+      uploadResponse.body.atsScoreBefore
+    );
 
     const uploadTypes = extractTypes(uploadResponse.body.urls);
     expect(uploadTypes).toEqual(
@@ -104,6 +110,19 @@ describe('resume lifecycle coverage', () => {
 
     const resumeText = uploadResponse.body.resumeText || uploadResponse.body.originalResumeText;
     expectResumeStructure(resumeText);
+
+    const { CV_TEMPLATES, CL_TEMPLATES } = serverModule;
+    const templateContext = uploadResponse.body.templateContext;
+    expect(templateContext).toEqual(
+      expect.objectContaining({
+        templates: expect.any(Array),
+        coverTemplates: expect.any(Array),
+        selectedTemplate: expect.any(String),
+      })
+    );
+    expect(templateContext.templates).toEqual(expect.arrayContaining(CV_TEMPLATES));
+    expect(templateContext.coverTemplates).toEqual(expect.arrayContaining(CL_TEMPLATES));
+    expect(CV_TEMPLATES).toContain(templateContext.selectedTemplate);
 
     const jobDescriptionText = uploadResponse.body.jobDescriptionText || JOB_DESCRIPTION;
     const jobSkills =
@@ -166,6 +185,14 @@ describe('resume lifecycle coverage', () => {
 
     expect(generationResponse.status).toBe(200);
     expect(generationResponse.body.success).toBe(true);
+    expect(typeof generationResponse.body.atsScoreBefore).toBe('number');
+    expect(typeof generationResponse.body.atsScoreAfter).toBe('number');
+    expect(generationResponse.body.atsScoreAfter).toBeGreaterThanOrEqual(
+      generationResponse.body.atsScoreBefore
+    );
+    expect(typeof generationResponse.body.scoreBreakdown).toBe('object');
+    expect(Array.isArray(generationResponse.body.atsSubScoresAfter)).toBe(true);
+    expect(generationResponse.body.atsSubScoresAfter.length).toBeGreaterThan(0);
 
     const generationTypes = extractTypes(generationResponse.body.urls);
     expect(generationTypes).toEqual(
@@ -185,6 +212,8 @@ describe('resume lifecycle coverage', () => {
       expect(entry.typeUrl).toContain('#');
       const fragment = entry.typeUrl.slice(entry.typeUrl.indexOf('#') + 1);
       expect(decodeURIComponent(fragment)).toBe(entry.type);
+      expect(typeof entry.expiresAt).toBe('string');
+      expect(typeof entry.generatedAt).toBe('string');
       if (entry.type === 'cover_letter1' || entry.type === 'cover_letter2') {
         expect(entry.text).toEqual(
           expect.objectContaining({
@@ -211,6 +240,15 @@ describe('resume lifecycle coverage', () => {
     expect(pdfKeys.join('\n')).toContain('/runs/');
     expect(pdfKeys.some((key) => key.includes('enhanced_'))).toBe(true);
     expect(pdfKeys.some((key) => key.includes('cover_letter_'))).toBe(true);
+    const pdfPutCommands = mocks.mockS3Send.mock.calls
+      .map(([command]) => command)
+      .filter(
+        (command) =>
+          command.__type === 'PutObjectCommand' &&
+          typeof command.input?.Key === 'string' &&
+          command.input.Key.endsWith('.pdf')
+      );
+    expect(pdfPutCommands.every((command) => command.input?.ContentType === 'application/pdf')).toBe(true);
 
     // Label used to ensure each iteration runs independently
     expect(label.length).toBeGreaterThan(0);
