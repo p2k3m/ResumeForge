@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
+import { Readable } from 'stream';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   S3Client,
@@ -8712,6 +8713,95 @@ function buildDocumentSessionPrefix({
   return `${segments.join('/')}/`;
 }
 
+function deriveSessionChangeLogKey({ changeLogKey, originalUploadKey } = {}) {
+  const explicitKey = typeof changeLogKey === 'string' ? changeLogKey.trim() : '';
+  if (explicitKey) {
+    return explicitKey;
+  }
+  const uploadKey = typeof originalUploadKey === 'string' ? originalUploadKey.trim() : '';
+  if (!uploadKey) {
+    return '';
+  }
+  const prefix = uploadKey.replace(/[^/]+$/, '');
+  if (!prefix) {
+    return '';
+  }
+  return `${prefix}logs/change-log.json`;
+}
+
+async function streamToString(stream) {
+  if (!stream) return '';
+  if (typeof stream === 'string') return stream;
+  if (Buffer.isBuffer(stream)) return stream.toString('utf8');
+  if (typeof stream.transformToString === 'function') {
+    return stream.transformToString();
+  }
+  const readable =
+    stream instanceof Readable || typeof stream[Symbol.asyncIterator] === 'function'
+      ? stream
+      : Readable.from(stream);
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+  }
+  return chunks.join('');
+}
+
+async function readJsonFromS3({ s3, bucket, key }) {
+  if (!s3 || !bucket || !key) {
+    return null;
+  }
+  try {
+    const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const raw = await streamToString(response.Body);
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw);
+  } catch (err) {
+    if (err?.$metadata?.httpStatusCode === 404 || err?.name === 'NoSuchKey') {
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = {}) {
+  const data = await readJsonFromS3({ s3, bucket, key });
+  if (!data) {
+    return Array.isArray(fallbackEntries) ? fallbackEntries : [];
+  }
+  const entries = Array.isArray(data.entries) ? data.entries : [];
+  return entries;
+}
+
+async function writeSessionChangeLog({
+  s3,
+  bucket,
+  key,
+  jobId,
+  entries,
+}) {
+  if (!s3 || !bucket || !key) {
+    return null;
+  }
+  const payload = {
+    version: 1,
+    jobId,
+    updatedAt: new Date().toISOString(),
+    entries: Array.isArray(entries) ? entries : [],
+  };
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: JSON.stringify(payload, null, 2),
+      ContentType: 'application/json',
+    })
+  );
+  return payload;
+}
+
 function buildDocumentFileBaseName({ type, templateId, variant }) {
   const templateSegment = sanitizeS3KeyComponent(templateId);
   const variantSegment = sanitizeS3KeyComponent(variant, { fallback: type });
@@ -11221,6 +11311,7 @@ async function handleImprovementRequest(type, req, res) {
   let logKey = '';
   let existingChangeLog = [];
   let jobStatus = '';
+  let sessionChangeLogKey = '';
 
   if (!isTestEnvironment) {
     dynamo = new DynamoDBClient({ region });
@@ -11245,6 +11336,8 @@ async function handleImprovementRequest(type, req, res) {
         new GetItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+          ProjectionExpression:
+            'jobId, status, s3Bucket, s3Key, changeLog, sessionChangeLogKey',
         })
       );
       const item = record.Item || {};
@@ -11260,13 +11353,37 @@ async function handleImprovementRequest(type, req, res) {
       existingRecord = item;
       storedBucket = item.s3Bucket?.S || '';
       originalUploadKey = item.s3Key?.S || '';
+      sessionChangeLogKey = deriveSessionChangeLogKey({
+        changeLogKey: item.sessionChangeLogKey?.S,
+        originalUploadKey,
+      });
       const existingPrefix = originalUploadKey
         ? originalUploadKey.replace(/[^/]+$/, '')
         : '';
       if (existingPrefix) {
         logKey = `${existingPrefix}logs/processing.jsonl`;
       }
-      existingChangeLog = parseDynamoChangeLog(item.changeLog);
+      try {
+        existingChangeLog = await loadSessionChangeLog({
+          s3: s3Client,
+          bucket: storedBucket,
+          key: sessionChangeLogKey,
+          fallbackEntries: parseDynamoChangeLog(item.changeLog),
+        });
+      } catch (loadErr) {
+        logStructured('error', 'improvement_change_log_load_failed', {
+          ...logContext,
+          bucket: storedBucket,
+          key: sessionChangeLogKey,
+          error: serializeError(loadErr),
+        });
+        return sendError(
+          res,
+          500,
+          'CHANGE_LOG_LOAD_FAILED',
+          'Unable to load the existing change log for this session.'
+        );
+      }
     } catch (err) {
       logStructured('error', 'improvement_job_context_lookup_failed', {
         ...logContext,
@@ -11937,6 +12054,11 @@ async function generateEnhancedDocumentsResponse({
     );
     return null;
   }
+
+  const sessionChangeLogKey = deriveSessionChangeLogKey({
+    changeLogKey: existingRecord?.sessionChangeLogKey?.S,
+    originalUploadKey,
+  });
 
   const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
     ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
@@ -12694,6 +12816,33 @@ async function generateEnhancedDocumentsResponse({
     textArtifactKeys[artifact.type] = key;
   }
 
+  if (sessionChangeLogKey) {
+    try {
+      await writeSessionChangeLog({
+        s3,
+        bucket,
+        key: sessionChangeLogKey,
+        jobId,
+        entries: normalizedChangeLogEntries,
+      });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'session_change_log_synced',
+        metadata: { entries: normalizedChangeLogEntries.length },
+      });
+    } catch (err) {
+      logStructured('warn', 'session_change_log_write_failed', {
+        ...logContext,
+        bucket,
+        key: sessionChangeLogKey,
+        error: serializeError(err),
+      });
+    }
+  }
+
   await logEvent({
     s3,
     bucket,
@@ -12831,6 +12980,11 @@ async function generateEnhancedDocumentsResponse({
     assignKey('enhancedVersion1Key', ':version1TextKey', textArtifactKeys.version1_text);
     assignKey('enhancedVersion2Key', ':version2TextKey', textArtifactKeys.version2_text);
     assignKey('changeLogKey', ':changeLogTextKey', textArtifactKeys.change_log);
+
+    if (sessionChangeLogKey) {
+      updateExpressionParts.push('sessionChangeLogKey = :sessionChangeLogKey');
+      expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
+    }
 
     try {
       await dynamo.send(
@@ -13553,6 +13707,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     }) || jobId;
   const storedLinkedIn = normalizePersonalData(profileIdentifier);
   const dynamo = new DynamoDBClient({ region });
+  const s3 = s3Client;
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
 
   try {
@@ -13570,13 +13725,18 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     );
   }
 
+  let storedBucket = '';
+  let originalUploadKey = '';
+  let sessionChangeLogKey = '';
+  let logKey = '';
   let existingChangeLog = [];
   try {
     const record = await dynamo.send(
       new GetItemCommand({
         TableName: tableName,
         Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-        ProjectionExpression: 'jobId, changeLog',
+        ProjectionExpression:
+          'jobId, changeLog, s3Bucket, s3Key, sessionChangeLogKey',
       })
     );
     const item = record.Item || {};
@@ -13588,7 +13748,39 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         'The upload context could not be located to update the change log.'
       );
     }
-    existingChangeLog = parseDynamoChangeLog(item.changeLog);
+    storedBucket = item.s3Bucket?.S || '';
+    originalUploadKey = item.s3Key?.S || '';
+    sessionChangeLogKey = deriveSessionChangeLogKey({
+      changeLogKey: item.sessionChangeLogKey?.S,
+      originalUploadKey,
+    });
+    if (originalUploadKey) {
+      const prefix = originalUploadKey.replace(/[^/]+$/, '');
+      if (prefix) {
+        logKey = `${prefix}logs/processing.jsonl`;
+      }
+    }
+    try {
+      existingChangeLog = await loadSessionChangeLog({
+        s3,
+        bucket: storedBucket,
+        key: sessionChangeLogKey,
+        fallbackEntries: parseDynamoChangeLog(item.changeLog),
+      });
+    } catch (loadErr) {
+      logStructured('error', 'change_log_load_failed', {
+        ...logContext,
+        bucket: storedBucket,
+        key: sessionChangeLogKey,
+        error: serializeError(loadErr),
+      });
+      return sendError(
+        res,
+        500,
+        'CHANGE_LOG_LOAD_FAILED',
+        'Unable to load the session change log for updates.'
+      );
+    }
   } catch (err) {
     logStructured('error', 'change_log_context_lookup_failed', {
       ...logContext,
@@ -13647,22 +13839,59 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     }
   }
 
-  const serializedChangeLog = enforceChangeLogDynamoSize(
-    serializeChangeLogEntries(updatedChangeLog)
-  );
+  const normalizedChangeLogEntries = updatedChangeLog
+    .map((entry) => normalizeChangeLogEntryInput(entry))
+    .filter(Boolean);
+
+  if (!sessionChangeLogKey) {
+    sessionChangeLogKey = deriveSessionChangeLogKey({ originalUploadKey });
+  }
+
+  try {
+    await writeSessionChangeLog({
+      s3,
+      bucket: storedBucket,
+      key: sessionChangeLogKey,
+      jobId,
+      entries: normalizedChangeLogEntries,
+    });
+    if (logKey) {
+      await logEvent({
+        s3,
+        bucket: storedBucket,
+        key: logKey,
+        jobId,
+        event: removeEntry ? 'change_log_entry_removed' : 'change_log_entry_saved',
+        metadata: { entries: normalizedChangeLogEntries.length },
+      });
+    }
+  } catch (err) {
+    logStructured('error', 'change_log_s3_write_failed', {
+      ...logContext,
+      bucket: storedBucket,
+      key: sessionChangeLogKey,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'CHANGE_LOG_PERSISTENCE_FAILED',
+      err.message || 'Unable to persist the change log to S3.'
+    );
+  }
 
   const expressionAttributeValues = {
     ':jobId': { S: jobId },
     ':updatedAt': { S: nowIso },
   };
-  let updateExpression = '';
+  let updateExpression = 'SET changeLogUpdatedAt = :updatedAt';
 
-  if (serializedChangeLog.length) {
-    expressionAttributeValues[':changeLog'] = { L: serializedChangeLog };
-    updateExpression = 'SET changeLog = :changeLog, changeLogUpdatedAt = :updatedAt';
-  } else {
-    updateExpression = 'SET changeLogUpdatedAt = :updatedAt REMOVE changeLog';
+  if (sessionChangeLogKey) {
+    expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
+    updateExpression += ', sessionChangeLogKey = :sessionChangeLogKey';
   }
+
+  updateExpression += ' REMOVE changeLog';
 
   try {
     await dynamo.send(
@@ -13676,29 +13905,25 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     );
     logStructured('info', 'change_log_updated', {
       ...logContext,
-      entries: updatedChangeLog.length,
+      entries: normalizedChangeLogEntries.length,
       action: removeEntry ? 'remove' : 'upsert',
     });
   } catch (err) {
     logStructured('error', 'change_log_update_failed', {
       ...logContext,
       error: serializeError(err),
-      entries: updatedChangeLog.length,
+      entries: normalizedChangeLogEntries.length,
       action: removeEntry ? 'remove' : 'upsert',
     });
     return sendError(
       res,
       500,
       'CHANGE_LOG_UPDATE_FAILED',
-      err.message || 'Unable to persist the change log.'
+      err.message || 'Unable to persist the change log metadata.'
     );
   }
 
-  const responseChangeLog = updatedChangeLog
-    .map((entry) => normalizeChangeLogEntryInput(entry))
-    .filter(Boolean);
-
-  return res.json({ success: true, changeLog: responseChangeLog });
+  return res.json({ success: true, changeLog: normalizedChangeLogEntries });
 });
 
 app.post(
@@ -14124,6 +14349,7 @@ app.post(
   const finalUploadKey = `${prefix}original${normalizedExt}`;
   const finalLogKey = `${prefix}logs/processing.jsonl`;
   const metadataKey = `${prefix}logs/log.json`;
+  const sessionChangeLogKey = `${prefix}logs/change-log.json`;
 
   if (finalUploadKey !== originalUploadKey) {
     try {
@@ -14222,7 +14448,8 @@ app.post(
         s3Key: { S: originalUploadKey },
         s3Url: { S: s3Location },
         fileType: { S: storedFileType },
-        status: { S: 'uploaded' }
+        status: { S: 'uploaded' },
+        sessionChangeLogKey: { S: sessionChangeLogKey },
       }
     };
     await dynamo.send(new PutItemCommand(putItemPayload));

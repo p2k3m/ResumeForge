@@ -27,8 +27,9 @@ without reverse-engineering `server.js`.
    canonical version.
 3. **Metadata & logs** – DynamoDB receives a record containing the canonical key
    and contextual metadata. JSONL/JSON logs are written under
-   `<prefix>/logs/processing.jsonl` and `<prefix>/logs/log.json` to capture the
-   full processing trail.
+   `<prefix>/logs/processing.jsonl`, `<prefix>/logs/log.json`, and the session
+   change log `<prefix>/logs/change-log.json` to capture the full processing
+   trail without storing verbose change history in DynamoDB.
 
 ## Key structure
 
@@ -50,8 +51,10 @@ Within each run the service writes:
   document type and is deduplicated with `ensureUniqueFileBase()` so collisions
   append `_2`, `_3`, etc.
 * **Text artefacts** – JSON snapshots (original text, generated versions, and
-  change log) live under `<generatedPrefix>/artifacts/*.json` so they are
-  co-located with the PDFs that produced them.
+  run-specific change logs) live under `<generatedPrefix>/artifacts/*.json` so
+  they are co-located with the PDFs that produced them. The session-wide change
+  history is mirrored to `<prefix>/logs/change-log.json` after each update so
+  DynamoDB retains only lightweight pointers.
 * **Activity logs** – Structured log events for uploads, generation, and
   failures are appended to the JSONL file in the same session prefix for easy
   incident reconstruction.
@@ -84,5 +87,6 @@ Within each run the service writes:
 * Apply S3 lifecycle policies at the prefix level to manage growth; the
   application never deletes completed runs automatically.
 * When triaging incidents, inspect the session prefix: the logs directory shows
-  the processing trail, the `runs/` subfolders enumerate each attempt, and the
-  `artifacts/` directory contains the JSON representation of what users saw.
+  the processing trail (including `change-log.json`), the `runs/` subfolders
+  enumerate each attempt, and the `artifacts/` directory contains the JSON
+  representation of what users saw.
