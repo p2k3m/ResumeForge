@@ -12612,32 +12612,23 @@ async function generateEnhancedDocumentsResponse({
       Date.now() + URL_EXPIRATION_SECONDS * 1000
     ).toISOString();
     const urlEntry = { type: name, url: signedUrl, expiresAt };
-    if (entry?.text) {
-      if (isCoverLetter) {
-        urlEntry.text = mapCoverLetterFields({
-          text: entry.text,
-          contactDetails,
-          jobTitle: versionsContext.jobTitle,
-          jobDescription,
-          jobSkills,
-          applicantName,
-          letterIndex: name === 'cover_letter1' ? 1 : 2,
-        });
-      } else {
-        urlEntry.text = entry.text;
-      }
+    if (isCoverLetter) {
+      const coverLetterText =
+        typeof entry?.text === 'string' ? entry.text : '';
+      urlEntry.text = coverLetterText;
+      urlEntry.coverLetterFields = mapCoverLetterFields({
+        text: coverLetterText,
+        contactDetails,
+        jobTitle: versionsContext.jobTitle,
+        jobDescription,
+        jobSkills,
+        applicantName,
+        letterIndex: name === 'cover_letter1' ? 1 : 2,
+      });
+    } else if (entry?.text) {
+      urlEntry.text = entry.text;
     } else if (name !== 'original_upload') {
-      urlEntry.text = isCoverLetter
-        ? mapCoverLetterFields({
-            text: '',
-            contactDetails,
-            jobTitle: versionsContext.jobTitle,
-            jobDescription,
-            jobSkills,
-            applicantName,
-            letterIndex: name === 'cover_letter1' ? 1 : 2,
-          })
-        : '';
+      urlEntry.text = '';
     }
     urls.push(urlEntry);
   }
