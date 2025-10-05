@@ -1258,6 +1258,43 @@ function formatScoreDelta(delta) {
   return `${prefix}${rounded} pts`
 }
 
+function normalizeRescoreSummary(summary) {
+  if (!summary || typeof summary !== 'object') {
+    return null
+  }
+
+  try {
+    return cloneData(summary)
+  } catch (err) {
+    console.error('Unable to clone rescore summary, falling back to shallow copy', err)
+    return { ...summary }
+  }
+}
+
+function deriveSelectionMeaning(value, fallback = null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback
+  }
+  if (value >= 75) {
+    return 'High'
+  }
+  if (value >= 55) {
+    return 'Medium'
+  }
+  return 'Low'
+}
+
+function buildSelectionRationale(value, meaning, fallback = null) {
+  if (typeof fallback === 'string' && fallback.trim()) {
+    return fallback.trim()
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && meaning) {
+    const rounded = Math.round(value)
+    return `Projected ${meaning.toLowerCase()} probability (${rounded}%) that this resume will be shortlisted for the JD.`
+  }
+  return fallback
+}
+
 function cloneData(value) {
   if (value === null || typeof value !== 'object') {
     return value
@@ -2537,6 +2574,7 @@ function App() {
           improvementSummary: Array.isArray(entry?.improvementSummary)
             ? entry.improvementSummary
             : [],
+          rescoreSummary: normalizeRescoreSummary(entry?.rescoreSummary),
           scoreDelta:
             typeof entry?.scoreDelta === 'number' && Number.isFinite(entry.scoreDelta)
               ? entry.scoreDelta
@@ -3406,7 +3444,7 @@ function App() {
   )
 
   const rescoreAfterImprovement = useCallback(
-    async ({ updatedResume, baselineScore, previousMissingSkills }) => {
+    async ({ updatedResume, baselineScore, previousMissingSkills, rescoreSummary = null }) => {
       const resumeDraft = typeof updatedResume === 'string' ? updatedResume : ''
       if (!resumeDraft.trim()) {
         return { delta: null, enhancedScore: null }
@@ -3467,6 +3505,58 @@ function App() {
       const previousMissingList = normalizeSkillList(previousMissingSkills)
       const responseCovered = normalizeSkillList(data.coveredSkills)
 
+      const summary = rescoreSummary && typeof rescoreSummary === 'object' ? rescoreSummary : null
+      const overallSummary =
+        summary && typeof summary.overall === 'object' ? summary.overall : null
+      const selectionSummary =
+        summary && typeof summary.selectionProbability === 'object'
+          ? summary.selectionProbability
+          : null
+      const selectionInsightsSummary =
+        summary && typeof summary.selectionInsights === 'object'
+          ? summary.selectionInsights
+          : null
+
+      const beforeSelectionValue =
+        typeof selectionSummary?.before === 'number' && Number.isFinite(selectionSummary.before)
+          ? selectionSummary.before
+          : null
+      const afterSelectionValue =
+        typeof selectionSummary?.after === 'number' && Number.isFinite(selectionSummary.after)
+          ? selectionSummary.after
+          : null
+      const beforeLevel =
+        typeof selectionSummary?.beforeLevel === 'string'
+          ? selectionSummary.beforeLevel
+          : null
+      const afterLevel =
+        typeof selectionSummary?.afterLevel === 'string'
+          ? selectionSummary.afterLevel
+          : null
+      const beforeMeaning = beforeLevel || deriveSelectionMeaning(beforeSelectionValue)
+      const afterMeaning = afterLevel || deriveSelectionMeaning(afterSelectionValue)
+      const beforeMessage =
+        selectionInsightsSummary?.before?.message || selectionInsightsSummary?.before?.rationale || null
+      const afterMessage =
+        selectionInsightsSummary?.after?.message ||
+        selectionInsightsSummary?.after?.rationale ||
+        selectionInsightsSummary?.message ||
+        null
+      const beforeRationale = buildSelectionRationale(
+        beforeSelectionValue,
+        beforeMeaning,
+        beforeMessage
+      )
+      const afterRationale = buildSelectionRationale(
+        afterSelectionValue,
+        afterMeaning,
+        afterMessage
+      )
+      const selectionDelta =
+        typeof selectionSummary?.delta === 'number' && Number.isFinite(selectionSummary.delta)
+          ? selectionSummary.delta
+          : null
+
       setMatch((prev) => {
         const base = prev || {}
         const nextMissing = Array.isArray(data.missingSkills) ? data.missingSkills : []
@@ -3500,21 +3590,127 @@ function App() {
             : base.enhancedScore
         const nextTable = Array.isArray(data.table) ? data.table : base.table || []
 
-        return {
+        const updatedMatch = {
           ...base,
           table: nextTable,
           missingSkills: nextMissing,
           addedSkills: mergedAdded,
           enhancedScore: enhancedScoreValue
         }
+
+        if (overallSummary) {
+          const overallBeforeScore =
+            typeof overallSummary.before?.score === 'number' && Number.isFinite(overallSummary.before.score)
+              ? overallSummary.before.score
+              : null
+          const overallAfterScore =
+            typeof overallSummary.after?.score === 'number' && Number.isFinite(overallSummary.after.score)
+              ? overallSummary.after.score
+              : null
+          if (overallBeforeScore !== null) {
+            updatedMatch.originalScore = overallBeforeScore
+            updatedMatch.atsScoreBefore = overallBeforeScore
+          }
+          if (overallAfterScore !== null) {
+            updatedMatch.enhancedScore = overallAfterScore
+            updatedMatch.atsScoreAfter = overallAfterScore
+          }
+          const overallMissing = Array.isArray(overallSummary.after?.missingSkills)
+            ? overallSummary.after.missingSkills
+            : null
+          if (overallMissing) {
+            updatedMatch.missingSkills = overallMissing
+          }
+        }
+
+        if (selectionSummary || selectionInsightsSummary) {
+          if (beforeSelectionValue !== null) {
+            updatedMatch.selectionProbabilityBefore = beforeSelectionValue
+          }
+          if (afterSelectionValue !== null) {
+            updatedMatch.selectionProbability = afterSelectionValue
+            updatedMatch.selectionProbabilityAfter = afterSelectionValue
+          }
+          if (beforeMeaning) {
+            updatedMatch.selectionProbabilityBeforeMeaning = beforeMeaning
+          }
+          if (afterMeaning) {
+            updatedMatch.selectionProbabilityMeaning = afterMeaning
+            updatedMatch.selectionProbabilityAfterMeaning = afterMeaning
+          }
+          if (beforeRationale !== null) {
+            updatedMatch.selectionProbabilityBeforeRationale = beforeRationale
+          }
+          if (afterRationale !== null) {
+            updatedMatch.selectionProbabilityRationale = afterRationale
+            updatedMatch.selectionProbabilityAfterRationale = afterRationale
+          }
+          if (selectionDelta !== null) {
+            updatedMatch.selectionProbabilityDelta = selectionDelta
+          }
+        }
+
+        return updatedMatch
       })
+
+      if (selectionInsightsSummary) {
+        setSelectionInsights(cloneData(selectionInsightsSummary))
+      } else if (selectionSummary) {
+        setSelectionInsights((prev) => {
+          const next = {
+            ...(prev || {}),
+            before: { ...(prev?.before || {}) },
+            after: { ...(prev?.after || {}) }
+          }
+
+          if (beforeSelectionValue !== null) {
+            next.before.probability = beforeSelectionValue
+          }
+          if (afterSelectionValue !== null) {
+            next.after.probability = afterSelectionValue
+            next.probability = afterSelectionValue
+          }
+          if (beforeMeaning) {
+            next.before.level = beforeMeaning
+          }
+          if (afterMeaning) {
+            next.after.level = afterMeaning
+            next.level = afterMeaning
+          }
+          if (beforeRationale !== null) {
+            next.before.message = beforeRationale
+            next.before.rationale = beforeRationale
+          }
+          if (afterRationale !== null) {
+            next.after.message = afterRationale
+            next.after.rationale = afterRationale
+            next.message = afterRationale
+          }
+          if (selectionDelta !== null) {
+            next.delta = selectionDelta
+          }
+
+          return next
+        })
+      }
 
       const baselineValid = typeof baselineScore === 'number' && Number.isFinite(baselineScore)
       const enhancedValid =
         typeof data.enhancedScore === 'number' && Number.isFinite(data.enhancedScore)
-      const delta = baselineValid && enhancedValid ? data.enhancedScore - baselineScore : null
+      const computedDelta = baselineValid && enhancedValid ? data.enhancedScore - baselineScore : null
+      const overallDelta =
+        typeof overallSummary?.delta?.score === 'number' && Number.isFinite(overallSummary.delta.score)
+          ? overallSummary.delta.score
+          : null
+      const finalDelta = overallDelta !== null ? overallDelta : computedDelta
+      const enhancedScoreValue =
+        typeof overallSummary?.after?.score === 'number' && Number.isFinite(overallSummary.after.score)
+          ? overallSummary.after.score
+          : enhancedValid
+            ? data.enhancedScore
+            : null
 
-      return { delta, enhancedScore: enhancedValid ? data.enhancedScore : null }
+      return { delta: finalDelta, enhancedScore: enhancedScoreValue }
     },
     [API_BASE_URL, jobDescriptionText, jobSkills, userIdentifier]
   )
@@ -3652,7 +3848,8 @@ function App() {
         const result = await rescoreAfterImprovement({
           updatedResume: updatedResumeDraft,
           baselineScore,
-          previousMissingSkills
+          previousMissingSkills,
+          rescoreSummary: suggestion.rescoreSummary
         })
         const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
 
@@ -4280,6 +4477,7 @@ function App() {
         confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
         accepted: null,
         improvementSummary,
+        rescoreSummary: normalizeRescoreSummary(data.rescore),
         scoreDelta: null,
         rescorePending: false,
         rescoreError: ''
