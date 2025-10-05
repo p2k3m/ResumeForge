@@ -12615,8 +12615,7 @@ async function generateEnhancedDocumentsResponse({
     if (isCoverLetter) {
       const coverLetterText =
         typeof entry?.text === 'string' ? entry.text : '';
-      urlEntry.text = coverLetterText;
-      urlEntry.coverLetterFields = mapCoverLetterFields({
+      const coverLetterFields = mapCoverLetterFields({
         text: coverLetterText,
         contactDetails,
         jobTitle: versionsContext.jobTitle,
@@ -12625,6 +12624,8 @@ async function generateEnhancedDocumentsResponse({
         applicantName,
         letterIndex: name === 'cover_letter1' ? 1 : 2,
       });
+      urlEntry.text = coverLetterFields;
+      urlEntry.coverLetterFields = coverLetterFields;
     } else if (entry?.text) {
       urlEntry.text = entry.text;
     } else if (name !== 'original_upload') {
