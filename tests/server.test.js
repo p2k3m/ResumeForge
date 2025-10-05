@@ -510,6 +510,10 @@ describe('/api/process-cv', () => {
 
     res.body.urls.forEach((entry) => {
       expect(entry.url).toMatch(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/);
+      expect(entry.fileUrl).toMatch(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600$/);
+      expect(entry.typeUrl).toMatch(/\.pdf\?X-Amz-Signature=[^&]+&X-Amz-Expires=3600#.+$/);
+      const fragment = entry.typeUrl.slice(entry.typeUrl.indexOf('#') + 1);
+      expect(decodeURIComponent(fragment)).toBe(entry.type);
       expect(entry.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(entry.templateName).toEqual(expect.any(String));
       expect(entry.templateName.trim().length).toBeGreaterThan(0);

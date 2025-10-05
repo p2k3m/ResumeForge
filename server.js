@@ -11861,13 +11861,12 @@ app.get('/', async (req, res) => {
     logStructured('error', 'client_ui_load_failed', {
       error: serializeError(err),
     });
-    res
-      .status(500)
-      .json({
-        status: 'error',
-        message:
-          'Client application is unavailable. Please try again later or contact support.',
-      });
+    sendError(
+      res,
+      500,
+      'CLIENT_UI_UNAVAILABLE',
+      'Client application is unavailable. Please try again later or contact support.'
+    );
   }
 });
 
@@ -12487,9 +12486,12 @@ async function generateEnhancedDocumentsResponse({
       const expiresAt = new Date(
         Date.now() + URL_EXPIRATION_SECONDS * 1000
       ).toISOString();
+      const typeFragment = encodeURIComponent('original_upload');
       urls.push({
         type: 'original_upload',
         url: originalSignedUrl,
+        fileUrl: originalSignedUrl,
+        typeUrl: `${originalSignedUrl}#${typeFragment}`,
         expiresAt,
         generatedAt: artifactTimestamp,
         templateId: 'original',
@@ -12595,9 +12597,12 @@ async function generateEnhancedDocumentsResponse({
     const expiresAt = new Date(
       Date.now() + URL_EXPIRATION_SECONDS * 1000
     ).toISOString();
+    const typeFragment = encodeURIComponent(name);
     const urlEntry = {
       type: name,
       url: signedUrl,
+      fileUrl: signedUrl,
+      typeUrl: `${signedUrl}#${typeFragment}`,
       expiresAt,
       generatedAt: artifactTimestamp,
     };

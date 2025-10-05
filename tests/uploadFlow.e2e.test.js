@@ -152,6 +152,11 @@ describe('upload to download flow (e2e)', () => {
 
     generationResponse.body.urls.forEach((entry) => {
       expect(entry.url).toContain('https://example.com/');
+      expect(entry.fileUrl).toContain('https://example.com/');
+      expect(entry.typeUrl).toContain('https://example.com/');
+      expect(entry.typeUrl).toContain('#');
+      const fragment = entry.typeUrl.slice(entry.typeUrl.indexOf('#') + 1);
+      expect(decodeURIComponent(fragment)).toBe(entry.type);
       if (entry.type === 'cover_letter1' || entry.type === 'cover_letter2') {
         expect(entry.text).toEqual(
           expect.objectContaining({
