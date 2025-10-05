@@ -152,7 +152,16 @@ describe('upload to download flow (e2e)', () => {
 
     generationResponse.body.urls.forEach((entry) => {
       expect(entry.url).toContain('https://example.com/');
-      if (entry.type !== 'original_upload') {
+      if (entry.type === 'cover_letter1' || entry.type === 'cover_letter2') {
+        expect(entry.text).toEqual(
+          expect.objectContaining({
+            raw: expect.any(String),
+            contact: expect.any(Object),
+            job: expect.any(Object),
+          })
+        );
+        expect(entry.text.raw.length).toBeGreaterThan(0);
+      } else if (entry.type !== 'original_upload') {
         expect(typeof entry.text).toBe('string');
         expect(entry.text.length).toBeGreaterThan(0);
       }
