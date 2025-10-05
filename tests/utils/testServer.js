@@ -26,6 +26,8 @@ export async function setupTestServer({
   dynamoImpl,
   axiosImpl,
   pdfText = 'John Doe\nProfessional Summary\nExperience\nEducation\nSkills\nProjects',
+  docxText = 'Doc text',
+  docText,
   allowedOrigins,
 } = {}) {
   jest.resetModules();
@@ -258,12 +260,25 @@ export async function setupTestServer({
     default: jest.fn().mockResolvedValue({ text: pdfText }),
   }));
 
-  const wordExtractorExtractMock = jest.fn().mockResolvedValue({
-    getBody: () => 'Doc body text',
-    getHeaders: () => ['Header text'],
-    getFooters: () => ['Footer text'],
-    getText: () => 'Doc fallback text',
-  });
+  const resolvedDocText =
+    typeof docText === 'string' && docText.trim()
+      ? docText
+      : 'Doc body text';
+  const wordExtractorExtractMock = jest.fn().mockResolvedValue(
+    docText
+      ? {
+          getBody: () => resolvedDocText,
+          getHeaders: () => [],
+          getFooters: () => [],
+          getText: () => '',
+        }
+      : {
+          getBody: () => 'Doc body text',
+          getHeaders: () => ['Header text'],
+          getFooters: () => ['Footer text'],
+          getText: () => 'Doc fallback text',
+        }
+  );
 
   jest.unstable_mockModule('word-extractor', () => ({
     default: class WordExtractorMock {
@@ -274,7 +289,9 @@ export async function setupTestServer({
   }));
 
   jest.unstable_mockModule('mammoth', () => ({
-    default: { extractRawText: jest.fn().mockResolvedValue({ value: 'Doc text' }) },
+    default: {
+      extractRawText: jest.fn().mockResolvedValue({ value: docxText }),
+    },
   }));
 
   const serverModule = await import('../../server.js');
