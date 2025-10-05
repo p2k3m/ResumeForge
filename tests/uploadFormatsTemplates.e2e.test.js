@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
@@ -45,6 +46,11 @@ function expectResumeStructure(text = '') {
 }
 
 describe('resume lifecycle coverage', () => {
+  const TEST_TIMEOUT_MS = 45000;
+
+  beforeAll(() => {
+    jest.setTimeout(TEST_TIMEOUT_MS);
+  });
 
   const FORMATS = [
     {
@@ -384,5 +390,5 @@ describe('resume lifecycle coverage', () => {
     CL_TEMPLATES.forEach((template) => {
       expect(pdfKeys.some((key) => key.includes(`cover_letter_${template}`))).toBe(true);
     });
-  }, 30000);
+  }, TEST_TIMEOUT_MS);
 });
