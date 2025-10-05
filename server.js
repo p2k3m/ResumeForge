@@ -13965,6 +13965,17 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     .map((entry) => normalizeChangeLogEntryInput(entry))
     .filter(Boolean);
 
+  const serializedChangeLogEntries = serializeChangeLogEntries(
+    normalizedChangeLogEntries
+  );
+  const dynamoChangeLogEntries = enforceChangeLogDynamoSize(
+    serializedChangeLogEntries,
+    {
+      budget: CHANGE_LOG_DYNAMO_LIMITS.budget,
+      hardLimit: CHANGE_LOG_DYNAMO_LIMITS.maxItemBytes,
+    }
+  );
+
   if (!sessionChangeLogKey) {
     sessionChangeLogKey = deriveSessionChangeLogKey({ originalUploadKey });
   }
@@ -14005,15 +14016,14 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   const expressionAttributeValues = {
     ':jobId': { S: jobId },
     ':updatedAt': { S: nowIso },
+    ':changeLog': { L: Array.isArray(dynamoChangeLogEntries) ? dynamoChangeLogEntries : [] },
   };
-  let updateExpression = 'SET changeLogUpdatedAt = :updatedAt';
+  let updateExpression = 'SET changeLog = :changeLog, changeLogUpdatedAt = :updatedAt';
 
   if (sessionChangeLogKey) {
     expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
     updateExpression += ', sessionChangeLogKey = :sessionChangeLogKey';
   }
-
-  updateExpression += ' REMOVE changeLog';
 
   try {
     await dynamo.send(
