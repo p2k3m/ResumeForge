@@ -55,6 +55,8 @@ describe('published CloudFront helpers', () => {
         cloudfront: {
           stackName: metadata.stackName,
           url: 'https://d3exampleabcdef8.cloudfront.net',
+          fileUrl: 'https://d3exampleabcdef8.cloudfront.net',
+          typeUrl: 'https://d3exampleabcdef8.cloudfront.net#download',
           distributionId: metadata.distributionId,
           updatedAt: metadata.updatedAt,
         },
