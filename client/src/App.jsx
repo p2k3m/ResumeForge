@@ -27,7 +27,7 @@ import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
-  'Could not enhance CV; your formatting remained untouched.'
+  'Could not generate PDF, please try again'
 
 const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
   'Please wait for the current ATS score refresh to finish before applying another improvement.'
@@ -2588,7 +2588,7 @@ function App() {
       setCoverLetterClipboardStatus('Updated PDF downloaded.')
     } catch (err) {
       console.error('Cover letter PDF generation failed', err)
-      setCoverLetterDownloadError('Unable to create the PDF. Please try again.')
+      setCoverLetterDownloadError('Could not generate PDF, please try again')
     } finally {
       setIsCoverLetterDownloading(false)
     }
