@@ -295,7 +295,27 @@ function sanitizeFileNameSegment(segment) {
   return normalized || 'document'
 }
 
-function deriveDownloadFileName(file, presentation = {}, response) {
+function formatDownloadTimestampLabel(timestamp) {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function buildTimestampSlug(timestamp) {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (value) => String(value).padStart(2, '0')
+  const year = date.getFullYear()
+  const month = pad(date.getMonth() + 1)
+  const day = pad(date.getDate())
+  const hours = pad(date.getHours())
+  const minutes = pad(date.getMinutes())
+  return `${year}${month}${day}-${hours}${minutes}`
+}
+
+function deriveDownloadFileName(file, presentation = {}, response, options = {}) {
   const disposition = response?.headers?.get?.('content-disposition') || ''
   const dispositionName = extractFileNameFromDisposition(disposition)
   if (dispositionName) {
@@ -313,6 +333,23 @@ function deriveDownloadFileName(file, presentation = {}, response) {
     (typeof file?.type === 'string' && file.type.trim()) ||
     'document'
   const base = sanitizeFileNameSegment(baseSource)
+
+  const templateSegmentRaw =
+    (typeof options?.templateName === 'string' && options.templateName.trim()) ||
+    (typeof options?.templateId === 'string' && options.templateId.trim()) ||
+    ''
+  const templateSegment = templateSegmentRaw ? sanitizeFileNameSegment(templateSegmentRaw) : ''
+
+  const timestampInput = options?.timestamp || options?.generatedAt || Date.now()
+  const timestampSegment = buildTimestampSlug(timestampInput)
+
+  const segments = [base]
+  if (templateSegment && !segments.includes(templateSegment)) {
+    segments.push(templateSegment)
+  }
+  if (timestampSegment && !segments.includes(timestampSegment)) {
+    segments.push(timestampSegment)
+  }
 
   const contentType = response?.headers?.get?.('content-type') || ''
   const normalizedType = contentType.split(';')[0]?.trim().toLowerCase()
@@ -332,7 +369,7 @@ function deriveDownloadFileName(file, presentation = {}, response) {
     }
   }
 
-  return `${base}${extension}`
+  return `${segments.filter(Boolean).join('-')}${extension}`
 }
 
 function buildActionableHint(segment) {
@@ -1645,6 +1682,7 @@ function App() {
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [outputFiles, setOutputFiles] = useState([])
+  const [downloadGeneratedAt, setDownloadGeneratedAt] = useState('')
   const [downloadStates, setDownloadStates] = useState({})
   const [match, setMatch] = useState(null)
   const [scoreBreakdown, setScoreBreakdown] = useState([])
@@ -1693,6 +1731,21 @@ function App() {
   const [coverLetterClipboardStatus, setCoverLetterClipboardStatus] = useState('')
   const [coverLetterReviewState, setCoverLetterReviewState] = useState({})
   const [resumeHistory, setResumeHistory] = useState([])
+  const updateOutputFiles = useCallback((files, options = {}) => {
+    setOutputFiles(files)
+    let nextTimestamp = ''
+    const providedTimestamp = options?.generatedAt
+    if (providedTimestamp) {
+      const providedDate = new Date(providedTimestamp)
+      if (!Number.isNaN(providedDate.getTime())) {
+        nextTimestamp = providedDate.toISOString()
+      }
+    }
+    if (!nextTimestamp && Array.isArray(files) && files.length > 0) {
+      nextTimestamp = new Date().toISOString()
+    }
+    setDownloadGeneratedAt(nextTimestamp)
+  }, [])
   const improvementLockRef = useRef(false)
   const scoreUpdateLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
@@ -2056,6 +2109,70 @@ function App() {
     return [...COVER_TEMPLATE_OPTIONS, ...extras]
   }, [templateContext, selectedCoverTemplate, selectedTemplate])
 
+  const downloadTemplateMetadata = useMemo(() => {
+    const canonicalPrimaryTemplate =
+      canonicalizeTemplateId(templateContext?.template1) ||
+      canonicalizeTemplateId(templateContext?.selectedTemplate) ||
+      canonicalizeTemplateId(selectedTemplate) ||
+      'modern'
+
+    const templateCandidates = Array.isArray(templateContext?.templates)
+      ? templateContext.templates.map((tpl) => canonicalizeTemplateId(tpl)).filter(Boolean)
+      : []
+
+    const canonicalSecondaryTemplateRaw = canonicalizeTemplateId(templateContext?.template2)
+    const canonicalSecondaryTemplate =
+      canonicalSecondaryTemplateRaw ||
+      templateCandidates.find((tpl) => tpl && tpl !== canonicalPrimaryTemplate) ||
+      canonicalPrimaryTemplate
+
+    const derivedCoverFallback = deriveCoverTemplateFromResume(canonicalPrimaryTemplate)
+    const canonicalCoverPrimaryTemplate = canonicalizeCoverTemplateId(
+      templateContext?.coverTemplate1,
+      derivedCoverFallback
+    )
+
+    const coverTemplateCandidates = normalizeCoverTemplateList(templateContext?.coverTemplates)
+    let canonicalCoverSecondaryTemplate = canonicalizeCoverTemplateId(
+      templateContext?.coverTemplate2
+    )
+    if (
+      !canonicalCoverSecondaryTemplate ||
+      canonicalCoverSecondaryTemplate === canonicalCoverPrimaryTemplate
+    ) {
+      canonicalCoverSecondaryTemplate =
+        coverTemplateCandidates.find((tpl) => tpl !== canonicalCoverPrimaryTemplate) ||
+        COVER_TEMPLATE_IDS.find((tpl) => tpl !== canonicalCoverPrimaryTemplate) ||
+        canonicalCoverPrimaryTemplate ||
+        derivedCoverFallback
+    }
+
+    const resolvedCoverPrimary =
+      canonicalCoverPrimaryTemplate || derivedCoverFallback || DEFAULT_COVER_TEMPLATE
+    const resolvedCoverSecondary =
+      canonicalCoverSecondaryTemplate || resolvedCoverPrimary || DEFAULT_COVER_TEMPLATE
+
+    return {
+      original_upload: { id: 'original', name: 'Original Upload' },
+      version1: {
+        id: canonicalPrimaryTemplate,
+        name: formatTemplateName(canonicalPrimaryTemplate)
+      },
+      version2: {
+        id: canonicalSecondaryTemplate,
+        name: formatTemplateName(canonicalSecondaryTemplate)
+      },
+      cover_letter1: {
+        id: resolvedCoverPrimary,
+        name: formatCoverTemplateName(resolvedCoverPrimary)
+      },
+      cover_letter2: {
+        id: resolvedCoverSecondary,
+        name: formatCoverTemplateName(resolvedCoverSecondary)
+      }
+    }
+  }, [selectedTemplate, templateContext])
+
   const templateHistorySummary = useMemo(() => {
     const baseHistory = Array.isArray(templateContext?.templateHistory)
       ? templateContext.templateHistory
@@ -2295,7 +2412,13 @@ function App() {
     outputFiles.forEach((file) => {
       if (!file || typeof file !== 'object') return
       const presentation = getDownloadPresentation(file)
-      const entry = { ...file, presentation }
+      const templateMeta = downloadTemplateMetadata[file.type] || null
+      const entry = {
+        ...file,
+        presentation,
+        templateMeta,
+        generatedAt: file.generatedAt || downloadGeneratedAt || ''
+      }
       if (presentation.category === 'resume') {
         resume.push(entry)
       } else if (presentation.category === 'cover') {
@@ -2308,7 +2431,7 @@ function App() {
     cover.sort((a, b) => (coverOrder[a.type] ?? 50) - (coverOrder[b.type] ?? 50))
     other.sort((a, b) => (a.presentation.label || '').localeCompare(b.presentation.label || ''))
     return { resume, cover, other }
-  }, [outputFiles])
+  }, [outputFiles, downloadTemplateMetadata, downloadGeneratedAt])
 
   useEffect(() => {
     setDownloadStates({})
@@ -2461,10 +2584,6 @@ function App() {
         return
       }
       const presentation = file.presentation || getDownloadPresentation(file)
-      if (presentation.category === 'cover' && isCoverLetterType(file.type)) {
-        openCoverLetterEditorModal({ ...file, presentation })
-        return
-      }
       if (typeof window === 'undefined' || typeof document === 'undefined') {
         setError('Download is not supported in this environment.')
         return
@@ -2492,7 +2611,13 @@ function App() {
           throw new Error(`Download failed with status ${response.status}`)
         }
         const blob = await response.blob()
-        const fileName = deriveDownloadFileName(file, presentation, response)
+        const templateMeta = file.templateMeta || downloadTemplateMetadata[file.type] || {}
+        const fileTimestamp = file.generatedAt || downloadGeneratedAt || Date.now()
+        const fileName = deriveDownloadFileName(file, presentation, response, {
+          templateName: templateMeta.name,
+          templateId: templateMeta.id,
+          generatedAt: fileTimestamp
+        })
         const blobUrl = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = blobUrl
@@ -2522,12 +2647,25 @@ function App() {
         }
       }
     },
-    [openCoverLetterEditorModal, setError]
+    [
+      downloadGeneratedAt,
+      downloadTemplateMetadata,
+      setError
+    ]
   )
 
   const renderDownloadCard = useCallback((file) => {
     if (!file) return null
     const presentation = file.presentation || getDownloadPresentation(file)
+    const templateMeta = file.templateMeta
+    const templateLabel = templateMeta?.name || ''
+    const generatedAtLabel = formatDownloadTimestampLabel(file.generatedAt)
+    const metaLine = [
+      templateLabel ? `Template: ${templateLabel}` : '',
+      generatedAtLabel ? `Generated ${generatedAtLabel}` : ''
+    ]
+      .filter(Boolean)
+      .join(' • ')
     const cardClass = `p-5 rounded-2xl shadow-sm flex flex-col gap-4 border ${
       presentation.cardBorder || 'border-purple-200'
     } ${presentation.cardAccent || 'bg-white/85'}`
@@ -2567,10 +2705,14 @@ function App() {
         ? 'Download link unavailable. Please regenerate the document.'
         : downloadError
     const isDownloadUnavailable = isDownloading || !downloadUrl || isExpired
-    const isCoverLetterDownloadDisabled = isCoverLetter ? false : isDownloadUnavailable
+    const isCoverLetterDownloadDisabled = isCoverLetter
+      ? !downloadUrl || isExpired
+      : isDownloadUnavailable
     const downloadButtonClass = `${buttonClass} ${
       isCoverLetter
-        ? ''
+        ? isCoverLetterDownloadDisabled
+          ? 'opacity-60 cursor-not-allowed'
+          : ''
         : isDownloading
           ? 'opacity-80 cursor-wait'
           : isDownloadUnavailable
@@ -2579,10 +2721,10 @@ function App() {
     }`
     const downloadButtonLabel = (() => {
       if (isCoverLetter) {
-        if (!hasPreviewedCoverLetter) {
-          return 'Preview to personalise'
-        }
-        return coverEdited ? 'Review edits & download' : 'Download from editor'
+        if (isExpired) return 'Link expired'
+        if (isDownloading) return 'Downloading…'
+        if (coverEdited) return 'Download edited PDF'
+        return presentation.linkLabel || 'Download'
       }
       if (isExpired) return 'Link expired'
       if (isDownloading) return 'Downloading…'
@@ -2594,6 +2736,9 @@ function App() {
           <div className="space-y-1">
             <p className="text-lg font-semibold text-purple-900">{presentation.label}</p>
             <p className="text-sm text-purple-700/90 leading-relaxed">{presentation.description}</p>
+            {metaLine && (
+              <p className="text-xs font-medium text-purple-500">{metaLine}</p>
+            )}
           </div>
           {presentation.badgeText && <span className={badgeClass}>{presentation.badgeText}</span>}
         </div>
@@ -2611,12 +2756,15 @@ function App() {
             <button
               type="button"
               onClick={() => {
-                if (isCoverLetter || !isDownloadUnavailable) {
+                const canDownload = isCoverLetter
+                  ? Boolean(downloadUrl) && !isExpired
+                  : !isDownloadUnavailable
+                if (canDownload) {
                   handleDownloadFile(file)
                 }
               }}
               className={downloadButtonClass}
-              disabled={isCoverLetter ? false : isCoverLetterDownloadDisabled}
+              disabled={isCoverLetterDownloadDisabled}
             >
               {downloadButtonLabel}
             </button>
@@ -2644,10 +2792,10 @@ function App() {
             }`}
           >
             {coverEdited
-              ? 'Edits pending — download the refreshed PDF from the editor after reviewing the changes.'
+              ? 'Edits pending — download the refreshed PDF once you are happy with the text.'
               : hasPreviewedCoverLetter
-                ? 'Download the tailored PDF from the editor once you are happy with the text.'
-                : 'Preview and personalise the cover letter in the editor before generating your PDF download.'}
+                ? 'Download the tailored PDF or revisit the editor to tweak the copy.'
+                : 'Preview and personalise the cover letter in the editor, or download it directly when ready.'}
           </p>
         )}
       </div>
@@ -2821,7 +2969,7 @@ function App() {
         setIsProcessing(false)
         setError('')
         const payloadUrls = Array.isArray(payload.urls) ? payload.urls : []
-        setOutputFiles(payloadUrls)
+        updateOutputFiles(payloadUrls, { generatedAt: payload.generatedAt })
         const { drafts, originals } = deriveCoverLetterStateFromFiles(payloadUrls)
         setCoverLetterDrafts(drafts)
         setCoverLetterOriginals(originals)
@@ -2888,7 +3036,7 @@ function App() {
 
   const resetAnalysisState = useCallback(() => {
     analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
-    setOutputFiles([])
+    updateOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
     setBaselineScoreBreakdown([])
@@ -2919,7 +3067,7 @@ function App() {
     setPreviewFile(null)
     setEnhanceAllSummaryText('')
     setIsCoverLetterDownloading(false)
-  }, [])
+  }, [updateOutputFiles])
 
   useEffect(() => {
     const context = analysisContextRef.current || {}
@@ -3073,7 +3221,7 @@ function App() {
         defaultExpiresAt: data?.urlExpiresAt,
         defaultExpiresInSeconds: data?.urlExpiresInSeconds,
       })
-      setOutputFiles(outputFilesValue)
+      updateOutputFiles(outputFilesValue, { generatedAt: data?.generatedAt })
       const { drafts: analysisCoverLetterDrafts, originals: analysisCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(outputFilesValue)
       setCoverLetterDrafts(analysisCoverLetterDrafts)
@@ -3271,6 +3419,7 @@ function App() {
     manualJobDescription,
     manualJobDescriptionRequired,
     resetAnalysisState,
+    updateOutputFiles,
     selectedTemplate,
     templateContext,
     userIdentifier
@@ -3341,7 +3490,7 @@ function App() {
       defaultExpiresAt: snapshot?.urlExpiresAt,
       defaultExpiresInSeconds: snapshot?.urlExpiresInSeconds,
     })
-    setOutputFiles(outputFilesValue)
+    updateOutputFiles(outputFilesValue, { generatedAt: snapshot?.generatedAt })
 
     const snapshotCoverDrafts =
       snapshot.coverLetterDrafts && typeof snapshot.coverLetterDrafts === 'object'
@@ -3380,7 +3529,7 @@ function App() {
     setResumeHistory([])
     setError('')
     setPreviewSuggestion(null)
-  }, [initialAnalysisSnapshot])
+  }, [initialAnalysisSnapshot, updateOutputFiles])
 
   const improvementAvailable =
     improvementsUnlocked && Boolean(resumeText && resumeText.trim()) && Boolean(jobDescriptionText && jobDescriptionText.trim())
@@ -4502,7 +4651,7 @@ function App() {
         defaultExpiresAt: data?.urlExpiresAt,
         defaultExpiresInSeconds: data?.urlExpiresInSeconds,
       })
-      setOutputFiles(urlsValue)
+      updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })
       const { drafts: generatedCoverLetterDrafts, originals: generatedCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(urlsValue)
       setCoverLetterDrafts(generatedCoverLetterDrafts)
@@ -4622,6 +4771,7 @@ function App() {
     selectionInsights,
     certificateInsights,
     templateContext,
+    updateOutputFiles,
     selectedTemplate
   ])
 
@@ -4740,7 +4890,7 @@ function App() {
         defaultExpiresInSeconds: data?.urlExpiresInSeconds
       })
       if (urlsValue.length) {
-        setOutputFiles(urlsValue)
+        updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })
         const {
           drafts: improvementCoverDrafts,
           originals: improvementCoverOriginals
