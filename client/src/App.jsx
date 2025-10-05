@@ -4442,13 +4442,25 @@ function App() {
     setError('')
     try {
       const requestUrl = buildApiUrl(API_BASE_URL, `/api/${type}`)
+      const selectionTargetTitle =
+        typeof selectionInsights?.designation?.targetTitle === 'string'
+          ? selectionInsights.designation.targetTitle.trim()
+          : ''
+      const matchModifiedTitle =
+        typeof match?.modifiedTitle === 'string' ? match.modifiedTitle.trim() : ''
+      const matchOriginalTitle =
+        typeof match?.originalTitle === 'string' ? match.originalTitle.trim() : ''
+      const targetJobTitle = selectionTargetTitle || matchModifiedTitle || matchOriginalTitle
+      const currentResumeTitle = matchModifiedTitle || matchOriginalTitle
+
       const payload = {
         jobId,
         linkedinProfileUrl: profileUrl.trim(),
         resumeText,
         jobDescription: jobDescriptionText,
-        jobTitle: match?.modifiedTitle || match?.originalTitle || '',
-        currentTitle: match?.modifiedTitle || match?.originalTitle || '',
+        jobTitle: targetJobTitle,
+        currentTitle: currentResumeTitle,
+        originalTitle: matchOriginalTitle,
         jobSkills,
         resumeSkills,
         missingSkills: match?.missingSkills || [],

@@ -2587,6 +2587,15 @@ function applyDesignationUpdate(originalResume, updatedResume, context = {}) {
     if (!alreadyExists) {
       const insertIndex = baseLines.length > 1 ? 1 : baseLines.length;
       baseLines.splice(insertIndex, 0, candidate);
+      if (!before) {
+        const fallbackBefore = searchTitles.find(Boolean);
+        if (
+          fallbackBefore &&
+          fallbackBefore.trim().toLowerCase() !== candidate.toLowerCase()
+        ) {
+          before = fallbackBefore;
+        }
+      }
     }
   }
 
@@ -2885,11 +2894,51 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       baseResult.updatedResume,
       context
     );
+    const changeDetails = Array.isArray(baseResult.changeDetails)
+      ? [...baseResult.changeDetails]
+      : [];
+    const reason = (() => {
+      const jobTitle = typeof context?.jobTitle === 'string' ? context.jobTitle.trim() : '';
+      if (jobTitle) {
+        return `Headline now states ${jobTitle} to remove designation mismatch.`;
+      }
+      return 'Headline now reflects the target job title for ATS clarity.';
+    })();
+    const beforeValue = (
+      designationResult.beforeExcerpt ||
+      baseResult.beforeExcerpt ||
+      context.currentTitle ||
+      context.originalTitle ||
+      ''
+    )
+      .toString()
+      .trim();
+    const afterValue = (
+      designationResult.afterExcerpt ||
+      baseResult.afterExcerpt ||
+      context.jobTitle ||
+      ''
+    )
+      .toString()
+      .trim();
+
+    if (afterValue && (!beforeValue || beforeValue.toLowerCase() !== afterValue.toLowerCase())) {
+      changeDetails.push({
+        key: 'designation',
+        section: 'Headline',
+        label: 'Headline',
+        before: beforeValue,
+        after: afterValue,
+        reasons: reason ? [reason] : [],
+      });
+    }
+
     return {
       ...baseResult,
       ...designationResult,
       beforeExcerpt: designationResult.beforeExcerpt || baseResult.beforeExcerpt,
       afterExcerpt: designationResult.afterExcerpt || baseResult.afterExcerpt,
+      changeDetails,
     };
   }
 
@@ -10674,9 +10723,10 @@ async function handleImprovementRequest(type, req, res) {
         : typeof payload.originalTitle === 'string' && payload.originalTitle.trim()
           ? payload.originalTitle.trim()
           : extractDesignationLine(resumeText);
+    const jobTitleInput = typeof payload.jobTitle === 'string' ? payload.jobTitle.trim() : '';
     const updatedDesignationTitle =
       type === 'change-designation' || type === 'enhance-all'
-        ? extractDesignationLine(updatedResumeText) || baselineDesignationTitle
+        ? extractDesignationLine(updatedResumeText) || jobTitleInput || baselineDesignationTitle
         : sectionContext.key === 'designation' && sectionContext.afterText
           ? sectionContext.afterText
           : baselineDesignationTitle;
