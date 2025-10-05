@@ -340,6 +340,7 @@ function buildActionableHint(segment) {
 }
 
 const TEMPLATE_PREFERENCE_STORAGE_KEY = 'resumeForge.templatePreferences'
+const USER_ID_STORAGE_KEY = 'resumeForge.userId'
 
 function readTemplatePreferenceStore() {
   if (typeof window === 'undefined' || !window?.localStorage) {
@@ -408,6 +409,56 @@ function setStoredTemplatePreference(userIdentifier, templateId) {
     updatedAt: new Date().toISOString()
   }
   writeTemplatePreferenceStore(store)
+}
+
+function generateUserIdentifier() {
+  try {
+    if (typeof globalThis !== 'undefined' && globalThis.crypto?.randomUUID) {
+      return globalThis.crypto.randomUUID()
+    }
+  } catch (err) {
+    console.warn('Failed to generate UUID via crypto', err)
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function readStoredUserId() {
+  if (typeof window === 'undefined' || !window?.localStorage) {
+    return ''
+  }
+  try {
+    const raw = window.localStorage.getItem(USER_ID_STORAGE_KEY)
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim()
+      if (trimmed) {
+        return trimmed
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to read stored user id', err)
+  }
+  return ''
+}
+
+function persistStoredUserId(userId) {
+  if (typeof window === 'undefined' || !window?.localStorage || !userId) {
+    return
+  }
+  try {
+    window.localStorage.setItem(USER_ID_STORAGE_KEY, userId)
+  } catch (err) {
+    console.warn('Failed to persist user id', err)
+  }
+}
+
+function getOrCreateUserId() {
+  const stored = readStoredUserId()
+  if (stored) {
+    return stored
+  }
+  const generated = generateUserIdentifier()
+  persistStoredUserId(generated)
+  return generated
 }
 
 function canonicalizeProfileIdentifier(profileUrl) {
@@ -1588,10 +1639,8 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 }
 
 function App() {
-  const [profileUrl, setProfileUrl] = useState('')
   const [credlyUrl, setCredlyUrl] = useState('')
   const [manualJobDescription, setManualJobDescription] = useState('')
-  const [jobDescriptionUrl, setJobDescriptionUrl] = useState('')
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -1649,14 +1698,13 @@ function App() {
   const autoPreviewSignatureRef = useRef('')
   const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
-  const profileInputRef = useRef(null)
   const analysisContextRef = useRef({ hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' })
   const cvSignatureRef = useRef('')
   const jobSignatureRef = useRef('')
-  const [linkedinRequired, setLinkedinRequired] = useState(false)
+  const [localUserId] = useState(() => getOrCreateUserId())
   const userIdentifier = useMemo(
-    () => deriveUserIdentifier({ profileUrl }),
-    [profileUrl]
+    () => deriveUserIdentifier({ userId: localUserId }),
+    [localUserId]
   )
 
   const currentCvSignature = useMemo(() => {
@@ -1673,12 +1721,8 @@ function App() {
     if (manualText) {
       return `manual:${manualText}`
     }
-    const url = typeof jobDescriptionUrl === 'string' ? jobDescriptionUrl.trim() : ''
-    if (url) {
-      return `url:${url}`
-    }
     return ''
-  }, [jobDescriptionUrl, manualJobDescription])
+  }, [manualJobDescription])
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
@@ -1800,11 +1844,7 @@ function App() {
       return
     }
     const manualText = manualJobDescription.trim()
-    const jobUrl = jobDescriptionUrl.trim()
-    if (manualJobDescriptionRequired && !manualText) {
-      return
-    }
-    if (!manualText && !jobUrl) {
+    if (!manualText) {
       return
     }
     const signature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
@@ -1815,15 +1855,13 @@ function App() {
       return
     }
     handleScoreSubmit()
-  }, [
-    cvFile,
-    handleScoreSubmit,
-    isProcessing,
-    jobDescriptionUrl,
-    manualJobDescription,
-    manualJobDescriptionRequired,
-    scoreComplete
-  ])
+  }, [cvFile, handleScoreSubmit, isProcessing, manualJobDescription, scoreComplete])
+
+  useEffect(() => {
+    if (manualJobDescriptionRequired && manualJobDescription.trim()) {
+      setManualJobDescriptionRequired(false)
+    }
+  }, [manualJobDescription, manualJobDescriptionRequired])
 
   const resumeHistoryMap = useMemo(() => {
     const map = new Map()
@@ -2884,21 +2922,16 @@ function App() {
 
   const handleScoreSubmit = useCallback(async () => {
     const manualText = manualJobDescription.trim()
-    const jobUrl = jobDescriptionUrl.trim()
     const fileSignature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
-    const jobSignature = manualText ? `manual:${manualText}` : jobUrl ? `url:${jobUrl}` : ''
+    const jobSignature = manualText ? `manual:${manualText}` : ''
 
     if (!cvFile) {
       setError('Please upload a CV before submitting.')
       return
     }
-    if (manualJobDescriptionRequired && !manualText) {
+    if (!manualText) {
+      setManualJobDescriptionRequired(true)
       setError('Please paste the full job description before continuing.')
-      manualJobDescriptionRef.current?.focus?.()
-      return
-    }
-    if (!manualText && !jobUrl) {
-      setError('Provide a job description URL or paste the full job description before continuing.')
       manualJobDescriptionRef.current?.focus?.()
       return
     }
@@ -2916,12 +2949,8 @@ function App() {
     try {
       const formData = new FormData()
       formData.append('resume', cvFile)
-      formData.append('linkedinProfileUrl', profileUrl)
       if (manualText) {
         formData.append('manualJobDescription', manualText)
-      }
-      if (jobUrl) {
-        formData.append('jobDescriptionUrl', jobUrl)
       }
       if (credlyUrl) formData.append('credlyProfileUrl', credlyUrl)
       if (manualCertificatesInput.trim()) {
@@ -2978,14 +3007,13 @@ function App() {
           }
           const manualRequired = data?.error?.details?.manualInputRequired === true
           const fetchReason = typeof data?.error?.details?.reason === 'string' ? data.error.details.reason : ''
-          if (manualRequired) {
-            setManualJobDescriptionRequired(true)
-            manualJobDescriptionRef.current?.focus?.()
-            if (fetchReason && fetchReason.toUpperCase() === 'FETCH_BLOCKED') {
-              message =
-                'This job post blocks automated access. Paste the full job description to continue.'
+            if (manualRequired) {
+              setManualJobDescriptionRequired(true)
+              manualJobDescriptionRef.current?.focus?.()
+              if (fetchReason && fetchReason.toUpperCase() === 'FETCH_BLOCKED') {
+                message = 'Paste the full job description to continue.'
+              }
             }
-          }
         } catch {
           try {
             const text = await response.text()
@@ -3216,11 +3244,9 @@ function App() {
     API_BASE_URL,
     credlyUrl,
     cvFile,
-    jobDescriptionUrl,
     manualCertificatesInput,
     manualJobDescription,
     manualJobDescriptionRequired,
-    profileUrl,
     resetAnalysisState,
     selectedTemplate,
     templateContext,
@@ -3880,13 +3906,12 @@ function App() {
 
   const persistChangeLogEntry = useCallback(
     async (entry) => {
-      if (!entry || !jobId || !profileUrl || !profileUrl.trim()) {
+      if (!entry || !jobId) {
         return null
       }
 
       const payload = {
         jobId,
-        linkedinProfileUrl: profileUrl.trim(),
         entry
       }
 
@@ -3915,7 +3940,7 @@ function App() {
       setChangeLog(entries)
       return entries
     },
-    [API_BASE_URL, jobId, profileUrl, userIdentifier]
+    [API_BASE_URL, jobId, userIdentifier]
   )
 
   const applyImprovementSuggestion = useCallback(
@@ -4329,13 +4354,12 @@ function App() {
 
   const removeChangeLogEntry = useCallback(
     async (entryId) => {
-      if (!entryId || !jobId || !profileUrl || !profileUrl.trim()) {
+      if (!entryId || !jobId) {
         return null
       }
 
       const payload = {
         jobId,
-        linkedinProfileUrl: profileUrl.trim(),
         remove: true,
         entryId
       }
@@ -4365,21 +4389,12 @@ function App() {
       setChangeLog(entries)
       return entries
     },
-    [API_BASE_URL, jobId, profileUrl, userIdentifier]
+    [API_BASE_URL, jobId, userIdentifier]
   )
 
   const handleGenerateEnhancedDocs = useCallback(async () => {
     if (!jobId) {
       setError('Upload your resume and job description before generating downloads.')
-      return
-    }
-    const trimmedLinkedIn = profileUrl.trim()
-    if (!trimmedLinkedIn) {
-      setLinkedinRequired(true)
-      setError('Add your LinkedIn profile URL before generating enhanced documents.')
-      if (profileInputRef.current) {
-        profileInputRef.current.focus()
-      }
       return
     }
     if (!improvementsUnlocked) {
@@ -4419,7 +4434,6 @@ function App() {
         jobDescriptionText,
         jobSkills,
         resumeSkills,
-        linkedinProfileUrl: trimmedLinkedIn,
         credlyProfileUrl: credlyUrl,
         manualCertificates: manualCertificatesData,
         templateContext: requestTemplateContext,
@@ -4579,7 +4593,6 @@ function App() {
     jobId,
     jobSkills,
     manualCertificatesData,
-    profileUrl,
     userIdentifier,
     resumeSkills,
     resumeText,
@@ -4651,7 +4664,6 @@ function App() {
 
       const payload = {
         jobId,
-        linkedinProfileUrl: profileUrl.trim(),
         resumeText,
         jobDescription: jobDescriptionText,
         jobTitle: targetJobTitle,
@@ -5075,10 +5087,7 @@ function App() {
   const handlePreviewReject = useCallback(() => handlePreviewDecision('reject'), [handlePreviewDecision])
 
   const hasManualJobDescriptionInput = Boolean(manualJobDescription && manualJobDescription.trim())
-  const hasJobDescriptionUrlInput = Boolean(jobDescriptionUrl && jobDescriptionUrl.trim())
-  const jobDescriptionReady = manualJobDescriptionRequired
-    ? hasManualJobDescriptionInput
-    : hasManualJobDescriptionInput || hasJobDescriptionUrlInput
+  const jobDescriptionReady = hasManualJobDescriptionInput
   const rescoreDisabled = !cvFile || isProcessing || !jobDescriptionReady
 
   return (
@@ -5162,43 +5171,10 @@ function App() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <input
-                ref={profileInputRef}
-                type="url"
-                placeholder="LinkedIn Profile URL"
-                value={profileUrl}
-                onChange={(e) => {
-                  const value = e.target.value
-                  setProfileUrl(value)
-                  if (linkedinRequired && value.trim()) {
-                    setLinkedinRequired(false)
-                  }
-                }}
-                aria-invalid={linkedinRequired ? 'true' : 'false'}
-                className={`w-full p-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-purple-400 ${
-                  linkedinRequired
-                    ? 'border-rose-400 focus:ring-rose-300'
-                    : 'border-purple-200'
-                }`}
-              />
-              {linkedinRequired && (
-                <p className="text-xs font-semibold text-rose-600">
-                  Add your LinkedIn profile URL to generate enhanced documents.
-                </p>
-              )}
-            </div>
-            <input
-              type="url"
-              placeholder="Job Description URL (optional)"
-              value={jobDescriptionUrl}
-              onChange={(e) => setJobDescriptionUrl(e.target.value)}
-              className="w-full p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-            />
             <div className="md:col-span-2 space-y-2">
               <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
                 Paste Full Job Description{' '}
-                {manualJobDescriptionRequired && <span className="text-rose-600">*</span>}
+                <span className={manualJobDescriptionRequired ? 'text-rose-600' : 'text-purple-500'}>*</span>
               </label>
               <textarea
                 id="manual-job-description"
@@ -5206,7 +5182,7 @@ function App() {
                 onChange={(e) => setManualJobDescription(e.target.value)}
                 placeholder="Paste the entire job post here."
                 className="w-full h-32 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                required={manualJobDescriptionRequired}
+                required
                 ref={manualJobDescriptionRef}
               />
               <p
@@ -5217,8 +5193,8 @@ function App() {
                 }`}
               >
                 {manualJobDescriptionRequired
-                  ? 'This job post blocked automatic access. Paste the full JD to continue.'
-                  : 'Paste the JD text here or provide the job post URL above and we will fetch it automatically.'}
+                  ? 'Paste the full job description to continue.'
+                  : 'Paste the full JD so we analyse the exact role requirements.'}
               </p>
               {hasManualJobDescriptionInput && (
                 <JobDescriptionPreview text={manualJobDescription} />

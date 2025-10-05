@@ -515,6 +515,31 @@ function captureUserContext(req, res) {
   return userId;
 }
 
+function resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId } = {}) {
+  const linkedinInput =
+    typeof linkedinProfileUrl === 'string' ? linkedinProfileUrl.trim() : '';
+  if (linkedinInput) {
+    return linkedinInput;
+  }
+  const normalizedUserId = normaliseUserId(userId);
+  if (normalizedUserId) {
+    return normalizedUserId;
+  }
+  const jobIdInput = typeof jobId === 'string' ? jobId.trim() : '';
+  if (jobIdInput) {
+    return jobIdInput;
+  }
+  return '';
+}
+
+function resolveProfileIdentifierHash(context) {
+  const identifier = resolveProfileIdentifier(context);
+  if (identifier) {
+    return anonymizePersonalData(identifier);
+  }
+  return anonymizePersonalData(createIdentifier());
+}
+
 const scheduleTask =
   typeof queueMicrotask === 'function'
     ? queueMicrotask
@@ -11325,14 +11350,6 @@ async function handleImprovementRequest(type, req, res) {
 
   const linkedinProfileUrlInput =
     typeof payload.linkedinProfileUrl === 'string' ? payload.linkedinProfileUrl.trim() : '';
-  if (!linkedinProfileUrlInput) {
-    return sendError(
-      res,
-      400,
-      'LINKEDIN_PROFILE_URL_REQUIRED',
-      'linkedinProfileUrl is required to continue the scored session.'
-    );
-  }
 
   req.jobId = jobIdInput;
   res.locals.jobId = jobIdInput;
@@ -11340,7 +11357,13 @@ async function handleImprovementRequest(type, req, res) {
   const requestId = res.locals.requestId;
   const logContext = { requestId, jobId: jobIdInput, type };
 
-  const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrlInput);
+  const profileIdentifier =
+    resolveProfileIdentifier({
+      linkedinProfileUrl: linkedinProfileUrlInput,
+      userId: res.locals.userId,
+      jobId: jobIdInput,
+    }) || jobIdInput;
+  const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
   let dynamo = null;
   let existingRecord = {};
@@ -13043,16 +13066,15 @@ app.post(
       );
     }
 
-    const linkedinProfileUrl =
+    const submittedLinkedIn =
       typeof req.body.linkedinProfileUrl === 'string' ? req.body.linkedinProfileUrl.trim() : '';
-    if (!linkedinProfileUrl) {
-      return sendError(
-        res,
-        400,
-        'LINKEDIN_PROFILE_URL_REQUIRED',
-        'linkedinProfileUrl is required to generate enhanced documents.'
-      );
-    }
+    const profileIdentifier =
+      resolveProfileIdentifier({
+        linkedinProfileUrl: submittedLinkedIn,
+        userId: res.locals.userId,
+        jobId: jobIdInput,
+      }) || jobIdInput;
+    const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
 
     const credlyProfileUrl =
       typeof req.body.credlyProfileUrl === 'string' ? req.body.credlyProfileUrl.trim() : '';
@@ -13162,8 +13184,6 @@ app.post(
       const date = new Date().toISOString().slice(0, 10);
       const applicantName = extractName(resumeText);
       const sanitizedName = sanitizeName(applicantName) || 'candidate';
-      const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
-
       let originalUploadKey = '';
       let storedBucket = '';
       let existingChangeLog = [];
@@ -13244,35 +13264,37 @@ app.post(
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_started' });
 
       let linkedinData = {};
-      try {
-        linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
-        logStructured('info', 'linkedin_profile_refetched', {
-          ...logContext,
-          experience: linkedinData.experience?.length || 0,
-          education: linkedinData.education?.length || 0,
-          certifications: linkedinData.certifications?.length || 0,
-        });
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'refetched_linkedin_profile',
-        });
-      } catch (err) {
-        logStructured('warn', 'linkedin_profile_refetch_failed', {
-          ...logContext,
-          error: serializeError(err),
-        });
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'linkedin_profile_refetch_failed',
-          level: 'error',
-          message: err.message,
-        });
+      if (submittedLinkedIn) {
+        try {
+          linkedinData = await fetchLinkedInProfile(submittedLinkedIn);
+          logStructured('info', 'linkedin_profile_refetched', {
+            ...logContext,
+            experience: linkedinData.experience?.length || 0,
+            education: linkedinData.education?.length || 0,
+            certifications: linkedinData.certifications?.length || 0,
+          });
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'refetched_linkedin_profile',
+          });
+        } catch (err) {
+          logStructured('warn', 'linkedin_profile_refetch_failed', {
+            ...logContext,
+            error: serializeError(err),
+          });
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'linkedin_profile_refetch_failed',
+            level: 'error',
+            message: err.message,
+          });
+        }
       }
 
       let credlyCertifications = [];
@@ -13592,23 +13614,19 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     );
   }
 
-  const linkedinProfileUrl =
-    typeof req.body.linkedinProfileUrl === 'string' ? req.body.linkedinProfileUrl.trim() : '';
-  if (!linkedinProfileUrl) {
-    return sendError(
-      res,
-      400,
-      'LINKEDIN_PROFILE_URL_REQUIRED',
-      'linkedinProfileUrl is required to update the change log.'
-    );
-  }
-
   const requestId = res.locals.requestId;
   const logContext = { requestId, jobId, route: 'change-log' };
 
   captureUserContext(req, res);
-
-  const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
+  const profileIdentifier =
+    resolveProfileIdentifier({
+      linkedinProfileUrl: typeof req.body.linkedinProfileUrl === 'string'
+        ? req.body.linkedinProfileUrl.trim()
+        : '',
+      userId: res.locals.userId,
+      jobId,
+    }) || jobId;
+  const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
   const dynamo = new DynamoDBClient({ region });
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
 
@@ -13915,14 +13933,21 @@ app.post(
         : '';
   const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
   const hasManualJobDescription = Boolean(manualJobDescription);
-  const jobDescriptionUrlValue =
+  const jobDescriptionUrlInput =
     typeof jobDescriptionUrl === 'string' ? jobDescriptionUrl.trim() : '';
-  const hasJobDescriptionUrl = Boolean(jobDescriptionUrlValue);
+  const jobDescriptionUrlValue = '';
+  const hasJobDescriptionUrl = false;
+  const submittedLinkedIn =
+    typeof linkedinProfileUrl === 'string' ? linkedinProfileUrl.trim() : '';
+  const submittedCredly =
+    typeof credlyProfileUrl === 'string' ? credlyProfileUrl.trim() : '';
+  const profileIdentifier =
+    resolveProfileIdentifier({ linkedinProfileUrl: submittedLinkedIn, userId, jobId }) || jobId;
   logStructured('info', 'process_cv_started', {
     ...logContext,
-    jobDescriptionHost: getUrlHost(jobDescriptionUrlValue),
-    linkedinHost: getUrlHost(linkedinProfileUrl),
-    credlyHost: getUrlHost(credlyProfileUrl),
+    jobDescriptionHost: getUrlHost(jobDescriptionUrlInput),
+    linkedinHost: getUrlHost(submittedLinkedIn),
+    credlyHost: getUrlHost(submittedCredly),
     manualJobDescriptionProvided: hasManualJobDescription,
   });
   const bodyTemplate =
@@ -14007,7 +14032,7 @@ app.post(
       { field: 'resume' }
     );
   }
-  if (!hasManualJobDescription && !hasJobDescriptionUrl) {
+  if (!hasManualJobDescription) {
     logStructured('warn', 'job_description_missing', logContext);
     return sendError(
       res,
@@ -14148,22 +14173,13 @@ app.post(
       }
     );
   }
-  if (!linkedinProfileUrl) {
-    logStructured('warn', 'linkedin_profile_missing', logContext);
-    return sendError(
-      res,
-      400,
-      'LINKEDIN_PROFILE_URL_REQUIRED',
-      'linkedinProfileUrl required'
-    );
-  }
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName) || 'candidate';
   const anonymizedApplicantName = anonymizePersonalData(applicantName);
-  const anonymizedLinkedIn = anonymizePersonalData(linkedinProfileUrl);
+  const anonymizedLinkedIn = anonymizePersonalData(profileIdentifier);
   const anonymizedIp = anonymizePersonalData(ipAddress);
   const anonymizedUserAgent = anonymizePersonalData(userAgent);
-  const anonymizedCredly = anonymizePersonalData(credlyProfileUrl);
+  const anonymizedCredly = anonymizePersonalData(submittedCredly);
   const jobKeySegment = sanitizeJobSegment(jobId);
   const prefix = jobKeySegment
     ? `${sanitizedName}/cv/${date}/${jobKeySegment}/`
@@ -14242,39 +14258,41 @@ app.post(
   try {
     await ensureTableExists();
     const timestamp = new Date().toISOString();
-    await dynamo.send(
-      new PutItemCommand({
-        TableName: tableName,
-        Item: {
-          linkedinProfileUrl: { S: anonymizedLinkedIn },
-          candidateName: { S: anonymizedApplicantName },
-          timestamp: { S: timestamp },
-          uploadedAt: { S: timestamp },
-          requestId: { S: safeRequestId },
-          jobId: { S: jobId },
-          jobDescriptionUrl: { S: jobDescriptionUrlValue },
-          credlyProfileUrl: { S: anonymizedCredly },
-          cv1Url: { S: '' },
-          cv2Url: { S: '' },
-          coverLetter1Url: { S: '' },
-          coverLetter2Url: { S: '' },
-          ipAddress: { S: anonymizedIp },
-          userAgent: { S: anonymizedUserAgent },
-          os: { S: os },
-          browser: { S: browser },
-          device: { S: device },
-          location: { S: locationLabel },
-          locationCity: { S: locationMeta.city || '' },
-          locationRegion: { S: locationMeta.region || '' },
-          locationCountry: { S: locationMeta.country || '' },
-          s3Bucket: { S: bucket },
-          s3Key: { S: originalUploadKey },
-          s3Url: { S: s3Location },
-          fileType: { S: storedFileType },
-          status: { S: 'uploaded' }
-        }
-      })
-    );
+    const putItemPayload = {
+      TableName: tableName,
+      Item: {
+        linkedinProfileUrl: { S: anonymizedLinkedIn },
+        candidateName: { S: anonymizedApplicantName },
+        timestamp: { S: timestamp },
+        uploadedAt: { S: timestamp },
+        requestId: { S: safeRequestId },
+        jobId: { S: jobId },
+        jobDescriptionUrl: { S: jobDescriptionUrlValue },
+        credlyProfileUrl: { S: anonymizedCredly },
+        cv1Url: { S: '' },
+        cv2Url: { S: '' },
+        coverLetter1Url: { S: '' },
+        coverLetter2Url: { S: '' },
+        ipAddress: { S: anonymizedIp },
+        userAgent: { S: anonymizedUserAgent },
+        os: { S: os },
+        browser: { S: browser },
+        device: { S: device },
+        location: { S: locationLabel },
+        locationCity: { S: locationMeta.city || '' },
+        locationRegion: { S: locationMeta.region || '' },
+        locationCountry: { S: locationMeta.country || '' },
+        s3Bucket: { S: bucket },
+        s3Key: { S: originalUploadKey },
+        s3Url: { S: s3Location },
+        fileType: { S: storedFileType },
+        status: { S: 'uploaded' }
+      }
+    };
+    if (submittedLinkedIn) {
+      putItemPayload.Item.submittedLinkedinProfileUrl = { S: submittedLinkedIn };
+    }
+    await dynamo.send(new PutItemCommand(putItemPayload));
     logStructured('info', 'dynamo_initial_record_written', {
       ...logContext,
       bucket,
@@ -14288,16 +14306,18 @@ app.post(
       event: 'dynamodb_initial_record_written'
     });
 
-    const metadataPayload = {
-      version: 1,
-      jobId,
-      uploadedAt: timestamp,
-      applicantHash: anonymizedApplicantName,
-      links: {
-        linkedinProfileUrlHash: anonymizedLinkedIn,
-        credlyProfileUrlHash: anonymizedCredly,
-        jobDescriptionUrl: jobDescriptionUrlValue,
-      },
+  const metadataPayload = {
+    version: 1,
+    jobId,
+    uploadedAt: timestamp,
+    applicantHash: anonymizedApplicantName,
+    links: {
+      linkedinProfileUrlHash: anonymizedLinkedIn,
+      linkedinProfileUrl: submittedLinkedIn,
+      credlyProfileUrlHash: anonymizedCredly,
+      credlyProfileUrl: submittedCredly,
+      jobDescriptionUrl: jobDescriptionUrlValue,
+    },
       client: {
         ipAddressHash: anonymizedIp,
         userAgentHash: anonymizedUserAgent,
@@ -14322,11 +14342,18 @@ app.post(
       requestContext: {
         requestId: safeRequestId || undefined,
       },
-      templates: {
-        resume: [template1, template2].filter(Boolean),
-        cover: [coverTemplate1, coverTemplate2].filter(Boolean),
-      },
-    };
+    templates: {
+      resume: [template1, template2].filter(Boolean),
+      cover: [coverTemplate1, coverTemplate2].filter(Boolean),
+    },
+  };
+
+    if (!submittedLinkedIn) {
+      delete metadataPayload.links.linkedinProfileUrl;
+    }
+    if (!submittedCredly) {
+      delete metadataPayload.links.credlyProfileUrl;
+    }
 
     if (!metadataPayload.requestContext.requestId) {
       delete metadataPayload.requestContext.requestId;
@@ -14400,7 +14427,7 @@ app.post(
       key: logKey,
       jobId,
       event: 'request_received',
-      message: `jobDescriptionUrl=${jobDescriptionUrl}; linkedinProfileUrl=${linkedinProfileUrl}; credlyProfileUrl=${credlyProfileUrl || ''}`
+      message: `jobDescriptionUrl=${jobDescriptionUrlInput}; linkedinProfileUrl=${submittedLinkedIn}; credlyProfileUrl=${submittedCredly || ''}`
     });
     await logEvent({
       s3,
@@ -14505,35 +14532,37 @@ app.post(
     });
 
     let linkedinData = {};
-    try {
-      linkedinData = await fetchLinkedInProfile(linkedinProfileUrl);
-      logStructured('info', 'linkedin_profile_fetched', {
-        ...logContext,
-        experience: linkedinData.experience?.length || 0,
-        education: linkedinData.education?.length || 0,
-        certifications: linkedinData.certifications?.length || 0,
-      });
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'fetched_linkedin_profile'
-      });
-    } catch (err) {
-      logStructured('warn', 'linkedin_profile_fetch_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'linkedin_profile_fetch_failed',
-        level: 'error',
-        message: err.message
-      });
+    if (submittedLinkedIn) {
+      try {
+        linkedinData = await fetchLinkedInProfile(submittedLinkedIn);
+        logStructured('info', 'linkedin_profile_fetched', {
+          ...logContext,
+          experience: linkedinData.experience?.length || 0,
+          education: linkedinData.education?.length || 0,
+          certifications: linkedinData.certifications?.length || 0,
+        });
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'fetched_linkedin_profile'
+        });
+      } catch (err) {
+        logStructured('warn', 'linkedin_profile_fetch_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'linkedin_profile_fetch_failed',
+          level: 'error',
+          message: err.message
+        });
+      }
     }
 
     const manualCertificates = parseManualCertificates(req.body.manualCertificates);
@@ -14546,14 +14575,14 @@ app.post(
 
     let credlyCertifications = [];
     let credlyStatus = {
-      attempted: Boolean(credlyProfileUrl),
+      attempted: Boolean(submittedCredly),
       success: false,
       manualEntryRequired: false,
       message: '',
     };
-    if (credlyProfileUrl) {
+    if (submittedCredly) {
       try {
-        credlyCertifications = await fetchCredlyProfile(credlyProfileUrl);
+        credlyCertifications = await fetchCredlyProfile(submittedCredly);
         logStructured('info', 'credly_profile_fetched', {
           ...logContext,
           certifications: credlyCertifications.length,
