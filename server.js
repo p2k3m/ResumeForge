@@ -2451,6 +2451,19 @@ function deriveHeadingLabel(sectionHeading = '', fallback = '') {
   return heading.replace(/^#\s*/, '').trim();
 }
 
+function canonicalSectionLabel(label = '', fallback = '') {
+  const normalized = typeof label === 'string' ? label.trim().toLowerCase() : '';
+  if (!normalized) {
+    return fallback || '';
+  }
+
+  if (normalized === 'experience' || normalized === 'professional experience') {
+    return 'Work Experience';
+  }
+
+  return label || fallback || '';
+}
+
 function escapeRegExp(value = '') {
   if (value === null || value === undefined) {
     return '';
@@ -3259,7 +3272,8 @@ function fallbackImprovement(type, context) {
 
   if (type === 'align-experience') {
     const section = extractSectionContent(resumeText, EXPERIENCE_SECTION_PATTERN);
-    const headingLabel = section.heading.replace(/^#\s*/, '') || 'Work Experience';
+    const headingLabel = deriveHeadingLabel(section.heading, 'Work Experience');
+    const sectionLabel = canonicalSectionLabel(headingLabel, 'Work Experience');
     const baseContent = sanitizeSectionLines(section.content);
     const before = baseContent.join('\n').trim();
     const responsibilityDescriptor = (() => {
@@ -3321,7 +3335,7 @@ function fallbackImprovement(type, context) {
       resumeText,
       EXPERIENCE_SECTION_PATTERN,
       sanitizedContent,
-      { headingLabel }
+      { headingLabel: headingLabel || 'Work Experience' }
     );
     const beforeLines = extractDiffLines(before);
     const afterLines = extractDiffLines(after);
@@ -3335,8 +3349,8 @@ function fallbackImprovement(type, context) {
     const changeDetails = [
       {
         key: 'experience',
-        section: headingLabel,
-        label: headingLabel,
+        section: sectionLabel,
+        label: sectionLabel,
         before,
         after,
         reasons: [explanation],
@@ -3344,7 +3358,7 @@ function fallbackImprovement(type, context) {
         removedItems,
         summarySegments: [
           {
-            section: headingLabel,
+            section: sectionLabel,
             added: addedItems,
             removed: removedItems,
             reasons: [explanation],
