@@ -1368,7 +1368,7 @@ function getApiBaseCandidate() {
   return ''
 }
 
-function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
+function ImprovementCard({ suggestion, onReject, onPreview }) {
   const deltaText = formatScoreDelta(suggestion.scoreDelta)
   const deltaTone =
     typeof suggestion.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
@@ -1388,7 +1388,6 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
     'Indicates how certain ResumeForge is that this change will resonate with ATS scoring and recruiter expectations based on the source analysis.'
   const deltaDescription =
     'Estimated impact on your ATS score if you apply this improvement. Positive values mean a projected lift; negative values signal a potential drop.'
-  const acceptDisabled = Boolean(suggestion.rescorePending || suggestion.accepted)
   const improvementHints = useMemo(() => {
     if (!Array.isArray(suggestion.improvementSummary)) return []
     return suggestion.improvementSummary.map((segment) => buildActionableHint(segment)).filter(Boolean)
@@ -1472,9 +1471,9 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
         <button
           type="button"
           onClick={onPreview}
-          className="px-4 py-2 rounded-full text-sm font-medium border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+          className="px-4 py-2 rounded-full text-sm font-semibold border border-indigo-200 text-indigo-600 hover:bg-indigo-50"
         >
-          Preview Update
+          Show Me Proposed Changes
         </button>
         <button
           type="button"
@@ -1482,16 +1481,6 @@ function ImprovementCard({ suggestion, onAccept, onReject, onPreview }) {
           className="px-4 py-2 rounded-full text-sm font-medium border border-rose-300 text-rose-600 hover:bg-rose-50"
         >
           Reject
-        </button>
-        <button
-          type="button"
-          onClick={onAccept}
-          disabled={acceptDisabled}
-          className={`px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 ${
-            acceptDisabled ? 'opacity-70 cursor-not-allowed' : ''
-          }`}
-        >
-          {suggestion.accepted ? 'Applied' : 'Accept'}
         </button>
       </div>
     </div>
@@ -1538,6 +1527,8 @@ function App() {
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
+  const [previewActionBusy, setPreviewActionBusy] = useState(false)
+  const [previewActiveAction, setPreviewActiveAction] = useState('')
   const [previewFile, setPreviewFile] = useState(null)
   const [initialAnalysisSnapshot, setInitialAnalysisSnapshot] = useState(null)
   const [jobId, setJobId] = useState('')
@@ -2480,7 +2471,7 @@ function App() {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault()
-        setPreviewSuggestion(null)
+        closePreview()
       }
     }
 
@@ -2489,7 +2480,7 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [previewSuggestion])
+  }, [previewSuggestion, closePreview])
 
   useEffect(() => {
     if (!previewFile || typeof window === 'undefined') {
@@ -4437,10 +4428,10 @@ function App() {
     async (id) => {
       const suggestion = improvementResults.find((item) => item.id === id)
       if (!suggestion) {
-        return
+        return false
       }
 
-      await applyImprovementSuggestion(suggestion)
+      return applyImprovementSuggestion(suggestion)
     },
     [applyImprovementSuggestion, improvementResults]
   )
@@ -4585,14 +4576,14 @@ function App() {
   const handleRejectImprovement = async (id) => {
     const targetSuggestion = improvementResults.find((item) => item.id === id)
     if (!targetSuggestion) {
-      return
+      return false
     }
 
     const wasAccepted = targetSuggestion.accepted === true
 
     if (wasAccepted && scoreUpdateLockRef.current) {
       setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
-      return
+      return false
     }
 
     const previousEnhanceAllSummaryText = enhanceAllSummaryText
@@ -4651,7 +4642,7 @@ function App() {
 
       if (!historyEntry || !previousResumeText) {
         setError('Previous version is unavailable for this update.')
-        return
+        return false
       }
 
       revertResumeText = previousResumeText
@@ -4680,6 +4671,8 @@ function App() {
     if (releaseLock) {
       scoreUpdateLockRef.current = true
     }
+
+    let success = false
 
     try {
       setImprovementResults((prev) =>
@@ -4750,6 +4743,7 @@ function App() {
 
       try {
         await removeChangeLogEntry(id)
+        success = true
       } catch (err) {
         console.error('Removing change log entry failed', err)
         setError(err.message || 'Unable to remove the change log entry.')
@@ -4765,18 +4759,23 @@ function App() {
           setScoreBreakdown(previousScoreBreakdownValue)
           setResumeSkills(previousResumeSkillsValue)
         }
+        return false
       }
     } finally {
       if (releaseLock) {
         scoreUpdateLockRef.current = false
       }
     }
+
+    return success
   }
 
   const handlePreviewImprovement = useCallback(
     (suggestion) => {
       if (!suggestion) return
       const previewEntry = buildChangeLogEntry(suggestion)
+      setPreviewActionBusy(false)
+      setPreviewActiveAction('')
       setPreviewSuggestion({
         id: suggestion.id,
         title: suggestion.title,
@@ -4795,8 +4794,78 @@ function App() {
   )
 
   const closePreview = useCallback(() => {
+    setPreviewActionBusy(false)
+    setPreviewActiveAction('')
     setPreviewSuggestion(null)
   }, [])
+
+  const previewedSuggestion = useMemo(() => {
+    if (!previewSuggestion) return null
+    return improvementResults.find((item) => item.id === previewSuggestion.id) || null
+  }, [previewSuggestion, improvementResults])
+
+  const previewAcceptDisabled =
+    previewActionBusy ||
+    !previewedSuggestion ||
+    previewedSuggestion.accepted === true ||
+    previewedSuggestion.rescorePending === true
+
+  const previewRejectDisabled = previewActionBusy || !previewedSuggestion
+
+  const previewAcceptLabel = previewedSuggestion?.accepted
+    ? 'Applied'
+    : previewActiveAction === 'accept'
+      ? 'Applying…'
+      : 'Accept Change'
+
+  const previewRejectLabel = previewActiveAction === 'reject' ? 'Rejecting…' : 'Reject'
+
+  const handlePreviewDecision = useCallback(
+    async (action) => {
+      if (!previewSuggestion) {
+        return
+      }
+      if (!previewedSuggestion) {
+        setError('This improvement is no longer available.')
+        return
+      }
+      setPreviewActiveAction(action)
+      setPreviewActionBusy(true)
+      try {
+        let result = false
+        if (action === 'accept') {
+          result = await handleAcceptImprovement(previewedSuggestion.id)
+        } else if (action === 'reject') {
+          result = await handleRejectImprovement(previewedSuggestion.id)
+        }
+        if (result !== false) {
+          closePreview()
+        }
+      } catch (err) {
+        console.error('Unable to update improvement from preview', err)
+        const fallbackMessage =
+          action === 'reject'
+            ? 'Unable to reject this improvement from the preview.'
+            : 'Unable to accept this improvement from the preview.'
+        setError(err?.message || fallbackMessage)
+      } finally {
+        setPreviewActionBusy(false)
+        setPreviewActiveAction('')
+      }
+    },
+    [
+      previewSuggestion,
+      previewedSuggestion,
+      handleAcceptImprovement,
+      handleRejectImprovement,
+      closePreview,
+      setError
+    ]
+  )
+
+  const handlePreviewAccept = useCallback(() => handlePreviewDecision('accept'), [handlePreviewDecision])
+
+  const handlePreviewReject = useCallback(() => handlePreviewDecision('reject'), [handlePreviewDecision])
 
   const hasManualJobDescriptionInput = Boolean(manualJobDescription && manualJobDescription.trim())
   const hasJobDescriptionUrlInput = Boolean(jobDescriptionUrl && jobDescriptionUrl.trim())
@@ -5383,7 +5452,6 @@ function App() {
                 <ImprovementCard
                   key={item.id}
                   suggestion={item}
-                  onAccept={() => handleAcceptImprovement(item.id)}
                   onReject={() => handleRejectImprovement(item.id)}
                   onPreview={() => handlePreviewImprovement(item)}
                 />
@@ -5847,6 +5915,29 @@ function App() {
                   </div>
                 </div>
               )}
+              <div className="border-t border-purple-100 bg-white/80 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-purple-600">
+                  Decide whether to apply this rewrite or keep your original wording.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={handlePreviewReject}
+                    disabled={previewRejectDisabled}
+                    className="px-4 py-2 rounded-full text-sm font-medium border border-rose-300 text-rose-600 hover:bg-rose-50 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {previewRejectLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePreviewAccept}
+                    disabled={previewAcceptDisabled}
+                    className="px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {previewAcceptLabel}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
