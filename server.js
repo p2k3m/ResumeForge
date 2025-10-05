@@ -8726,12 +8726,13 @@ function buildDocumentSessionPrefix({
   dateSegment,
   jobSegment,
 } = {}) {
-  const safeOwner = sanitizeS3KeyComponent(ownerSegment, { fallback: 'candidate' }) || 'candidate';
+  const safeOwner =
+    sanitizeS3KeyComponent(ownerSegment, { fallback: 'candidate' }) || 'candidate';
   const safeDate = sanitizeS3KeyComponent(dateSegment, {
     fallback: new Date().toISOString().slice(0, 10),
   });
   const safeJob = sanitizeS3KeyComponent(jobSegment);
-  let prefix = `cv/${safeOwner}/`;
+  let prefix = `${safeOwner}/cv/`;
   if (safeDate) {
     prefix += `${safeDate}/`;
   }
@@ -12407,6 +12408,7 @@ async function generateEnhancedDocumentsResponse({
         dateSegment: generationDateSegment,
         jobSegment: jobSegmentForKeys,
       });
+  const generatedPrefix = `${prefix}generated/`;
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
   });
@@ -12519,7 +12521,7 @@ async function generateEnhancedDocumentsResponse({
       variant: name,
     });
     const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
-    const key = `${prefix}${uniqueBaseName}.pdf`;
+    const key = `${generatedPrefix}${uniqueBaseName}.pdf`;
 
     const resolvedTemplateParams = resolveTemplateParamsConfig(
       templateParamsConfig,
@@ -12627,7 +12629,7 @@ async function generateEnhancedDocumentsResponse({
     urls.push(urlEntry);
   }
 
-  const textArtifactPrefix = `${prefix}artifacts/`;
+  const textArtifactPrefix = `${generatedPrefix}artifacts/`;
   const originalResumeForStorage =
     typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
       ? originalResumeTextInput
