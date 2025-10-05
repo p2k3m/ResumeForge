@@ -1402,4 +1402,91 @@ describe('change log persistence safeguards', () => {
 
     setupDefaultDynamoMock();
   });
+
+  test('persists category changelog details for ATS, skills, and related sections', async () => {
+    const updateCommands = [];
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-321' },
+              changeLog: { L: [] },
+            },
+          });
+        case 'UpdateItemCommand':
+          updateCommands.push(cmd);
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const entryPayload = {
+      id: 'entry-category',
+      title: 'Improve ATS Layout',
+      detail: 'Added for better fit to JD keywords.',
+      categoryChangelog: [
+        {
+          key: 'skills',
+          label: 'Skills',
+          added: ['Kubernetes'],
+          reasons: ['Added for better fit to JD'],
+        },
+        {
+          key: 'ats',
+          label: 'ATS',
+          reasons: ['Score impact: +4 pts versus the baseline upload.'],
+        },
+      ],
+    };
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-321',
+        linkedinProfileUrl: 'https://www.linkedin.com/in/example',
+        entry: entryPayload,
+      });
+
+    expect(response.status).toBe(200);
+    expect(updateCommands).toHaveLength(1);
+
+    const updateCommand = updateCommands[0];
+    const serializedEntries = updateCommand.input.ExpressionAttributeValues[':changeLog'].L;
+    expect(serializedEntries).toHaveLength(1);
+
+    const serializedCategory = serializedEntries[0].M.categoryChangelog;
+    expect(serializedCategory).toBeDefined();
+    expect(serializedCategory.L).toHaveLength(2);
+    const [skillsEntry, atsEntry] = serializedCategory.L.map((item) => item.M);
+    expect(skillsEntry.key.S).toBe('skills');
+    expect(skillsEntry.added.L[0].S).toBe('Kubernetes');
+    expect(skillsEntry.reasons.L[0].S).toContain('better fit to JD');
+    expect(atsEntry.key.S).toBe('ats');
+
+    const [responseEntry] = response.body.changeLog;
+    expect(responseEntry.categoryChangelog).toEqual([
+      {
+        key: 'skills',
+        label: 'Skills',
+        description: '',
+        added: ['Kubernetes'],
+        removed: [],
+        reasons: ['Added for better fit to JD'],
+      },
+      {
+        key: 'ats',
+        label: 'ATS',
+        description: '',
+        added: [],
+        removed: [],
+        reasons: ['Score impact: +4 pts versus the baseline upload.'],
+      },
+    ]);
+
+    setupDefaultDynamoMock();
+  });
 });

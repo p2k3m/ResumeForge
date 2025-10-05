@@ -10306,6 +10306,39 @@ function normalizeChangeLogItemizedChange(change = {}) {
   };
 }
 
+function normalizeChangeLogCategoryEntry(entry = {}) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const key = normalizeChangeLogString(entry.key);
+  const label = normalizeChangeLogString(entry.label);
+  const description = normalizeChangeLogString(entry.description);
+  const added = normalizeChangeLogList(entry.added);
+  const removed = normalizeChangeLogList(entry.removed);
+  const reasons = normalizeChangeLogList(entry.reasons || entry.reason);
+
+  if (
+    !key &&
+    !label &&
+    !description &&
+    !added.length &&
+    !removed.length &&
+    !reasons.length
+  ) {
+    return null;
+  }
+
+  return {
+    key,
+    label,
+    description,
+    added,
+    removed,
+    reasons,
+  };
+}
+
 function parseHistoryContextSource(value) {
   if (!value) {
     return null;
@@ -10419,6 +10452,11 @@ function normalizeChangeLogEntryInput(entry) {
         .map((change) => normalizeChangeLogItemizedChange(change))
         .filter(Boolean)
     : [];
+  const categoryChangelog = Array.isArray(entry.categoryChangelog)
+    ? entry.categoryChangelog
+        .map((category) => normalizeChangeLogCategoryEntry(category))
+        .filter(Boolean)
+    : [];
   const acceptedAt = normalizeChangeLogString(entry.acceptedAt);
   const historyContext = normalizeChangeLogHistoryContext(
     entry.historyContext || entry.resumeHistoryContext || entry.historySnapshot
@@ -10449,6 +10487,7 @@ function normalizeChangeLogEntryInput(entry) {
     addedItems,
     removedItems,
     itemizedChanges,
+    categoryChangelog,
     scoreDelta,
     acceptedAt,
     historyContext,
@@ -10510,6 +10549,39 @@ function parseDynamoItemizedChanges(attribute) {
   }).filter(Boolean);
 }
 
+function parseDynamoCategoryChangelog(attribute) {
+  if (!attribute || !Array.isArray(attribute.L)) {
+    return [];
+  }
+
+  return attribute.L.map((item) => {
+    if (!item || !item.M) {
+      return null;
+    }
+
+    const map = item.M;
+    const key = normalizeChangeLogString(map.key?.S);
+    const label = normalizeChangeLogString(map.label?.S);
+    const description = normalizeChangeLogString(map.description?.S);
+    const added = parseDynamoStringList(map.added);
+    const removed = parseDynamoStringList(map.removed);
+    const reasons = parseDynamoStringList(map.reasons);
+
+    if (!key && !label && !description && !added.length && !removed.length && !reasons.length) {
+      return null;
+    }
+
+    return {
+      key,
+      label,
+      description,
+      added,
+      removed,
+      reasons,
+    };
+  }).filter(Boolean);
+}
+
 function parseDynamoChangeLog(attribute) {
   if (!attribute || !Array.isArray(attribute.L)) {
     return [];
@@ -10535,6 +10607,7 @@ function parseDynamoChangeLog(attribute) {
     const removedItems = parseDynamoStringList(map.removedItems);
     const summarySegments = parseDynamoSummarySegments(map.summarySegments);
     const itemizedChanges = parseDynamoItemizedChanges(map.itemizedChanges);
+    const categoryChangelog = parseDynamoCategoryChangelog(map.categoryChangelog);
     const acceptedAt = normalizeChangeLogString(map.acceptedAt?.S);
     const scoreDelta = map.scoreDelta && map.scoreDelta.N ? Number(map.scoreDelta.N) : null;
     const historyContext = parseHistoryContextSource(
@@ -10555,6 +10628,7 @@ function parseDynamoChangeLog(attribute) {
       addedItems,
       removedItems,
       itemizedChanges,
+      categoryChangelog,
       scoreDelta: Number.isFinite(scoreDelta) ? scoreDelta : null,
       acceptedAt,
       historyContext,
@@ -10635,6 +10709,49 @@ function toDynamoItemizedChanges(changes = []) {
   };
 }
 
+function toDynamoCategoryChangelog(entries = []) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return undefined;
+  }
+
+  const normalized = entries
+    .map((entry) => normalizeChangeLogCategoryEntry(entry))
+    .filter(Boolean);
+
+  if (!normalized.length) {
+    return undefined;
+  }
+
+  return {
+    L: normalized.map((entry) => {
+      const map = {};
+      if (entry.key) {
+        map.key = { S: entry.key };
+      }
+      if (entry.label) {
+        map.label = { S: entry.label };
+      }
+      if (entry.description) {
+        map.description = { S: entry.description };
+      }
+      const added = toDynamoStringList(entry.added);
+      if (added) {
+        map.added = added;
+      }
+      const removed = toDynamoStringList(entry.removed);
+      if (removed) {
+        map.removed = removed;
+      }
+      const reasons = toDynamoStringList(entry.reasons);
+      if (reasons) {
+        map.reasons = reasons;
+      }
+
+      return { M: map };
+    }),
+  };
+}
+
 function serializeChangeLogEntries(entries = []) {
   if (!Array.isArray(entries) || !entries.length) {
     return [];
@@ -10692,6 +10809,10 @@ function serializeChangeLogEntries(entries = []) {
       const itemizedChanges = toDynamoItemizedChanges(normalized.itemizedChanges);
       if (itemizedChanges) {
         map.itemizedChanges = itemizedChanges;
+      }
+      const categoryChangelog = toDynamoCategoryChangelog(normalized.categoryChangelog);
+      if (categoryChangelog) {
+        map.categoryChangelog = categoryChangelog;
       }
       if (typeof normalized.scoreDelta === 'number' && Number.isFinite(normalized.scoreDelta)) {
         map.scoreDelta = { N: String(normalized.scoreDelta) };
@@ -10766,7 +10887,7 @@ function enforceChangeLogDynamoSize(serializedEntries = [], {
     ['resumeBeforeText', 'resumeAfterText'],
     ['before', 'after'],
     ['detail'],
-    ['summarySegments', 'itemizedChanges'],
+    ['summarySegments', 'itemizedChanges', 'categoryChangelog'],
     ['addedItems', 'removedItems'],
   ];
 
