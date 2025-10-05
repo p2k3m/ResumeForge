@@ -64,6 +64,9 @@ describe('ATSScoreDashboard', () => {
     expect(cards).toHaveLength(metrics.length)
     expect(screen.getAllByText('ATS Score Before')).not.toHaveLength(0)
     expect(screen.getAllByText('ATS Score After')).not.toHaveLength(0)
+    expect(screen.getByTestId('ats-score-summary')).toHaveTextContent(
+      'ATS score moved from 48% to 76% (+28 pts).'
+    )
     expect(screen.getByLabelText('match comparison')).toBeInTheDocument()
     expect(screen.getByTestId('original-score')).toHaveTextContent('48%')
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('76%')
@@ -171,5 +174,21 @@ describe('ATSScoreDashboard', () => {
     expect(card).toBeInTheDocument()
     const tip = within(card).getByTestId('metric-tip')
     expect(tip).toHaveTextContent('Tighten formatting')
+  })
+
+  it('describes selection probability changes before and after enhancements', () => {
+    const match = {
+      ...baseMatch,
+      selectionProbabilityBefore: 42,
+      selectionProbabilityAfter: 71
+    }
+
+    render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
+
+    expect(screen.getByTestId('selection-summary')).toHaveTextContent(
+      'Selection chance moved from 42% to 71% (+29 pts).'
+    )
+    expect(screen.getByText('Selection % Before')).toBeInTheDocument()
+    expect(screen.getByText('Selection % After')).toBeInTheDocument()
   })
 })

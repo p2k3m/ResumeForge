@@ -198,6 +198,18 @@ function ATSScoreDashboard({
           typeof match?.atsScoreBefore === 'number' ? match.atsScoreBefore : match?.originalScore,
           typeof match?.atsScoreAfter === 'number' ? match.atsScoreAfter : match?.enhancedScore
         )
+  const atsScoreSummary = (() => {
+    if (originalScoreValue !== null && enhancedScoreValue !== null) {
+      return `ATS score moved from ${originalScoreValue}% to ${enhancedScoreValue}%${matchDelta ? ` (${matchDelta})` : ''}.`
+    }
+    if (originalScoreValue !== null) {
+      return `Current ATS score before enhancements: ${originalScoreValue}%.`
+    }
+    if (enhancedScoreValue !== null) {
+      return `Current ATS score after enhancements: ${enhancedScoreValue}%.`
+    }
+    return null
+  })()
   const selectionProbabilityBeforeValue =
     typeof match?.selectionProbabilityBefore === 'number'
       ? match.selectionProbabilityBefore
@@ -243,6 +255,18 @@ function ATSScoreDashboard({
     typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
       ? formatDelta(selectionProbabilityBeforeValue, selectionProbabilityAfterValue)
       : null
+  const selectionProbabilitySummary = (() => {
+    if (typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number') {
+      return `Selection chance moved from ${selectionProbabilityBeforeValue}% to ${selectionProbabilityAfterValue}%${selectionProbabilityDelta ? ` (${selectionProbabilityDelta})` : ''}.`
+    }
+    if (typeof selectionProbabilityBeforeValue === 'number') {
+      return `Selection chance before enhancements: ${selectionProbabilityBeforeValue}%.`
+    }
+    if (typeof selectionProbabilityAfterValue === 'number') {
+      return `Selection chance after enhancements: ${selectionProbabilityAfterValue}%.`
+    }
+    return null
+  })()
   const hasComparableScores =
     typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number'
   const scoreBands = hasComparableScores
@@ -393,6 +417,24 @@ function ATSScoreDashboard({
           className={`grid grid-cols-1 gap-4 ${hasSelectionProbability ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
           aria-label="match comparison"
         >
+          {(atsScoreSummary || selectionProbabilitySummary) && (
+            <div
+              className="rounded-3xl border border-purple-100/80 bg-purple-50/60 p-4 shadow-sm md:col-span-full"
+              data-testid="score-summary-banner"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-600">Score Snapshot</p>
+              {atsScoreSummary && (
+                <p className="mt-2 text-sm text-purple-800" data-testid="ats-score-summary">
+                  {atsScoreSummary}
+                </p>
+              )}
+              {selectionProbabilitySummary && (
+                <p className="mt-1 text-sm text-purple-800" data-testid="selection-summary">
+                  {selectionProbabilitySummary}
+                </p>
+              )}
+            </div>
+          )}
           <div className="rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-lg backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">ATS Score Before</p>
