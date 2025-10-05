@@ -2620,6 +2620,47 @@ function App() {
     setPendingDownloadFile(null)
   }, [])
 
+  const renderTemplateSelection = (context = 'improvements') => {
+    const resumeSelectorIdPrefix =
+      context === 'downloads' ? 'download-resume-template-selector' : 'resume-template-selector'
+    const coverSelectorIdPrefix =
+      context === 'downloads' ? 'download-cover-template-selector' : 'cover-template-selector'
+
+    return (
+      <>
+        <TemplateSelector
+          idPrefix={resumeSelectorIdPrefix}
+          title="CV Template Style"
+          description="Choose the CV aesthetic that mirrors your personality and the JD tone."
+          options={availableTemplateOptions}
+          selectedTemplate={selectedTemplate}
+          onSelect={handleTemplateSelect}
+          disabled={isProcessing}
+          historySummary={templateHistorySummary}
+        />
+
+        <TemplateSelector
+          idPrefix={coverSelectorIdPrefix}
+          title="Cover Letter Template"
+          description="Align your letter visuals with your selected CV or explore a bold alternative."
+          options={availableCoverTemplateOptions}
+          selectedTemplate={selectedCoverTemplate}
+          onSelect={handleCoverTemplateSelect}
+          disabled={isProcessing}
+        />
+
+        <TemplatePreview
+          resumeTemplateId={selectedTemplate}
+          resumeTemplateName={formatTemplateName(selectedTemplate)}
+          resumeTemplateDescription={selectedTemplateOption?.description || ''}
+          coverTemplateId={selectedCoverTemplate}
+          coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
+          coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
+        />
+      </>
+    )
+  }
+
   const handleDownloadFile = useCallback(
     async (file) => {
       if (!file || typeof file !== 'object') {
@@ -2644,6 +2685,13 @@ function App() {
         return
       }
       const stateKey = stateKeyBase || downloadUrl
+      const previewStateKey = previewFile
+        ? getDownloadStateKey(previewFile) || (typeof previewFile.url === 'string' ? previewFile.url : '')
+        : ''
+      if (previewStateKey !== stateKey) {
+        openDownloadPreview(file, { requireDownloadConfirmation: true })
+        return
+      }
       setDownloadStates((prev) => ({
         ...prev,
         [stateKey]: { status: 'loading', error: '' }
@@ -2696,7 +2744,9 @@ function App() {
       downloadGeneratedAt,
       downloadTemplateMetadata,
       setError,
-      setPendingDownloadFile
+      setPendingDownloadFile,
+      previewFile,
+      openDownloadPreview
     ]
   )
 
@@ -5752,35 +5802,7 @@ function App() {
             </header>
             {scoreDashboardReady ? (
               <div className="space-y-6">
-                <TemplateSelector
-                  idPrefix="resume-template-selector"
-                  title="CV Template Style"
-                  description="Choose the CV aesthetic that mirrors your personality and the JD tone."
-                  options={availableTemplateOptions}
-                  selectedTemplate={selectedTemplate}
-                  onSelect={handleTemplateSelect}
-                  disabled={isProcessing}
-                  historySummary={templateHistorySummary}
-                />
-
-                <TemplateSelector
-                  idPrefix="cover-template-selector"
-                  title="Cover Letter Template"
-                  description="Align your letter visuals with your selected CV or explore a bold alternative."
-                  options={availableCoverTemplateOptions}
-                  selectedTemplate={selectedCoverTemplate}
-                  onSelect={handleCoverTemplateSelect}
-                  disabled={isProcessing}
-                />
-
-                <TemplatePreview
-                  resumeTemplateId={selectedTemplate}
-                  resumeTemplateName={formatTemplateName(selectedTemplate)}
-                  resumeTemplateDescription={selectedTemplateOption?.description || ''}
-                  coverTemplateId={selectedCoverTemplate}
-                  coverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
-                  coverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
-                />
+                {renderTemplateSelection('improvements')}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {improvementActions.map((action) => {
@@ -6062,6 +6084,8 @@ function App() {
               </p>
             </header>
             <div className="space-y-6">
+              {renderTemplateSelection('downloads')}
+
               {downloadGroups.resume.length > 0 && (
                 <div className="space-y-3">
                   <div className="space-y-1">
