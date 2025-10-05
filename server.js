@@ -12,8 +12,6 @@ import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
-  ListObjectsV2Command,
-  DeleteObjectsCommand,
   CopyObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
@@ -26,8 +24,6 @@ const {
   GetItemCommand,
   PutItemCommand,
   UpdateItemCommand,
-  ScanCommand,
-  DeleteItemCommand,
 } = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -1672,29 +1668,6 @@ errorLogBucket =
 const piiHashSecret =
   runtimeConfigSnapshot?.PII_HASH_SECRET || process.env.PII_HASH_SECRET || '';
 
-const parsedRetention = Number.parseInt(
-  process.env.SESSION_RETENTION_DAYS || '',
-  10
-);
-const SESSION_RETENTION_DAYS =
-  Number.isFinite(parsedRetention) && parsedRetention > 0
-    ? parsedRetention
-    : 30;
-const SESSION_PREFIX = 'cv/';
-const SESSION_PATH_REGEX =
-  /^cv\/([^/]+)\/(\d{4}-\d{2}-\d{2})(?:\/([^/]+))?\//;
-
-function deriveSessionPrefix(match) {
-  if (!match) return '';
-  const [, ownerSegment, sessionDate, jobSegment] = match;
-  if (!ownerSegment || !sessionDate) {
-    return '';
-  }
-  return jobSegment
-    ? `cv/${ownerSegment}/${sessionDate}/${jobSegment}/`
-    : `cv/${ownerSegment}/${sessionDate}/`;
-}
-
 function anonymizePersonalData(value) {
   if (!value) return '';
   const hash = crypto.createHash('sha256');
@@ -1744,232 +1717,6 @@ function extractLocationMetadata(req = {}) {
     country: country || '',
     label: parts.length ? parts.join(', ') : 'Unknown',
   };
-}
-
-async function purgeExpiredSessions({
-  bucket: overrideBucket,
-  retentionDays = SESSION_RETENTION_DAYS,
-  now = new Date(),
-} = {}) {
-  const { S3_BUCKET } = getSecrets();
-  const bucket = overrideBucket || S3_BUCKET;
-  if (!bucket) {
-    throw new Error('S3 bucket not configured');
-  }
-  const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
-  const cutoff = now.getTime() - retentionMs;
-  let continuationToken;
-  let scanned = 0;
-  const keysToDelete = [];
-
-  do {
-    const response = await s3Client.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Prefix: SESSION_PREFIX,
-        ContinuationToken: continuationToken,
-      })
-    );
-    const contents = response.Contents || [];
-    for (const object of contents) {
-      const key = object.Key;
-      if (!key) continue;
-      scanned += 1;
-      const match = key.match(SESSION_PATH_REGEX);
-      if (!match) continue;
-      const sessionDate = new Date(match[2]);
-      if (Number.isNaN(sessionDate.getTime())) continue;
-      if (sessionDate.getTime() <= cutoff) {
-        keysToDelete.push(key);
-      }
-    }
-    continuationToken = response.IsTruncated
-      ? response.NextContinuationToken
-      : undefined;
-  } while (continuationToken);
-
-  let deleted = 0;
-  const expiredSessionPrefixes = new Set();
-  for (let i = 0; i < keysToDelete.length; i += 1000) {
-    const chunk = keysToDelete.slice(i, i + 1000).map((Key) => ({ Key }));
-    if (!chunk.length) continue;
-    for (const { Key } of chunk) {
-      if (!Key) continue;
-      const match = Key.match(SESSION_PATH_REGEX);
-      if (match) {
-        const derivedPrefix = deriveSessionPrefix(match);
-        if (derivedPrefix) {
-          expiredSessionPrefixes.add(derivedPrefix);
-        }
-      }
-    }
-    const result = await s3Client.send(
-      new DeleteObjectsCommand({
-        Bucket: bucket,
-        Delete: { Objects: chunk, Quiet: true },
-      })
-    );
-    deleted += result?.Deleted?.length ?? chunk.length;
-  }
-
-  let metadataDeleted = 0;
-  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
-  const dynamoClient = new DynamoDBClient({ region });
-  const keysForDeletion = new Set();
-  let lastEvaluatedKey;
-  do {
-    try {
-      if (!tableName) {
-        break;
-      }
-      const response = await dynamoClient.send(
-        new ScanCommand({
-          TableName: tableName,
-          ProjectionExpression:
-            '#pk, s3Key, uploadedAt, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url',
-          ExpressionAttributeNames: { '#pk': 'linkedinProfileUrl' },
-          ExclusiveStartKey: lastEvaluatedKey,
-        })
-      );
-      const items = response.Items || [];
-      for (const item of items) {
-        const pk = item?.linkedinProfileUrl?.S;
-        if (!pk) continue;
-        const s3Key = item?.s3Key?.S || '';
-        let shouldDelete = false;
-        let detectedPrefix;
-        if (s3Key) {
-          const match = s3Key.match(SESSION_PATH_REGEX);
-          if (match) {
-            detectedPrefix = deriveSessionPrefix(match);
-            const sessionDate = new Date(match[2]);
-            if (!Number.isNaN(sessionDate.getTime())) {
-              if (sessionDate.getTime() <= cutoff) {
-                shouldDelete = true;
-                if (detectedPrefix) {
-                  expiredSessionPrefixes.add(detectedPrefix);
-                }
-              } else if (
-                detectedPrefix &&
-                expiredSessionPrefixes.has(detectedPrefix)
-              ) {
-                shouldDelete = true;
-              }
-            }
-          }
-        }
-
-        if (!shouldDelete) {
-          const uploadedAt = item?.uploadedAt?.S;
-          if (uploadedAt) {
-            const uploadedDate = new Date(uploadedAt);
-            if (!Number.isNaN(uploadedDate.getTime()) && uploadedDate.getTime() <= cutoff) {
-              shouldDelete = true;
-            }
-          }
-        }
-
-        if (!shouldDelete) continue;
-
-        keysForDeletion.add(pk);
-        if (detectedPrefix) {
-          expiredSessionPrefixes.add(detectedPrefix);
-        }
-        const linkedUrls = [
-          item?.cv1Url?.S,
-          item?.cv2Url?.S,
-          item?.coverLetter1Url?.S,
-          item?.coverLetter2Url?.S,
-        ];
-        for (const url of linkedUrls) {
-          if (typeof url !== 'string' || !url) continue;
-          try {
-            const parsed = new URL(url);
-            const derivedKey = decodeURIComponent(
-              parsed.pathname.replace(/^\//, '')
-            );
-            if (!derivedKey) continue;
-            const derivedMatch = derivedKey.match(SESSION_PATH_REGEX);
-            if (derivedMatch) {
-              const linkedPrefix = deriveSessionPrefix(derivedMatch);
-              if (linkedPrefix) {
-                expiredSessionPrefixes.add(linkedPrefix);
-              }
-            }
-          } catch (err) {
-            logStructured('warn', 'metadata_url_parse_failed', {
-              url,
-              error: serializeError(err),
-            });
-          }
-        }
-      }
-      lastEvaluatedKey = response.LastEvaluatedKey;
-    } catch (err) {
-      if (err?.name === 'ResourceNotFoundException') {
-        logStructured('warn', 'dynamo_table_missing_for_retention', {
-          tableName,
-        });
-        lastEvaluatedKey = undefined;
-        break;
-      }
-      logStructured('error', 'dynamo_scan_failed_for_retention', {
-        tableName,
-        error: serializeError(err),
-      });
-      throw err;
-    }
-  } while (lastEvaluatedKey);
-
-  for (const pk of keysForDeletion) {
-    try {
-      const response = await dynamoClient.send(
-        new DeleteItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: pk } },
-        })
-      );
-      metadataDeleted += 1;
-    } catch (err) {
-      logStructured('error', 'dynamo_metadata_delete_failed', {
-        tableName,
-        key: pk,
-        error: serializeError(err),
-      });
-    }
-  }
-
-  // GDPR: scheduled retention removes artefacts that exceed policy windows.
-  return { bucket, scanned, deleted, retentionDays, metadataDeleted };
-}
-
-async function handleDataRetentionEvent(event = {}) {
-  const detailRetention = Number.parseInt(event?.detail?.retentionDays, 10);
-  const retentionDays =
-    Number.isFinite(detailRetention) && detailRetention > 0
-      ? detailRetention
-      : SESSION_RETENTION_DAYS;
-  const now = event?.time ? new Date(event.time) : new Date();
-  try {
-    const result = await purgeExpiredSessions({
-      retentionDays,
-      now,
-    });
-    logStructured('info', 's3_session_retention_completed', {
-      ...result,
-      source: event?.source,
-    });
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, ...result }),
-    };
-  } catch (err) {
-    logStructured('error', 's3_session_retention_failed', {
-      error: serializeError(err),
-      source: event?.source,
-    });
-    throw err;
-  }
 }
 
 function getSecrets() {
@@ -15028,8 +14775,6 @@ export {
   relocateProfileLinks,
   verifyResume,
   createResumeVariants,
-  purgeExpiredSessions,
-  handleDataRetentionEvent,
   classifyDocument,
   buildScoreBreakdown,
   enforceTargetedUpdate,

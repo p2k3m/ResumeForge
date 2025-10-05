@@ -26,8 +26,8 @@ This guide walks a candidate through ResumeForge end to end so every action has 
 
 ## 5. Download enhanced assets
 - **What to do:** Once satisfied, select the download buttons for the updated résumé(s) and tailored cover letter.
-- **Behind the scenes:** ResumeForge stores the generated PDFs alongside the session for 30 days and tracks download events for analytics.
-- **Expected result:** The candidate receives ATS-optimised résumé PDFs (2025 design), a tailored cover letter, and a summary of the enhancements to reference during interviews. Sessions automatically expire after the retention window to satisfy GDPR requirements.
+- **Behind the scenes:** ResumeForge stores the generated PDFs alongside the session and tracks download events for analytics, overwriting older artefacts whenever new versions are produced so only current files remain.
+- **Expected result:** The candidate receives ATS-optimised résumé PDFs (2025 design), a tailored cover letter, and a summary of the enhancements to reference during interviews. The platform retains only the current artefacts generated during the session so stored data stays tidy without automated expiry jobs.
 
 ## Troubleshooting quick reference
 - **Blocked job description:** Provide the full JD text manually when prompted. The system halts the flow until the paste box is filled so analysis never runs without the complete description.

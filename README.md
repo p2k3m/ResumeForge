@@ -11,9 +11,9 @@ ResumeForge generates tailored cover letters and enhanced CV versions by combini
 | 2. Provide job description | Candidate enters the job post URL or pastes the full job description text into the portal. | The backend fetches the JD when the URL is accessible; if the site blocks automated access the flow stops instantly, displays the paste box, and requires the candidate to provide the text manually. | The user either sees the JD captured automatically or receives a clear prompt to paste it before continuing, guaranteeing the analysis always runs on the actual JD content. |
 | 3. Run ATS analysis | Candidate clicks **Evaluate me against the JD**. | Lambda analyses the CV + JD, generating ATS scores (Layout & Searchability, Readability, Impact, Crispness, Other Metrics) and alignment data (designation deltas, experience gaps, skill/task matches, certifications, highlights). | The dashboard surfaces quantified fit, missing elements, and probability of selection so the candidate understands current readiness. |
 | 4. Apply improvements | Candidate uses **Improve** on specific sections or **Improve All**. | AI suggestions rewrite summaries, add skills, realign designations, adjust experience narratives, and highlight certifications. Accept/reject toggles persist the chosen edits. | The résumé content evolves in-app with an audit trail explaining each enhancement, keeping the candidate in control. |
-| 5. Download deliverables | Candidate downloads regenerated assets. | The portal exposes enhanced ATS-ready CV PDFs (2025 design), the tailored cover letter, and the change log. Session metadata schedules automatic S3 cleanup after 30 days. | Candidate leaves with ready-to-submit documents and clarity on how the edits improved hiring odds. |
+| 5. Download deliverables | Candidate downloads regenerated assets. | The portal exposes enhanced ATS-ready CV PDFs (2025 design), the tailored cover letter, and the change log. Only the latest artefacts for the current session are retained so storage stays lean without background cleanup jobs. | Candidate leaves with ready-to-submit documents and clarity on how the edits improved hiring odds. |
 
-Old S3 sessions are automatically purged after 30 days to honour GDPR commitments. Every interaction is processed via the serverless Express Lambda/API Gateway stack while the React frontend is delivered through CloudFront.
+Every interaction is processed via the serverless Express Lambda/API Gateway stack while the React frontend is delivered through CloudFront.
 
 > Looking for a candidate-facing walkthrough? See [docs/user-journey.md](docs/user-journey.md) for triggers and expected outcomes at each step.
 
@@ -47,8 +47,7 @@ The runtime looks for the following keys:
   "S3_BUCKET": "resume-forge-data",
   "RESUME_TABLE_NAME": "ResumeForge",
   "CLOUDFRONT_ORIGINS": "https://d123example.cloudfront.net",
-  "PII_HASH_SECRET": "<random-string>",
-  "SESSION_RETENTION_DAYS": "30"
+  "PII_HASH_SECRET": "<random-string>"
 }
 ```
 
@@ -56,32 +55,14 @@ The runtime looks for the following keys:
 - `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Provide the bucket name through the `S3_BUCKET` environment variable so artifacts are stored in the correct account and region.
 - `CLOUDFRONT_ORIGINS` – Optional, comma-separated list of CloudFront origins that are permitted through the server's CORS middleware. Include your distribution domain to restrict browser calls to trusted hosts.
 - `PII_HASH_SECRET` – Optional salt used when hashing personal data before writing DynamoDB records. Configure a deployment-specific value to make hashes non-reversible if the table leaks.
-- `SESSION_RETENTION_DAYS` – Optional override for the automated S3 clean-up job. Defaults to 30 days when unset.
 - `AWS_REGION`, `PORT`, and `RESUME_TABLE_NAME` can continue to come from the environment. Reasonable defaults are provided for local development.
 
 Because the configuration is loaded and cached once, the service reuses the same credentials across requests instead of recreating clients every time.
 
-### Privacy, GDPR, and data retention
+### Privacy and data handling
 
-- DynamoDB inserts now hash candidate names, LinkedIn URLs, IP addresses, and user agents with SHA-256 (plus the optional `PII_HASH_SECRET` salt) before persisting them. The table retains browser, OS, and device metadata for aggregate analytics without storing raw personally identifiable information.
-- An EventBridge rule can invoke the Lambda on a schedule to remove generated sessions from S3 that are older than `SESSION_RETENTION_DAYS` (30 days by default). The scheduled handler deletes entire `cv/<candidate>/<ISO-date>/<session-id>/...` prefixes so no PDFs or logs linger past the retention window.
-
-Implementation snippet:
-
-```ts
-// cron expression example: run daily at 01:00 UTC
-const rule = new events.Rule(this, 'SessionRetentionRule', {
-  schedule: events.Schedule.cron({ minute: '0', hour: '1' }),
-});
-rule.addTarget(new targets.LambdaFunction(resumeForgeLambda, {
-  event: events.RuleTargetInput.fromObject({
-    source: 'resume-forge.gdpr',
-    detail: { retentionDays: 30 },
-  }),
-}));
-```
-
-The Lambda automatically calls the retention routine when invoked by EventBridge (checks for `aws.events` and `Scheduled Event` sources), so attaching the rule is enough to enforce rolling deletion.
+- DynamoDB inserts hash candidate names, LinkedIn URLs, IP addresses, and user agents with SHA-256 (plus the optional `PII_HASH_SECRET` salt) before persisting them. The table retains browser, OS, and device metadata for aggregate analytics without storing raw personally identifiable information.
+- Generated PDFs, cover letters, and change logs are stored in S3 only for the active session that produced them. Old keys are overwritten as users regenerate documents, so the bucket naturally keeps just the current versions without relying on scheduled deletion jobs.
 
 ### Required parameters for AWS deployment
 
