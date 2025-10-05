@@ -916,6 +916,13 @@ async function loadPublishedCloudfrontMetadata() {
       }
     }
 
+    if (metadata.url) {
+      const [normalizedMetadata] = ensureOutputFileUrls([{ ...metadata }]);
+      if (normalizedMetadata) {
+        return normalizedMetadata;
+      }
+    }
+
     return metadata;
   } catch (err) {
     if (err && err.code === 'ENOENT') {
@@ -14829,6 +14836,51 @@ app.post(
       Object.keys(details).length ? details : undefined
     );
   }
+});
+
+app.use((err, req, res, next) => {
+  if (!err) {
+    return next();
+  }
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const statusCandidates = [err?.statusCode, err?.status, err?.httpStatus];
+  const status = statusCandidates.find(
+    (value) => Number.isInteger(value) && value >= 400 && value <= 599
+  ) || 500;
+
+  const code =
+    typeof err?.code === 'string' && err.code.trim()
+      ? err.code.trim()
+      : status >= 500
+        ? 'INTERNAL_SERVER_ERROR'
+        : 'BAD_REQUEST';
+
+  const fallbackMessage =
+    status >= 500
+      ? 'An unexpected error occurred. Please try again later.'
+      : 'The request could not be completed.';
+
+  const message =
+    typeof err?.message === 'string' && err.message.trim()
+      ? err.message.trim()
+      : fallbackMessage;
+
+  const details = err?.details ?? err?.errors ?? err?.data ?? undefined;
+
+  logStructured('error', 'unhandled_request_error', {
+    requestId: req.requestId,
+    path: req.originalUrl || req.url,
+    method: req.method,
+    status,
+    code,
+    error: serializeError(err),
+  });
+
+  return sendError(res, status, code, message, details);
 });
 
 const port = process.env.PORT || 3000;
