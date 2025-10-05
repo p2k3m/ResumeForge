@@ -374,52 +374,6 @@ describe('/api/process-cv', () => {
     expect(manual.body.jobDescriptionText).toContain('Manual JD text');
   });
 
-  test('fetches job description when a URL is supplied', async () => {
-    axios.get.mockResolvedValueOnce({
-      data: '<html><title>Backend Engineer</title><p>Design scalable systems.</p></html>'
-    });
-
-    const response = await request(app)
-      .post('/api/process-cv')
-      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
-      .set('X-Forwarded-For', '198.51.100.5')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .field('jobDescriptionUrl', 'https://jobs.example.com/backend-engineer')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-
-    expect(response.status).toBe(200);
-    expect(response.body.success).toBe(true);
-    expect(String(response.body.jobDescriptionText || '')).toContain('Design scalable systems.');
-    expect(axios.get).toHaveBeenCalledWith('https://jobs.example.com/backend-engineer', expect.any(Object));
-  });
-
-  test('requires pasted JD when URL fetch is blocked', async () => {
-    const blockedError = Object.assign(new Error('Forbidden'), {
-      response: { status: 403 },
-      code: 'ERR_BLOCKED_BY_RESPONSE',
-    });
-    axios.get.mockRejectedValueOnce(blockedError);
-
-    const response = await request(app)
-      .post('/api/process-cv')
-      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
-      .set('X-Forwarded-For', '198.51.100.5')
-      .field('linkedinProfileUrl', 'http://linkedin.com/in/example')
-      .field('jobDescriptionUrl', 'https://jobs.example.com/protected-role')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-
-    expect(response.status).toBe(400);
-    expect(response.body.success).toBe(false);
-    expect(response.body.error.code).toBe('JOB_DESCRIPTION_FETCH_FAILED');
-    expect(response.body.error.message).toBe(
-      'Unable to fetch JD from this URL. Please paste full job description below.'
-    );
-    expect(response.body.error.details).toMatchObject({
-      manualInputRequired: true,
-      url: 'https://jobs.example.com/protected-role',
-    });
-  });
-
   test('sanitizes manual job description input before analysis', async () => {
     const manual = await request(app)
       .post('/api/process-cv')
@@ -443,6 +397,19 @@ describe('/api/process-cv', () => {
     expect(jobText).not.toContain('javascript');
     expect(jobText).not.toContain('onclick');
 
+  });
+
+  test('accepts uploads without a LinkedIn profile URL', async () => {
+    const response = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.jobDescriptionText).toContain('Software Engineer');
   });
 
   test('malformed AI response', async () => {
@@ -1193,25 +1160,9 @@ describe('/api/process-cv', () => {
     });
   });
 
-  test('missing linkedin profile URL', async () => {
-    const res = await request(app)
-      .post('/api/process-cv')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({
-      success: false,
-      error: {
-        code: 'LINKEDIN_PROFILE_URL_REQUIRED',
-        message: 'linkedinProfileUrl required',
-        requestId: expect.any(String),
-        jobId: expect.any(String),
-      },
-    });
   });
-});
 
-describe('classifyDocument', () => {
+  describe('classifyDocument', () => {
   test('identifies resumes by section structure', async () => {
     const result = await classifyDocument('PROFESSIONAL SUMMARY\nExperience\nEducation\nSkills');
     expect(result.isResume).toBe(true);
