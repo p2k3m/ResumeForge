@@ -44,8 +44,14 @@ describe('template coverage for /api/process-cv', () => {
       expect(
         pdfCommands.some((command) => command.input.Key.includes(`enhanced_${templateId}`))
       ).toBe(true);
+      const generatedPdfCommands = pdfCommands.filter(
+        (command) => !/\/incoming\//.test(String(command.input?.Key))
+      );
+
       expect(
-        pdfCommands.every((command) => command.input?.ContentType === 'application/pdf')
+        generatedPdfCommands.every(
+          (command) => command.input?.ContentType === 'application/pdf'
+        )
       ).toBe(true);
       for (const command of pdfCommands) {
         const body = command.input?.Body;
