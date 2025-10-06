@@ -188,6 +188,7 @@ describe('normalizeOutputFiles', () => {
           autoPreviewPriority: 3,
           meta: { skip: true },
         },
+        storageKey: ' cv/candidate/resume.pdf ',
       },
     ]
 
@@ -213,6 +214,7 @@ describe('normalizeOutputFiles', () => {
           badgeText: 'Primary',
           autoPreviewPriority: 3,
         },
+        storageKey: 'cv/candidate/resume.pdf',
       },
     ])
 

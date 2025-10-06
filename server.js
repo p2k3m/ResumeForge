@@ -14038,6 +14038,7 @@ async function generateEnhancedDocumentsResponse({
         templateId: 'original',
         templateName: 'Original Upload',
         templateType: 'resume',
+        storageKey: originalUploadKey,
       });
     } catch (err) {
       logStructured('warn', 'generation_original_url_failed', {
@@ -14387,6 +14388,7 @@ async function generateEnhancedDocumentsResponse({
       typeUrl: `${signedUrl}#${typeFragment}`,
       expiresAt,
       generatedAt: artifactTimestamp,
+      storageKey: artifact.key,
     };
 
     if (artifact.templateMetadata) {
@@ -15513,6 +15515,214 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   }
 
   return res.json({ success: true, changeLog: normalizedChangeLogEntries });
+});
+
+app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
+  const jobId = typeof req.body.jobId === 'string' ? req.body.jobId.trim() : '';
+  if (!jobId) {
+    return sendError(
+      res,
+      400,
+      'JOB_ID_REQUIRED',
+      'jobId is required to refresh a download link.'
+    );
+  }
+
+  const storageKeyInput =
+    typeof req.body.storageKey === 'string' ? req.body.storageKey.trim() : '';
+  if (!storageKeyInput) {
+    return sendError(
+      res,
+      400,
+      'DOWNLOAD_KEY_REQUIRED',
+      'storageKey is required to refresh a download link.'
+    );
+  }
+
+  if (storageKeyInput.includes('..') || storageKeyInput.includes('\\')) {
+    return sendError(
+      res,
+      400,
+      'INVALID_DOWNLOAD_KEY',
+      'The provided download key is invalid.'
+    );
+  }
+
+  captureUserContext(req, res);
+
+  const requestId = res.locals.requestId;
+  const logContext = { requestId, jobId, route: 'refresh-download-link' };
+
+  const profileIdentifier =
+    resolveProfileIdentifier({
+      linkedinProfileUrl:
+        typeof req.body.linkedinProfileUrl === 'string'
+          ? req.body.linkedinProfileUrl.trim()
+          : '',
+      userId: res.locals.userId,
+      jobId,
+    }) || jobId;
+
+  const storedLinkedIn = normalizePersonalData(profileIdentifier);
+  const dynamo = new DynamoDBClient({ region });
+  const s3 = s3Client;
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+
+  try {
+    await ensureDynamoTableExists({ dynamo, tableName });
+  } catch (err) {
+    logStructured('error', 'refresh_download_table_ensure_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'DYNAMO_TABLE_UNAVAILABLE',
+      'Unable to prepare storage for download link refresh.'
+    );
+  }
+
+  let storedBucket = '';
+  let originalUploadKey = '';
+  let logKey = '';
+  const allowedKeys = new Set();
+  try {
+    const record = await dynamo.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+        ProjectionExpression:
+          'jobId, s3Bucket, s3Key, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url, originalTextKey, enhancedVersion1Key, enhancedVersion2Key, changeLogKey, sessionChangeLogKey',
+      })
+    );
+
+    const item = record.Item || {};
+    if (!item.jobId || item.jobId.S !== jobId) {
+      return sendError(
+        res,
+        404,
+        'JOB_CONTEXT_NOT_FOUND',
+        'The upload context could not be located to refresh the download link.'
+      );
+    }
+
+    storedBucket = item.s3Bucket?.S || '';
+    originalUploadKey = item.s3Key?.S || '';
+
+    const registerKey = (value) => {
+      if (typeof value !== 'string') return;
+      const trimmed = value.trim();
+      if (trimmed) {
+        allowedKeys.add(trimmed);
+      }
+    };
+
+    registerKey(originalUploadKey);
+    registerKey(item.cv1Url?.S);
+    registerKey(item.cv2Url?.S);
+    registerKey(item.coverLetter1Url?.S);
+    registerKey(item.coverLetter2Url?.S);
+    registerKey(item.originalTextKey?.S);
+    registerKey(item.enhancedVersion1Key?.S);
+    registerKey(item.enhancedVersion2Key?.S);
+    registerKey(item.changeLogKey?.S);
+
+    const sessionChangeLogKey = deriveSessionChangeLogKey({
+      changeLogKey: item.sessionChangeLogKey?.S,
+      originalUploadKey,
+    });
+    registerKey(sessionChangeLogKey);
+
+    if (originalUploadKey) {
+      const prefix = originalUploadKey.replace(/[^/]+$/, '');
+      if (prefix) {
+        logKey = `${prefix}logs/processing.jsonl`;
+      }
+    }
+  } catch (err) {
+    logStructured('error', 'refresh_download_context_lookup_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'JOB_CONTEXT_LOOKUP_FAILED',
+      'Unable to load the session context for download refresh.'
+    );
+  }
+
+  const storageKey = storageKeyInput.replace(/^\/+/, '');
+
+  if (!allowedKeys.has(storageKey)) {
+    return sendError(
+      res,
+      404,
+      'DOWNLOAD_NOT_FOUND',
+      'The requested download link is no longer available.'
+    );
+  }
+
+  if (!storedBucket) {
+    logStructured('error', 'refresh_download_bucket_missing', logContext);
+    return sendError(
+      res,
+      500,
+      'STORAGE_UNAVAILABLE',
+      'Download storage is not configured.'
+    );
+  }
+
+  try {
+    const signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: storedBucket, Key: storageKey }),
+      { expiresIn: URL_EXPIRATION_SECONDS }
+    );
+    const expiresAt = new Date(
+      Date.now() + URL_EXPIRATION_SECONDS * 1000
+    ).toISOString();
+
+    if (logKey) {
+      try {
+        await logEvent({
+          s3,
+          bucket: storedBucket,
+          key: logKey,
+          jobId,
+          event: 'download_link_refreshed',
+          metadata: { storageKey },
+        });
+      } catch (logErr) {
+        logStructured('warn', 'refresh_download_log_failed', {
+          ...logContext,
+          bucket: storedBucket,
+          key: logKey,
+          error: serializeError(logErr),
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      url: signedUrl,
+      expiresAt,
+      storageKey,
+    });
+  } catch (err) {
+    logStructured('error', 'refresh_download_sign_failed', {
+      ...logContext,
+      storageKey,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'DOWNLOAD_REFRESH_FAILED',
+      err.message || 'Unable to refresh the download link.'
+    );
+  }
 });
 
 app.post(
