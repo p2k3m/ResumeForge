@@ -7201,7 +7201,8 @@ async function generatePdfWithFallback({
   buildOptionsForTemplate,
   inputText,
   generativeModel,
-  logContext = {}
+  logContext = {},
+  allowPlainFallback = false,
 }) {
   const candidates = uniqueTemplates(Array.isArray(templates) ? templates : []);
   if (!candidates.length) {
@@ -7293,7 +7294,7 @@ async function generatePdfWithFallback({
         ? 'resume'
         : null;
 
-  if (plainFallbackDocumentType) {
+  if (plainFallbackDocumentType && allowPlainFallback) {
     const fallbackTemplateId =
       lastAttemptTemplate || candidates[candidates.length - 1] || candidates[0];
     const fallbackOptions =
@@ -7356,6 +7357,14 @@ async function generatePdfWithFallback({
       });
       lastError = fallbackError;
     }
+  } else if (plainFallbackDocumentType && !allowPlainFallback) {
+    logStructured('warn', 'pdf_generation_plain_fallback_skipped', {
+      ...logContext,
+      documentType,
+      templates: candidates,
+      reason: 'fallback_disabled',
+      error: serializeError(lastError),
+    });
   }
 
   logStructured('error', 'pdf_generation_all_attempts_failed', {
