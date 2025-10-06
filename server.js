@@ -13994,6 +13994,7 @@ async function generateEnhancedDocumentsResponse({
   const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
   const downloadsRestricted = allowedOriginsForDownloads.length === 0;
   const urls = [];
+  const downloadArtifacts = [];
   const artifactTimestamp = new Date().toISOString();
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
@@ -14184,32 +14185,28 @@ async function generateEnhancedDocumentsResponse({
       registerStaleArtifactKey(existingArtifactKeys.coverLetter2Url);
     }
 
-    const signedUrl = await getSignedUrl(
-      s3,
-      new GetObjectCommand({ Bucket: bucket, Key: key }),
-      { expiresIn: URL_EXPIRATION_SECONDS }
-    );
-    const expiresAt = new Date(
-      Date.now() + URL_EXPIRATION_SECONDS * 1000
-    ).toISOString();
-    const typeFragment = encodeURIComponent(name);
-    const urlEntry = {
+    const artifactDownloadEntry = {
       type: name,
-      url: signedUrl,
-      fileUrl: signedUrl,
-      typeUrl: `${signedUrl}#${typeFragment}`,
-      expiresAt,
-      generatedAt: artifactTimestamp,
+      key,
+      isCoverLetter,
+      templateMetadata: null,
+      text: undefined,
+      coverLetterFields: undefined,
+      rawText: undefined,
     };
+
     if (effectiveTemplateId) {
       const templateType = isCoverLetter ? 'cover' : 'resume';
       const templateName = isCoverLetter
         ? formatCoverTemplateDisplayName(effectiveTemplateId)
         : formatTemplateDisplayName(effectiveTemplateId);
-      urlEntry.templateId = effectiveTemplateId;
-      urlEntry.templateName = templateName;
-      urlEntry.templateType = templateType;
+      artifactDownloadEntry.templateMetadata = {
+        templateId: effectiveTemplateId,
+        templateName,
+        templateType,
+      };
     }
+
     if (isCoverLetter) {
       const coverLetterText =
         typeof entry?.text === 'string' ? entry.text : '';
@@ -14222,15 +14219,16 @@ async function generateEnhancedDocumentsResponse({
         applicantName,
         letterIndex: name === 'cover_letter1' ? 1 : 2,
       });
-      urlEntry.text = coverLetterFields;
-      urlEntry.coverLetterFields = coverLetterFields;
-      urlEntry.rawText = coverLetterText;
+      artifactDownloadEntry.text = coverLetterFields;
+      artifactDownloadEntry.coverLetterFields = coverLetterFields;
+      artifactDownloadEntry.rawText = coverLetterText;
     } else if (typeof entry?.text === 'string') {
-      urlEntry.text = entry.text;
+      artifactDownloadEntry.text = entry.text;
     } else if (name !== 'original_upload') {
-      urlEntry.text = '';
+      artifactDownloadEntry.text = '';
     }
-    urls.push(urlEntry);
+
+    downloadArtifacts.push(artifactDownloadEntry);
   }
 
   const textArtifactPrefix = `${generatedPrefix}artifacts/`;
@@ -14371,6 +14369,48 @@ async function generateEnhancedDocumentsResponse({
   }
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
+
+  for (const artifact of downloadArtifacts) {
+    const signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({ Bucket: bucket, Key: artifact.key }),
+      { expiresIn: URL_EXPIRATION_SECONDS }
+    );
+    const expiresAt = new Date(
+      Date.now() + URL_EXPIRATION_SECONDS * 1000
+    ).toISOString();
+    const typeFragment = encodeURIComponent(artifact.type);
+    const urlEntry = {
+      type: artifact.type,
+      url: signedUrl,
+      fileUrl: signedUrl,
+      typeUrl: `${signedUrl}#${typeFragment}`,
+      expiresAt,
+      generatedAt: artifactTimestamp,
+    };
+
+    if (artifact.templateMetadata) {
+      urlEntry.templateId = artifact.templateMetadata.templateId;
+      urlEntry.templateName = artifact.templateMetadata.templateName;
+      urlEntry.templateType = artifact.templateMetadata.templateType;
+    }
+
+    if (artifact.isCoverLetter) {
+      if (artifact.coverLetterFields) {
+        urlEntry.text = artifact.coverLetterFields;
+        urlEntry.coverLetterFields = artifact.coverLetterFields;
+      }
+      if (typeof artifact.rawText === 'string') {
+        urlEntry.rawText = artifact.rawText;
+      }
+    } else if (typeof artifact.text === 'string') {
+      urlEntry.text = artifact.text;
+    } else if (artifact.type !== 'original_upload') {
+      urlEntry.text = '';
+    }
+
+    urls.push(urlEntry);
+  }
 
   const normalizedUrls = ensureOutputFileUrls(urls);
 
