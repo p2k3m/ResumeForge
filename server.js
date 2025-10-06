@@ -6966,6 +6966,7 @@ let generatePdf = async function (
       return pdfBuffer;
     } catch (err) {
       logStructured('error', 'pdf_renderer_failed', {
+        ...resolvedInvocationContext,
         templateId,
         requestedTemplateId,
         error: serializeError(err),
@@ -6978,6 +6979,7 @@ let generatePdf = async function (
         });
       } else {
         logStructured('warn', 'pdf_renderer_error_recovered', {
+          ...resolvedInvocationContext,
           templateId,
           requestedTemplateId,
           errorCode: err?.code,
@@ -7737,6 +7739,7 @@ let generatePdf = async function (
         fallbackErr.cause = err;
       }
       logStructured('error', 'pdf_plain_fallback_failed', {
+        ...resolvedInvocationContext,
         templateId,
         requestedTemplateId,
         documentType: fallbackDocumentType,
