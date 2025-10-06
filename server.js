@@ -162,6 +162,8 @@ const CV_GENERATION_ERROR_MESSAGE =
   'Our Lambda resume engine could not generate your PDFs. Please try again shortly.';
 const GEMINI_ENHANCEMENT_ERROR_MESSAGE =
   'Gemini enhancements are temporarily offline. Please try again soon.';
+const DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE =
+  'Unable to prepare download links for the generated documents.';
 const S3_STORAGE_ERROR_MESSAGE =
   'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.';
 const S3_CHANGE_LOG_ERROR_MESSAGE =
@@ -938,11 +940,18 @@ function sendError(res, status, code, message, details) {
   const normalizedDetails = normalizeErrorDetails(details);
   const baseDetails =
     normalizedDetails === undefined ? {} : normalizedDetails;
-  const enrichedDetails = withServiceSource(baseDetails, {
-    code,
-    message,
-    details: baseDetails,
-  });
+  const shouldAnnotateSource =
+    status >= 500 &&
+    baseDetails &&
+    typeof baseDetails === 'object' &&
+    Object.keys(baseDetails).length > 0;
+  const enrichedDetails = shouldAnnotateSource
+    ? withServiceSource(baseDetails, {
+        code,
+        message,
+        details: baseDetails,
+      })
+    : baseDetails;
   const error = {
     code,
     message,
@@ -14003,7 +14012,12 @@ async function generateEnhancedDocumentsResponse({
       level: 'error',
       message: 'Unable to construct resume variants from extracted content',
     });
-    sendError(res, 500, 'AI_RESPONSE_INVALID', GEMINI_ENHANCEMENT_ERROR_MESSAGE);
+    sendError(
+      res,
+      500,
+      'AI_RESPONSE_INVALID',
+      DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
+    );
     return null;
   }
 
@@ -14591,11 +14605,21 @@ async function generateEnhancedDocumentsResponse({
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
 
   for (const artifact of downloadArtifacts) {
-    const signedUrl = await getSignedUrl(
+    const rawSignedUrl = await getSignedUrl(
       s3,
       new GetObjectCommand({ Bucket: bucket, Key: artifact.key }),
       { expiresIn: URL_EXPIRATION_SECONDS }
     );
+    const signedUrl =
+      typeof rawSignedUrl === 'string' ? rawSignedUrl.trim() : '';
+    if (!signedUrl) {
+      logStructured('warn', 'download_artifact_signed_url_missing', {
+        ...logContext,
+        artifactType: artifact.type,
+        storageKey: artifact.key,
+      });
+      continue;
+    }
     const expiresAt = new Date(
       Date.now() + URL_EXPIRATION_SECONDS * 1000
     ).toISOString();
@@ -14654,7 +14678,7 @@ async function generateEnhancedDocumentsResponse({
       res,
       500,
       'AI_RESPONSE_INVALID',
-      GEMINI_ENHANCEMENT_ERROR_MESSAGE
+      DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
     );
     return null;
   }
@@ -15945,11 +15969,30 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
   }
 
   try {
-    const signedUrl = await getSignedUrl(
+    const rawSignedUrl = await getSignedUrl(
       s3,
       new GetObjectCommand({ Bucket: storedBucket, Key: storageKey }),
       { expiresIn: URL_EXPIRATION_SECONDS }
     );
+    const signedUrl =
+      typeof rawSignedUrl === 'string' ? rawSignedUrl.trim() : '';
+    if (!signedUrl) {
+      logStructured('error', 'refresh_download_signed_url_missing', {
+        ...logContext,
+        storageKey,
+      });
+      return sendError(
+        res,
+        500,
+        'DOWNLOAD_REFRESH_FAILED',
+        S3_STORAGE_ERROR_MESSAGE,
+        {
+          bucket: storedBucket,
+          key: storageKey,
+          reason: 'Received an empty signed URL while refreshing the download link.',
+        }
+      );
+    }
     const expiresAt = new Date(
       Date.now() + URL_EXPIRATION_SECONDS * 1000
     ).toISOString();
