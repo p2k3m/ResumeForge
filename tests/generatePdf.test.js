@@ -7,7 +7,8 @@ import {
   selectTemplates,
   CONTRASTING_PAIRS,
   CV_TEMPLATE_GROUPS,
-  setChromiumLauncher
+  setChromiumLauncher,
+  setPlainPdfFallbackEngines
 } from '../server.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import zlib from 'zlib';
@@ -729,6 +730,59 @@ describe('generatePdf and parsing', () => {
     expect(text).toContain('Summar');
     expect(text).toMatch(/(\u2022\s*First bullet)|First\s+b\s+20\s+ullet/);
     expect(text).toContain('Education');
+  });
+
+  describe('plain PDF minimal fallback', () => {
+    const missingModuleLoader = (moduleName) => async () => {
+      const error = new Error(`Cannot find module '${moduleName}'`);
+      error.code = 'MODULE_NOT_FOUND';
+      throw error;
+    };
+
+    afterEach(() => {
+      setPlainPdfFallbackEngines({ pdfLibLoader: null, pdfKitLoader: null });
+    });
+
+    test('resume fallback succeeds when pdf-lib and pdfkit are unavailable', async () => {
+      setPlainPdfFallbackEngines({
+        pdfLibLoader: missingModuleLoader('pdf-lib'),
+        pdfKitLoader: missingModuleLoader('pdfkit'),
+      });
+      const input = [
+        'Jane Minimal',
+        '',
+        'Experience',
+        '- Coordinated cross-functional teams to deliver projects ahead of schedule',
+      ].join('\n');
+      const fallbackPdf = await generatePdf(input, 'modern');
+      expect(fallbackPdf.subarray(0, 4).toString()).toBe('%PDF');
+      const text = await parsePdfText(fallbackPdf);
+      expect(text).toContain('Jane Minimal');
+      expect(text).toContain('Experience');
+      expect(text).toContain('Coordinated cross-functional teams');
+    });
+
+    test('cover letter fallback succeeds when pdf-lib and pdfkit are unavailable', async () => {
+      setPlainPdfFallbackEngines({
+        pdfLibLoader: missingModuleLoader('pdf-lib'),
+        pdfKitLoader: missingModuleLoader('pdfkit'),
+      });
+      const input = [
+        'John Writer',
+        '',
+        'Thank you for considering my application.',
+        'Sincerely,',
+        'John',
+      ].join('\n');
+      const fallbackPdf = await generatePdf(input, 'cover_modern', {
+        skipRequiredSections: true,
+      });
+      expect(fallbackPdf.subarray(0, 4).toString()).toBe('%PDF');
+      const text = await parsePdfText(fallbackPdf);
+      expect(text).toContain('John Writer');
+      expect(text).toContain('Cover Letter');
+      expect(text).toContain('Thank you for considering my application.');
+    });
   });
 
   test('2025 template renders expected HTML snapshot', async () => {
