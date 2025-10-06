@@ -27,7 +27,70 @@ import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
-  'Could not generate PDF, please try again'
+  'Our Lambda resume engine could not generate your PDFs. Please try again shortly.'
+
+const FRIENDLY_ERROR_MESSAGES = {
+  INITIAL_UPLOAD_FAILED:
+    'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.',
+  STORAGE_UNAVAILABLE:
+    'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.',
+  CHANGE_LOG_PERSISTENCE_FAILED:
+    'Amazon S3 is currently unavailable, so we could not save your updates. Please retry shortly.',
+  DOCUMENT_GENERATION_FAILED:
+    'Our Lambda resume engine is temporarily unavailable. Please try again shortly.',
+  PROCESSING_FAILED:
+    'Our Lambda resume engine is temporarily unavailable. Please try again shortly.',
+  GENERATION_FAILED:
+    'Our Lambda resume engine is temporarily unavailable. Please try again shortly.',
+  AI_RESPONSE_INVALID:
+    'Gemini enhancements are temporarily offline. Please try again soon.'
+}
+
+function resolveApiError({ data, fallback, status }) {
+  const normalizedFallback =
+    typeof fallback === 'string' && fallback.trim()
+      ? fallback.trim()
+      : 'Request failed. Please try again.'
+  const errorCode =
+    typeof data?.error?.code === 'string' ? data.error.code.trim() : ''
+  const errorSource =
+    typeof data?.error?.details?.source === 'string'
+      ? data.error.details.source.trim().toLowerCase()
+      : ''
+  const rawMessage =
+    (typeof data?.error?.message === 'string' && data.error.message.trim()) ||
+    (typeof data?.message === 'string' && data.message.trim()) ||
+    (typeof data?.error === 'string' && data.error.trim()) ||
+    ''
+
+  let friendlyFromCode = ''
+  if (errorSource === 's3') {
+    friendlyFromCode = FRIENDLY_ERROR_MESSAGES.STORAGE_UNAVAILABLE
+  } else if (errorSource === 'gemini') {
+    friendlyFromCode = FRIENDLY_ERROR_MESSAGES.AI_RESPONSE_INVALID
+  } else if (errorCode) {
+    friendlyFromCode = FRIENDLY_ERROR_MESSAGES[errorCode] || ''
+  }
+  let message = friendlyFromCode || rawMessage
+
+  if (!message || /^internal server error$/i.test(message)) {
+    message = normalizedFallback
+  }
+
+  if (!friendlyFromCode && status >= 500) {
+    if (/gemini/i.test(rawMessage)) {
+      message = FRIENDLY_ERROR_MESSAGES.AI_RESPONSE_INVALID
+    } else if (/s3|bucket|accessdenied/i.test(rawMessage)) {
+      message = FRIENDLY_ERROR_MESSAGES.STORAGE_UNAVAILABLE
+    } else if (/lambda|serverless|invocation|timeout/i.test(rawMessage)) {
+      message = FRIENDLY_ERROR_MESSAGES.DOCUMENT_GENERATION_FAILED
+    }
+  }
+
+  const isFriendly = Boolean(friendlyFromCode) || message !== rawMessage
+
+  return { message, code: errorCode, isFriendly }
+}
 
 const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
   'Please wait for the current ATS score refresh to finish before applying another improvement.'
@@ -2877,18 +2940,18 @@ function App() {
       }
 
       const data = await response.json().catch(() => ({}))
-      const errorMessage =
-        (data?.error && data.error.message) ||
-        (typeof data?.message === 'string' ? data.message : undefined) ||
-        (typeof data?.error === 'string' ? data.error : undefined) ||
-        fallbackMessage
+      const { message: errorMessage, code: errorCode } = resolveApiError({
+        data,
+        fallback: fallbackMessage,
+        status: response.status
+      })
 
       if (!response.ok) {
         if (!silent) {
           setError(errorMessage)
         }
         const err = new Error(errorMessage)
-        err.code = data?.error?.code || 'DOWNLOAD_REFRESH_FAILED'
+        err.code = errorCode || 'DOWNLOAD_REFRESH_FAILED'
         throw err
       }
 
@@ -3698,33 +3761,31 @@ function App() {
       })
 
       if (!response.ok) {
-        let message = response.status >= 500 ? CV_GENERATION_ERROR_MESSAGE : 'Request failed'
+        let data = {}
         try {
-          const data = await response.json()
-          const apiMessage =
-            data?.error?.message ||
-            (typeof data?.message === 'string' ? data.message : undefined) ||
-            (typeof data?.error === 'string' ? data.error : undefined)
-          if (apiMessage) {
-            message = apiMessage
-          }
-          if (data?.error?.code && data?.error?.code !== 'PROCESSING_FAILED') {
-            message = `${message} (${data.error.code})`
-          }
-          const manualRequired = data?.error?.details?.manualInputRequired === true
-          const fetchReason = typeof data?.error?.details?.reason === 'string' ? data.error.details.reason : ''
-            if (manualRequired) {
-              setManualJobDescriptionRequired(true)
-              manualJobDescriptionRef.current?.focus?.()
-              if (fetchReason && fetchReason.toUpperCase() === 'FETCH_BLOCKED') {
-                message = 'Paste the full job description to continue.'
-              }
-            }
+          data = await response.json()
         } catch {
-          try {
-            const text = await response.text()
-            if (text) message = text
-          } catch {}
+          data = {}
+        }
+        const fallbackMessage =
+          response.status >= 500 ? CV_GENERATION_ERROR_MESSAGE : 'Request failed'
+        const { message: resolvedMessage, code: errorCode, isFriendly } = resolveApiError({
+          data,
+          fallback: fallbackMessage,
+          status: response.status
+        })
+        const manualRequired = data?.error?.details?.manualInputRequired === true
+        const fetchReason = typeof data?.error?.details?.reason === 'string' ? data.error.details.reason : ''
+        let message = resolvedMessage
+        if (manualRequired) {
+          setManualJobDescriptionRequired(true)
+          manualJobDescriptionRef.current?.focus?.()
+          if (fetchReason && fetchReason.toUpperCase() === 'FETCH_BLOCKED') {
+            message = 'Paste the full job description to continue.'
+          }
+        }
+        if (!isFriendly && errorCode && errorCode !== 'PROCESSING_FAILED') {
+          message = `${message} (${errorCode})`
         }
         console.error('Resume processing request failed', {
           status: response.status,
@@ -4651,11 +4712,11 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const message =
-          errPayload?.error?.message ||
-          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
-          (typeof errPayload?.error === 'string' ? errPayload.error : undefined) ||
-          'Unable to store the change log entry.'
+        const { message } = resolveApiError({
+          data: errPayload,
+          fallback: 'Unable to store the change log entry.',
+          status: response.status
+        })
         throw new Error(message)
       }
 
@@ -5101,11 +5162,11 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const message =
-          errPayload?.error?.message ||
-          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
-          (typeof errPayload?.error === 'string' ? errPayload.error : undefined) ||
-          'Unable to remove the change log entry.'
+        const { message } = resolveApiError({
+          data: errPayload,
+          fallback: 'Unable to remove the change log entry.',
+          status: response.status
+        })
         throw new Error(message)
       }
 
@@ -5190,12 +5251,16 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const message =
-          errPayload?.error?.message ||
-          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
-          (typeof errPayload?.error === 'string' ? errPayload.error : undefined) ||
-          CV_GENERATION_ERROR_MESSAGE
-        throw new Error(message)
+        const { message, code, isFriendly } = resolveApiError({
+          data: errPayload,
+          fallback: CV_GENERATION_ERROR_MESSAGE,
+          status: response.status
+        })
+        const finalMessage =
+          !isFriendly && code && code !== 'PROCESSING_FAILED'
+            ? `${message} (${code})`
+            : message
+        throw new Error(finalMessage)
       }
 
       const data = await response.json()
@@ -5436,14 +5501,14 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const serverMessage =
-          errPayload?.error?.message ||
-          (typeof errPayload?.message === 'string' ? errPayload.message : undefined) ||
-          (typeof errPayload?.error === 'string' ? errPayload.error : undefined)
-        const message =
-          response.status >= 500
-            ? CV_GENERATION_ERROR_MESSAGE
-            : serverMessage || 'Unable to generate improvement.'
+        const { message } = resolveApiError({
+          data: errPayload,
+          fallback:
+            response.status >= 500
+              ? CV_GENERATION_ERROR_MESSAGE
+              : 'Unable to generate improvement.',
+          status: response.status
+        })
         throw new Error(message)
       }
 
