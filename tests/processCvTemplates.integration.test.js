@@ -35,14 +35,29 @@ describe('template coverage for /api/process-cv', () => {
         resumeEntries.some((entry) => entry.templateId === templateId && /\.pdf/.test(entry.url))
       ).toBe(true);
 
-      const pdfKeys = mocks.mockS3Send.mock.calls
+      const pdfCommands = mocks.mockS3Send.mock.calls
         .map(([command]) => command)
         .filter((command) => command.__type === 'PutObjectCommand')
-        .map((command) => command.input?.Key)
-        .filter((key) => typeof key === 'string' && key.endsWith('.pdf'));
+        .filter((command) => typeof command.input?.Key === 'string' && command.input.Key.endsWith('.pdf'));
 
-      expect(pdfKeys.length).toBeGreaterThan(0);
-      expect(pdfKeys.some((key) => key.includes(`enhanced_${templateId}`))).toBe(true);
+      expect(pdfCommands.length).toBeGreaterThan(0);
+      expect(
+        pdfCommands.some((command) => command.input.Key.includes(`enhanced_${templateId}`))
+      ).toBe(true);
+      expect(
+        pdfCommands.every((command) => command.input?.ContentType === 'application/pdf')
+      ).toBe(true);
+      for (const command of pdfCommands) {
+        const body = command.input?.Body;
+        const byteLength = Buffer.isBuffer(body)
+          ? body.length
+          : typeof body === 'string'
+            ? Buffer.byteLength(body)
+            : typeof body?.byteLength === 'number'
+              ? body.byteLength
+              : 0;
+        expect(byteLength).toBeGreaterThan(0);
+      }
 
       seenTemplates.add(templateId);
     }
