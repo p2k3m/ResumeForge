@@ -6778,8 +6778,13 @@ let generatePdf = async function (
   text,
   templateId = 'modern',
   options = {},
-  generativeModel
+  generativeModel,
+  invocationContext = {}
 ) {
+  const resolvedInvocationContext =
+    invocationContext && typeof invocationContext === 'object'
+      ? { ...invocationContext }
+      : {};
   const requestedTemplateId = templateId;
   const isCoverCandidate =
     typeof templateId === 'string' &&
@@ -6881,6 +6886,7 @@ let generatePdf = async function (
       contactLines: fallbackContactLines,
       documentType: fallbackDocumentType,
       logContext: {
+        ...resolvedInvocationContext,
         templateId,
         requestedTemplateId,
         documentType: fallbackDocumentType,
@@ -6947,6 +6953,7 @@ let generatePdf = async function (
       templateSource = await fs.readFile(templatePath, 'utf-8');
     } catch (err) {
       logStructured('error', 'pdf_template_load_failed', {
+        ...resolvedInvocationContext,
         templateId,
         templatePath,
         error: serializeError(err),
@@ -7059,6 +7066,7 @@ let generatePdf = async function (
       }
     } catch (err) {
       logStructured('error', 'chromium_pdf_generation_failed', {
+        ...resolvedInvocationContext,
         templateId,
         requestedTemplateId,
         error: serializeError(err),
@@ -7077,6 +7085,7 @@ let generatePdf = async function (
   } catch (err) {
     if (isModuleNotFoundError(err, 'pdfkit')) {
       logStructured('warn', 'pdf_pdfkit_dependency_missing', {
+        ...resolvedInvocationContext,
         templateId,
         requestedTemplateId,
         documentType: fallbackDocumentType,
@@ -7084,9 +7093,11 @@ let generatePdf = async function (
       const plainPayload = buildPlainPdfFallbackPayload();
       plainPayload.logContext = {
         ...(plainPayload.logContext || {}),
+        ...resolvedInvocationContext,
         reason: 'pdfkit_dependency_missing',
       };
       logStructured('warn', 'pdf_plain_fallback_invoked', {
+        ...resolvedInvocationContext,
         templateId,
         requestedTemplateId,
         reason: 'pdfkit_dependency_missing',
@@ -7095,6 +7106,7 @@ let generatePdf = async function (
       return generatePlainPdfFallback(plainPayload);
     }
     logStructured('error', 'pdf_pdfkit_import_failed', {
+      ...resolvedInvocationContext,
       templateId,
       requestedTemplateId,
       error: serializeError(err),
@@ -7394,6 +7406,7 @@ let generatePdf = async function (
       });
       doc.on('error', (err) => {
         logStructured('error', 'pdf_pdfkit_fallback_failed', {
+          ...resolvedInvocationContext,
           templateId,
           requestedTemplateId,
           error: serializeError(err),
@@ -7687,6 +7700,30 @@ function setGeneratePdf(fn) {
   generatePdf = fn;
 }
 
+function collectPdfEnvironmentDetails() {
+  const environment = {
+    nodeEnv: process.env.NODE_ENV || 'development',
+    runtime: process.version,
+    platform: process.platform,
+    arch: process.arch,
+  };
+  const awsRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  if (awsRegion) {
+    environment.awsRegion = awsRegion;
+  }
+  if (process.env.STAGE) {
+    environment.stage = process.env.STAGE;
+  }
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    environment.lambdaFunction = process.env.AWS_LAMBDA_FUNCTION_NAME;
+  }
+  if (process.env.ENABLE_PLAIN_PDF_FALLBACK !== undefined) {
+    environment.plainPdfFallbackEnabled =
+      process.env.ENABLE_PLAIN_PDF_FALLBACK === 'true';
+  }
+  return environment;
+}
+
 function uniqueTemplates(templates = []) {
   const seen = new Set();
   const result = [];
@@ -7746,11 +7783,13 @@ async function generatePdfWithFallback({
   allowPlainFallback = false,
 }) {
   const candidates = uniqueTemplates(Array.isArray(templates) ? templates : []);
+  const environmentDetails = collectPdfEnvironmentDetails();
   if (!candidates.length) {
     const error = new Error(`No PDF templates provided for ${documentType}`);
     logStructured('error', 'pdf_generation_no_templates', {
       ...logContext,
       documentType,
+      environment: environmentDetails,
     });
     throw error;
   }
@@ -7768,17 +7807,31 @@ async function generatePdfWithFallback({
   let lastError;
   let lastAttemptOptions;
   let lastAttemptTemplate;
+  let lastAttemptFilePath;
   let fallbackContext;
 
   for (let index = 0; index < candidates.length; index += 1) {
     const templateId = candidates[index];
     const attempt = index + 1;
+    const attemptFileBase = buildDocumentFileBaseName({
+      type: documentType,
+      templateId,
+      variant: logContext?.outputName || documentType,
+    });
+    const attemptFileName = `${attemptFileBase || documentType}.pdf`;
+    const attemptFilePath =
+      typeof logContext.outputKeyPrefix === 'string' && logContext.outputKeyPrefix
+        ? `${logContext.outputKeyPrefix}${attemptFileName}`
+        : attemptFileName;
+    lastAttemptFilePath = attemptFilePath;
     logStructured('info', 'pdf_generation_attempt', {
       ...logContext,
       documentType,
       template: templateId,
       attempt,
       totalAttempts: candidates.length,
+      targetFileName: attemptFileName,
+      targetFilePath: attemptFilePath,
     });
 
     let options;
@@ -7809,7 +7862,17 @@ async function generatePdfWithFallback({
         inputText,
         templateId,
         options,
-        generativeModel
+        generativeModel,
+        {
+          ...logContext,
+          documentType,
+          template: templateId,
+          attempt,
+          totalAttempts: candidates.length,
+          targetFileName: attemptFileName,
+          targetFilePath: attemptFilePath,
+          environment: environmentDetails,
+        }
       );
 
       logStructured('info', 'pdf_generation_attempt_succeeded', {
@@ -7818,6 +7881,8 @@ async function generatePdfWithFallback({
         template: templateId,
         attempt,
         bytes: buffer.length,
+        targetFileName: attemptFileName,
+        targetFilePath: attemptFilePath,
       });
 
       return { buffer, template: templateId, messages };
@@ -7833,6 +7898,9 @@ async function generatePdfWithFallback({
         template: templateId,
         attempt,
         error: serializeError(error),
+        targetFileName: attemptFileName,
+        targetFilePath: attemptFilePath,
+        environment: environmentDetails,
       });
       const templateIdString = typeof templateId === 'string' ? templateId : '';
       const is2025Template = templateIdString.startsWith('2025');
@@ -7859,6 +7927,7 @@ async function generatePdfWithFallback({
               template: templateIdString,
               templatesBackstopped: templatesToBackstop,
               backstopResults: sanitizedResults,
+              environment: environmentDetails,
             });
           } catch (backstopError) {
             logStructured('error', 'pdf_generation_backstop_failed', {
@@ -7867,6 +7936,7 @@ async function generatePdfWithFallback({
               template: templateIdString,
               templatesBackstopped: templatesToBackstop,
               error: serializeError(backstopError),
+              environment: environmentDetails,
             });
           }
         }
@@ -7910,6 +7980,8 @@ async function generatePdfWithFallback({
       documentType,
       template: fallbackTemplateId,
       templates: candidates,
+      environment: environmentDetails,
+      targetFilePath: lastAttemptFilePath,
     };
     fallbackContext = {
       templateId: fallbackTemplateId,
@@ -7921,6 +7993,7 @@ async function generatePdfWithFallback({
       forcedFallback,
       log: baseFallbackLog,
       lastError,
+      targetFilePath: lastAttemptFilePath,
     };
     const fallbackPayload = {
       requestedTemplateId: fallbackTemplateId,
@@ -7936,6 +8009,7 @@ async function generatePdfWithFallback({
         ...(lastError ? { error: serializeError(lastError) } : {}),
         forcedFallback,
         fallbackConfigured: Boolean(allowPlainFallback),
+        targetFilePath: lastAttemptFilePath,
       },
     };
     if (forcedFallback) {
@@ -8000,6 +8074,7 @@ async function generatePdfWithFallback({
         previousError: fallbackContext.lastError
           ? serializeError(fallbackContext.lastError)
           : undefined,
+        environment: environmentDetails,
       });
       return {
         buffer: minimalBuffer,
@@ -8014,6 +8089,7 @@ async function generatePdfWithFallback({
         previousError: fallbackContext.lastError
           ? serializeError(fallbackContext.lastError)
           : undefined,
+        environment: environmentDetails,
       });
     }
   }
@@ -8023,6 +8099,8 @@ async function generatePdfWithFallback({
     documentType,
     templates: candidates,
     error: serializeError(lastError),
+    targetFilePath: lastAttemptFilePath,
+    environment: environmentDetails,
   });
 
   const failure = new Error(
@@ -12532,7 +12610,12 @@ async function handleImprovementRequest(type, req, res) {
   res.locals.jobId = jobIdInput;
   captureUserContext(req, res);
   const requestId = res.locals.requestId;
-  const logContext = { requestId, jobId: jobIdInput, type };
+  const logContext = {
+    requestId,
+    jobId: jobIdInput,
+    type,
+    sessionId: improvementSessionSegment,
+  };
   const improvementSessionSegment =
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
     sanitizeS3KeyComponent(`session-${createIdentifier()}`);
@@ -13472,6 +13555,11 @@ async function generateEnhancedDocumentsResponse({
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
     sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
+  logContext = {
+    ...logContext,
+    generationRunId: logContext?.generationRunId || generationRunSegment,
+  };
+
   const resumeExperience = extractExperience(resumeText);
   const linkedinExperience = extractExperience(linkedinData.experience || []);
   const resumeEducation = extractEducation(resumeText);
@@ -14124,6 +14212,9 @@ async function generateEnhancedDocumentsResponse({
         ...logContext,
         documentType,
         outputName: name,
+        outputKeyPrefix: generatedPrefix,
+        sessionId: logContext?.sessionId || generationRunSegment,
+        generationRunId: generationRunSegment,
       },
       buildOptionsForTemplate: (templateId) => {
         const resolvedTemplateParams = resolveTemplateParamsConfig(
@@ -14818,7 +14909,12 @@ app.post(
     const jobId = jobIdInput;
     res.locals.jobId = jobId;
     const requestId = res.locals.requestId;
-    const logContext = { requestId, jobId, route: 'generate-enhanced-docs' };
+    const logContext = {
+      requestId,
+      jobId,
+      route: 'generate-enhanced-docs',
+      sessionId: generationSessionSegment,
+    };
     const generationSessionSegment =
       sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
       sanitizeS3KeyComponent(`session-${createIdentifier()}`);
