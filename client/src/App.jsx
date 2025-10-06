@@ -1801,7 +1801,22 @@ function App() {
   const [changeLog, setChangeLog] = useState([])
   const [activeDashboardStage, setActiveDashboardStage] = useState('score')
   const [activeImprovement, setActiveImprovement] = useState('')
-  const [error, setError] = useState('')
+  const [error, setErrorState] = useState('')
+  const [errorRecovery, setErrorRecovery] = useState(null)
+  const setError = useCallback((value, options = {}) => {
+    const nextMessage =
+      typeof value === 'string'
+        ? value
+        : typeof value === 'number'
+          ? String(value)
+          : ''
+    setErrorState(nextMessage)
+    if (nextMessage && options?.allowRetry) {
+      setErrorRecovery('generation')
+    } else {
+      setErrorRecovery(null)
+    }
+  }, [])
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
@@ -5378,7 +5393,7 @@ function App() {
       const message =
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
-      setError(message)
+      setError(message, { allowRetry: true })
     } finally {
       setIsGeneratingDocs(false)
     }
@@ -6026,7 +6041,21 @@ function App() {
               <div className="mt-4 h-10 w-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          {error && <p className="text-red-600 text-center font-semibold">{error}</p>}
+          {error && (
+            <div className="flex flex-col items-center gap-3 text-center">
+              <p className="text-red-600 text-sm font-semibold">{error}</p>
+              {errorRecovery === 'generation' && (
+                <button
+                  type="button"
+                  onClick={handleGenerateEnhancedDocs}
+                  disabled={isGeneratingDocs}
+                  className="inline-flex items-center justify-center rounded-full border border-purple-600 px-4 py-2 text-sm font-semibold text-purple-600 transition hover:bg-purple-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:cursor-not-allowed disabled:border-purple-300 disabled:text-purple-300"
+                >
+                  Retry generation
+                </button>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="space-y-5" aria-label="Improvement dashboard">
