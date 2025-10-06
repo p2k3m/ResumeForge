@@ -14961,15 +14961,15 @@ app.post(
     const jobId = jobIdInput;
     res.locals.jobId = jobId;
     const requestId = res.locals.requestId;
+    const generationSessionSegment =
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(`session-${createIdentifier()}`);
     const logContext = {
       requestId,
       jobId,
       route: 'generate-enhanced-docs',
       sessionId: generationSessionSegment,
     };
-    const generationSessionSegment =
-      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
-      sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
     captureUserContext(req, res);
 
