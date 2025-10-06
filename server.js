@@ -156,8 +156,16 @@ axiosResponseInterceptor?.use(
   }
 );
 
+const LAMBDA_PROCESSING_ERROR_MESSAGE =
+  'Our Lambda resume engine is temporarily unavailable. Please try again shortly.';
 const CV_GENERATION_ERROR_MESSAGE =
-  'Could not generate PDF, please try again';
+  'Our Lambda resume engine could not generate your PDFs. Please try again shortly.';
+const GEMINI_ENHANCEMENT_ERROR_MESSAGE =
+  'Gemini enhancements are temporarily offline. Please try again soon.';
+const S3_STORAGE_ERROR_MESSAGE =
+  'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.';
+const S3_CHANGE_LOG_ERROR_MESSAGE =
+  'Amazon S3 is currently unavailable, so we could not save your updates. Please retry shortly.';
 const TEMPLATE_RENDER_RETRY_MESSAGE =
   'Could not generate PDF for 2025 template, retrying with Modern';
 
@@ -1063,9 +1071,47 @@ function describeConfigurationError(err) {
   return message;
 }
 
+function detectServiceErrorMessage(messages = []) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return null;
+  }
+  const normalized = messages
+    .map((msg) => (typeof msg === 'string' ? msg.trim().toLowerCase() : ''))
+    .filter(Boolean);
+  if (!normalized.length) return null;
+
+  if (normalized.some((msg) => msg.includes('gemini') || msg.includes('generative ai'))) {
+    return GEMINI_ENHANCEMENT_ERROR_MESSAGE;
+  }
+  if (
+    normalized.some(
+      (msg) =>
+        msg.includes('s3') ||
+        msg.includes('bucket') ||
+        msg.includes('accessdenied') ||
+        msg.includes('no such bucket') ||
+        msg.includes('unable to upload')
+    )
+  ) {
+    return S3_STORAGE_ERROR_MESSAGE;
+  }
+  if (
+    normalized.some(
+      (msg) =>
+        msg.includes('lambda') ||
+        msg.includes('serverless') ||
+        msg.includes('invoke') ||
+        msg.includes('timeout')
+    )
+  ) {
+    return LAMBDA_PROCESSING_ERROR_MESSAGE;
+  }
+  return null;
+}
+
 function describeProcessingFailure(err) {
   if (!err) {
-    return 'Processing failed. Check the server logs for additional details.';
+    return LAMBDA_PROCESSING_ERROR_MESSAGE;
   }
 
   const collectMessages = (value) => {
@@ -1085,7 +1131,12 @@ function describeProcessingFailure(err) {
 
   const messages = collectMessages(err);
   if (!messages.length) {
-    return 'Processing failed. Please try again later.';
+    return LAMBDA_PROCESSING_ERROR_MESSAGE;
+  }
+
+  const serviceMessage = detectServiceErrorMessage(messages);
+  if (serviceMessage) {
+    return serviceMessage;
   }
 
   if (messages.some((msg) => /pdf generation failed/i.test(msg))) {
@@ -1095,7 +1146,7 @@ function describeProcessingFailure(err) {
   const meaningful = messages.find((msg) => !/^processing failed$/i.test(msg));
   const summary = meaningful || messages[0];
   if (/^processing failed$/i.test(summary)) {
-    return 'Processing failed. Please try again later.';
+    return LAMBDA_PROCESSING_ERROR_MESSAGE;
   }
   return `Processing failed: ${summary}`;
 }
@@ -13026,7 +13077,7 @@ async function handleImprovementRequest(type, req, res) {
           res,
           500,
           'STORAGE_UNAVAILABLE',
-          'Storage bucket is not configured for final generation.'
+          S3_STORAGE_ERROR_MESSAGE
         );
         return;
       }
@@ -13390,7 +13441,7 @@ async function generateEnhancedDocumentsResponse({
       res,
       500,
       'STORAGE_UNAVAILABLE',
-      'Storage bucket is not configured for final generation.'
+      S3_STORAGE_ERROR_MESSAGE
     );
     return null;
   }
@@ -13875,7 +13926,7 @@ async function generateEnhancedDocumentsResponse({
       level: 'error',
       message: 'Unable to construct resume variants from extracted content',
     });
-    sendError(res, 500, 'AI_RESPONSE_INVALID', CV_GENERATION_ERROR_MESSAGE);
+    sendError(res, 500, 'AI_RESPONSE_INVALID', GEMINI_ENHANCEMENT_ERROR_MESSAGE);
     return null;
   }
 
@@ -14456,7 +14507,7 @@ async function generateEnhancedDocumentsResponse({
       level: 'error',
       message: CV_GENERATION_ERROR_MESSAGE,
     });
-    sendError(res, 500, 'AI_RESPONSE_INVALID', CV_GENERATION_ERROR_MESSAGE);
+    sendError(res, 500, 'AI_RESPONSE_INVALID', GEMINI_ENHANCEMENT_ERROR_MESSAGE);
     return null;
   }
 
@@ -15030,7 +15081,7 @@ app.post(
           res,
           500,
           'STORAGE_UNAVAILABLE',
-          'Storage bucket is not configured for final generation.'
+          S3_STORAGE_ERROR_MESSAGE
         );
       }
 
@@ -15250,14 +15301,49 @@ app.post(
         ...logContext,
         error: serializeError(err),
       });
-      const message =
-        err?.code === 'ENHANCEMENT_VARIANT_FAILED' ||
-        err?.code === 'TEMPLATE_RENDER_FAILED'
-          ? CV_GENERATION_ERROR_MESSAGE
-          : typeof err?.message === 'string' && err.message.trim()
-            ? err.message
-            : CV_GENERATION_ERROR_MESSAGE;
-      return sendError(res, 500, 'GENERATION_FAILED', message);
+      const rawMessage =
+        typeof err?.message === 'string' && err.message.trim()
+          ? err.message.trim()
+          : '';
+      const lowerMessage = rawMessage.toLowerCase();
+      const isGeminiFailure =
+        err?.code === 'ENHANCEMENT_VARIANT_FAILED' || lowerMessage.includes('gemini');
+      const isS3Failure =
+        lowerMessage.includes('s3') ||
+        lowerMessage.includes('bucket') ||
+        lowerMessage.includes('accessdenied');
+      const isTemplateFailure = err?.code === 'TEMPLATE_RENDER_FAILED';
+
+      let message = rawMessage || CV_GENERATION_ERROR_MESSAGE;
+      if (isGeminiFailure) {
+        message = GEMINI_ENHANCEMENT_ERROR_MESSAGE;
+      } else if (isS3Failure) {
+        message = S3_STORAGE_ERROR_MESSAGE;
+      } else if (isTemplateFailure || !rawMessage || /^internal server error$/i.test(rawMessage)) {
+        message = CV_GENERATION_ERROR_MESSAGE;
+      }
+
+      const details = {};
+      if (err?.details && typeof err.details === 'object') {
+        Object.assign(details, err.details);
+      }
+      if (rawMessage && !details.reason) {
+        details.reason = rawMessage;
+      }
+      if (isGeminiFailure) {
+        details.source = 'gemini';
+      } else if (isS3Failure) {
+        details.source = 's3';
+      }
+
+      const hasDetails = Object.keys(details).length > 0;
+      return sendError(
+        res,
+        500,
+        'GENERATION_FAILED',
+        message,
+        hasDetails ? details : undefined
+      );
     }
   }
 );
@@ -15564,7 +15650,11 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       res,
       500,
       'CHANGE_LOG_PERSISTENCE_FAILED',
-      err.message || 'Unable to persist the change log to S3.'
+      S3_CHANGE_LOG_ERROR_MESSAGE,
+      {
+        bucket: storedBucket,
+        reason: err?.message || 'Unable to persist the change log to S3.',
+      }
     );
   }
 
@@ -16153,8 +16243,8 @@ app.post(
       res,
       500,
       'INITIAL_UPLOAD_FAILED',
-      `Initial S3 upload to bucket ${bucket} failed: ${message}`,
-      { bucket }
+      S3_STORAGE_ERROR_MESSAGE,
+      { bucket, reason: message }
     );
   }
 
@@ -16817,7 +16907,7 @@ app.post(
       res,
       500,
       'DOCUMENT_GENERATION_FAILED',
-      CV_GENERATION_ERROR_MESSAGE,
+      LAMBDA_PROCESSING_ERROR_MESSAGE,
       errorDetails
     );
 
