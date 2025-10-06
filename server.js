@@ -6108,6 +6108,180 @@ function buildTemplateContactEntries(contactLines = []) {
     .filter(Boolean);
 }
 
+const defaultPlainPdfLoaders = {
+  pdfLibLoader: () => import('pdf-lib'),
+  pdfKitLoader: () => import('pdfkit'),
+};
+
+let loadPlainPdfLib = defaultPlainPdfLoaders.pdfLibLoader;
+let loadPlainPdfKit = defaultPlainPdfLoaders.pdfKitLoader;
+
+function setPlainPdfFallbackEngines(overrides = {}) {
+  if (Object.prototype.hasOwnProperty.call(overrides, 'pdfLibLoader')) {
+    loadPlainPdfLib =
+      typeof overrides.pdfLibLoader === 'function'
+        ? overrides.pdfLibLoader
+        : defaultPlainPdfLoaders.pdfLibLoader;
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, 'pdfKitLoader')) {
+    loadPlainPdfKit =
+      typeof overrides.pdfKitLoader === 'function'
+        ? overrides.pdfKitLoader
+        : defaultPlainPdfLoaders.pdfKitLoader;
+  }
+}
+
+const MINIMAL_PDF_PAGE = { width: 612, height: 792 };
+const MINIMAL_PDF_MARGIN = 56;
+const MINIMAL_PDF_LEADING = 16;
+const MINIMAL_PDF_LINE_WIDTH = 90;
+
+function escapeMinimalPdfString(input = '') {
+  return input
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/\r/g, '')
+    .replace(/\t/g, '    ')
+    .replace(/[\u0000-\u001f]/g, ' ');
+}
+
+function wrapMinimalPlainText(line = '', max = MINIMAL_PDF_LINE_WIDTH) {
+  const sanitized = typeof line === 'string' ? line.replace(/\r/g, '') : '';
+  if (!sanitized.trim()) {
+    return [''];
+  }
+  if (sanitized.length <= max) {
+    return [sanitized];
+  }
+  const words = sanitized.split(/\s+/).filter(Boolean);
+  if (!words.length) {
+    return [''];
+  }
+  const wrapped = [];
+  let current = words[0];
+  for (let index = 1; index < words.length; index += 1) {
+    const word = words[index];
+    const candidate = `${current} ${word}`;
+    if (candidate.length > max) {
+      wrapped.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  wrapped.push(current);
+  return wrapped;
+}
+
+function createMinimalPlainPdfBuffer({
+  lines = [],
+  name,
+  jobTitle,
+  contactLines = [],
+  documentType = 'resume',
+}) {
+  const headerLines = [];
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
+  const trimmedJobTitle = typeof jobTitle === 'string' ? jobTitle.trim() : '';
+  if (trimmedName) {
+    headerLines.push(trimmedName);
+  }
+  if (trimmedJobTitle) {
+    headerLines.push(trimmedJobTitle);
+  }
+  if (Array.isArray(contactLines)) {
+    const contact = contactLines
+      .map((line) => (typeof line === 'string' ? line.trim() : ''))
+      .filter(Boolean)
+      .join(' • ');
+    if (contact) {
+      headerLines.push(contact);
+    }
+  }
+  if (documentType === 'cover_letter') {
+    headerLines.push('Cover Letter');
+  }
+
+  const bodyLines = [];
+  (Array.isArray(lines) ? lines : []).forEach((rawLine) => {
+    const normalized = typeof rawLine === 'string'
+      ? rawLine.replace(/\r/g, '')
+      : '';
+    if (!normalized.trim()) {
+      bodyLines.push('');
+      return;
+    }
+    wrapMinimalPlainText(normalized).forEach((entry) => {
+      bodyLines.push(entry);
+    });
+  });
+
+  const composedLines = [];
+  if (headerLines.length) {
+    headerLines.forEach((line) => composedLines.push(line));
+    if (bodyLines.length) {
+      composedLines.push('');
+    }
+  }
+  composedLines.push(...bodyLines);
+  if (!composedLines.some((line) => typeof line === 'string' && line.trim())) {
+    composedLines.push('Resume content unavailable.');
+  }
+
+  const finalizedLines = composedLines.map((line) =>
+    typeof line === 'string' ? line.replace(/\s+$/g, '') : ''
+  );
+
+  const contentParts = [
+    'BT',
+    '/F1 12 Tf',
+    `${MINIMAL_PDF_LEADING} TL`,
+    `${MINIMAL_PDF_MARGIN} ${MINIMAL_PDF_PAGE.height - MINIMAL_PDF_MARGIN} Td`,
+  ];
+
+  finalizedLines.forEach((line, index) => {
+    contentParts.push(`(${escapeMinimalPdfString(line)}) Tj`);
+    if (index < finalizedLines.length - 1) {
+      contentParts.push('T*');
+    }
+  });
+
+  contentParts.push('ET');
+
+  const contentStream = contentParts.join('\n');
+  const contentLength = Buffer.byteLength(contentStream, 'utf8');
+
+  const objects = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
+    `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${MINIMAL_PDF_PAGE.width} ${MINIMAL_PDF_PAGE.height}] /Contents 5 0 R /Resources << /Font << /F1 4 0 R >> >> >>\nendobj\n`,
+    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
+    `5 0 obj\n<< /Length ${contentLength} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+  ];
+
+  const header = '%PDF-1.4\n';
+  let offset = Buffer.byteLength(header, 'utf8');
+  const offsets = [];
+  const bodyChunks = [];
+  for (const obj of objects) {
+    offsets.push(offset);
+    bodyChunks.push(obj);
+    offset += Buffer.byteLength(obj, 'utf8');
+  }
+
+  const xrefStart = offset;
+  const xrefEntries = [
+    '0000000000 65535 f \n',
+    ...offsets.map((value) => `${value.toString().padStart(10, '0')} 00000 n \n`),
+  ].join('');
+  const trailer =
+    `xref\n0 ${objects.length + 1}\n${xrefEntries}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+
+  const pdfContent = header + bodyChunks.join('') + trailer;
+  return Buffer.from(pdfContent, 'utf8');
+}
+
 async function generatePlainPdfFallback({
   requestedTemplateId,
   templateId,
@@ -6132,7 +6306,7 @@ async function generatePlainPdfFallback({
   const tryPdfLib = async () => {
     let pdfLib;
     try {
-      pdfLib = await import('pdf-lib');
+      pdfLib = await loadPlainPdfLib();
     } catch (err) {
       lastError = err;
       if (isModuleNotFoundError(err, 'pdf-lib')) {
@@ -6321,7 +6495,7 @@ async function generatePlainPdfFallback({
   const tryPdfKit = async () => {
     let pdfKitModule;
     try {
-      pdfKitModule = await import('pdfkit');
+      pdfKitModule = await loadPlainPdfKit();
     } catch (err) {
       lastError = err;
       if (isModuleNotFoundError(err, 'pdfkit')) {
@@ -6429,6 +6603,28 @@ async function generatePlainPdfFallback({
   const pdfKitBuffer = await tryPdfKit();
   if (pdfKitBuffer) {
     return pdfKitBuffer;
+  }
+
+  try {
+    const minimalBuffer = createMinimalPlainPdfBuffer({
+      lines,
+      name,
+      jobTitle,
+      contactLines,
+      documentType,
+    });
+    logStructured('warn', 'pdf_plain_fallback_minimal_generated', {
+      ...baseLog,
+      engine: 'minimal',
+      bytes: minimalBuffer.length,
+    });
+    return minimalBuffer;
+  } catch (err) {
+    lastError = err;
+    logStructured('error', 'pdf_plain_fallback_minimal_failed', {
+      ...baseLog,
+      error: serializeError(err),
+    });
   }
 
   logStructured('error', 'pdf_plain_fallback_failed', {
@@ -15892,6 +16088,7 @@ export {
   setGeneratePdf,
   setChromiumLauncher,
   setS3Client,
+  setPlainPdfFallbackEngines,
   parseContent,
   parseLine,
   ensureRequiredSections,
