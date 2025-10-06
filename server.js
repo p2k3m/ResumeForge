@@ -6073,6 +6073,181 @@ function buildTemplateContactEntries(contactLines = []) {
     .filter(Boolean);
 }
 
+async function generatePlainPdfFallback({
+  requestedTemplateId,
+  templateId,
+  text,
+  name,
+  jobTitle,
+  contactLines = [],
+  documentType = 'resume',
+  logContext = {}
+}) {
+  const {
+    PDFDocument,
+    StandardFonts
+  } = await import('pdf-lib');
+
+  const doc = await PDFDocument.create();
+  const pageSize = [612, 792];
+  let page = doc.addPage(pageSize);
+  const regularFont = await doc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+  const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
+  const margin = 56;
+  const maxWidth = page.getWidth() - margin * 2;
+  const bodySize = 11;
+  const headingSize = 14;
+  const nameSize = 22;
+  const contactSize = 10;
+  const lineGap = 16;
+  const bulletIndent = 16;
+  let y = page.getHeight() - margin;
+
+  const ensureSpace = (needed = 1) => {
+    if (y - needed * lineGap < margin) {
+      page = doc.addPage(pageSize);
+      y = page.getHeight() - margin;
+    }
+  };
+
+  const wrapText = (value, font, size, width) => {
+    if (!value) return [''];
+    const words = value.split(/\s+/).filter(Boolean);
+    if (!words.length) return [''];
+    const lines = [];
+    let current = words[0];
+    for (let index = 1; index < words.length; index += 1) {
+      const candidate = `${current} ${words[index]}`;
+      if (font.widthOfTextAtSize(candidate, size) <= width) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = words[index];
+      }
+    }
+    lines.push(current);
+    return lines;
+  };
+
+  const drawParagraph = ({
+    content,
+    font = regularFont,
+    size = bodySize,
+    indent = 0,
+    bullet = false,
+    spacing = lineGap
+  }) => {
+    const lines = wrapText(content, font, size, maxWidth - indent);
+    ensureSpace(lines.length);
+    lines.forEach((line, index) => {
+      if (bullet && index === 0) {
+        page.drawText('•', {
+          x: margin,
+          y,
+          size,
+          font: boldFont
+        });
+      }
+      page.drawText(line, {
+        x: margin + indent,
+        y,
+        size,
+        font
+      });
+      y -= spacing;
+    });
+    y -= Math.max(0, spacing / 2);
+  };
+
+  const normalizedText = typeof text === 'string' ? text.replace(/\r\n?/g, '\n') : '';
+  const lines = normalizedText.split('\n');
+
+  if (name) {
+    ensureSpace();
+    page.drawText(name, {
+      x: margin,
+      y,
+      size: nameSize,
+      font: boldFont
+    });
+    y -= nameSize + 8;
+  }
+
+  if (jobTitle) {
+    ensureSpace();
+    page.drawText(jobTitle, {
+      x: margin,
+      y,
+      size: bodySize,
+      font: italicFont
+    });
+    y -= lineGap;
+  }
+
+  if (Array.isArray(contactLines) && contactLines.length) {
+    const contact = contactLines.join(' • ');
+    const wrapped = wrapText(contact, regularFont, contactSize, maxWidth);
+    ensureSpace(wrapped.length);
+    wrapped.forEach((line) => {
+      page.drawText(line, {
+        x: margin,
+        y,
+        size: contactSize,
+        font: regularFont
+      });
+      y -= contactSize + 4;
+    });
+    y -= lineGap / 2;
+  }
+
+  if (documentType === 'cover_letter') {
+    ensureSpace();
+    page.drawText('Cover Letter', {
+      x: margin,
+      y,
+      size: headingSize,
+      font: boldFont
+    });
+    y -= headingSize + 8;
+  }
+
+  lines.forEach((rawLine) => {
+    const trimmed = rawLine.trimEnd();
+    if (!trimmed) {
+      y -= lineGap;
+      return;
+    }
+    const bulletMatch = trimmed.match(/^[-*•]+\s*/);
+    const bullet = Boolean(bulletMatch);
+    const content = bullet ? trimmed.slice(bulletMatch[0].length).trimStart() : trimmed;
+    const headingCandidate = content.trim();
+    const isHeading =
+      headingCandidate &&
+      headingCandidate.length <= 64 &&
+      /[A-Za-z]/.test(headingCandidate) &&
+      headingCandidate === headingCandidate.toUpperCase();
+
+    drawParagraph({
+      content: headingCandidate,
+      font: isHeading ? boldFont : regularFont,
+      size: isHeading ? headingSize : bodySize,
+      indent: bullet ? bulletIndent : 0,
+      bullet
+    });
+  });
+
+  const buffer = await doc.save();
+  logStructured('info', 'pdf_plain_fallback_generated', {
+    ...logContext,
+    templateId,
+    requestedTemplateId,
+    bytes: buffer.length,
+  });
+
+  return Buffer.from(buffer);
+}
+
 let generatePdf = async function (
   text,
   templateId = 'modern',
@@ -6111,8 +6286,10 @@ let generatePdf = async function (
       ? options.enhancementTokenMap
       : {};
 
+  const resolvedInputText = resolveEnhancementTokens(text, enhancementTokenMap);
+
   const contactContext = buildTemplateContactContext({
-    text: resolveEnhancementTokens(text, enhancementTokenMap),
+    text: resolvedInputText,
     options,
     templateParams,
   });
@@ -6328,7 +6505,46 @@ let generatePdf = async function (
     });
   }
 
-  const { default: PDFDocument } = await import('pdfkit');
+  let PDFDocument;
+  try {
+    ({ default: PDFDocument } = await import('pdfkit'));
+  } catch (err) {
+    if (isModuleNotFoundError(err, 'pdfkit')) {
+      logStructured('warn', 'pdf_pdfkit_dependency_missing', {
+        templateId,
+        requestedTemplateId,
+        documentType: isCoverCandidate ? 'cover_letter' : 'resume',
+      });
+      const fallbackBuffer = await generatePlainPdfFallback({
+        requestedTemplateId,
+        templateId,
+        text: resolvedInputText || (typeof text === 'string' ? text : ''),
+        name:
+          (templateParams?.name && String(templateParams.name).trim()) ||
+          (data?.name && String(data.name).trim()) ||
+          '',
+        jobTitle:
+          (templateParams?.jobTitle && String(templateParams.jobTitle).trim()) ||
+          (options?.jobTitle && String(options.jobTitle).trim()) ||
+          '',
+        contactLines: Array.isArray(contactContext.contactLines)
+          ? contactContext.contactLines
+          : [],
+        documentType: isCoverCandidate ? 'cover_letter' : 'resume',
+        logContext: {
+          templateId,
+          requestedTemplateId,
+        },
+      });
+      return fallbackBuffer;
+    }
+    logStructured('error', 'pdf_pdfkit_import_failed', {
+      templateId,
+      requestedTemplateId,
+      error: serializeError(err),
+    });
+    throw err;
+  }
   logStructured('debug', 'pdf_pdfkit_fallback', {
     templateId,
     requestedTemplateId,
