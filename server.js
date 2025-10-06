@@ -12661,15 +12661,16 @@ async function handleImprovementRequest(type, req, res) {
   res.locals.jobId = jobIdInput;
   captureUserContext(req, res);
   const requestId = res.locals.requestId;
+  const improvementSessionSegment =
+    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
+
   const logContext = {
     requestId,
     jobId: jobIdInput,
     type,
     sessionId: improvementSessionSegment,
   };
-  const improvementSessionSegment =
-    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
-    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
   const profileIdentifier =
     resolveProfileIdentifier({
