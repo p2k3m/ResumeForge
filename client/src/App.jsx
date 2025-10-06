@@ -4904,6 +4904,18 @@ function App() {
       }
 
       const data = await response.json()
+      const serverMessages = Array.isArray(data.messages)
+        ? data.messages
+            .map((message) =>
+              typeof message === 'string' ? message.trim() : ''
+            )
+            .filter(Boolean)
+        : []
+      if (serverMessages.length > 0) {
+        setQueuedMessage(serverMessages[serverMessages.length - 1])
+      } else {
+        setQueuedMessage('')
+      }
       const urlsValue = normalizeOutputFiles(data.urls, {
         defaultExpiresAt: data?.urlExpiresAt,
         defaultExpiresInSeconds: data?.urlExpiresInSeconds,
