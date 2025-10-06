@@ -956,10 +956,14 @@ function sendError(res, status, code, message, details) {
       ? 'An unexpected error occurred. Please try again later.'
       : 'The request could not be completed.');
 
-  const baseDetails =
-    normalizedDetails === undefined ? {} : normalizedDetails;
+  const hasExplicitDetails = normalizedDetails !== undefined;
+  const baseDetails = hasExplicitDetails
+    ? normalizedDetails && typeof normalizedDetails === 'object'
+      ? normalizedDetails
+      : normalizedDetails
+    : {};
 
-  const shouldAnnotateSource = status >= 500;
+  const shouldAnnotateSource = status >= 500 && hasExplicitDetails;
   let enrichedDetails = baseDetails;
 
   if (shouldAnnotateSource) {
