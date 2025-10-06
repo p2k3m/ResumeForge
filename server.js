@@ -751,6 +751,72 @@ function normalizeErrorDetails(details) {
   return { value: details };
 }
 
+function detectServiceErrorSource({ code, message, details }) {
+  const normalizedCode = typeof code === 'string' ? code.trim().toUpperCase() : '';
+  const textSegments = [];
+  const appendText = (value) => {
+    if (typeof value === 'string' && value.trim()) {
+      textSegments.push(value.trim().toLowerCase());
+    }
+  };
+
+  appendText(message);
+  if (details && typeof details === 'object') {
+    appendText(details.reason);
+    appendText(details.message);
+  }
+
+  if (normalizedCode) {
+    appendText(normalizedCode);
+  }
+
+  const combined = textSegments.join(' ');
+  const includes = (needle) => combined.includes(needle);
+
+  if (
+    /GEMINI|AI_RESPONSE/.test(normalizedCode) ||
+    includes('gemini') ||
+    includes('ai response invalid')
+  ) {
+    return 'gemini';
+  }
+
+  if (
+    /S3|STORAGE|UPLOAD|CHANGE_LOG/.test(normalizedCode) ||
+    includes('amazon s3') ||
+    includes('bucket') ||
+    includes('storage')
+  ) {
+    return 's3';
+  }
+
+  if (
+    /LAMBDA|PROCESS|GENERAT/.test(normalizedCode) ||
+    includes('lambda') ||
+    includes('serverless') ||
+    includes('generation failed') ||
+    includes('processing failed')
+  ) {
+    return 'lambda';
+  }
+
+  return undefined;
+}
+
+function withServiceSource(details, context) {
+  if (!details || typeof details !== 'object') {
+    return details;
+  }
+  if (details.source) {
+    return details;
+  }
+  const source = detectServiceErrorSource(context);
+  if (!source) {
+    return details;
+  }
+  return { ...details, source };
+}
+
 const OUTPUT_URL_KEYS = ['fileUrl', 'url', 'downloadUrl', 'href', 'link', 'signedUrl'];
 
 function parseTypeUrl(value) {
@@ -870,10 +936,17 @@ function ensureOutputFileUrls(entries) {
 
 function sendError(res, status, code, message, details) {
   const normalizedDetails = normalizeErrorDetails(details);
+  const baseDetails =
+    normalizedDetails === undefined ? {} : normalizedDetails;
+  const enrichedDetails = withServiceSource(baseDetails, {
+    code,
+    message,
+    details: baseDetails,
+  });
   const error = {
     code,
     message,
-    details: normalizedDetails !== undefined ? normalizedDetails : {},
+    details: enrichedDetails,
   };
   if (res.locals.requestId) {
     error.requestId = res.locals.requestId;
@@ -14581,7 +14654,7 @@ async function generateEnhancedDocumentsResponse({
       res,
       500,
       'AI_RESPONSE_INVALID',
-      'Unable to prepare download links for the generated documents.'
+      GEMINI_ENHANCEMENT_ERROR_MESSAGE
     );
     return null;
   }
@@ -15545,7 +15618,14 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         res,
         500,
         'CHANGE_LOG_LOAD_FAILED',
-        'Unable to load the session change log for updates.'
+        S3_CHANGE_LOG_ERROR_MESSAGE,
+        {
+          bucket: storedBucket,
+          key: sessionChangeLogKey,
+          reason:
+            (typeof loadErr?.message === 'string' && loadErr.message) ||
+            'Unable to load the session change log for updates.',
+        }
       );
     }
   } catch (err) {
@@ -15910,7 +15990,12 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
       res,
       500,
       'DOWNLOAD_REFRESH_FAILED',
-      err.message || 'Unable to refresh the download link.'
+      S3_STORAGE_ERROR_MESSAGE,
+      {
+        bucket: storedBucket,
+        key: storageKey,
+        reason: err?.message || 'Unable to refresh the download link.',
+      }
     );
   }
 });
