@@ -6083,169 +6083,329 @@ async function generatePlainPdfFallback({
   documentType = 'resume',
   logContext = {}
 }) {
-  const {
-    PDFDocument,
-    StandardFonts
-  } = await import('pdf-lib');
-
-  const doc = await PDFDocument.create();
-  const pageSize = [612, 792];
-  let page = doc.addPage(pageSize);
-  const regularFont = await doc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-  const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
-  const margin = 56;
-  const maxWidth = page.getWidth() - margin * 2;
-  const bodySize = 11;
-  const headingSize = 14;
-  const nameSize = 22;
-  const contactSize = 10;
-  const lineGap = 16;
-  const bulletIndent = 16;
-  let y = page.getHeight() - margin;
-
-  const ensureSpace = (needed = 1) => {
-    if (y - needed * lineGap < margin) {
-      page = doc.addPage(pageSize);
-      y = page.getHeight() - margin;
-    }
-  };
-
-  const wrapText = (value, font, size, width) => {
-    if (!value) return [''];
-    const words = value.split(/\s+/).filter(Boolean);
-    if (!words.length) return [''];
-    const lines = [];
-    let current = words[0];
-    for (let index = 1; index < words.length; index += 1) {
-      const candidate = `${current} ${words[index]}`;
-      if (font.widthOfTextAtSize(candidate, size) <= width) {
-        current = candidate;
-      } else {
-        lines.push(current);
-        current = words[index];
-      }
-    }
-    lines.push(current);
-    return lines;
-  };
-
-  const drawParagraph = ({
-    content,
-    font = regularFont,
-    size = bodySize,
-    indent = 0,
-    bullet = false,
-    spacing = lineGap
-  }) => {
-    const lines = wrapText(content, font, size, maxWidth - indent);
-    ensureSpace(lines.length);
-    lines.forEach((line, index) => {
-      if (bullet && index === 0) {
-        page.drawText('•', {
-          x: margin,
-          y,
-          size,
-          font: boldFont
-        });
-      }
-      page.drawText(line, {
-        x: margin + indent,
-        y,
-        size,
-        font
-      });
-      y -= spacing;
-    });
-    y -= Math.max(0, spacing / 2);
-  };
-
   const normalizedText = typeof text === 'string' ? text.replace(/\r\n?/g, '\n') : '';
   const lines = normalizedText.split('\n');
-
-  if (name) {
-    ensureSpace();
-    page.drawText(name, {
-      x: margin,
-      y,
-      size: nameSize,
-      font: boldFont
-    });
-    y -= nameSize + 8;
-  }
-
-  if (jobTitle) {
-    ensureSpace();
-    page.drawText(jobTitle, {
-      x: margin,
-      y,
-      size: bodySize,
-      font: italicFont
-    });
-    y -= lineGap;
-  }
-
-  if (Array.isArray(contactLines) && contactLines.length) {
-    const contact = contactLines.join(' • ');
-    const wrapped = wrapText(contact, regularFont, contactSize, maxWidth);
-    ensureSpace(wrapped.length);
-    wrapped.forEach((line) => {
-      page.drawText(line, {
-        x: margin,
-        y,
-        size: contactSize,
-        font: regularFont
-      });
-      y -= contactSize + 4;
-    });
-    y -= lineGap / 2;
-  }
-
-  if (documentType === 'cover_letter') {
-    ensureSpace();
-    page.drawText('Cover Letter', {
-      x: margin,
-      y,
-      size: headingSize,
-      font: boldFont
-    });
-    y -= headingSize + 8;
-  }
-
-  lines.forEach((rawLine) => {
-    const trimmed = rawLine.trimEnd();
-    if (!trimmed) {
-      y -= lineGap;
-      return;
-    }
-    const bulletMatch = trimmed.match(/^[-*•]+\s*/);
-    const bullet = Boolean(bulletMatch);
-    const content = bullet ? trimmed.slice(bulletMatch[0].length).trimStart() : trimmed;
-    const headingCandidate = content.trim();
-    const isHeading =
-      headingCandidate &&
-      headingCandidate.length <= 64 &&
-      /[A-Za-z]/.test(headingCandidate) &&
-      headingCandidate === headingCandidate.toUpperCase();
-
-    drawParagraph({
-      content: headingCandidate,
-      font: isHeading ? boldFont : regularFont,
-      size: isHeading ? headingSize : bodySize,
-      indent: bullet ? bulletIndent : 0,
-      bullet
-    });
-  });
-
-  const buffer = await doc.save();
-  logStructured('info', 'pdf_plain_fallback_generated', {
+  const baseLog = {
     ...logContext,
     templateId,
     requestedTemplateId,
-    bytes: buffer.length,
+    documentType
+  };
+
+  let lastError;
+
+  const tryPdfLib = async () => {
+    let pdfLib;
+    try {
+      pdfLib = await import('pdf-lib');
+    } catch (err) {
+      lastError = err;
+      if (isModuleNotFoundError(err, 'pdf-lib')) {
+        logStructured('warn', 'pdf_plain_fallback_pdf_lib_missing', {
+          ...baseLog,
+        });
+        return null;
+      }
+      logStructured('error', 'pdf_plain_fallback_pdf_lib_import_failed', {
+        ...baseLog,
+        error: serializeError(err),
+      });
+      return null;
+    }
+
+    try {
+      const { PDFDocument, StandardFonts } = pdfLib;
+      const doc = await PDFDocument.create();
+      const pageSize = [612, 792];
+      let page = doc.addPage(pageSize);
+      const regularFont = await doc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+      const italicFont = await doc.embedFont(StandardFonts.HelveticaOblique);
+      const margin = 56;
+      const maxWidth = page.getWidth() - margin * 2;
+      const bodySize = 11;
+      const headingSize = 14;
+      const nameSize = 22;
+      const contactSize = 10;
+      const lineGap = 16;
+      const bulletIndent = 16;
+      let y = page.getHeight() - margin;
+
+      const ensureSpace = (needed = 1) => {
+        if (y - needed * lineGap < margin) {
+          page = doc.addPage(pageSize);
+          y = page.getHeight() - margin;
+        }
+      };
+
+      const wrapText = (value, font, size, width) => {
+        if (!value) return [''];
+        const words = value.split(/\s+/).filter(Boolean);
+        if (!words.length) return [''];
+        const wrappedLines = [];
+        let current = words[0];
+        for (let index = 1; index < words.length; index += 1) {
+          const candidate = `${current} ${words[index]}`;
+          if (font.widthOfTextAtSize(candidate, size) <= width) {
+            current = candidate;
+          } else {
+            wrappedLines.push(current);
+            current = words[index];
+          }
+        }
+        wrappedLines.push(current);
+        return wrappedLines;
+      };
+
+      const drawParagraph = ({
+        content,
+        font = regularFont,
+        size = bodySize,
+        indent = 0,
+        bullet = false,
+        spacing = lineGap
+      }) => {
+        const wrappedLines = wrapText(content, font, size, maxWidth - indent);
+        ensureSpace(wrappedLines.length);
+        wrappedLines.forEach((line, index) => {
+          if (bullet && index === 0) {
+            page.drawText('•', {
+              x: margin,
+              y,
+              size,
+              font: boldFont
+            });
+          }
+          page.drawText(line, {
+            x: margin + indent,
+            y,
+            size,
+            font
+          });
+          y -= spacing;
+        });
+        y -= Math.max(0, spacing / 2);
+      };
+
+      if (name) {
+        ensureSpace();
+        page.drawText(name, {
+          x: margin,
+          y,
+          size: nameSize,
+          font: boldFont
+        });
+        y -= nameSize + 8;
+      }
+
+      if (jobTitle) {
+        ensureSpace();
+        page.drawText(jobTitle, {
+          x: margin,
+          y,
+          size: bodySize,
+          font: italicFont
+        });
+        y -= lineGap;
+      }
+
+      if (Array.isArray(contactLines) && contactLines.length) {
+        const contact = contactLines.join(' • ');
+        const wrapped = wrapText(contact, regularFont, contactSize, maxWidth);
+        ensureSpace(wrapped.length);
+        wrapped.forEach((line) => {
+          page.drawText(line, {
+            x: margin,
+            y,
+            size: contactSize,
+            font: regularFont
+          });
+          y -= contactSize + 4;
+        });
+        y -= lineGap / 2;
+      }
+
+      if (documentType === 'cover_letter') {
+        ensureSpace();
+        page.drawText('Cover Letter', {
+          x: margin,
+          y,
+          size: headingSize,
+          font: boldFont
+        });
+        y -= headingSize + 8;
+      }
+
+      lines.forEach((rawLine) => {
+        const trimmed = rawLine.trimEnd();
+        if (!trimmed) {
+          y -= lineGap;
+          return;
+        }
+        const bulletMatch = trimmed.match(/^[-*•]+\s*/);
+        const bullet = Boolean(bulletMatch);
+        const content = bullet ? trimmed.slice(bulletMatch[0].length).trimStart() : trimmed;
+        const headingCandidate = content.trim();
+        const isHeading =
+          headingCandidate &&
+          headingCandidate.length <= 64 &&
+          /[A-Za-z]/.test(headingCandidate) &&
+          headingCandidate === headingCandidate.toUpperCase();
+
+        drawParagraph({
+          content: headingCandidate,
+          font: isHeading ? boldFont : regularFont,
+          size: isHeading ? headingSize : bodySize,
+          indent: bullet ? bulletIndent : 0,
+          bullet
+        });
+      });
+
+      const buffer = await doc.save();
+      logStructured('info', 'pdf_plain_fallback_generated', {
+        ...baseLog,
+        engine: 'pdf-lib',
+        bytes: buffer.length,
+      });
+      return Buffer.from(buffer);
+    } catch (err) {
+      lastError = err;
+      logStructured('error', 'pdf_plain_fallback_pdf_lib_failed', {
+        ...baseLog,
+        error: serializeError(err),
+      });
+      return null;
+    }
+  };
+
+  const pdfLibBuffer = await tryPdfLib();
+  if (pdfLibBuffer) {
+    return pdfLibBuffer;
+  }
+
+  const tryPdfKit = async () => {
+    let pdfKitModule;
+    try {
+      pdfKitModule = await import('pdfkit');
+    } catch (err) {
+      lastError = err;
+      if (isModuleNotFoundError(err, 'pdfkit')) {
+        logStructured('warn', 'pdf_plain_fallback_pdfkit_missing', {
+          ...baseLog,
+        });
+        return null;
+      }
+      logStructured('error', 'pdf_plain_fallback_pdfkit_import_failed', {
+        ...baseLog,
+        error: serializeError(err),
+      });
+      return null;
+    }
+
+    try {
+      const { default: PDFKitDocument } = pdfKitModule;
+      const buffer = await new Promise((resolve, reject) => {
+        try {
+          const doc = new PDFKitDocument({ size: 'LETTER', margins: { top: 56, bottom: 56, left: 56, right: 56 } });
+          const chunks = [];
+          doc.on('data', (chunk) => chunks.push(chunk));
+          doc.on('error', reject);
+          doc.on('end', () => resolve(Buffer.concat(chunks)));
+
+          const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+          if (name) {
+            doc.font('Helvetica-Bold').fontSize(22).text(name, { width: pageWidth });
+            doc.moveDown(0.25);
+          }
+
+          if (jobTitle) {
+            doc.font('Helvetica-Oblique').fontSize(11).text(jobTitle, { width: pageWidth });
+            doc.moveDown(0.35);
+          }
+
+          if (Array.isArray(contactLines) && contactLines.length) {
+            doc.font('Helvetica').fontSize(10).text(contactLines.join(' • '), { width: pageWidth });
+            doc.moveDown(0.35);
+          }
+
+          if (documentType === 'cover_letter') {
+            doc.font('Helvetica-Bold').fontSize(14).text('Cover Letter', { width: pageWidth });
+            doc.moveDown(0.5);
+          }
+
+          doc.font('Helvetica').fontSize(11);
+
+          lines.forEach((rawLine) => {
+            const trimmed = rawLine.trimEnd();
+            if (!trimmed) {
+              doc.moveDown();
+              return;
+            }
+            const bulletMatch = trimmed.match(/^[-*•]+\s*/);
+            const bullet = Boolean(bulletMatch);
+            const content = bullet ? trimmed.slice(bulletMatch[0].length).trimStart() : trimmed;
+            const headingCandidate = content.trim();
+            const isHeading =
+              headingCandidate &&
+              headingCandidate.length <= 64 &&
+              /[A-Za-z]/.test(headingCandidate) &&
+              headingCandidate === headingCandidate.toUpperCase();
+
+            if (isHeading) {
+              doc.font('Helvetica-Bold').fontSize(14).text(headingCandidate, { width: pageWidth, paragraphGap: 6 });
+              doc.font('Helvetica').fontSize(11);
+              return;
+            }
+
+            if (bullet) {
+              doc.font('Helvetica').fontSize(11).text(`• ${content}`, {
+                width: pageWidth,
+                paragraphGap: 6,
+              });
+              return;
+            }
+
+            doc.font('Helvetica').fontSize(11).text(content, { width: pageWidth, paragraphGap: 6 });
+          });
+
+          doc.end();
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      logStructured('info', 'pdf_plain_fallback_generated', {
+        ...baseLog,
+        engine: 'pdfkit',
+        bytes: buffer.length,
+      });
+      return buffer;
+    } catch (err) {
+      lastError = err;
+      logStructured('error', 'pdf_plain_fallback_pdfkit_failed', {
+        ...baseLog,
+        error: serializeError(err),
+      });
+      return null;
+    }
+  };
+
+  const pdfKitBuffer = await tryPdfKit();
+  if (pdfKitBuffer) {
+    return pdfKitBuffer;
+  }
+
+  logStructured('error', 'pdf_plain_fallback_failed', {
+    ...baseLog,
+    error: serializeError(lastError),
   });
 
-  return Buffer.from(buffer);
+  const failure = new Error('Unable to generate plain PDF fallback.');
+  if (lastError) {
+    failure.cause = lastError;
+  }
+  throw failure;
 }
 
 let generatePdf = async function (
@@ -13332,6 +13492,7 @@ async function generateEnhancedDocumentsResponse({
           },
         };
       },
+      allowPlainFallback: true,
     });
 
     const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
