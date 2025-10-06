@@ -6318,9 +6318,9 @@ function determineUploadContentType(file) {
       }
     }
     if (typeof originalname === 'string' && /\.pdf$/i.test(originalname)) {
-      return normalizedType;
+      return fallbackType;
     }
-    return normalizedType || fallbackType;
+    return fallbackType;
   }
   return normalizedType || fallbackType;
 }
