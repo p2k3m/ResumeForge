@@ -27,9 +27,9 @@ describe('ATSScoreCard', () => {
     expect(screen.getByText('Tip')).toBeInTheDocument()
   })
 
-  it('matches the gradient snapshot for consistency', () => {
+  it('matches the card snapshot for consistency', () => {
     const { asFragment } = render(
-      <ATSScoreCard metric={baseMetric} accentClass="from-indigo-500 to-purple-500" />
+      <ATSScoreCard metric={baseMetric} />
     )
 
     expect(asFragment()).toMatchSnapshot()
