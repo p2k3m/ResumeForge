@@ -119,6 +119,7 @@ const {
   default: app,
   extractText,
   setGeneratePdf,
+  generatePdfWithFallback,
   parseContent,
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
@@ -1318,6 +1319,40 @@ describe('/api/generate-enhanced-docs', () => {
         details: {},
       }),
     });
+  });
+});
+
+describe('generatePdfWithFallback', () => {
+  afterEach(() => {
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
+
+  test('records retry message when 2025 renderer fails', async () => {
+    const renderError = new Error('Renderer unavailable');
+    renderError.code = 'TEMPLATE_RENDER_FAILED';
+    const pdfMock = jest.fn((text, templateId) => {
+      if (templateId === '2025') {
+        return Promise.reject(renderError);
+      }
+      return Promise.resolve(Buffer.from(`pdf-${templateId}`));
+    });
+    setGeneratePdf(pdfMock);
+
+    const result = await generatePdfWithFallback({
+      documentType: 'resume',
+      templates: ['2025', 'modern'],
+      buildOptionsForTemplate: () => ({}),
+      inputText: 'Jane Doe',
+      generativeModel: null,
+      logContext: {},
+      allowPlainFallback: false,
+    });
+
+    expect(pdfMock).toHaveBeenCalledTimes(2);
+    expect(result.template).toBe('modern');
+    expect(result.messages).toContain(
+      'Could not generate PDF for 2025 template, retrying with Modern'
+    );
   });
 });
 

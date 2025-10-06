@@ -155,6 +155,8 @@ axiosResponseInterceptor?.use(
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Could not generate PDF, please try again';
+const TEMPLATE_RENDER_RETRY_MESSAGE =
+  'Could not generate PDF for 2025 template, retrying with Modern';
 
 let chromium;
 let puppeteerCore;
@@ -7663,6 +7665,16 @@ async function generatePdfWithFallback({
     throw error;
   }
 
+  const messages = [];
+  const appendMessage = (value) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (!messages.includes(trimmed)) {
+      messages.push(trimmed);
+    }
+  };
+
   let lastError;
   let lastAttemptOptions;
   let lastAttemptTemplate;
@@ -7718,7 +7730,7 @@ async function generatePdfWithFallback({
         bytes: buffer.length,
       });
 
-      return { buffer, template: templateId };
+      return { buffer, template: templateId, messages };
     } catch (error) {
       lastError = error;
       if (options && typeof options === 'object') {
@@ -7732,6 +7744,9 @@ async function generatePdfWithFallback({
         attempt,
         error: serializeError(error),
       });
+      if (templateId === '2025') {
+        appendMessage(TEMPLATE_RENDER_RETRY_MESSAGE);
+      }
     }
   }
 
@@ -7816,7 +7831,11 @@ async function generatePdfWithFallback({
         bytes: fallbackBuffer.length,
         forcedFallback,
       });
-      return { buffer: fallbackBuffer, template: fallbackTemplateId };
+      return {
+        buffer: fallbackBuffer,
+        template: fallbackTemplateId,
+        messages,
+      };
     } catch (fallbackError) {
       if (!fallbackError.cause && lastError) {
         fallbackError.cause = lastError;
@@ -7858,7 +7877,11 @@ async function generatePdfWithFallback({
           ? serializeError(fallbackContext.lastError)
           : undefined,
       });
-      return { buffer: minimalBuffer, template: fallbackContext.templateId };
+      return {
+        buffer: minimalBuffer,
+        template: fallbackContext.templateId,
+        messages,
+      };
     } catch (minimalError) {
       logStructured('error', 'pdf_generation_minimal_fallback_failed', {
         ...(fallbackContext.log || {}),
@@ -13707,6 +13730,15 @@ async function generateEnhancedDocumentsResponse({
   const textArtifactKeys = {};
   const usedFileBaseNames = new Set();
   const generatedTemplates = {};
+  const generationMessages = [];
+  const pushGenerationMessage = (value) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (!generationMessages.includes(trimmed)) {
+      generationMessages.push(trimmed);
+    }
+  };
   if (downloadsRestricted) {
     logStructured('info', 'generation_downloads_restricted', {
       ...logContext,
@@ -13808,7 +13840,11 @@ async function generateEnhancedDocumentsResponse({
       return uniqueTemplates(merged);
     })();
 
-    const { buffer: pdfBuffer, template: resolvedTemplate } = await generatePdfWithFallback({
+    const {
+      buffer: pdfBuffer,
+      template: resolvedTemplate,
+      messages: attemptMessages = [],
+    } = await generatePdfWithFallback({
       documentType,
       templates: candidateTemplates,
       inputText: templateText,
@@ -13839,6 +13875,12 @@ async function generateEnhancedDocumentsResponse({
       },
       allowPlainFallback: Boolean(plainPdfFallbackEnabled),
     });
+
+    if (Array.isArray(attemptMessages)) {
+      for (const message of attemptMessages) {
+        pushGenerationMessage(message);
+      }
+    }
 
     const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
     generatedTemplates[name] = effectiveTemplateId;
@@ -14285,6 +14327,7 @@ async function generateEnhancedDocumentsResponse({
       selectedTemplate: canonicalSelectedTemplate,
       templateHistory,
     },
+    messages: generationMessages,
   };
 }
 
@@ -16207,6 +16250,7 @@ export default app;
 export {
   extractText,
   generatePdf,
+  generatePdfWithFallback,
   setGeneratePdf,
   setChromiumLauncher,
   setS3Client,
