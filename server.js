@@ -12692,6 +12692,7 @@ async function generateEnhancedDocumentsResponse({
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
   const usedFileBaseNames = new Set();
+  const generatedTemplates = {};
   if (downloadsRestricted) {
     logStructured('info', 'generation_downloads_restricted', {
       ...logContext,
@@ -12733,8 +12734,10 @@ async function generateEnhancedDocumentsResponse({
   for (const [name, entry] of Object.entries(outputs)) {
     const templateText = entry?.templateText || entry?.text;
     if (!templateText) continue;
+
     const isCvDocument = name === 'version1' || name === 'version2';
     const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
+    const documentType = isCvDocument ? 'resume' : isCoverLetter ? 'cover_letter' : name;
     const primaryTemplate = isCvDocument
       ? name === 'version1'
         ? template1
@@ -12744,30 +12747,8 @@ async function generateEnhancedDocumentsResponse({
           ? coverTemplate1
           : coverTemplate2
         : template1;
-    const documentType = isCvDocument ? 'resume' : isCoverLetter ? 'cover_letter' : name;
-    const baseName = buildDocumentFileBaseName({
-      type: documentType,
-      templateId: primaryTemplate,
-      variant: name,
-    });
-    const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
-    const key = `${generatedPrefix}${uniqueBaseName}.pdf`;
 
-    const resolvedTemplateParams = resolveTemplateParamsConfig(
-      templateParamsConfig,
-      {
-        resumeExperience,
-        linkedinExperience,
-        resumeEducation,
-        linkedinEducation,
-        knownCertificates,
-        jobSkills,
-        project: projectText,
-        jobTitle: versionsContext.jobTitle,
-      }
-    );
-
-    const templateOptions = {
+    const baseTemplateOptions = {
       jobSkills,
       linkedinExperience,
       resumeEducation,
@@ -12785,22 +12766,68 @@ async function generateEnhancedDocumentsResponse({
       cityState: contactDetails.cityState,
       linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
       ...sectionPreservation,
-      templateParams: resolvedTemplateParams,
+      templateParams: {},
       enhancementTokenMap,
     };
 
     if (isCvDocument) {
-      templateOptions.resumeExperience = resumeExperience;
+      baseTemplateOptions.resumeExperience = resumeExperience;
     } else if (isCoverLetter) {
-      templateOptions.skipRequiredSections = true;
+      baseTemplateOptions.skipRequiredSections = true;
     }
 
-    const pdfBuffer = await generatePdf(
-      templateText,
-      primaryTemplate,
-      templateOptions,
-      generativeModel
-    );
+    const candidateTemplates = (() => {
+      const fallbackTemplates = isCoverLetter ? CL_TEMPLATES : CV_TEMPLATES;
+      const requestedTemplates = isCvDocument
+        ? [template1, template2, ...(availableCvTemplates || [])]
+        : isCoverLetter
+          ? [coverTemplate1, coverTemplate2, ...(availableCoverTemplates || [])]
+          : [primaryTemplate];
+      const merged = [primaryTemplate, ...requestedTemplates, ...fallbackTemplates].filter(Boolean);
+      return uniqueTemplates(merged);
+    })();
+
+    const { buffer: pdfBuffer, template: resolvedTemplate } = await generatePdfWithFallback({
+      documentType,
+      templates: candidateTemplates,
+      inputText: templateText,
+      generativeModel,
+      logContext: {
+        ...logContext,
+        documentType,
+        outputName: name,
+      },
+      buildOptionsForTemplate: (templateId) => {
+        const resolvedTemplateParams = resolveTemplateParamsConfig(
+          templateParamsConfig,
+          templateId,
+          documentType
+        );
+        const outputTemplateParams =
+          name && name !== documentType
+            ? resolveTemplateParamsConfig(templateParamsConfig, templateId, name)
+            : {};
+        return {
+          ...baseTemplateOptions,
+          templateParams: {
+            ...(baseTemplateOptions.templateParams || {}),
+            ...(resolvedTemplateParams || {}),
+            ...(outputTemplateParams || {}),
+          },
+        };
+      },
+    });
+
+    const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
+    generatedTemplates[name] = effectiveTemplateId;
+
+    const baseName = buildDocumentFileBaseName({
+      type: documentType,
+      templateId: effectiveTemplateId,
+      variant: name,
+    });
+    const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
+    const key = `${generatedPrefix}${uniqueBaseName}.pdf`;
 
     await s3.send(
       new PutObjectCommand({
@@ -12830,12 +12857,12 @@ async function generateEnhancedDocumentsResponse({
       expiresAt,
       generatedAt: artifactTimestamp,
     };
-    if (primaryTemplate) {
+    if (effectiveTemplateId) {
       const templateType = isCoverLetter ? 'cover' : 'resume';
       const templateName = isCoverLetter
-        ? formatCoverTemplateDisplayName(primaryTemplate)
-        : formatTemplateDisplayName(primaryTemplate);
-      urlEntry.templateId = primaryTemplate;
+        ? formatCoverTemplateDisplayName(effectiveTemplateId)
+        : formatTemplateDisplayName(effectiveTemplateId);
+      urlEntry.templateId = effectiveTemplateId;
       urlEntry.templateName = templateName;
       urlEntry.templateType = templateType;
     }
@@ -12887,7 +12914,7 @@ async function generateEnhancedDocumentsResponse({
         generatedAt: artifactTimestamp,
         version: 'version1',
         text: outputs.version1?.text || '',
-        template: template1 || '',
+        template: generatedTemplates.version1 || template1 || '',
       },
     },
     {
@@ -12898,7 +12925,7 @@ async function generateEnhancedDocumentsResponse({
         generatedAt: artifactTimestamp,
         version: 'version2',
         text: outputs.version2?.text || '',
-        template: template2 || '',
+        template: generatedTemplates.version2 || template2 || '',
       },
     },
     {
