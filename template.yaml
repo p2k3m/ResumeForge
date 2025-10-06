@@ -118,9 +118,8 @@ Resources:
 
   DataBucketPolicy:
     Type: AWS::S3::BucketPolicy
-    Condition: CreateDataBucketCondition
     Properties:
-      Bucket: !Ref DataBucket
+      Bucket: !If [CreateDataBucketCondition, !Ref DataBucket, !Ref DataBucketName]
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -133,14 +132,20 @@ Resources:
               - s3:PutObject
               - s3:DeleteObject
             Resource:
-              - !Sub arn:aws:s3:::${DataBucket}/*
+              - !If
+                - CreateDataBucketCondition
+                - !Sub arn:aws:s3:::${DataBucket}/*
+                - !Sub arn:aws:s3:::${DataBucketName}/*
           - Sid: AllowLambdaListBucket
             Effect: Allow
             Principal:
               AWS: !GetAtt ResumeForgeFunctionRole.Arn
             Action:
               - s3:ListBucket
-            Resource: !Sub arn:aws:s3:::${DataBucket}
+            Resource: !If
+              - CreateDataBucketCondition
+              - !Sub arn:aws:s3:::${DataBucket}
+              - !Sub arn:aws:s3:::${DataBucketName}
 
   ResumeForgeTable:
     Type: AWS::DynamoDB::Table
