@@ -1344,6 +1344,7 @@ const CV_TEMPLATE_ALIASES = {
 const CV_TEMPLATES = ['modern', 'professional', 'classic', 'ats', '2025'];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
 const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
+const COVER_LETTER_VARIANT_KEYS = ['cover_letter1', 'cover_letter2'];
 const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional']);
 const USER_TEMPLATE_ITEM_TYPE = 'USER_TEMPLATE_PREFERENCE';
 const USER_TEMPLATE_PREFIX = 'user_template#';
@@ -4082,6 +4083,81 @@ function tokenizeCoverLetterText(text = '', { letterIndex = 1 } = {}) {
   });
 
   return { tokenizedText: tokens.join('\n\n'), placeholders };
+}
+
+function collectCoverLetterSegments(value) {
+  if (!value) return [];
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectCoverLetterSegments(item));
+  }
+  if (typeof value === 'object') {
+    const segments = [];
+    if (typeof value.text === 'string') {
+      segments.push(...collectCoverLetterSegments(value.text));
+    }
+    if (typeof value.raw === 'string') {
+      segments.push(...collectCoverLetterSegments(value.raw));
+    }
+    if (typeof value.value === 'string') {
+      segments.push(...collectCoverLetterSegments(value.value));
+    }
+    if (typeof value.paragraph === 'string') {
+      segments.push(...collectCoverLetterSegments(value.paragraph));
+    }
+    ['paragraphs', 'sentences', 'lines', 'content'].forEach((key) => {
+      if (Array.isArray(value[key])) {
+        segments.push(...collectCoverLetterSegments(value[key]));
+      }
+    });
+    if (
+      segments.length === 0 &&
+      typeof value.toString === 'function'
+    ) {
+      const rendered = value.toString();
+      if (rendered && rendered !== '[object Object]') {
+        segments.push(...collectCoverLetterSegments(rendered));
+      }
+    }
+    return segments;
+  }
+  return [];
+}
+
+function normalizeCoverLetterTextValue(value) {
+  if (typeof value === 'string') {
+    return value.trim() ? value : '';
+  }
+  const segments = collectCoverLetterSegments(value);
+  if (!segments.length) {
+    return '';
+  }
+  const joined = segments.join('\n\n');
+  return joined.trim() ? joined : '';
+}
+
+function normalizeCoverLetterOutputs(data = {}) {
+  const normalized = {};
+  const normalizedFrom = [];
+  const invalidKeys = [];
+
+  COVER_LETTER_VARIANT_KEYS.forEach((key) => {
+    const rawValue = data && typeof data === 'object' ? data[key] : undefined;
+    const normalizedText = normalizeCoverLetterTextValue(rawValue);
+    normalized[key] = normalizedText;
+    if (normalizedText) {
+      if (typeof rawValue !== 'string') {
+        normalizedFrom.push(key);
+      }
+    } else if (rawValue && typeof rawValue !== 'string') {
+      invalidKeys.push(key);
+    }
+  });
+
+  return { normalized, normalizedFrom, invalidKeys };
 }
 
 function buildResumeDataFromGeminiOutput(parsed = {}, name = 'Resume', sanitizeOptions = {}) {
@@ -12589,6 +12665,25 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
+  const { normalized: normalizedCoverData, normalizedFrom, invalidKeys } =
+    normalizeCoverLetterOutputs(coverData);
+
+  if (normalizedFrom.length) {
+    logStructured('info', 'generation_cover_letters_normalized', {
+      ...logContext,
+      variants: normalizedFrom,
+    });
+  }
+
+  if (invalidKeys.length) {
+    logStructured('warn', 'generation_cover_letters_invalid_type', {
+      ...logContext,
+      variants: invalidKeys,
+    });
+  }
+
+  coverData = normalizedCoverData;
+
   const fallbackLetters = buildFallbackCoverLetters({
     applicantName,
     jobTitle: versionsContext.jobTitle || applicantTitle,
@@ -12617,7 +12712,7 @@ async function generateEnhancedDocumentsResponse({
       missing: missingCoverLetters,
     });
   }
-  const coverVariants = ['cover_letter1', 'cover_letter2'].filter(
+  const coverVariants = COVER_LETTER_VARIANT_KEYS.filter(
     (key) => typeof coverData[key] === 'string' && coverData[key].trim()
   ).length;
 
@@ -12732,8 +12827,15 @@ async function generateEnhancedDocumentsResponse({
   }
 
   for (const [name, entry] of Object.entries(outputs)) {
-    const templateText = entry?.templateText || entry?.text;
-    if (!templateText) continue;
+    const templateTextCandidate =
+      typeof entry?.templateText === 'string' ? entry.templateText : '';
+    const fallbackTemplateText =
+      typeof entry?.text === 'string' ? entry.text : '';
+    const templateText =
+      templateTextCandidate && templateTextCandidate.trim()
+        ? templateTextCandidate
+        : fallbackTemplateText;
+    if (!templateText || !templateText.trim()) continue;
 
     const isCvDocument = name === 'version1' || name === 'version2';
     const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
@@ -12881,7 +12983,7 @@ async function generateEnhancedDocumentsResponse({
       urlEntry.text = coverLetterFields;
       urlEntry.coverLetterFields = coverLetterFields;
       urlEntry.rawText = coverLetterText;
-    } else if (entry?.text) {
+    } else if (typeof entry?.text === 'string') {
       urlEntry.text = entry.text;
     } else if (name !== 'original_upload') {
       urlEntry.text = '';
