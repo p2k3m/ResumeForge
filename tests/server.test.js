@@ -894,6 +894,106 @@ describe('/api/process-cv', () => {
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
 
+  test('normalizes structured cover letter responses into text', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary'],
+              experience: ['Role'],
+              education: [],
+              certifications: [],
+              skills: ['Skill A'],
+              projects: [],
+              projectSnippet: 'Improved reliability.',
+              latestRoleTitle: 'Lead Engineer',
+              latestRoleDescription: 'Built systems.',
+              mandatorySkills: ['Skill A'],
+              addedSkills: [],
+            })
+        }
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Delivered a critical platform migration.' }
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              cover_letter1: {
+                paragraphs: [
+                  'Hello hiring team,',
+                  'Thank you for considering my application.'
+                ]
+              },
+              cover_letter2: [
+                'Greetings hiring manager,',
+                { text: 'I look forward to discussing how I can help.' }
+              ]
+            })
+        }
+      });
+
+    const pdfCalls = [];
+    setGeneratePdf(
+      jest.fn((text, template, options) => {
+        pdfCalls.push({ text, template, options });
+        return Promise.resolve(Buffer.from('pdf'));
+      })
+    );
+
+    try {
+      const res = await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+      expect(res.status).toBe(200);
+
+      const coverPdfCalls = pdfCalls.filter((call) => call.options?.skipRequiredSections);
+      expect(coverPdfCalls).toHaveLength(2);
+      expect(coverPdfCalls[0].text).toEqual(expect.any(String));
+      expect(coverPdfCalls[1].text).toEqual(expect.any(String));
+
+      const cover1Tokens =
+        (coverPdfCalls[0].options && coverPdfCalls[0].options.enhancementTokenMap) || {};
+      expect(Object.values(cover1Tokens)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('Hello hiring team'),
+          expect.stringContaining('Thank you for considering my application'),
+        ])
+      );
+
+      const cover2Tokens =
+        (coverPdfCalls[1].options && coverPdfCalls[1].options.enhancementTokenMap) || {};
+      expect(Object.values(cover2Tokens)).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('Greetings hiring manager'),
+          expect.stringContaining('I look forward to discussing how I can help'),
+        ])
+      );
+
+      const cover1 = res.body.urls.find((entry) => entry.type === 'cover_letter1');
+      expect(cover1).toBeTruthy();
+      expect(cover1.rawText).toContain('Hello hiring team');
+      expect(cover1.rawText).toContain('Thank you for considering my application');
+
+      const cover2 = res.body.urls.find((entry) => entry.type === 'cover_letter2');
+      expect(cover2).toBeTruthy();
+      expect(cover2.rawText).toContain('Greetings hiring manager');
+      expect(cover2.rawText).toContain('I look forward to discussing how I can help');
+    } finally {
+      setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+      process.env.NODE_ENV = originalEnv;
+      generateContentMock.mockReset();
+      primeDefaultGeminiResponses();
+    }
+  });
+
   test('uses sanitized resume fallback when AI returns plain text for versions', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
