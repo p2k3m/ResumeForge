@@ -6324,6 +6324,43 @@ let generatePdf = async function (
       : {}),
   };
   templateParams.contactLines = contactContext.contactLines;
+  const fallbackDocumentType = isCoverCandidate ? 'cover_letter' : 'resume';
+  const buildPlainPdfFallbackPayload = () => {
+    const contextContactLines = Array.isArray(contactContext.contactLines)
+      ? contactContext.contactLines
+          .map((line) => (typeof line === 'string' ? line.trim() : ''))
+          .filter(Boolean)
+      : [];
+    const fallbackContactLines =
+      contextContactLines.length > 0
+        ? contextContactLines
+        : collectContactLinesFromOptions(options);
+    return {
+      requestedTemplateId,
+      templateId,
+      text:
+        resolvedInputText || (typeof text === 'string' ? text : ''),
+      name: firstNonEmptyString(
+        templateParams?.name,
+        templateParams?.contact?.name,
+        options?.name,
+        options?.candidateName,
+        data?.name
+      ),
+      jobTitle: firstNonEmptyString(
+        templateParams?.jobTitle,
+        templateParams?.contact?.jobTitle,
+        options?.jobTitle
+      ),
+      contactLines: fallbackContactLines,
+      documentType: fallbackDocumentType,
+      logContext: {
+        templateId,
+        requestedTemplateId,
+        documentType: fallbackDocumentType,
+      },
+    };
+  };
   if (templateId === '2025') {
     logStructured('debug', 'pdf_renderer_invoked', {
       templateId,
@@ -6516,30 +6553,20 @@ let generatePdf = async function (
       logStructured('warn', 'pdf_pdfkit_dependency_missing', {
         templateId,
         requestedTemplateId,
-        documentType: isCoverCandidate ? 'cover_letter' : 'resume',
+        documentType: fallbackDocumentType,
       });
-      const fallbackBuffer = await generatePlainPdfFallback({
-        requestedTemplateId,
+      const plainPayload = buildPlainPdfFallbackPayload();
+      plainPayload.logContext = {
+        ...(plainPayload.logContext || {}),
+        reason: 'pdfkit_dependency_missing',
+      };
+      logStructured('warn', 'pdf_plain_fallback_invoked', {
         templateId,
-        text: resolvedInputText || (typeof text === 'string' ? text : ''),
-        name:
-          (templateParams?.name && String(templateParams.name).trim()) ||
-          (data?.name && String(data.name).trim()) ||
-          '',
-        jobTitle:
-          (templateParams?.jobTitle && String(templateParams.jobTitle).trim()) ||
-          (options?.jobTitle && String(options.jobTitle).trim()) ||
-          '',
-        contactLines: Array.isArray(contactContext.contactLines)
-          ? contactContext.contactLines
-          : [],
-        documentType: isCoverCandidate ? 'cover_letter' : 'resume',
-        logContext: {
-          templateId,
-          requestedTemplateId,
-        },
+        requestedTemplateId,
+        reason: 'pdfkit_dependency_missing',
+        documentType: fallbackDocumentType,
       });
-      return fallbackBuffer;
+      return generatePlainPdfFallback(plainPayload);
     }
     logStructured('error', 'pdf_pdfkit_import_failed', {
       templateId,
@@ -6819,263 +6846,300 @@ let generatePdf = async function (
     }
   };
 
-  return new Promise((resolve, reject) => {
-    const style = styleMap[templateId] || styleMap.modern;
-    const paragraphGap = style.paragraphGap ?? baseStyle.paragraphGap ?? 8;
-    const lineGap = style.lineGap ?? baseStyle.lineGap ?? 6;
-    const bodyFontSize = style.bodyFontSize || baseStyle.bodyFontSize || 12;
-    const tabSize = style.tabSize || 4;
-    const doc = new PDFDocument({ margin: style.margin || 50, compress: false });
-    const buffers = [];
-    doc.on('data', (d) => buffers.push(d));
-    doc.on('end', () => {
-      const result = Buffer.concat(buffers);
-      const normalized = normalizePdfKitTextOperators(result);
-      logStructured('debug', 'pdf_pdfkit_fallback_complete', {
-        templateId,
-        requestedTemplateId,
-        bytes: normalized.length,
+  try {
+    const pdfKitBuffer = await new Promise((resolve, reject) => {
+      const style = styleMap[templateId] || styleMap.modern;
+      const paragraphGap = style.paragraphGap ?? baseStyle.paragraphGap ?? 8;
+      const lineGap = style.lineGap ?? baseStyle.lineGap ?? 6;
+      const bodyFontSize = style.bodyFontSize || baseStyle.bodyFontSize || 12;
+      const tabSize = style.tabSize || 4;
+      const doc = new PDFDocument({ margin: style.margin || 50, compress: false });
+      const buffers = [];
+      doc.on('data', (d) => buffers.push(d));
+      doc.on('end', () => {
+        const result = Buffer.concat(buffers);
+        const normalized = normalizePdfKitTextOperators(result);
+        logStructured('debug', 'pdf_pdfkit_fallback_complete', {
+          templateId,
+          requestedTemplateId,
+          bytes: normalized.length,
+        });
+        resolve(normalized);
       });
-      resolve(normalized);
-    });
-    doc.on('error', (err) => {
-      logStructured('error', 'pdf_pdfkit_fallback_failed', {
-        templateId,
-        requestedTemplateId,
-        error: serializeError(err),
+      doc.on('error', (err) => {
+        logStructured('error', 'pdf_pdfkit_fallback_failed', {
+          templateId,
+          requestedTemplateId,
+          error: serializeError(err),
+        });
+        reject(err);
       });
-      reject(err);
-    });
-    // Optional font embedding for Roboto/Helvetica families if available
-    let robotoAvailable = false;
-    try {
-      const fontsDir = path.resolve('fonts');
-      const reg = path.join(fontsDir, 'Roboto-Regular.ttf');
-      const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
-      const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
-      if (fsSync.existsSync(reg)) {
-        doc.registerFont('Roboto', reg);
-        robotoAvailable = true;
-      }
-      if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
-      if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
-      const hReg = path.join(fontsDir, 'Helvetica.ttf');
-      const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
-      const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
-      if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
-      if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
-      if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
-    } catch {}
-    if (robotoAvailable) {
-      ['modern', 'professional', 'classic', 'ats', '2025', 'cover_modern'].forEach((tpl) => {
-        if (styleMap[tpl]) {
-          styleMap[tpl].font = 'Roboto';
-          styleMap[tpl].bold = 'Roboto-Bold';
-          styleMap[tpl].italic = 'Roboto-Italic';
+      // Optional font embedding for Roboto/Helvetica families if available
+      let robotoAvailable = false;
+      try {
+        const fontsDir = path.resolve('fonts');
+        const reg = path.join(fontsDir, 'Roboto-Regular.ttf');
+        const bold = path.join(fontsDir, 'Roboto-Bold.ttf');
+        const italic = path.join(fontsDir, 'Roboto-Italic.ttf');
+        if (fsSync.existsSync(reg)) {
+          doc.registerFont('Roboto', reg);
+          robotoAvailable = true;
         }
-      });
-    }
-    const applyPageBackground = () => {
-      if (style.backgroundColor) {
-        doc.save();
-        doc.rect(0, 0, doc.page.width, doc.page.height).fill(style.backgroundColor);
-        doc.restore();
-        doc.fillColor(style.textColor);
+        if (fsSync.existsSync(bold)) doc.registerFont('Roboto-Bold', bold);
+        if (fsSync.existsSync(italic)) doc.registerFont('Roboto-Italic', italic);
+        const hReg = path.join(fontsDir, 'Helvetica.ttf');
+        const hBold = path.join(fontsDir, 'Helvetica-Bold.ttf');
+        const hItalic = path.join(fontsDir, 'Helvetica-Oblique.ttf');
+        if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
+        if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
+        if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
+      } catch {}
+      if (robotoAvailable) {
+        ['modern', 'professional', 'classic', 'ats', '2025', 'cover_modern'].forEach((tpl) => {
+          if (styleMap[tpl]) {
+            styleMap[tpl].font = 'Roboto';
+            styleMap[tpl].bold = 'Roboto-Bold';
+            styleMap[tpl].italic = 'Roboto-Italic';
+          }
+        });
       }
-    };
-    applyPageBackground();
-    doc.on('pageAdded', applyPageBackground);
+      const applyPageBackground = () => {
+        if (style.backgroundColor) {
+          doc.save();
+          doc.rect(0, 0, doc.page.width, doc.page.height).fill(style.backgroundColor);
+          doc.restore();
+          doc.fillColor(style.textColor);
+        }
+      };
+      applyPageBackground();
+      doc.on('pageAdded', applyPageBackground);
 
-    doc
-      .font(style.bold)
-      .fillColor(style.headingColor)
-      .fontSize(style.nameFontSize || 20)
-      .text(data.name, {
-        paragraphGap,
-        align: 'left',
-        lineGap,
-      })
-      .fillColor(style.textColor);
-
-    data.sections.forEach((sec) => {
-      const headingText = style.headingUppercase ? sec.heading?.toUpperCase() : sec.heading;
       doc
         .font(style.bold)
         .fillColor(style.headingColor)
-        .fontSize(style.headingFontSize || 14)
-        .text(headingText, {
+        .fontSize(style.nameFontSize || 20)
+        .text(data.name, {
           paragraphGap,
+          align: 'left',
           lineGap,
-        });
-      (sec.items || []).forEach((tokens) => {
-        const startY = doc.y;
-        doc.font(style.font).fontSize(bodyFontSize);
-        const renderTokens = [];
-        for (let i = 0; i < tokens.length; i += 1) {
-          const token = tokens[i];
-          if (
-            token?.type === 'paragraph' &&
-            typeof token.text === 'string'
-          ) {
-            let labelText = token.text;
-            let spaces = 0;
-            const trimmed = labelText.replace(/\s+$/, '');
-            if (trimmed !== labelText) {
-              spaces += labelText.length - trimmed.length;
-              labelText = trimmed;
-            }
-            let j = i + 1;
-            while (tokens[j]?.type === 'paragraph' && tokens[j].text === ' ') {
-              spaces += 1;
-              j += 1;
-            }
-            const linkToken = tokens[j];
+        })
+        .fillColor(style.textColor);
+
+      data.sections.forEach((sec) => {
+        const headingText = style.headingUppercase ? sec.heading?.toUpperCase() : sec.heading;
+        doc
+          .font(style.bold)
+          .fillColor(style.headingColor)
+          .fontSize(style.headingFontSize || 14)
+          .text(headingText, {
+            paragraphGap,
+            lineGap,
+          });
+        (sec.items || []).forEach((tokens) => {
+          const startY = doc.y;
+          doc.font(style.font).fontSize(bodyFontSize);
+          const renderTokens = [];
+          for (let i = 0; i < tokens.length; i += 1) {
+            const token = tokens[i];
             if (
-              labelText &&
-              /[:：]$/.test(labelText) &&
-              linkToken?.type === 'link'
+              token?.type === 'paragraph' &&
+              typeof token.text === 'string'
             ) {
-              renderTokens.push({
-                type: 'label_link',
-                label: labelText,
-                labelStyle: token.style,
-                spaces: spaces || 1,
-                link: linkToken,
-              });
-              i = j;
-              continue;
+              let labelText = token.text;
+              let spaces = 0;
+              const trimmed = labelText.replace(/\s+$/, '');
+              if (trimmed !== labelText) {
+                spaces += labelText.length - trimmed.length;
+                labelText = trimmed;
+              }
+              let j = i + 1;
+              while (tokens[j]?.type === 'paragraph' && tokens[j].text === ' ') {
+                spaces += 1;
+                j += 1;
+              }
+              const linkToken = tokens[j];
+              if (
+                labelText &&
+                /[:：]$/.test(labelText) &&
+                linkToken?.type === 'link'
+              ) {
+                renderTokens.push({
+                  type: 'label_link',
+                  label: labelText,
+                  labelStyle: token.style,
+                  spaces: spaces || 1,
+                  link: linkToken,
+                });
+                i = j;
+                continue;
+              }
             }
+            renderTokens.push(token);
           }
-          renderTokens.push(token);
-        }
-        renderTokens.forEach((t, idx) => {
-          if (t.type === 'bullet') {
-            const glyph =
-              sec.heading?.toLowerCase() === 'education'
-                ? style.eduBullet || style.bullet
-                : style.bullet;
-            doc
-              .fillColor(style.bulletColor)
-              .text(`${glyph} `, { continued: true, lineGap })
-              .text('', { continued: true })
-              .fillColor(style.textColor);
-            return;
-          }
-          if (t.type === 'jobsep') {
-            return;
-          }
-          if (t.type === 'newline') {
-            const before = doc.y;
-            doc.text('', { continued: false, lineGap });
-            if (doc.y === before) doc.moveDown();
-            doc.text('   ', { continued: true, lineGap });
-            return;
-          }
-          const opts = { continued: idx < renderTokens.length - 1, lineGap };
-          if (
-            t.type === 'paragraph' &&
-            typeof t.text === 'string' &&
-            /\s$/.test(t.text) &&
-            renderTokens[idx + 1]?.type === 'link'
-          ) {
-            const trimmed = t.text.replace(/\s+$/, '');
-            if (trimmed && /[:：]$/.test(trimmed)) {
-              const merged = trimmed + '\u00a0'.repeat(Math.max(t.text.length - trimmed.length, 1));
-              if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
-              else if (t.style === 'italic') doc.font(style.italic);
-              else doc.font(style.font);
-              doc.text(merged, { continued: true, lineGap, lineBreak: false });
+          renderTokens.forEach((t, idx) => {
+            if (t.type === 'bullet') {
+              const glyph =
+                sec.heading?.toLowerCase() === 'education'
+                  ? style.eduBullet || style.bullet
+                  : style.bullet;
+              doc
+                .fillColor(style.bulletColor)
+                .text(`${glyph} `, { continued: true, lineGap })
+                .text('', { continued: true })
+                .fillColor(style.textColor);
+              return;
+            }
+            if (t.type === 'jobsep') {
+              return;
+            }
+            if (t.type === 'newline') {
+              const before = doc.y;
+              doc.text('', { continued: false, lineGap });
+              if (doc.y === before) doc.moveDown();
+              doc.text('   ', { continued: true, lineGap });
+              return;
+            }
+            const opts = { continued: idx < renderTokens.length - 1, lineGap };
+            if (
+              t.type === 'paragraph' &&
+              typeof t.text === 'string' &&
+              /\s$/.test(t.text) &&
+              renderTokens[idx + 1]?.type === 'link'
+            ) {
+              const trimmed = t.text.replace(/\s+$/, '');
+              if (trimmed && /[:：]$/.test(trimmed)) {
+                const merged = trimmed + '\u00a0'.repeat(Math.max(t.text.length - trimmed.length, 1));
+                if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
+                else if (t.style === 'italic') doc.font(style.italic);
+                else doc.font(style.font);
+                doc.text(merged, { continued: true, lineGap, lineBreak: false });
+                doc.font(style.font);
+                return;
+              }
+            }
+            if (
+              t.type === 'paragraph' &&
+              t.text === ' ' &&
+              renderTokens[idx + 1]?.type === 'link'
+            ) {
+              const prev = renderTokens[idx - 1];
+              const prevText = typeof prev?.text === 'string' ? prev.text.trim() : '';
+              if (prevText && /[:：]$/.test(prevText)) {
+                doc.text('\u00a0', { ...opts, lineBreak: false });
+                return;
+              }
+            }
+            if (t.type === 'label_link') {
+              const linkToken = t.link;
+              const linkText = linkToken.text || linkToken.href || '';
+              const spacer = ' '.repeat(Math.max(t.spaces || 1, 1));
+              const combined = `${t.label}${spacer}${linkText}`;
+              const startX = doc.x;
+              const baselineY = doc.y;
+              const lineHeight = doc.currentLineHeight(true);
+              doc.font(style.font);
+              doc.text(combined, {
+                continued: idx < renderTokens.length - 1,
+                lineGap,
+                lineBreak: false,
+              });
+              const labelWidth = doc.widthOfString(`${t.label}${spacer}`);
+              const totalWidth = doc.widthOfString(combined);
+              const top = baselineY - lineHeight;
+              if (totalWidth > labelWidth) {
+                const width = totalWidth - labelWidth;
+                const linkColor = style.linkColor || 'blue';
+                doc.link(startX + labelWidth, top, width, lineHeight, linkToken.href);
+                doc.underline(startX + labelWidth, top, width, lineHeight, {
+                  color: linkColor,
+                });
+              }
+              return;
+            }
+            if (t.type === 'tab') {
+              doc.text(' '.repeat(tabSize), opts);
+              return;
+            }
+            if (t.type === 'link') {
+              const linkText = t.text || t.href || '';
+              const startX = doc.x;
+              const baselineY = doc.y;
+              const lineHeight = doc.currentLineHeight(true);
+              const linkWidth = Math.max(doc.widthOfString(linkText), 0);
+              doc.text(linkText, {
+                continued: idx < renderTokens.length - 1,
+                lineGap,
+                lineBreak: false,
+              });
+              const endX = doc.x;
+              let width = linkWidth;
+              if (idx < renderTokens.length - 1) {
+                width = Math.max(endX - startX, linkWidth);
+              }
+              const top = baselineY - lineHeight;
+              if (width > 0) {
+                const linkColor = style.linkColor || 'blue';
+                doc.link(startX, top, width, lineHeight, t.href);
+                doc.underline(startX, top, width, lineHeight, { color: linkColor });
+              }
+              return;
+            }
+            if (t.type === 'heading') {
+              doc.font(style.bold);
+              doc.text(t.text, opts);
               doc.font(style.font);
               return;
             }
-          }
-          if (
-            t.type === 'paragraph' &&
-            t.text === ' ' &&
-            renderTokens[idx + 1]?.type === 'link'
-          ) {
-            const prev = renderTokens[idx - 1];
-            const prevText = typeof prev?.text === 'string' ? prev.text.trim() : '';
-            if (prevText && /[:：]$/.test(prevText)) {
-              doc.text('\u00a0', { ...opts, lineBreak: false });
-              return;
-            }
-          }
-          if (t.type === 'label_link') {
-            const linkToken = t.link;
-            const linkText = linkToken.text || linkToken.href || '';
-            const spacer = ' '.repeat(Math.max(t.spaces || 1, 1));
-            const combined = `${t.label}${spacer}${linkText}`;
-            const startX = doc.x;
-            const baselineY = doc.y;
-            const lineHeight = doc.currentLineHeight(true);
-            doc.font(style.font);
-            doc.text(combined, {
-              continued: idx < renderTokens.length - 1,
-              lineGap,
-              lineBreak: false,
-            });
-            const labelWidth = doc.widthOfString(`${t.label}${spacer}`);
-            const totalWidth = doc.widthOfString(combined);
-            const top = baselineY - lineHeight;
-            if (totalWidth > labelWidth) {
-              const width = totalWidth - labelWidth;
-              const linkColor = style.linkColor || 'blue';
-              doc.link(startX + labelWidth, top, width, lineHeight, linkToken.href);
-              doc.underline(startX + labelWidth, top, width, lineHeight, {
-                color: linkColor,
-              });
-            }
-            return;
-          }
-          if (t.type === 'tab') {
-            doc.text(' '.repeat(tabSize), opts);
-            return;
-          }
-          if (t.type === 'link') {
-            const linkText = t.text || t.href || '';
-            const startX = doc.x;
-            const baselineY = doc.y;
-            const lineHeight = doc.currentLineHeight(true);
-            const linkWidth = Math.max(doc.widthOfString(linkText), 0);
-            doc.text(linkText, {
-              continued: idx < renderTokens.length - 1,
-              lineGap,
-              lineBreak: false,
-            });
-            const endX = doc.x;
-            let width = linkWidth;
-            if (idx < renderTokens.length - 1) {
-              width = Math.max(endX - startX, linkWidth);
-            }
-            const top = baselineY - lineHeight;
-            if (width > 0) {
-              const linkColor = style.linkColor || 'blue';
-              doc.link(startX, top, width, lineHeight, t.href);
-              doc.underline(startX, top, width, lineHeight, { color: linkColor });
-            }
-            return;
-          }
-          if (t.type === 'heading') {
-            doc.font(style.bold);
+            if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
+            else if (t.style === 'italic') doc.font(style.italic);
+            else doc.font(style.font);
             doc.text(t.text, opts);
             doc.font(style.font);
-            return;
-          }
-          if (t.style === 'bold' || t.style === 'bolditalic') doc.font(style.bold);
-          else if (t.style === 'italic') doc.font(style.italic);
-          else doc.font(style.font);
-          doc.text(t.text, opts);
-          doc.font(style.font);
+          });
+          if (doc.y === startY) doc.moveDown();
+          const extra = paragraphGap / doc.currentLineHeight(true);
+          if (extra) doc.moveDown(extra);
         });
-        if (doc.y === startY) doc.moveDown();
-        const extra = paragraphGap / doc.currentLineHeight(true);
-        if (extra) doc.moveDown(extra);
+        doc.moveDown();
       });
-      doc.moveDown();
+      doc.end();
     });
-    doc.end();
-  });
+    return pdfKitBuffer;
+  } catch (err) {
+    const plainPayload = buildPlainPdfFallbackPayload();
+    plainPayload.logContext = {
+      ...(plainPayload.logContext || {}),
+      reason: 'pdfkit_runtime_error',
+      error: serializeError(err),
+    };
+    logStructured('warn', 'pdf_plain_fallback_invoked', {
+      templateId,
+      requestedTemplateId,
+      reason: 'pdfkit_runtime_error',
+      documentType: fallbackDocumentType,
+      error: serializeError(err),
+    });
+    try {
+      const fallbackBuffer = await generatePlainPdfFallback(plainPayload);
+      logStructured('info', 'pdf_plain_fallback_recovered', {
+        templateId,
+        requestedTemplateId,
+        documentType: fallbackDocumentType,
+      });
+      return fallbackBuffer;
+    } catch (fallbackErr) {
+      if (!fallbackErr.cause) {
+        fallbackErr.cause = err;
+      }
+      logStructured('error', 'pdf_plain_fallback_failed', {
+        templateId,
+        requestedTemplateId,
+        documentType: fallbackDocumentType,
+        error: serializeError(fallbackErr),
+      });
+      throw fallbackErr;
+    }
+  }
 };
 
 function setGeneratePdf(fn) {
@@ -7092,6 +7156,43 @@ function uniqueTemplates(templates = []) {
     result.push(template);
   }
   return result;
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
+function collectContactLinesFromOptions(options) {
+  if (!options || typeof options !== 'object') return [];
+  const candidates = [];
+  if (Array.isArray(options.contactLines)) candidates.push(options.contactLines);
+  const templateParams = options.templateParams;
+  if (templateParams && typeof templateParams === 'object') {
+    if (Array.isArray(templateParams.contactLines)) {
+      candidates.push(templateParams.contactLines);
+    }
+    if (templateParams.contact && typeof templateParams.contact === 'object') {
+      const contact = templateParams.contact;
+      if (Array.isArray(contact.lines)) {
+        candidates.push(contact.lines);
+      }
+    }
+  }
+  const normalized = [];
+  for (const list of candidates) {
+    for (const entry of list) {
+      if (typeof entry !== 'string') continue;
+      const trimmed = entry.trim();
+      if (!trimmed) continue;
+      normalized.push(trimmed);
+    }
+  }
+  return normalized;
 }
 
 async function generatePdfWithFallback({
@@ -7113,6 +7214,8 @@ async function generatePdfWithFallback({
   }
 
   let lastError;
+  let lastAttemptOptions;
+  let lastAttemptTemplate;
 
   for (let index = 0; index < candidates.length; index += 1) {
     const templateId = candidates[index];
@@ -7125,10 +7228,15 @@ async function generatePdfWithFallback({
       totalAttempts: candidates.length,
     });
 
+    let options;
     try {
-      const options = (typeof buildOptionsForTemplate === 'function'
+      options = (typeof buildOptionsForTemplate === 'function'
         ? buildOptionsForTemplate(templateId)
         : {}) || {};
+      if (options && typeof options === 'object') {
+        lastAttemptOptions = options;
+      }
+      lastAttemptTemplate = templateId;
       const optionKeys =
         options && typeof options === 'object' ? Object.keys(options) : [];
       const templateParamKeys =
@@ -7162,6 +7270,10 @@ async function generatePdfWithFallback({
       return { buffer, template: templateId };
     } catch (error) {
       lastError = error;
+      if (options && typeof options === 'object') {
+        lastAttemptOptions = options;
+      }
+      lastAttemptTemplate = templateId;
       logStructured('error', 'pdf_generation_attempt_failed', {
         ...logContext,
         documentType,
@@ -7169,6 +7281,80 @@ async function generatePdfWithFallback({
         attempt,
         error: serializeError(error),
       });
+    }
+  }
+
+  const normalizedDocType =
+    typeof documentType === 'string' ? documentType.toLowerCase() : '';
+  const plainFallbackDocumentType =
+    normalizedDocType === 'cover_letter'
+      ? 'cover_letter'
+      : normalizedDocType === 'resume'
+        ? 'resume'
+        : null;
+
+  if (plainFallbackDocumentType) {
+    const fallbackTemplateId =
+      lastAttemptTemplate || candidates[candidates.length - 1] || candidates[0];
+    const fallbackOptions =
+      lastAttemptOptions && typeof lastAttemptOptions === 'object'
+        ? lastAttemptOptions
+        : {};
+    const fallbackContactLines = collectContactLinesFromOptions(fallbackOptions);
+    const fallbackName = firstNonEmptyString(
+      fallbackOptions?.templateParams?.name,
+      fallbackOptions?.templateParams?.contact?.name,
+      fallbackOptions?.name,
+      fallbackOptions?.candidateName
+    );
+    const fallbackJobTitle = firstNonEmptyString(
+      fallbackOptions?.templateParams?.jobTitle,
+      fallbackOptions?.templateParams?.contact?.jobTitle,
+      fallbackOptions?.jobTitle
+    );
+    const fallbackPayload = {
+      requestedTemplateId: fallbackTemplateId,
+      templateId: fallbackTemplateId,
+      text: typeof inputText === 'string' ? inputText : '',
+      name: fallbackName,
+      jobTitle: fallbackJobTitle,
+      contactLines: fallbackContactLines,
+      documentType: plainFallbackDocumentType,
+      logContext: {
+        ...logContext,
+        documentType,
+        template: fallbackTemplateId,
+        templates: candidates,
+        reason: 'all_template_attempts_failed',
+        ...(lastError ? { error: serializeError(lastError) } : {}),
+      },
+    };
+    try {
+      logStructured('warn', 'pdf_generation_plain_fallback_invoked', {
+        ...logContext,
+        documentType,
+        template: fallbackTemplateId,
+        templates: candidates,
+      });
+      const fallbackBuffer = await generatePlainPdfFallback(fallbackPayload);
+      logStructured('info', 'pdf_generation_plain_fallback_succeeded', {
+        ...logContext,
+        documentType,
+        template: fallbackTemplateId,
+        bytes: fallbackBuffer.length,
+      });
+      return { buffer: fallbackBuffer, template: fallbackTemplateId };
+    } catch (fallbackError) {
+      if (!fallbackError.cause && lastError) {
+        fallbackError.cause = lastError;
+      }
+      logStructured('error', 'pdf_generation_plain_fallback_failed', {
+        ...logContext,
+        documentType,
+        template: fallbackTemplateId,
+        error: serializeError(fallbackError),
+      });
+      lastError = fallbackError;
     }
   }
 
