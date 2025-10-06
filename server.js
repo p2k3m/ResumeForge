@@ -896,6 +896,35 @@ function readEnvValue(name) {
   return trimmed.length ? trimmed : undefined;
 }
 
+function parseBoolean(value, defaultValue = false) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value !== 0 : defaultValue;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return defaultValue;
+    if (['1', 'true', 'yes', 'y', 'on', 'enable', 'enabled'].includes(normalized)) {
+      return true;
+    }
+    if (['0', 'false', 'no', 'n', 'off', 'disable', 'disabled'].includes(normalized)) {
+      return false;
+    }
+    return defaultValue;
+  }
+  return defaultValue;
+}
+
+function readBooleanEnv(name, defaultValue = false) {
+  const raw = readEnvValue(name);
+  if (raw === undefined) {
+    return defaultValue;
+  }
+  return parseBoolean(raw, defaultValue);
+}
+
 function normaliseOrigins(value) {
   if (Array.isArray(value)) {
     return value
@@ -1086,6 +1115,10 @@ function buildRuntimeConfig() {
       fileConfig.CLOUDFRONT_ORIGINS ||
       fileConfig.ALLOWED_ORIGINS
   );
+  const plainPdfFallbackEnabled = readBooleanEnv(
+    'ENABLE_PLAIN_PDF_FALLBACK',
+    parseBoolean(fileConfig.ENABLE_PLAIN_PDF_FALLBACK, false)
+  );
   const missing = [];
   if (!s3Bucket) missing.push('S3_BUCKET');
   if (!geminiApiKey) missing.push('GEMINI_API_KEY');
@@ -1099,12 +1132,14 @@ function buildRuntimeConfig() {
   process.env.AWS_REGION = region;
   process.env.S3_BUCKET = s3Bucket;
   process.env.GEMINI_API_KEY = geminiApiKey;
+  process.env.ENABLE_PLAIN_PDF_FALLBACK = plainPdfFallbackEnabled ? 'true' : 'false';
 
   return Object.freeze({
     AWS_REGION: region,
     S3_BUCKET: s3Bucket,
     GEMINI_API_KEY: geminiApiKey,
     CLOUDFRONT_ORIGINS: allowedOrigins,
+    ENABLE_PLAIN_PDF_FALLBACK: plainPdfFallbackEnabled,
   });
 }
 
@@ -12807,6 +12842,7 @@ async function generateEnhancedDocumentsResponse({
   changeLogEntries = [],
   existingRecord = {},
   userId,
+  plainPdfFallbackEnabled = false,
 }) {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (!bucket) {
@@ -13492,7 +13528,7 @@ async function generateEnhancedDocumentsResponse({
           },
         };
       },
-      allowPlainFallback: true,
+      allowPlainFallback: Boolean(plainPdfFallbackEnabled),
     });
 
     const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
@@ -15691,6 +15727,7 @@ app.post(
         locationCountry: { S: locationMeta.country || '' },
       },
       userId: res.locals.userId,
+      plainPdfFallbackEnabled: Boolean(secrets.ENABLE_PLAIN_PDF_FALLBACK),
     };
 
     try {

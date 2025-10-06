@@ -12,5 +12,8 @@
   CLOUDFRONT_ORIGINS: [
     'http://localhost:3000',
     'http://localhost:5173'
-  ]
+  ],
+  // Optional: set to true to enable plaintext PDF fallback generation when
+  // template rendering fails. Leave unset to return an error instead.
+  ENABLE_PLAIN_PDF_FALLBACK: false
 }
