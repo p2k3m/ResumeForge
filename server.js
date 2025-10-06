@@ -7724,13 +7724,14 @@ async function generatePdfWithFallback({
         ? 'resume'
         : null;
 
-  if (plainFallbackDocumentType && allowPlainFallback) {
+  if (plainFallbackDocumentType) {
     const fallbackTemplateId =
       lastAttemptTemplate || candidates[candidates.length - 1] || candidates[0];
     const fallbackOptions =
       lastAttemptOptions && typeof lastAttemptOptions === 'object'
         ? lastAttemptOptions
         : {};
+    const forcedFallback = !allowPlainFallback;
     const fallbackContactLines = collectContactLinesFromOptions(fallbackOptions);
     const fallbackName = firstNonEmptyString(
       fallbackOptions?.templateParams?.name,
@@ -7758,14 +7759,23 @@ async function generatePdfWithFallback({
         templates: candidates,
         reason: 'all_template_attempts_failed',
         ...(lastError ? { error: serializeError(lastError) } : {}),
+        forcedFallback,
+        fallbackConfigured: Boolean(allowPlainFallback),
       },
     };
+    if (forcedFallback) {
+      fallbackPayload.logContext = {
+        ...fallbackPayload.logContext,
+        forceReason: 'config_disabled',
+      };
+    }
     try {
       logStructured('warn', 'pdf_generation_plain_fallback_invoked', {
         ...logContext,
         documentType,
         template: fallbackTemplateId,
         templates: candidates,
+        forcedFallback,
       });
       const fallbackBuffer = await generatePlainPdfFallback(fallbackPayload);
       logStructured('info', 'pdf_generation_plain_fallback_succeeded', {
@@ -7773,6 +7783,7 @@ async function generatePdfWithFallback({
         documentType,
         template: fallbackTemplateId,
         bytes: fallbackBuffer.length,
+        forcedFallback,
       });
       return { buffer: fallbackBuffer, template: fallbackTemplateId };
     } catch (fallbackError) {
@@ -7784,15 +7795,16 @@ async function generatePdfWithFallback({
         documentType,
         template: fallbackTemplateId,
         error: serializeError(fallbackError),
+        forcedFallback,
       });
       lastError = fallbackError;
     }
-  } else if (plainFallbackDocumentType && !allowPlainFallback) {
+  } else if (allowPlainFallback) {
     logStructured('warn', 'pdf_generation_plain_fallback_skipped', {
       ...logContext,
       documentType,
       templates: candidates,
-      reason: 'fallback_disabled',
+      reason: 'unsupported_document_type',
       error: serializeError(lastError),
     });
   }

@@ -1040,7 +1040,7 @@ describe('/api/process-cv', () => {
     }
   });
 
-  test('returns error when PDF generation fails for all templates', async () => {
+  test('falls back to plain PDFs when template rendering fails', async () => {
     generateContentMock.mockReset();
     primeDefaultGeminiResponses();
 
@@ -1051,14 +1051,34 @@ describe('/api/process-cv', () => {
       })
     );
 
+    mockS3Send.mockClear();
+
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    expect(res.status).toBe(500);
-    expect(res.body.success).toBe(false);
-    expect(res.body.error.code).toBe('DOCUMENT_GENERATION_FAILED');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.urls)).toBe(true);
+    const pdfEntries = res.body.urls.filter((entry) => entry.type && entry.url);
+    const coverEntries = pdfEntries.filter((entry) => entry.type.startsWith('cover_letter'));
+    const cvEntries = pdfEntries.filter((entry) => entry.type.startsWith('version'));
+    expect(coverEntries.length).toBeGreaterThanOrEqual(2);
+    expect(cvEntries.length).toBeGreaterThanOrEqual(2);
+
+    const pdfPutCommands = mockS3Send.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command.__type === 'PutObjectCommand')
+      .filter((command) => command.input?.ContentType === 'application/pdf');
+    expect(pdfPutCommands.length).toBeGreaterThanOrEqual(4);
+    pdfPutCommands.forEach((command) => {
+      const body = command.input?.Body;
+      expect(Buffer.isBuffer(body)).toBe(true);
+      if (Buffer.isBuffer(body)) {
+        expect(body.subarray(0, 4).toString()).toBe('%PDF');
+      }
+    });
 
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
   });
