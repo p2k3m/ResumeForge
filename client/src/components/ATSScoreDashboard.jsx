@@ -2,14 +2,6 @@ import ATSScoreCard from './ATSScoreCard.jsx'
 import InfoTooltip from './InfoTooltip.jsx'
 import { buildMetricTip } from '../utils/actionableAdvice.js'
 
-const gradientPalette = [
-  'from-[#5B21B6] via-[#7C3AED] to-[#4C1D95]',
-  'from-[#1E3A8A] via-[#312E81] to-[#4338CA]',
-  'from-[#0F172A] via-[#1D4ED8] to-[#6366F1]',
-  'from-[#312E81] via-[#4C1D95] to-[#7C3AED]',
-  'from-[#4338CA] via-[#6366F1] to-[#8B5CF6]'
-]
-
 function clampScore(score) {
   if (typeof score !== 'number' || !Number.isFinite(score)) {
     return null
@@ -117,8 +109,7 @@ function ATSScoreDashboard({
     return null
   }
 
-  const displayMetrics = metricList.map((metric, index) => {
-    const accent = gradientPalette[index % gradientPalette.length]
+  const displayMetrics = metricList.map((metric) => {
     const baselineMetric = metric?.category ? baselineMap.get(metric.category) || {} : {}
     const beforeScore = clampScore(
       typeof metric?.beforeScore === 'number'
@@ -148,14 +139,14 @@ function ATSScoreDashboard({
     const metricWithTip = { ...enrichedMetric, tip: buildMetricTip(enrichedMetric, { match }) }
 
     if (!metricActionMap || typeof onImproveMetric !== 'function') {
-      return { metric: metricWithTip, accent, improvement: null }
+      return { metric: metricWithTip, improvement: null }
     }
 
     const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
     const config = category ? metricActionMap.get(category) || null : null
 
     if (!config || !config.actionKey) {
-      return { metric: metricWithTip, accent, improvement: null }
+      return { metric: metricWithTip, improvement: null }
     }
 
     const busy = improvementState.activeKey === config.actionKey
@@ -168,7 +159,6 @@ function ATSScoreDashboard({
 
     return {
       metric: metricWithTip,
-      accent,
       improvement: {
         key: config.actionKey,
         label: config.label,
@@ -312,8 +302,8 @@ function ATSScoreDashboard({
         delta: typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number' ? matchDelta : null,
         beforeTone: 'text-indigo-700',
         afterTone: 'text-emerald-700',
-        beforeBadgeClass: 'bg-indigo-500/10 text-indigo-700',
-        afterBadgeClass: 'bg-emerald-500/10 text-emerald-700',
+        beforeBadgeClass: 'border border-indigo-200 bg-indigo-50 text-indigo-700',
+        afterBadgeClass: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
         format: formatPercent
       })
     }
@@ -334,8 +324,8 @@ function ATSScoreDashboard({
         afterMeaning: selectionProbabilityAfterMeaning ? `${selectionProbabilityAfterMeaning} Outlook` : null,
         beforeTone: 'text-indigo-700',
         afterTone: 'text-emerald-700',
-        beforeBadgeClass: 'bg-indigo-500/10 text-indigo-700',
-        afterBadgeClass: 'bg-emerald-500/10 text-emerald-700',
+        beforeBadgeClass: 'border border-indigo-200 bg-indigo-50 text-indigo-700',
+        afterBadgeClass: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
         format: formatPercent
       })
     }
@@ -350,12 +340,12 @@ function ATSScoreDashboard({
     match: {
       label: 'Match',
       badgeClass:
-        'inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700 ring-1 ring-inset ring-emerald-200'
+        'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700'
     },
     mismatch: {
       label: 'Mismatch',
       badgeClass:
-        'inline-flex items-center rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-rose-700 ring-1 ring-inset ring-rose-200'
+        'inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700'
     }
   }
 
@@ -429,30 +419,29 @@ function ATSScoreDashboard({
 
   return (
     <section className="space-y-6" aria-label="ATS dashboard" aria-live="polite">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-purple-900">ATS Performance Dashboard</h2>
-          <p className="text-sm text-purple-700/80">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-xl font-semibold text-slate-900">ATS Performance Dashboard</h2>
+          <p className="text-sm text-slate-600">
             Track how your resume aligns with the job description across keyword, structure, readability, and skill coverage metrics.
           </p>
         </div>
         {match && (
           <div
-            className="flex items-center gap-3 text-xs font-semibold uppercase tracking-widest text-purple-600"
+            className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
             data-testid="dashboard-live-indicator"
           >
-            <span className="rounded-full bg-purple-100 px-3 py-1">Live Update</span>
-            <span>Synced with latest analysis</span>
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+            <span>Live analysis</span>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {displayMetrics.map(({ metric, accent, improvement }) => (
+        {displayMetrics.map(({ metric, improvement }) => (
           <ATSScoreCard
             key={metric.category}
             metric={metric}
-            accentClass={accent}
             improvement={improvement}
           />
         ))}
@@ -465,17 +454,17 @@ function ATSScoreDashboard({
         >
           {(atsScoreSummary || selectionProbabilitySummary) && (
             <div
-              className="rounded-3xl border border-purple-100/80 bg-purple-50/60 p-4 shadow-sm md:col-span-full"
+              className="md:col-span-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               data-testid="score-summary-banner"
             >
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-600">Score Snapshot</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Score Snapshot</p>
               {atsScoreSummary && (
-                <p className="mt-2 text-sm text-purple-800" data-testid="ats-score-summary">
+                <p className="mt-2 text-sm text-slate-700" data-testid="ats-score-summary">
                   {atsScoreSummary}
                 </p>
               )}
               {selectionProbabilitySummary && (
-                <p className="mt-1 text-sm text-purple-800" data-testid="selection-summary">
+                <p className="mt-1 text-sm text-slate-700" data-testid="selection-summary">
                   {selectionProbabilitySummary}
                 </p>
               )}
@@ -487,16 +476,16 @@ function ATSScoreDashboard({
                   {snapshotSegments.map((segment) => (
                     <div
                       key={segment.id}
-                      className="rounded-2xl border border-purple-200/70 bg-white/70 p-4"
+                      className="rounded-lg border border-slate-200 bg-slate-50 p-4"
                       data-testid={`${segment.id}-summary-card`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-purple-500">
+                        <p className="text-xs font-semibold uppercase text-slate-500">
                           {segment.label}
                         </p>
                         {segment.delta && (
                           <span
-                            className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] text-emerald-700"
+                            className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
                             data-testid={`${segment.id}-summary-delta`}
                           >
                             {segment.delta}
@@ -505,33 +494,29 @@ function ATSScoreDashboard({
                       </div>
                       <dl className="mt-3 grid grid-cols-2 gap-4">
                         <div>
-                          <dt className="text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
-                            {segment.beforeLabel}
-                          </dt>
+                          <dt className="text-xs font-semibold text-slate-500">{segment.beforeLabel}</dt>
                           <dd
-                            className={`mt-2 text-2xl font-black ${segment.beforeTone}`}
+                            className={`mt-2 text-2xl font-semibold ${segment.beforeTone}`}
                             data-testid={`${segment.id}-summary-before`}
                           >
                             {segment.format(segment.beforeValue)}
                           </dd>
                           {segment.beforeMeaning && (
-                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] ${segment.beforeBadgeClass}`}>
+                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-medium ${segment.beforeBadgeClass}`}>
                               {segment.beforeMeaning}
                             </span>
                           )}
                         </div>
                         <div>
-                          <dt className="text-[10px] font-semibold uppercase tracking-[0.35em] text-slate-500">
-                            {segment.afterLabel}
-                          </dt>
+                          <dt className="text-xs font-semibold text-slate-500">{segment.afterLabel}</dt>
                           <dd
-                            className={`mt-2 text-2xl font-black ${segment.afterTone}`}
+                            className={`mt-2 text-2xl font-semibold ${segment.afterTone}`}
                             data-testid={`${segment.id}-summary-after`}
                           >
                             {segment.format(segment.afterValue)}
                           </dd>
                           {segment.afterMeaning && (
-                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] ${segment.afterBadgeClass}`}>
+                            <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-medium ${segment.afterBadgeClass}`}>
                               {segment.afterMeaning}
                             </span>
                           )}
@@ -543,9 +528,9 @@ function ATSScoreDashboard({
               )}
             </div>
           )}
-          <div className="rounded-3xl border border-indigo-100 bg-white/80 p-6 shadow-lg backdrop-blur">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">ATS Score Before</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ATS Score Before</p>
               <InfoTooltip
                 variant="light"
                 align="right"
@@ -553,10 +538,10 @@ function ATSScoreDashboard({
                 content={originalScoreDescription}
               />
             </div>
-            <p className="mt-3 text-5xl font-black text-indigo-700" data-testid="original-score">
+            <p className="mt-3 text-4xl font-semibold text-slate-900" data-testid="original-score">
               {typeof originalScoreValue === 'number' ? `${originalScoreValue}%` : '—'}
             </p>
-            <p className="mt-2 text-sm text-indigo-600/90" data-testid="original-title">
+            <p className="mt-2 text-sm text-slate-600" data-testid="original-title">
               {match.originalTitle || 'Initial resume title unavailable.'}
             </p>
             <div className="mt-4 space-y-2">
@@ -566,17 +551,17 @@ function ATSScoreDashboard({
               >
                 {matchStatusStyles[originalStatus].label}
               </span>
-              <p className="text-sm text-indigo-700/90" data-testid="original-match-advice">
+              <p className="text-sm text-slate-700" data-testid="original-match-advice">
                 {originalAdvice}
               </p>
             </div>
           </div>
-          <div className="rounded-3xl border border-emerald-100 bg-gradient-to-br from-emerald-100 via-white to-emerald-50 p-6 shadow-lg backdrop-blur">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">ATS Score After</p>
-                  <p className="mt-3 text-5xl font-black text-emerald-700" data-testid="enhanced-score">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ATS Score After</p>
+                  <p className="mt-3 text-4xl font-semibold text-slate-900" data-testid="enhanced-score">
                     {typeof enhancedScoreValue === 'number' ? `${enhancedScoreValue}%` : '—'}
                   </p>
                 </div>
@@ -588,12 +573,12 @@ function ATSScoreDashboard({
                 />
               </div>
               {matchDelta && (
-                <span className="self-start rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700" data-testid="match-delta">
+                <span className="self-start rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700" data-testid="match-delta">
                   {matchDelta}
                 </span>
               )}
             </div>
-            <p className="mt-2 text-sm text-emerald-700/90" data-testid="enhanced-title">
+            <p className="mt-2 text-sm text-slate-600" data-testid="enhanced-title">
               {match.modifiedTitle || match.originalTitle || 'Enhanced resume title coming soon.'}
             </p>
             <div className="mt-4 space-y-2">
@@ -603,20 +588,20 @@ function ATSScoreDashboard({
               >
                 {matchStatusStyles[enhancedStatus].label}
               </span>
-              <p className="text-sm text-emerald-700/90" data-testid="enhanced-match-advice">
+              <p className="text-sm text-slate-700" data-testid="enhanced-match-advice">
                 {enhancedAdvice}
               </p>
             </div>
           </div>
           {hasComparableScores && (
             <div
-              className="rounded-3xl border border-slate-200/70 bg-white/90 p-6 shadow-lg backdrop-blur"
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
               data-testid="score-comparison-chart"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">Score Comparison</p>
-                  <p className="mt-2 text-sm text-slate-700/90">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Score Comparison</p>
+                  <p className="mt-2 text-sm text-slate-600">
                     Visualise how the enhanced version closes the gap against ATS expectations.
                   </p>
                 </div>
@@ -628,7 +613,7 @@ function ATSScoreDashboard({
                     content={scoreComparisonDescription}
                   />
                   {matchDelta && (
-                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                    <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                       {matchDelta}
                     </span>
                   )}
@@ -641,11 +626,11 @@ function ATSScoreDashboard({
               >
                 {scoreBands.map(({ label, value, tone, textTone }) => (
                   <div key={label} className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-[0.3em] text-slate-600">
+                    <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-slate-500">
                       <span>{label}</span>
                       <span className={textTone}>{value}%</span>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-slate-200/80">
+                    <div className="h-2 w-full rounded-full bg-slate-200">
                       <div
                         className={`h-full rounded-full ${tone}`}
                         style={{ width: `${value}%` }}
@@ -655,15 +640,15 @@ function ATSScoreDashboard({
                   </div>
                 ))}
               </div>
-              <p className="mt-4 text-sm text-slate-700/95" data-testid="score-improvement-narrative">
+              <p className="mt-4 text-sm text-slate-700" data-testid="score-improvement-narrative">
                 {improvementNarrative}
               </p>
             </div>
           )}
           {hasSelectionProbability && (
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50/80 p-6 shadow-lg backdrop-blur">
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection Probability</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection Probability</p>
                 <InfoTooltip
                   variant="light"
                   align="right"
@@ -673,43 +658,43 @@ function ATSScoreDashboard({
               </div>
               <div className="mt-4 space-y-4">
                 {typeof selectionProbabilityBeforeValue === 'number' && (
-                  <div className="rounded-2xl border border-indigo-200/60 bg-white/80 p-4 shadow-sm">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <div className="flex items-baseline justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-indigo-500">Selection % Before</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection % Before</p>
                         <div className="mt-2 flex items-baseline gap-3">
-                          <p className="text-4xl font-black text-indigo-700">{selectionProbabilityBeforeValue}%</p>
+                          <p className="text-3xl font-semibold text-slate-900">{selectionProbabilityBeforeValue}%</p>
                           {selectionProbabilityBeforeMeaning && (
-                            <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-indigo-700">
+                            <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
                               {selectionProbabilityBeforeMeaning} Outlook
                             </span>
                           )}
                         </div>
                       </div>
                       {selectionProbabilityDelta && (
-                        <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                           {selectionProbabilityDelta}
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 text-sm text-indigo-700/90">
+                    <p className="mt-2 text-sm text-slate-600">
                       {selectionProbabilityBeforeRationale ||
                         'Baseline estimate derived from your uploaded resume before enhancements.'}
                     </p>
                   </div>
                 )}
                 {typeof selectionProbabilityAfterValue === 'number' && (
-                  <div className="rounded-2xl border border-emerald-300 bg-emerald-100/60 p-4 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Selection % After</p>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection % After</p>
                     <div className="mt-2 flex items-baseline gap-3">
-                      <p className="text-4xl font-black text-emerald-700">{selectionProbabilityAfterValue}%</p>
+                      <p className="text-3xl font-semibold text-slate-900">{selectionProbabilityAfterValue}%</p>
                       {selectionProbabilityAfterMeaning && (
-                        <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-700">
+                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
                           {selectionProbabilityAfterMeaning} Outlook
                         </span>
                       )}
                     </div>
-                    <p className="mt-2 text-sm text-emerald-700/90">
+                    <p className="mt-2 text-sm text-slate-600">
                       {selectionProbabilityAfterRationale ||
                         'Enhanced estimate reflecting ATS, keyword, and credential gains from the accepted changes.'}
                     </p>
@@ -722,13 +707,13 @@ function ATSScoreDashboard({
       )}
       {match && improvementDetails.length > 0 && (
         <div
-          className="rounded-3xl border border-purple-200/70 bg-white/90 p-6 shadow-lg backdrop-blur"
+          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
           data-testid="improvement-recap-card"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Improvement Recap</p>
-              <h3 className="mt-1 text-lg font-semibold text-purple-900">What changed and why it matters</h3>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Improvement Recap</p>
+              <h3 className="mt-1 text-lg font-semibold text-slate-900">What changed and why it matters</h3>
             </div>
             <InfoTooltip
               variant="light"
@@ -741,15 +726,15 @@ function ATSScoreDashboard({
             {improvementDetails.map((detail) => (
               <li
                 key={detail.id}
-                className="rounded-2xl border border-purple-100/80 bg-purple-50/60 p-4 shadow-sm"
+                className="rounded-lg border border-slate-200 bg-slate-50 p-4"
                 data-testid="improvement-recap-item"
               >
-                <p className="text-sm font-semibold text-purple-900">{detail.section}</p>
-                <p className="mt-2 text-sm text-purple-700/95">{detail.changeSummary}</p>
-                <p className="mt-2 text-sm text-purple-700/95" data-testid="improvement-recap-reason">
-                  <span className="font-semibold text-purple-900">Why it matters:</span> {detail.reasonText}
+                <p className="text-sm font-semibold text-slate-900">{detail.section}</p>
+                <p className="mt-2 text-sm text-slate-700">{detail.changeSummary}</p>
+                <p className="mt-2 text-sm text-slate-700" data-testid="improvement-recap-reason">
+                  <span className="font-semibold text-slate-900">Why it matters:</span> {detail.reasonText}
                 </p>
-                <p className="mt-2 text-sm italic text-purple-700/95" data-testid="improvement-recap-interview">
+                <p className="mt-2 text-sm italic text-slate-600" data-testid="improvement-recap-interview">
                   {detail.interviewAdvice}
                 </p>
               </li>
