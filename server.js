@@ -35,7 +35,7 @@ import mammoth from 'mammoth';
 import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
 import mime from 'mime-types';
-import { MIMEType } from 'whatwg-mimetype';
+import { MIMEType } from 'node:util';
 import { renderTemplatePdf } from './lib/pdf/index.js';
 import { backstopPdfTemplates as runPdfTemplateBackstop } from './lib/pdf/backstop.js';
 import {
