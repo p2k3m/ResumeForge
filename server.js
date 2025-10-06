@@ -936,25 +936,65 @@ function ensureOutputFileUrls(entries) {
     .filter((entry) => entry && typeof entry === 'object');
 }
 
+const SERVICE_ERROR_FALLBACK_MESSAGES = {
+  INITIAL_UPLOAD_FAILED: S3_STORAGE_ERROR_MESSAGE,
+  STORAGE_UNAVAILABLE: S3_STORAGE_ERROR_MESSAGE,
+  CHANGE_LOG_PERSISTENCE_FAILED: S3_CHANGE_LOG_ERROR_MESSAGE,
+  DOCUMENT_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
+  PROCESSING_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
+  GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
+  AI_RESPONSE_INVALID: GEMINI_ENHANCEMENT_ERROR_MESSAGE,
+};
+
 function sendError(res, status, code, message, details) {
   const normalizedDetails = normalizeErrorDetails(details);
+  const normalizedMessage =
+    typeof message === 'string' && message.trim() ? message.trim() : '';
+  const fallbackMessage =
+    SERVICE_ERROR_FALLBACK_MESSAGES[code] ||
+    (status >= 500
+      ? 'An unexpected error occurred. Please try again later.'
+      : 'The request could not be completed.');
+
   const baseDetails =
     normalizedDetails === undefined ? {} : normalizedDetails;
-  const shouldAnnotateSource =
-    status >= 500 &&
-    baseDetails &&
-    typeof baseDetails === 'object' &&
-    Object.keys(baseDetails).length > 0;
-  const enrichedDetails = shouldAnnotateSource
-    ? withServiceSource(baseDetails, {
+
+  const shouldAnnotateSource = status >= 500;
+  let enrichedDetails = baseDetails;
+
+  if (shouldAnnotateSource) {
+    const detectedSource = detectServiceErrorSource({
+      code,
+      message: normalizedMessage || fallbackMessage,
+      details: baseDetails,
+    });
+    if (detectedSource) {
+      if (!enrichedDetails || typeof enrichedDetails !== 'object') {
+        enrichedDetails = { source: detectedSource };
+      } else if (!enrichedDetails.source) {
+        enrichedDetails = { ...enrichedDetails, source: detectedSource };
+      }
+    } else if (
+      enrichedDetails &&
+      typeof enrichedDetails === 'object' &&
+      Object.keys(enrichedDetails).length > 0
+    ) {
+      enrichedDetails = withServiceSource(enrichedDetails, {
         code,
-        message,
-        details: baseDetails,
-      })
-    : baseDetails;
+        message: normalizedMessage || fallbackMessage,
+        details: enrichedDetails,
+      });
+    }
+  }
+
+  const finalMessage =
+    !normalizedMessage || /internal server error/i.test(normalizedMessage)
+      ? fallbackMessage
+      : normalizedMessage;
+
   const error = {
     code,
-    message,
+    message: finalMessage,
     details: enrichedDetails,
   };
   if (res.locals.requestId) {
