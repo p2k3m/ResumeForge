@@ -6308,7 +6308,7 @@ function determineUploadContentType(file) {
   if (!file || typeof file !== 'object') {
     return fallbackType;
   }
-  const { mimetype, buffer } = file;
+  const { mimetype, buffer, originalname } = file;
   const normalizedType = typeof mimetype === 'string' ? mimetype.trim() : '';
   if (normalizedType === 'application/pdf') {
     if (Buffer.isBuffer(buffer) && buffer.length >= 4) {
@@ -6317,7 +6317,10 @@ function determineUploadContentType(file) {
         return normalizedType;
       }
     }
-    return fallbackType;
+    if (typeof originalname === 'string' && /\.pdf$/i.test(originalname)) {
+      return normalizedType;
+    }
+    return normalizedType || fallbackType;
   }
   return normalizedType || fallbackType;
 }
