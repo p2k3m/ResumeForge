@@ -6301,6 +6301,25 @@ function createMinimalPlainPdfBuffer({
   return Buffer.from(pdfContent, 'utf8');
 }
 
+function determineUploadContentType(file) {
+  const fallbackType = 'application/octet-stream';
+  if (!file || typeof file !== 'object') {
+    return fallbackType;
+  }
+  const { mimetype, buffer } = file;
+  const normalizedType = typeof mimetype === 'string' ? mimetype.trim() : '';
+  if (normalizedType === 'application/pdf') {
+    if (Buffer.isBuffer(buffer) && buffer.length >= 4) {
+      const signature = buffer.subarray(0, 4).toString();
+      if (signature === '%PDF') {
+        return normalizedType;
+      }
+    }
+    return fallbackType;
+  }
+  return normalizedType || fallbackType;
+}
+
 async function generatePlainPdfFallback({
   requestedTemplateId,
   templateId,
@@ -15324,13 +15343,22 @@ app.post(
   let originalUploadKey = `${temporaryPrefix}original${normalizedExt}`;
   const initialUploadKey = originalUploadKey;
   let logKey = `${temporaryPrefix}logs/processing.jsonl`;
+  const originalContentType = determineUploadContentType(req.file);
+  if (originalContentType !== req.file.mimetype) {
+    logStructured('warn', 'initial_upload_content_type_adjusted', {
+      ...logContext,
+      originalContentType: req.file.mimetype,
+      normalizedContentType: originalContentType,
+    });
+  }
+
   try {
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: originalUploadKey,
         Body: req.file.buffer,
-        ContentType: req.file.mimetype
+        ContentType: originalContentType,
       })
     );
     logStructured('info', 'initial_upload_completed', {
