@@ -153,8 +153,48 @@ function matchesBannedStatus(value) {
   return BANNED_STATUS_PATTERNS.some((pattern) => pattern.test(normalized))
 }
 
+function hasTrustedMetadata(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return false
+  }
+
+  const presentation = entry.presentation
+  if (presentation && typeof presentation === 'object') {
+    const presentationStrings = PRESENTATION_STRING_FIELDS.some((key) => {
+      const value = presentation[key]
+      return typeof value === 'string' && value.trim()
+    })
+
+    if (presentationStrings || Number.isFinite(presentation.autoPreviewPriority)) {
+      return true
+    }
+  }
+
+  if (entry.templateMeta && typeof entry.templateMeta === 'object') {
+    const metaHasValue = TEMPLATE_META_STRING_FIELDS.some((key) => {
+      const value = entry.templateMeta[key]
+      return typeof value === 'string' && value.trim()
+    })
+
+    if (metaHasValue) {
+      return true
+    }
+  }
+
+  const templateStrings = ['templateId', 'templateName', 'template']
+  if (templateStrings.some((key) => typeof entry[key] === 'string' && entry[key].trim())) {
+    return true
+  }
+
+  return false
+}
+
 function isMarkedTestOrStale(entry) {
   if (!entry || typeof entry !== 'object') {
+    return false
+  }
+
+  if (entry.__trusted === true || hasTrustedMetadata(entry)) {
     return false
   }
 
@@ -658,6 +698,10 @@ function normaliseOutputFileEntry(entry, index = 0, fallbackType = '', options =
   const normalized = {
     ...entry,
     url,
+  }
+
+  if (hasTrustedMetadata(normalized)) {
+    normalized.__trusted = true
   }
 
   const expiresAt = resolveExpiresAt(entry, options)
