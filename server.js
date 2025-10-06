@@ -34,6 +34,8 @@ import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
 import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
+import mime from 'mime-types';
+import { MIMEType } from 'whatwg-mimetype';
 import { renderTemplatePdf } from './lib/pdf/index.js';
 import { backstopPdfTemplates as runPdfTemplateBackstop } from './lib/pdf/backstop.js';
 import {
@@ -6304,26 +6306,104 @@ function createMinimalPlainPdfBuffer({
   return Buffer.from(pdfContent, 'utf8');
 }
 
+const GENERIC_MIME_TYPES = new Set([
+  'application/octet-stream',
+  'binary/octet-stream',
+  'application/zip'
+]);
+
+function normalizeMimeTypeValue(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+  try {
+    const parsed = new MIMEType(trimmed);
+    return `${parsed.type}/${parsed.subtype}`.toLowerCase();
+  } catch {
+    const [essence] = trimmed.split(';');
+    return essence.trim().toLowerCase();
+  }
+}
+
+function sniffPdfSignature(buffer) {
+  if (!Buffer.isBuffer(buffer)) {
+    return false;
+  }
+  if (buffer.length < 4) {
+    return false;
+  }
+  const limit = Math.min(buffer.length, 1024);
+  let offset = 0;
+  if (limit >= 3 && buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    offset = 3;
+  }
+  while (offset < limit && buffer[offset] <= 0x20) {
+    offset += 1;
+  }
+  if (offset + 4 > limit) {
+    return false;
+  }
+  return (
+    buffer[offset] === 0x25 &&
+    buffer[offset + 1] === 0x50 &&
+    buffer[offset + 2] === 0x44 &&
+    buffer[offset + 3] === 0x46
+  );
+}
+
+function guessMimeTypeFromName(originalname) {
+  if (typeof originalname !== 'string') {
+    return '';
+  }
+  const ext = path.extname(originalname).toLowerCase();
+  if (!ext) {
+    return '';
+  }
+  const lookedUp = mime.lookup(ext);
+  if (typeof lookedUp !== 'string') {
+    return '';
+  }
+  return normalizeMimeTypeValue(lookedUp);
+}
+
 function determineUploadContentType(file) {
   const fallbackType = 'application/octet-stream';
   if (!file || typeof file !== 'object') {
     return fallbackType;
   }
   const { mimetype, buffer, originalname } = file;
-  const normalizedType = typeof mimetype === 'string' ? mimetype.trim() : '';
+  const normalizedType = normalizeMimeTypeValue(mimetype);
+  const extensionType = guessMimeTypeFromName(originalname);
+
+  if (sniffPdfSignature(buffer)) {
+    return 'application/pdf';
+  }
+
   if (normalizedType === 'application/pdf') {
-    if (Buffer.isBuffer(buffer) && buffer.length >= 4) {
-      const signature = buffer.subarray(0, 4).toString();
-      if (signature === '%PDF') {
-        return normalizedType;
-      }
-    }
-    if (typeof originalname === 'string' && /\.pdf$/i.test(originalname)) {
-      return fallbackType;
-    }
     return fallbackType;
   }
-  return normalizedType || fallbackType;
+
+  if (normalizedType && !GENERIC_MIME_TYPES.has(normalizedType)) {
+    return normalizedType;
+  }
+
+  if (extensionType && extensionType !== 'application/pdf') {
+    return extensionType;
+  }
+
+  if (extensionType === 'application/pdf') {
+    return fallbackType;
+  }
+
+  if (normalizedType) {
+    return normalizedType;
+  }
+
+  return fallbackType;
 }
 
 async function generatePlainPdfFallback({
@@ -16345,4 +16425,5 @@ export {
   CHANGE_LOG_DYNAMO_LIMITS,
   mapCoverLetterFields,
   ensureOutputFileUrls,
+  determineUploadContentType,
 };
