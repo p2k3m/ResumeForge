@@ -7666,6 +7666,7 @@ async function generatePdfWithFallback({
   let lastError;
   let lastAttemptOptions;
   let lastAttemptTemplate;
+  let fallbackContext;
 
   for (let index = 0; index < candidates.length; index += 1) {
     const templateId = candidates[index];
@@ -7763,19 +7764,35 @@ async function generatePdfWithFallback({
       fallbackOptions?.templateParams?.contact?.jobTitle,
       fallbackOptions?.jobTitle
     );
+    const fallbackText =
+      typeof inputText === 'string' ? inputText.replace(/\r\n?/g, '\n') : '';
+    const baseFallbackLog = {
+      ...logContext,
+      documentType,
+      template: fallbackTemplateId,
+      templates: candidates,
+    };
+    fallbackContext = {
+      templateId: fallbackTemplateId,
+      documentType: plainFallbackDocumentType,
+      name: fallbackName,
+      jobTitle: fallbackJobTitle,
+      contactLines: fallbackContactLines,
+      text: fallbackText,
+      forcedFallback,
+      log: baseFallbackLog,
+      lastError,
+    };
     const fallbackPayload = {
       requestedTemplateId: fallbackTemplateId,
       templateId: fallbackTemplateId,
-      text: typeof inputText === 'string' ? inputText : '',
+      text: fallbackText,
       name: fallbackName,
       jobTitle: fallbackJobTitle,
       contactLines: fallbackContactLines,
       documentType: plainFallbackDocumentType,
       logContext: {
-        ...logContext,
-        documentType,
-        template: fallbackTemplateId,
-        templates: candidates,
+        ...baseFallbackLog,
         reason: 'all_template_attempts_failed',
         ...(lastError ? { error: serializeError(lastError) } : {}),
         forcedFallback,
@@ -7790,17 +7807,12 @@ async function generatePdfWithFallback({
     }
     try {
       logStructured('warn', 'pdf_generation_plain_fallback_invoked', {
-        ...logContext,
-        documentType,
-        template: fallbackTemplateId,
-        templates: candidates,
+        ...baseFallbackLog,
         forcedFallback,
       });
       const fallbackBuffer = await generatePlainPdfFallback(fallbackPayload);
       logStructured('info', 'pdf_generation_plain_fallback_succeeded', {
-        ...logContext,
-        documentType,
-        template: fallbackTemplateId,
+        ...baseFallbackLog,
         bytes: fallbackBuffer.length,
         forcedFallback,
       });
@@ -7810,12 +7822,11 @@ async function generatePdfWithFallback({
         fallbackError.cause = lastError;
       }
       logStructured('error', 'pdf_generation_plain_fallback_failed', {
-        ...logContext,
-        documentType,
-        template: fallbackTemplateId,
+        ...baseFallbackLog,
         error: serializeError(fallbackError),
         forcedFallback,
       });
+      fallbackContext.lastError = fallbackError;
       lastError = fallbackError;
     }
   } else if (allowPlainFallback) {
@@ -7826,6 +7837,38 @@ async function generatePdfWithFallback({
       reason: 'unsupported_document_type',
       error: serializeError(lastError),
     });
+  }
+
+  if (fallbackContext) {
+    fallbackContext.lastError = lastError;
+    try {
+      const minimalBuffer = createMinimalPlainPdfBuffer({
+        lines: fallbackContext.text.split('\n'),
+        name: fallbackContext.name,
+        jobTitle: fallbackContext.jobTitle,
+        contactLines: fallbackContext.contactLines,
+        documentType: fallbackContext.documentType,
+        requestedTemplateId: fallbackContext.templateId,
+      });
+      logStructured('warn', 'pdf_generation_minimal_fallback_recovered', {
+        ...(fallbackContext.log || {}),
+        forcedFallback: fallbackContext.forcedFallback,
+        bytes: minimalBuffer.length,
+        previousError: fallbackContext.lastError
+          ? serializeError(fallbackContext.lastError)
+          : undefined,
+      });
+      return { buffer: minimalBuffer, template: fallbackContext.templateId };
+    } catch (minimalError) {
+      logStructured('error', 'pdf_generation_minimal_fallback_failed', {
+        ...(fallbackContext.log || {}),
+        forcedFallback: fallbackContext.forcedFallback,
+        error: serializeError(minimalError),
+        previousError: fallbackContext.lastError
+          ? serializeError(fallbackContext.lastError)
+          : undefined,
+      });
+    }
   }
 
   logStructured('error', 'pdf_generation_all_attempts_failed', {
