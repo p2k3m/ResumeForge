@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import path from 'path'
 import { mkdir, rm, cp } from 'fs/promises'
 import { spawn } from 'child_process'
+import { backstopPdfTemplates } from './pdf-template-backstop.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -128,6 +129,7 @@ async function copyStaticAssets() {
 
 async function main() {
   await runClientBuild()
+  await backstopPdfTemplates({ logger: console })
   await ensureCleanOutput()
   await runEsbuild()
   await copyStaticAssets()
