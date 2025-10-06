@@ -13313,93 +13313,153 @@ async function generateEnhancedDocumentsResponse({
   }
 
   const artifactCleanupKeys = new Set();
+  const staleArtifactKeys = new Set();
   let generationSucceeded = false;
   let cleanupReason = 'aborted';
+  let shouldDeleteStaleArtifacts = false;
+
+  const normalizeArtifactKey = (key) => {
+    if (typeof key !== 'string') return '';
+    const trimmed = key.trim();
+    return trimmed;
+  };
 
   const registerArtifactKey = (key) => {
-    if (typeof key === 'string' && key) {
-      artifactCleanupKeys.add(key);
-    }
+    const normalized = normalizeArtifactKey(key);
+    if (!normalized) return;
+    artifactCleanupKeys.add(normalized);
+    staleArtifactKeys.delete(normalized);
   };
 
-  const cleanupArtifacts = async (reason) => {
-    if (!artifactCleanupKeys.size) {
+  const registerStaleArtifactKey = (key) => {
+    const normalized = normalizeArtifactKey(key);
+    if (!normalized) return;
+    const originalKey = normalizeArtifactKey(originalUploadKey);
+    if (originalKey && normalized === originalKey) {
       return;
     }
+    staleArtifactKeys.add(normalized);
+  };
 
-    const keys = Array.from(artifactCleanupKeys);
-    artifactCleanupKeys.clear();
-
-    const results = await Promise.allSettled(
-      keys.map((key) =>
-        s3.send(
-          new DeleteObjectCommand({
-            Bucket: bucket,
-            Key: key,
-          })
-        )
-      )
-    );
-
-    const deletedKeys = [];
-    const failedDeletes = [];
-
-    for (let index = 0; index < results.length; index += 1) {
-      const result = results[index];
-      const key = keys[index];
-      if (result.status === 'fulfilled') {
-        deletedKeys.push(key);
-      } else {
-        failedDeletes.push({ key, error: result.reason });
+  const createCleanupHandler = ({
+    keySet,
+    structuredEventName,
+    failedStructuredEventName,
+    logEventName,
+  }) => {
+    return async (reason) => {
+      if (!keySet.size) {
+        return;
       }
-    }
 
-    if (deletedKeys.length) {
-      logStructured('warn', 'generation_artifacts_cleaned_up', {
-        ...logContext,
-        reason,
-        deletedKeys,
-      });
-      if (logKey) {
-        try {
-          await logEvent({
-            s3,
-            bucket,
-            key: logKey,
-            jobId,
-            event: 'generation_artifacts_cleaned_up',
-            metadata: {
-              reason,
-              deletedCount: deletedKeys.length,
-              attemptedCount: keys.length,
-            },
-          });
-        } catch (logErr) {
-          logStructured('error', 'generation_cleanup_log_failed', {
-            ...logContext,
-            error: serializeError(logErr),
-          });
+      const keys = Array.from(keySet);
+      keySet.clear();
+
+      const results = await Promise.allSettled(
+        keys.map((key) =>
+          s3.send(
+            new DeleteObjectCommand({
+              Bucket: bucket,
+              Key: key,
+            })
+          )
+        )
+      );
+
+      const deletedKeys = [];
+      const failedDeletes = [];
+
+      for (let index = 0; index < results.length; index += 1) {
+        const result = results[index];
+        const key = keys[index];
+        if (result.status === 'fulfilled') {
+          deletedKeys.push(key);
+        } else {
+          failedDeletes.push({ key, error: result.reason });
         }
       }
-    }
 
-    if (failedDeletes.length) {
-      logStructured('error', 'generation_artifact_cleanup_failed', {
-        ...logContext,
-        reason,
-        failures: failedDeletes.map((entry) => ({
-          key: entry.key,
-          error: serializeError(entry.error),
-        })),
-      });
-    }
+      if (deletedKeys.length) {
+        logStructured('warn', structuredEventName, {
+          ...logContext,
+          reason,
+          deletedKeys,
+        });
+        if (logKey && logEventName) {
+          try {
+            await logEvent({
+              s3,
+              bucket,
+              key: logKey,
+              jobId,
+              event: logEventName,
+              metadata: {
+                reason,
+                deletedCount: deletedKeys.length,
+                attemptedCount: keys.length,
+              },
+            });
+          } catch (logErr) {
+            logStructured('error', 'generation_cleanup_log_failed', {
+              ...logContext,
+              cleanupEvent: logEventName,
+              error: serializeError(logErr),
+            });
+          }
+        }
+      }
+
+      if (failedDeletes.length) {
+        logStructured('error', failedStructuredEventName, {
+          ...logContext,
+          reason,
+          failures: failedDeletes.map((entry) => ({
+            key: entry.key,
+            error: serializeError(entry.error),
+          })),
+        });
+      }
+    };
   };
+
+  const cleanupArtifacts = createCleanupHandler({
+    keySet: artifactCleanupKeys,
+    structuredEventName: 'generation_artifacts_cleaned_up',
+    failedStructuredEventName: 'generation_artifact_cleanup_failed',
+    logEventName: 'generation_artifacts_cleaned_up',
+  });
+
+  const cleanupStaleArtifacts = createCleanupHandler({
+    keySet: staleArtifactKeys,
+    structuredEventName: 'generation_stale_artifacts_cleaned_up',
+    failedStructuredEventName: 'generation_stale_artifact_cleanup_failed',
+    logEventName: 'generation_stale_artifacts_cleaned_up',
+  });
 
   try {
   const sessionChangeLogKey = deriveSessionChangeLogKey({
     changeLogKey: existingRecord?.sessionChangeLogKey?.S,
     originalUploadKey,
   });
+
+  const readExistingArtifactKey = (field) => {
+    const attribute = existingRecord?.[field];
+    if (attribute && typeof attribute.S === 'string') {
+      return attribute.S.trim();
+    }
+    return '';
+  };
+
+  const existingArtifactKeys = {
+    cv1Url: readExistingArtifactKey('cv1Url'),
+    cv2Url: readExistingArtifactKey('cv2Url'),
+    coverLetter1Url: readExistingArtifactKey('coverLetter1Url'),
+    coverLetter2Url: readExistingArtifactKey('coverLetter2Url'),
+    originalTextKey: readExistingArtifactKey('originalTextKey'),
+    enhancedVersion1Key: readExistingArtifactKey('enhancedVersion1Key'),
+    enhancedVersion2Key: readExistingArtifactKey('enhancedVersion2Key'),
+    changeLogKey: readExistingArtifactKey('changeLogKey'),
+  };
   const stageMetadataKey = originalUploadKey
     ? `${originalUploadKey.replace(/[^/]+$/, '')}logs/log.json`
     : '';
@@ -14114,6 +14174,16 @@ async function generateEnhancedDocumentsResponse({
     registerArtifactKey(key);
     uploadedArtifacts.push({ type: name, key });
 
+    if (name === 'version1' && existingArtifactKeys.cv1Url && existingArtifactKeys.cv1Url !== key) {
+      registerStaleArtifactKey(existingArtifactKeys.cv1Url);
+    } else if (name === 'version2' && existingArtifactKeys.cv2Url && existingArtifactKeys.cv2Url !== key) {
+      registerStaleArtifactKey(existingArtifactKeys.cv2Url);
+    } else if (name === 'cover_letter1' && existingArtifactKeys.coverLetter1Url && existingArtifactKeys.coverLetter1Url !== key) {
+      registerStaleArtifactKey(existingArtifactKeys.coverLetter1Url);
+    } else if (name === 'cover_letter2' && existingArtifactKeys.coverLetter2Url && existingArtifactKeys.coverLetter2Url !== key) {
+      registerStaleArtifactKey(existingArtifactKeys.coverLetter2Url);
+    }
+
     const signedUrl = await getSignedUrl(
       s3,
       new GetObjectCommand({ Bucket: bucket, Key: key }),
@@ -14226,6 +14296,24 @@ async function generateEnhancedDocumentsResponse({
     registerArtifactKey(key);
     uploadedArtifacts.push({ type: artifact.type, key });
     textArtifactKeys[artifact.type] = key;
+
+    if (artifact.type === 'original_text') {
+      if (existingArtifactKeys.originalTextKey && existingArtifactKeys.originalTextKey !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.originalTextKey);
+      }
+    } else if (artifact.type === 'version1_text') {
+      if (existingArtifactKeys.enhancedVersion1Key && existingArtifactKeys.enhancedVersion1Key !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.enhancedVersion1Key);
+      }
+    } else if (artifact.type === 'version2_text') {
+      if (existingArtifactKeys.enhancedVersion2Key && existingArtifactKeys.enhancedVersion2Key !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.enhancedVersion2Key);
+      }
+    } else if (artifact.type === 'change_log') {
+      if (existingArtifactKeys.changeLogKey && existingArtifactKeys.changeLogKey !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.changeLogKey);
+      }
+    }
   }
 
   if (sessionChangeLogKey) {
@@ -14309,6 +14397,60 @@ async function generateEnhancedDocumentsResponse({
     );
     return null;
   }
+
+  const addedSkills = sanitizedFallbackUsed
+    ? []
+    : Array.from(
+        new Set(
+          (bestMatch.table || [])
+            .filter((row) =>
+              row.matched &&
+              originalMatchResult.table?.some(
+                (baselineRow) =>
+                  baselineRow.skill === row.skill && !baselineRow.matched
+              )
+            )
+            .map((row) => row.skill)
+            .concat(geminiAddedSkills)
+        )
+      );
+
+  const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
+    jobSkills,
+    resumeSkills: extractResumeSkills(combinedProfile),
+    jobText: jobDescription,
+  });
+  const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
+  const baselineAtsScores = scoreBreakdownToArray(baselineScoreBreakdown);
+
+  const selectionInsights = buildSelectionInsights({
+    jobTitle: versionsContext.jobTitle,
+    originalTitle: applicantTitle,
+    modifiedTitle: modifiedTitle || applicantTitle,
+    jobDescriptionText: jobDescription,
+    bestMatch,
+    originalMatch: originalMatchResult,
+    missingSkills: bestMatch.newSkills,
+    addedSkills,
+    scoreBreakdown: finalScoreBreakdown,
+    baselineScoreBreakdown,
+    resumeExperience,
+    linkedinExperience,
+    knownCertificates,
+    certificateSuggestions,
+    manualCertificatesRequired,
+  });
+
+  const atsScoreBefore = Number.isFinite(originalMatchResult.score)
+    ? originalMatchResult.score
+    : bestMatch.score;
+  const atsScoreAfter = bestMatch.score;
+
+  logStructured('info', 'generation_completed', {
+    ...logContext,
+    enhancedScore: bestMatch.score,
+    outputs: normalizedUrls.length,
+  });
 
   let generationCompletedAt = null;
 
@@ -14408,6 +14550,9 @@ async function generateEnhancedDocumentsResponse({
             'jobId = :jobId AND (#status = :statusScored OR #status = :statusCompleted)',
         })
       );
+      if (staleArtifactKeys.size) {
+        shouldDeleteStaleArtifacts = true;
+      }
       await logEvent({
         s3,
         bucket,
@@ -14424,56 +14569,17 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  const addedSkills = sanitizedFallbackUsed
-    ? []
-    : Array.from(
-        new Set(
-          (bestMatch.table || [])
-            .filter((row) =>
-              row.matched &&
-              originalMatchResult.table?.some(
-                (baselineRow) =>
-                  baselineRow.skill === row.skill && !baselineRow.matched
-              )
-            )
-            .map((row) => row.skill)
-            .concat(geminiAddedSkills)
-        )
-      );
+  generationSucceeded = true;
+  cleanupReason = 'completed';
 
-  const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
-    jobSkills,
-    resumeSkills: extractResumeSkills(combinedProfile),
-    jobText: jobDescription,
-  });
-  const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
-  const baselineAtsScores = scoreBreakdownToArray(baselineScoreBreakdown);
-
-  const selectionInsights = buildSelectionInsights({
-    jobTitle: versionsContext.jobTitle,
-    originalTitle: applicantTitle,
-    modifiedTitle: modifiedTitle || applicantTitle,
-    jobDescriptionText: jobDescription,
-    bestMatch,
-    originalMatch: originalMatchResult,
-    missingSkills: bestMatch.newSkills,
-    addedSkills,
-    scoreBreakdown: finalScoreBreakdown,
-    baselineScoreBreakdown,
-    resumeExperience,
-    linkedinExperience,
-    knownCertificates,
-    certificateSuggestions,
-    manualCertificatesRequired,
-  });
-
-  logStructured('info', 'generation_completed', {
-    ...logContext,
-    enhancedScore: bestMatch.score,
-    outputs: normalizedUrls.length,
-  });
-
-  await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
+  try {
+    await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
+  } catch (err) {
+    logStructured('warn', 'generation_completed_log_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+  }
 
   await updateStageMetadata({
     s3,
@@ -14488,13 +14594,9 @@ async function generateEnhancedDocumentsResponse({
     logContext,
   });
 
-  const atsScoreBefore = Number.isFinite(originalMatchResult.score)
-    ? originalMatchResult.score
-    : bestMatch.score;
-  const atsScoreAfter = bestMatch.score;
-
-  generationSucceeded = true;
-  cleanupReason = 'completed';
+  if (shouldDeleteStaleArtifacts) {
+    await cleanupStaleArtifacts('replaced');
+  }
 
   return {
     success: true,
