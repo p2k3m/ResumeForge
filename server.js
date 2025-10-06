@@ -6108,6 +6108,20 @@ function buildTemplateContactEntries(contactLines = []) {
     .filter(Boolean);
 }
 
+function isCoverLetterDocument(documentType) {
+  if (!documentType) return false;
+  const normalized = String(documentType)
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+  return normalized === 'coverletter';
+}
+
+function isCoverTemplateId(templateId) {
+  if (!templateId) return false;
+  const normalized = String(templateId).toLowerCase();
+  return normalized.startsWith('cover') || normalized.includes('coverletter');
+}
+
 const defaultPlainPdfLoaders = {
   pdfLibLoader: () => import('pdf-lib'),
   pdfKitLoader: () => import('pdfkit'),
@@ -6180,6 +6194,7 @@ function createMinimalPlainPdfBuffer({
   jobTitle,
   contactLines = [],
   documentType = 'resume',
+  requestedTemplateId,
 }) {
   const headerLines = [];
   const trimmedName = typeof name === 'string' ? name.trim() : '';
@@ -6199,9 +6214,13 @@ function createMinimalPlainPdfBuffer({
       headerLines.push(contact);
     }
   }
-  if (documentType === 'cover_letter') {
+  const shouldIncludeCoverHeading =
+    (isCoverLetterDocument(documentType) || isCoverTemplateId(requestedTemplateId)) &&
+    !headerLines.some((line) => line.trim().toLowerCase() === 'cover letter');
+  if (shouldIncludeCoverHeading) {
     headerLines.push('Cover Letter');
   }
+
 
   const bodyLines = [];
   (Array.isArray(lines) ? lines : []).forEach((rawLine) => {
@@ -6434,7 +6453,9 @@ async function generatePlainPdfFallback({
         y -= lineGap / 2;
       }
 
-      if (documentType === 'cover_letter') {
+      const includeCoverHeading =
+        isCoverLetterDocument(documentType) || isCoverTemplateId(requestedTemplateId);
+      if (includeCoverHeading) {
         ensureSpace();
         page.drawText('Cover Letter', {
           x: margin,
@@ -6538,7 +6559,9 @@ async function generatePlainPdfFallback({
             doc.moveDown(0.35);
           }
 
-          if (documentType === 'cover_letter') {
+          const includeCoverHeading =
+            isCoverLetterDocument(documentType) || isCoverTemplateId(requestedTemplateId);
+          if (includeCoverHeading) {
             doc.font('Helvetica-Bold').fontSize(14).text('Cover Letter', { width: pageWidth });
             doc.moveDown(0.5);
           }
@@ -6612,6 +6635,7 @@ async function generatePlainPdfFallback({
       jobTitle,
       contactLines,
       documentType,
+      requestedTemplateId,
     });
     logStructured('warn', 'pdf_plain_fallback_minimal_generated', {
       ...baseLog,
@@ -7315,6 +7339,21 @@ let generatePdf = async function (
           lineGap,
         })
         .fillColor(style.textColor);
+
+      const includeCoverHeading =
+        isCoverLetterDocument(fallbackDocumentType) ||
+        isCoverTemplateId(requestedTemplateId);
+      if (includeCoverHeading) {
+        doc
+          .font(style.bold)
+          .fillColor(style.headingColor)
+          .fontSize(style.headingFontSize || 14)
+          .text('Cover Letter', {
+            paragraphGap,
+            lineGap,
+          })
+          .fillColor(style.textColor);
+      }
 
       data.sections.forEach((sec) => {
         const headingText = style.headingUppercase ? sec.heading?.toUpperCase() : sec.heading;
