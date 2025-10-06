@@ -13312,6 +13312,90 @@ async function generateEnhancedDocumentsResponse({
     return null;
   }
 
+  const artifactCleanupKeys = new Set();
+  let generationSucceeded = false;
+  let cleanupReason = 'aborted';
+
+  const registerArtifactKey = (key) => {
+    if (typeof key === 'string' && key) {
+      artifactCleanupKeys.add(key);
+    }
+  };
+
+  const cleanupArtifacts = async (reason) => {
+    if (!artifactCleanupKeys.size) {
+      return;
+    }
+
+    const keys = Array.from(artifactCleanupKeys);
+    artifactCleanupKeys.clear();
+
+    const results = await Promise.allSettled(
+      keys.map((key) =>
+        s3.send(
+          new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          })
+        )
+      )
+    );
+
+    const deletedKeys = [];
+    const failedDeletes = [];
+
+    for (let index = 0; index < results.length; index += 1) {
+      const result = results[index];
+      const key = keys[index];
+      if (result.status === 'fulfilled') {
+        deletedKeys.push(key);
+      } else {
+        failedDeletes.push({ key, error: result.reason });
+      }
+    }
+
+    if (deletedKeys.length) {
+      logStructured('warn', 'generation_artifacts_cleaned_up', {
+        ...logContext,
+        reason,
+        deletedKeys,
+      });
+      if (logKey) {
+        try {
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'generation_artifacts_cleaned_up',
+            metadata: {
+              reason,
+              deletedCount: deletedKeys.length,
+              attemptedCount: keys.length,
+            },
+          });
+        } catch (logErr) {
+          logStructured('error', 'generation_cleanup_log_failed', {
+            ...logContext,
+            error: serializeError(logErr),
+          });
+        }
+      }
+    }
+
+    if (failedDeletes.length) {
+      logStructured('error', 'generation_artifact_cleanup_failed', {
+        ...logContext,
+        reason,
+        failures: failedDeletes.map((entry) => ({
+          key: entry.key,
+          error: serializeError(entry.error),
+        })),
+      });
+    }
+  };
+
+  try {
   const sessionChangeLogKey = deriveSessionChangeLogKey({
     changeLogKey: existingRecord?.sessionChangeLogKey?.S,
     originalUploadKey,
@@ -13633,6 +13717,7 @@ async function generateEnhancedDocumentsResponse({
   }
 
   if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
+    cleanupReason = 'variants_unavailable';
     await logEvent({
       s3,
       bucket,
@@ -14026,6 +14111,7 @@ async function generateEnhancedDocumentsResponse({
       })
     );
 
+    registerArtifactKey(key);
     uploadedArtifacts.push({ type: name, key });
 
     const signedUrl = await getSignedUrl(
@@ -14137,6 +14223,7 @@ async function generateEnhancedDocumentsResponse({
         ContentType: 'application/json',
       })
     );
+    registerArtifactKey(key);
     uploadedArtifacts.push({ type: artifact.type, key });
     textArtifactKeys[artifact.type] = key;
   }
@@ -14181,6 +14268,7 @@ async function generateEnhancedDocumentsResponse({
   });
 
   if (urls.length === 0) {
+    cleanupReason = 'no_outputs';
     await logEvent({
       s3,
       bucket,
@@ -14199,6 +14287,7 @@ async function generateEnhancedDocumentsResponse({
   const normalizedUrls = ensureOutputFileUrls(urls);
 
   if (normalizedUrls.length === 0) {
+    cleanupReason = 'no_valid_urls';
     await logEvent({
       s3,
       bucket,
@@ -14404,6 +14493,9 @@ async function generateEnhancedDocumentsResponse({
     : bestMatch.score;
   const atsScoreAfter = bestMatch.score;
 
+  generationSucceeded = true;
+  cleanupReason = 'completed';
+
   return {
     success: true,
     requestId,
@@ -14453,6 +14545,16 @@ async function generateEnhancedDocumentsResponse({
     },
     messages: generationMessages,
   };
+  } catch (err) {
+    if (cleanupReason === 'aborted') {
+      cleanupReason = 'error';
+    }
+    throw err;
+  } finally {
+    if (!generationSucceeded) {
+      await cleanupArtifacts(cleanupReason);
+    }
+  }
 }
 
 
