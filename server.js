@@ -6356,17 +6356,20 @@ let generatePdf = async function (
           requestedTemplateId,
           dependency: 'pdf-lib',
         });
-        logStructured('info', 'pdf_template_fallback_applied', {
-          requestedTemplateId,
-          fallbackTemplateId: templateId,
-          strategy: 'html_template_render',
-        });
       } else {
-        const templateError = new Error(CV_GENERATION_ERROR_MESSAGE);
-        templateError.code = 'TEMPLATE_RENDER_FAILED';
-        templateError.cause = err;
-        throw templateError;
+        logStructured('warn', 'pdf_renderer_error_recovered', {
+          templateId,
+          requestedTemplateId,
+          errorCode: err?.code,
+          errorMessage: err?.message,
+        });
       }
+      logStructured('info', 'pdf_template_fallback_applied', {
+        requestedTemplateId,
+        fallbackTemplateId: templateId,
+        strategy: 'html_template_render',
+        reason: err?.code || err?.message || 'unknown_error',
+      });
     }
   }
   let html;
