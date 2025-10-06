@@ -523,6 +523,8 @@ describe('/api/process-cv', () => {
       expect(entry.templateName.trim().length).toBeGreaterThan(0);
       expect(entry.templateId).toEqual(expect.any(String));
       expect(entry.templateId.trim().length).toBeGreaterThan(0);
+      expect(entry.storageKey).toEqual(expect.any(String));
+      expect(entry.storageKey.trim().length).toBeGreaterThan(0);
       if (entry.type === 'original_upload' || entry.type === 'version1' || entry.type === 'version2') {
         expect(entry.templateType).toBe('resume');
       } else if (entry.type === 'cover_letter1' || entry.type === 'cover_letter2') {
@@ -552,6 +554,86 @@ describe('/api/process-cv', () => {
     );
 
     getSignedUrlMock.mockImplementation(defaultSignedUrlImplementation);
+  });
+
+  describe('download link refresh', () => {
+    afterEach(() => {
+      setupDefaultDynamoMock();
+    });
+
+    test('resigns an existing artifact key for the active job', async () => {
+      getSignedUrlMock.mockClear();
+      const storageKey = 'cv/candidate/2024-01-01/job-123/runs/run-1/resume.pdf';
+
+      mockDynamoSend.mockImplementation((cmd) => {
+        switch (cmd.__type) {
+          case 'DescribeTableCommand':
+            return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+          case 'GetItemCommand':
+            return Promise.resolve({
+              Item: {
+                jobId: { S: 'job-123' },
+                s3Bucket: { S: 'test-bucket' },
+                s3Key: { S: 'cv/candidate/original.pdf' },
+                cv1Url: { S: storageKey },
+              },
+            });
+          default:
+            return Promise.resolve({});
+        }
+      });
+
+      const response = await request(app)
+        .post('/api/refresh-download-link')
+        .send({ jobId: 'job-123', storageKey });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: true,
+          storageKey,
+          url: expect.stringContaining(storageKey),
+          expiresAt: expect.any(String),
+        })
+      );
+      expect(getSignedUrlMock).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ input: expect.objectContaining({ Key: storageKey }) }),
+        expect.objectContaining({ expiresIn: 3600 })
+      );
+    });
+
+    test('returns not found when the storage key does not match the job context', async () => {
+      mockDynamoSend.mockImplementation((cmd) => {
+        switch (cmd.__type) {
+          case 'DescribeTableCommand':
+            return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+          case 'GetItemCommand':
+            return Promise.resolve({
+              Item: {
+                jobId: { S: 'job-123' },
+                s3Bucket: { S: 'test-bucket' },
+                s3Key: { S: 'cv/candidate/original.pdf' },
+                cv1Url: { S: 'cv/candidate/runs/run-1/resume.pdf' },
+              },
+            });
+          default:
+            return Promise.resolve({});
+        }
+      });
+
+      const response = await request(app)
+        .post('/api/refresh-download-link')
+        .send({ jobId: 'job-123', storageKey: 'cv/candidate/runs/run-2/resume.pdf' });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          success: false,
+          error: expect.objectContaining({ code: 'DOWNLOAD_NOT_FOUND' }),
+        })
+      );
+    });
   });
 
   test('cover letter urls include structured metadata', async () => {

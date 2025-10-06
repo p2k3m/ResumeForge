@@ -2811,19 +2811,233 @@ function App() {
     )
   }
 
+  const refreshDownloadLink = useCallback(
+    async (file, { silent = false } = {}) => {
+      const fallbackMessage =
+        'Unable to refresh the download link. Please try again.'
+      if (!file || typeof file !== 'object') {
+        if (!silent) {
+          setError('Download link is unavailable. Please regenerate the document.')
+        }
+        const err = new Error('DOWNLOAD_ENTRY_INVALID')
+        err.message = 'Download link is unavailable. Please regenerate the document.'
+        throw err
+      }
+
+      const storageKey =
+        typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
+      if (!storageKey) {
+        if (!silent) {
+          setError('Download link is unavailable. Please regenerate the document.')
+        }
+        const err = new Error('DOWNLOAD_KEY_MISSING')
+        err.message = 'Download link is unavailable. Please regenerate the document.'
+        throw err
+      }
+
+      if (!jobId) {
+        if (!silent) {
+          setError('Upload your resume and job description before generating downloads.')
+        }
+        const err = new Error('JOB_ID_REQUIRED')
+        err.message = 'Upload your resume and job description before generating downloads.'
+        throw err
+      }
+
+      const payload = { jobId, storageKey }
+      if (typeof file.type === 'string' && file.type.trim()) {
+        payload.type = file.type.trim()
+      }
+      if (userIdentifier) {
+        payload.userId = userIdentifier
+      }
+      if (typeof file.linkedinProfileUrl === 'string' && file.linkedinProfileUrl.trim()) {
+        payload.linkedinProfileUrl = file.linkedinProfileUrl.trim()
+      }
+
+      let response
+      try {
+        response = await fetch(
+          buildApiUrl(API_BASE_URL, '/api/refresh-download-link'),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          }
+        )
+      } catch (err) {
+        if (!silent) {
+          setError(fallbackMessage)
+        }
+        const error = err instanceof Error ? err : new Error(fallbackMessage)
+        if (!error.message) {
+          error.message = fallbackMessage
+        }
+        throw error
+      }
+
+      const data = await response.json().catch(() => ({}))
+      const errorMessage =
+        (data?.error && data.error.message) ||
+        (typeof data?.message === 'string' ? data.message : undefined) ||
+        (typeof data?.error === 'string' ? data.error : undefined) ||
+        fallbackMessage
+
+      if (!response.ok) {
+        if (!silent) {
+          setError(errorMessage)
+        }
+        const err = new Error(errorMessage)
+        err.code = data?.error?.code || 'DOWNLOAD_REFRESH_FAILED'
+        throw err
+      }
+
+      const refreshedUrl = typeof data.url === 'string' ? data.url.trim() : ''
+      if (!refreshedUrl) {
+        const message =
+          'Download link is unavailable after refresh. Please regenerate the document.'
+        if (!silent) {
+          setError(message)
+        }
+        const err = new Error(message)
+        err.code = 'DOWNLOAD_URL_MISSING'
+        throw err
+      }
+
+      const refreshedExpiresAt =
+        typeof data.expiresAt === 'string' ? data.expiresAt.trim() : ''
+      const refreshedAtIso = new Date().toISOString()
+      const typeFragment =
+        (typeof file.type === 'string' && file.type.trim()) || 'download'
+      const updatedFields = {
+        url: refreshedUrl,
+        fileUrl: refreshedUrl,
+        typeUrl: `${refreshedUrl}#${encodeURIComponent(typeFragment)}`,
+        expiresAt: refreshedExpiresAt,
+        refreshedAt: refreshedAtIso,
+        storageKey
+      }
+
+      let refreshedEntry = null
+
+      setOutputFiles((prev) => {
+        if (!Array.isArray(prev) || prev.length === 0) {
+          return prev
+        }
+        let changed = false
+        const next = prev.map((entry) => {
+          if (!entry || typeof entry !== 'object') return entry
+          const entryKey =
+            typeof entry.storageKey === 'string' ? entry.storageKey.trim() : ''
+          const matchesKey = entryKey && entryKey === storageKey
+          const matchesType = !entryKey && entry.type === file.type
+          if (!matchesKey && !matchesType) {
+            return entry
+          }
+          changed = true
+          const merged = { ...entry, ...updatedFields }
+          refreshedEntry = merged
+          return merged
+        })
+        return changed ? next : prev
+      })
+
+      setPreviewFile((prev) => {
+        if (!prev || typeof prev !== 'object') return prev
+        const entryKey =
+          typeof prev.storageKey === 'string' ? prev.storageKey.trim() : ''
+        const matchesKey = entryKey && entryKey === storageKey
+        const matchesType = !entryKey && prev.type === file.type
+        if (!matchesKey && !matchesType) {
+          return prev
+        }
+        return { ...prev, ...updatedFields }
+      })
+
+      setPendingDownloadFile((prev) => {
+        if (!prev || typeof prev !== 'object') return prev
+        const entryKey =
+          typeof prev.storageKey === 'string' ? prev.storageKey.trim() : ''
+        const matchesKey = entryKey && entryKey === storageKey
+        const matchesType = !entryKey && prev.type === file.type
+        if (!matchesKey && !matchesType) {
+          return prev
+        }
+        return { ...prev, ...updatedFields }
+      })
+
+      if (!refreshedEntry) {
+        refreshedEntry = { ...file, ...updatedFields }
+      }
+
+      return refreshedEntry
+    },
+    [API_BASE_URL, jobId, userIdentifier, setError, setOutputFiles, setPreviewFile, setPendingDownloadFile]
+  )
+
   const handleDownloadFile = useCallback(
     async (file) => {
       if (!file || typeof file !== 'object') {
         setError('Unable to download this document. Please try again.')
         return
       }
-      const presentation = file.presentation || getDownloadPresentation(file)
+      let activeFile = file
+      const presentation =
+        activeFile.presentation || getDownloadPresentation(activeFile)
       if (typeof window === 'undefined' || typeof document === 'undefined') {
         setError('Download is not supported in this environment.')
         return
       }
-      const stateKeyBase = getDownloadStateKey(file)
-      const downloadUrl = typeof file.url === 'string' ? file.url.trim() : ''
+      const stateKeyBase = getDownloadStateKey(activeFile)
+      let downloadUrl =
+        typeof activeFile.url === 'string' ? activeFile.url.trim() : ''
+      let expiresAtIso =
+        typeof activeFile.expiresAt === 'string' ? activeFile.expiresAt.trim() : ''
+      const storageKey =
+        typeof activeFile.storageKey === 'string' ? activeFile.storageKey.trim() : ''
+      const canRefresh = Boolean(storageKey)
+      const computeIsExpired = (value) => {
+        if (!value) return false
+        const expiryDate = new Date(value)
+        if (Number.isNaN(expiryDate.getTime())) {
+          return false
+        }
+        return expiryDate.getTime() <= Date.now()
+      }
+      let isExpired = computeIsExpired(expiresAtIso)
+
+      if ((!downloadUrl || isExpired) && canRefresh) {
+        try {
+          const refreshed = await refreshDownloadLink(activeFile, { silent: true })
+          if (refreshed && typeof refreshed === 'object') {
+            activeFile = { ...activeFile, ...refreshed }
+            downloadUrl =
+              typeof activeFile.url === 'string' ? activeFile.url.trim() : ''
+            expiresAtIso =
+              typeof activeFile.expiresAt === 'string'
+                ? activeFile.expiresAt.trim()
+                : ''
+            isExpired = computeIsExpired(expiresAtIso)
+          }
+        } catch (refreshErr) {
+          const refreshMessage =
+            refreshErr?.message ||
+            'Unable to refresh the download link. Please try again.'
+          setError(refreshMessage)
+          if (stateKeyBase) {
+            setDownloadStates((prev) => ({
+              ...prev,
+              [stateKeyBase]: {
+                status: 'idle',
+                error: 'Download link expired. Try refreshing again.'
+              }
+            }))
+          }
+          setPendingDownloadFile(null)
+          return
+        }
+      }
+
       if (!downloadUrl) {
         setError('Download link is unavailable. Please regenerate the document.')
         if (stateKeyBase) {
@@ -2839,7 +3053,7 @@ function App() {
         ? getDownloadStateKey(previewFile) || (typeof previewFile.url === 'string' ? previewFile.url : '')
         : ''
       if (previewStateKey !== stateKey) {
-        openDownloadPreview(file, { requireDownloadConfirmation: true })
+        openDownloadPreview(activeFile, { requireDownloadConfirmation: true })
         return
       }
       setDownloadStates((prev) => ({
@@ -2879,9 +3093,11 @@ function App() {
           rawBlob,
           { contentType: responseContentType }
         )
-        const templateMeta = file.templateMeta || downloadTemplateMetadata[file.type] || {}
-        const fileTimestamp = file.generatedAt || downloadGeneratedAt || Date.now()
-        const fileName = deriveDownloadFileName(file, presentation, response, {
+        const templateMeta =
+          activeFile.templateMeta || downloadTemplateMetadata[activeFile.type] || {}
+        const fileTimestamp =
+          activeFile.generatedAt || downloadGeneratedAt || Date.now()
+        const fileName = deriveDownloadFileName(activeFile, presentation, response, {
           templateName: templateMeta.name,
           templateId: templateMeta.id,
           generatedAt: fileTimestamp,
@@ -2927,7 +3143,7 @@ function App() {
         }
         setPendingDownloadFile(null)
       }
-    },
+  },
     [
       downloadGeneratedAt,
       downloadTemplateMetadata,
@@ -2935,7 +3151,8 @@ function App() {
       setPendingDownloadFile,
       previewFile,
       openDownloadPreview,
-      resetUiAfterDownload
+      resetUiAfterDownload,
+      refreshDownloadLink
     ]
   )
 
@@ -2971,6 +3188,9 @@ function App() {
         })
       : null
     const downloadUrl = typeof file.url === 'string' ? file.url : ''
+    const storageKey =
+      typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
+    const canRefresh = Boolean(storageKey)
     const isExpired = Boolean(isExpiryValid && expiryDate.getTime() <= Date.now())
     const isCoverLetter = presentation.category === 'cover' && isCoverLetterType(file.type)
     const coverDraftText = isCoverLetter ? coverLetterDrafts[file.type] ?? '' : ''
@@ -2985,13 +3205,16 @@ function App() {
     const isDownloading = downloadState?.status === 'loading'
     const downloadError = downloadState?.error || ''
     const derivedDownloadError = isExpired
-      ? 'This link has expired. Generate the enhanced documents again to refresh it.'
+      ? canRefresh
+        ? 'This link expired. Select Download to refresh it automatically.'
+        : 'This link has expired. Regenerate the documents to refresh it.'
       : !downloadUrl
         ? 'Download link unavailable. Please regenerate the document.'
         : downloadError
-    const isDownloadUnavailable = isDownloading || !downloadUrl || isExpired
+    const isDownloadUnavailable =
+      isDownloading || !downloadUrl || (isExpired && !canRefresh)
     const isCoverLetterDownloadDisabled = isCoverLetter
-      ? !downloadUrl || isExpired
+      ? !downloadUrl || (isExpired && !canRefresh)
       : isDownloadUnavailable
     const templateNameValue =
       (typeof templateMeta?.name === 'string' && templateMeta.name.trim()) ||
@@ -3004,7 +3227,7 @@ function App() {
       (typeof file.coverTemplateId === 'string' && file.coverTemplateId.trim()) ||
       (typeof file.template === 'string' && file.template.trim()) ||
       ''
-    const directDownloadDisabled = !downloadUrl || isExpired
+    const directDownloadDisabled = !downloadUrl || (isExpired && !canRefresh)
     const directDownloadFileName = !directDownloadDisabled
       ? deriveDownloadFileName(file, presentation, null, {
           templateName: templateNameValue,
@@ -3033,11 +3256,11 @@ function App() {
     }`
     const downloadButtonLabel = (() => {
       if (isCoverLetter) {
-        if (isExpired) return 'Link expired'
+        if (isExpired) return canRefresh ? 'Refresh link' : 'Link expired'
         if (isDownloading) return 'Downloading…'
         return 'Preview before download'
       }
-      if (isExpired) return 'Link expired'
+      if (isExpired) return canRefresh ? 'Refresh link' : 'Link expired'
       if (isDownloading) return 'Downloading…'
       return 'Preview & Download'
     })()
@@ -3068,7 +3291,7 @@ function App() {
               type="button"
               onClick={() => {
                 const canDownload = isCoverLetter
-                  ? Boolean(downloadUrl) && !isExpired
+                  ? Boolean(downloadUrl) && (!isExpired || canRefresh)
                   : !isDownloadUnavailable
                 if (!canDownload) {
                   return
@@ -3088,10 +3311,17 @@ function App() {
           <div className="flex flex-col items-start gap-1 sm:items-end">
             <a
               href={directDownloadDisabled ? undefined : downloadUrl}
-              onClick={(event) => {
+              onClick={async (event) => {
                 if (directDownloadDisabled) {
                   event.preventDefault()
                   event.stopPropagation()
+                  if (isExpired && canRefresh) {
+                    try {
+                      await refreshDownloadLink(file)
+                    } catch (refreshErr) {
+                      console.warn('Download link refresh failed', refreshErr)
+                    }
+                  }
                 }
               }}
               className={downloadLinkClass}
@@ -3107,7 +3337,9 @@ function App() {
             )}
             {expiryLabel && isExpired && (
               <p className="text-xs font-semibold text-rose-600">
-                Expired on {expiryLabel}. Generate the documents again to refresh the download link.
+                {canRefresh
+                  ? `Expired on ${expiryLabel}. Select Download to refresh the link automatically.`
+                  : `Expired on ${expiryLabel}. Generate the documents again to refresh the download link.`}
               </p>
             )}
           </div>
@@ -3140,7 +3372,8 @@ function App() {
     coverLetterDrafts,
     coverLetterOriginals,
     coverLetterReviewState,
-    downloadStates
+    downloadStates,
+    refreshDownloadLink
   ])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
@@ -6443,9 +6676,15 @@ function App() {
             const expiryValid = expiryDate && !Number.isNaN(expiryDate.getTime())
             const previewExpired = Boolean(expiryValid && expiryDate.getTime() <= Date.now())
             const previewHasUrl = typeof previewFile.url === 'string' && previewFile.url
+            const previewStorageKey =
+              typeof previewFile.storageKey === 'string'
+                ? previewFile.storageKey.trim()
+                : ''
+            const previewCanRefresh = Boolean(previewStorageKey)
             const previewPresentation =
               previewFile.presentation || getDownloadPresentation(previewFile)
-            const previewButtonDisabled = previewIsDownloading || previewExpired || !previewHasUrl
+            const previewButtonDisabled =
+              previewIsDownloading || (!previewHasUrl && !previewCanRefresh)
             const previewLinkDisabled = previewExpired || !previewHasUrl
             const previewTemplateMeta = previewFile.templateMeta || {}
             const previewTemplateName =
@@ -6477,9 +6716,10 @@ function App() {
             }`
 
             const downloadButtonLabel = (() => {
-              if (previewExpired) return 'Link expired'
-              if (!previewHasUrl) return 'Link unavailable'
-              return previewIsDownloading ? 'Downloading…' : 'Download PDF'
+              if (previewIsDownloading) return 'Downloading…'
+              if (previewExpired) return previewCanRefresh ? 'Refresh link' : 'Link expired'
+              if (!previewHasUrl) return previewCanRefresh ? 'Refresh link' : 'Link unavailable'
+              return 'Download PDF'
             })()
 
             return (
@@ -6537,12 +6777,16 @@ function App() {
                       )}
                       {!previewHasUrl && (
                         <span className="block font-semibold text-rose-600">
-                          Download link unavailable. Please regenerate the document.
+                          {previewCanRefresh
+                            ? 'Download link unavailable. Select Download to refresh it automatically.'
+                            : 'Download link unavailable. Please regenerate the document.'}
                         </span>
                       )}
                       {previewExpired && (
                         <span className="block font-semibold text-rose-600">
-                          This link has expired. Regenerate the documents to refresh the download.
+                          {previewCanRefresh
+                            ? 'This link expired. Select Download to refresh it automatically.'
+                            : 'This link has expired. Regenerate the documents to refresh the download.'}
                         </span>
                       )}
                     </div>
@@ -6550,10 +6794,17 @@ function App() {
                       {previewHasUrl && (
                         <a
                           href={previewLinkDisabled ? undefined : previewFile.url}
-                          onClick={(event) => {
+                          onClick={async (event) => {
                             if (previewLinkDisabled) {
                               event.preventDefault()
                               event.stopPropagation()
+                              if (previewCanRefresh) {
+                                try {
+                                  await refreshDownloadLink(previewFile)
+                                } catch (refreshErr) {
+                                  console.warn('Preview download refresh failed', refreshErr)
+                                }
+                              }
                             }
                           }}
                           className={previewDownloadLinkClass}
