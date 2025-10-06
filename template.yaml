@@ -116,6 +116,32 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
 
+  DataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateDataBucketCondition
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowLambdaBucketActions
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt ResumeForgeFunctionRole.Arn
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource:
+              - !Sub arn:aws:s3:::${DataBucket}/*
+          - Sid: AllowLambdaListBucket
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt ResumeForgeFunctionRole.Arn
+            Action:
+              - s3:ListBucket
+            Resource: !Sub arn:aws:s3:::${DataBucket}
+
   ResumeForgeTable:
     Type: AWS::DynamoDB::Table
     Condition: CreateResumeTableCondition
