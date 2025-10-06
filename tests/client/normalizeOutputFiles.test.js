@@ -159,4 +159,65 @@ describe('normalizeOutputFiles', () => {
 
     expect(result).toHaveLength(0)
   })
+
+  it('strips unusable nested fields and preserves trimmed metadata', () => {
+    const input = [
+      {
+        type: 'version1',
+        url: ' https://cdn.example.com/enhanced.pdf ',
+        generatedAt: '2025-01-01T00:00:00Z',
+        updatedAt: new Date('2025-01-01T00:00:00Z'),
+        expiresAt: '2025-01-01T01:00:00Z',
+        templateId: ' modern ',
+        templateName: ' Modern Layout ',
+        templateMeta: {
+          id: ' modern ',
+          name: ' Modern Layout ',
+          description: ' Detailed info ',
+          extra: 'remove',
+        },
+        download: {
+          href: 'https://cdn.example.com/enhanced.pdf',
+          text: '  Cover text  ',
+        },
+        payload: { debug: true },
+        tags: ['preview'],
+        presentation: {
+          label: ' Enhanced CV ',
+          badgeText: ' Primary ',
+          autoPreviewPriority: 3,
+          meta: { skip: true },
+        },
+      },
+    ]
+
+    const result = normalizeOutputFiles(input)
+
+    expect(result).toEqual([
+      {
+        type: 'version1',
+        url: 'https://cdn.example.com/enhanced.pdf',
+        generatedAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        expiresAt: '2025-01-01T01:00:00.000Z',
+        templateId: 'modern',
+        templateName: 'Modern Layout',
+        templateMeta: {
+          id: 'modern',
+          name: 'Modern Layout',
+          description: 'Detailed info',
+        },
+        text: 'Cover text',
+        presentation: {
+          label: 'Enhanced CV',
+          badgeText: 'Primary',
+          autoPreviewPriority: 3,
+        },
+      },
+    ])
+
+    expect(result[0]).not.toHaveProperty('download')
+    expect(result[0]).not.toHaveProperty('payload')
+    expect(result[0]).not.toHaveProperty('tags')
+  })
 })

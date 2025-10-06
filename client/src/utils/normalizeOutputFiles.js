@@ -52,6 +52,41 @@ const KNOWN_AUTO_TYPES = new Set([
   'cover_letter2'
 ])
 
+const PRESERVED_STRING_FIELDS = [
+  'fileName',
+  'title',
+  'template',
+  'templateId',
+  'templateName',
+  'coverTemplate',
+  'coverTemplateId',
+  'coverTemplateName'
+]
+
+const TEMPLATE_META_STRING_FIELDS = [
+  'id',
+  'name',
+  'variant',
+  'category',
+  'template',
+  'type',
+  'description',
+  'label'
+]
+
+const PRESENTATION_STRING_FIELDS = [
+  'label',
+  'description',
+  'badgeText',
+  'badgeStyle',
+  'buttonStyle',
+  'secondaryButtonStyle',
+  'cardAccent',
+  'cardBorder',
+  'linkLabel',
+  'category'
+]
+
 const BANNED_STATUS_PATTERNS = [
   /\btest(ing)?\b/i,
   /\bpreview\b/i,
@@ -468,6 +503,139 @@ function deriveType(entry = {}, fallbackType = '', index = 0) {
   return `file_${index + 1}`
 }
 
+function sanitizeStringValue(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+  const trimmed = value.trim()
+  return trimmed
+}
+
+function sanitizeTimestampValue(value) {
+  if (!value) {
+    return ''
+  }
+  if (value instanceof Date) {
+    const time = value.getTime()
+    if (Number.isNaN(time)) {
+      return ''
+    }
+    return value.toISOString()
+  }
+  if (typeof value === 'number') {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) {
+      return ''
+    }
+    return date.toISOString()
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return ''
+    }
+    const date = new Date(trimmed)
+    if (Number.isNaN(date.getTime())) {
+      return ''
+    }
+    return date.toISOString()
+  }
+  return ''
+}
+
+function sanitizeTemplateMeta(meta) {
+  if (!meta || typeof meta !== 'object') {
+    return undefined
+  }
+  const sanitized = {}
+  TEMPLATE_META_STRING_FIELDS.forEach((key) => {
+    const value = meta[key]
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed) {
+        sanitized[key] = trimmed
+      }
+    }
+  })
+  return Object.keys(sanitized).length ? sanitized : undefined
+}
+
+function sanitizePresentationMeta(presentation) {
+  if (!presentation || typeof presentation !== 'object') {
+    return undefined
+  }
+  const sanitized = {}
+  PRESENTATION_STRING_FIELDS.forEach((key) => {
+    const value = presentation[key]
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed) {
+        sanitized[key] = trimmed
+      }
+    }
+  })
+  if (Number.isFinite(presentation.autoPreviewPriority)) {
+    sanitized.autoPreviewPriority = presentation.autoPreviewPriority
+  }
+  return Object.keys(sanitized).length ? sanitized : undefined
+}
+
+function sanitizeNormalizedEntry(entry, index = 0) {
+  if (!entry || typeof entry !== 'object') {
+    return null
+  }
+
+  const sanitized = {}
+
+  const type = sanitizeStringValue(entry.type) || `file_${index + 1}`
+  const url = sanitizeStringValue(entry.url)
+  if (!url) {
+    return null
+  }
+
+  sanitized.type = type
+  sanitized.url = url
+
+  PRESERVED_STRING_FIELDS.forEach((key) => {
+    const value = sanitizeStringValue(entry[key])
+    if (value) {
+      sanitized[key] = value
+    }
+  })
+
+  const text = typeof entry.text === 'string' ? entry.text.trim() : ''
+  if (text) {
+    sanitized.text = text
+  }
+
+  const generatedAt = sanitizeTimestampValue(entry.generatedAt)
+  if (generatedAt) {
+    sanitized.generatedAt = generatedAt
+  }
+
+  const updatedAt = sanitizeTimestampValue(entry.updatedAt)
+  if (updatedAt) {
+    sanitized.updatedAt = updatedAt
+  }
+
+  const expiresAt = sanitizeTimestampValue(entry.expiresAt)
+  if (expiresAt) {
+    sanitized.expiresAt = expiresAt
+  }
+
+  const templateMeta = sanitizeTemplateMeta(entry.templateMeta)
+  if (templateMeta) {
+    sanitized.templateMeta = templateMeta
+  }
+
+  const presentation = sanitizePresentationMeta(entry.presentation)
+  if (presentation) {
+    sanitized.presentation = presentation
+  }
+
+  return sanitized
+}
+
 function normaliseOutputFileEntry(entry, index = 0, fallbackType = '', options = {}) {
   if (!entry) return null
   if (typeof entry === 'string') {
@@ -611,6 +779,12 @@ function dedupePreferredEntries(entries) {
     .map((item) => item.entry)
 }
 
+function finalizeNormalizedEntries(entries) {
+  return dedupePreferredEntries(entries)
+    .map((entry, index) => sanitizeNormalizedEntry(entry, index))
+    .filter(Boolean)
+}
+
 export function normalizeOutputFiles(rawInput, options = {}) {
   if (!rawInput) {
     return []
@@ -625,18 +799,14 @@ export function normalizeOutputFiles(rawInput, options = {}) {
         normalized.push(normalizedEntry)
       }
     })
-    return dedupePreferredEntries(normalized)
+    return finalizeNormalizedEntries(normalized)
   }
 
   if (typeof rawInput === 'string') {
     const trimmed = rawInput.trim()
     if (!trimmed) return []
-    return [
-      {
-        type: 'file_1',
-        url: trimmed,
-      },
-    ]
+    const sanitized = sanitizeNormalizedEntry({ type: 'file_1', url: trimmed }, 0)
+    return sanitized ? [sanitized] : []
   }
 
   if (typeof rawInput === 'object') {
@@ -651,7 +821,7 @@ export function normalizeOutputFiles(rawInput, options = {}) {
     })
   }
 
-  return dedupePreferredEntries(normalized)
+  return finalizeNormalizedEntries(normalized)
 }
 
 export default normalizeOutputFiles
