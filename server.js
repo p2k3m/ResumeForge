@@ -35,6 +35,7 @@ import mammoth from 'mammoth';
 import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
 import { renderTemplatePdf } from './lib/pdf/index.js';
+import { backstopPdfTemplates as runPdfTemplateBackstop } from './lib/pdf/backstop.js';
 import {
   parseTemplateParams as parseTemplateParamsConfig,
   resolveTemplateParams as resolveTemplateParamsConfig
@@ -6687,6 +6688,12 @@ async function generatePlainPdfFallback({
   throw failure;
 }
 
+let templateBackstop = runPdfTemplateBackstop;
+
+function setTemplateBackstop(fn) {
+  templateBackstop = typeof fn === 'function' ? fn : runPdfTemplateBackstop;
+}
+
 let generatePdf = async function (
   text,
   templateId = 'modern',
@@ -7747,8 +7754,42 @@ async function generatePdfWithFallback({
         attempt,
         error: serializeError(error),
       });
-      if (templateId === '2025') {
+      const templateIdString = typeof templateId === 'string' ? templateId : '';
+      const is2025Template = templateIdString.startsWith('2025');
+      if (is2025Template) {
         appendMessage(TEMPLATE_RENDER_RETRY_MESSAGE);
+        if (typeof templateBackstop === 'function') {
+          const templatesToBackstop = uniqueTemplates(
+            [templateIdString, '2025'].filter(Boolean)
+          );
+          try {
+            const backstopResults = await templateBackstop({
+              templates: templatesToBackstop,
+              logger: null,
+            });
+            const sanitizedResults = Array.isArray(backstopResults)
+              ? backstopResults.map((entry) => ({
+                  templateId: entry?.templateId,
+                  bytes: entry?.bytes,
+                }))
+              : [];
+            logStructured('info', 'pdf_generation_backstop_succeeded', {
+              ...logContext,
+              documentType,
+              template: templateIdString,
+              templatesBackstopped: templatesToBackstop,
+              backstopResults: sanitizedResults,
+            });
+          } catch (backstopError) {
+            logStructured('error', 'pdf_generation_backstop_failed', {
+              ...logContext,
+              documentType,
+              template: templateIdString,
+              templatesBackstopped: templatesToBackstop,
+              error: serializeError(backstopError),
+            });
+          }
+        }
       }
     }
   }
@@ -16255,6 +16296,7 @@ export {
   generatePdf,
   generatePdfWithFallback,
   setGeneratePdf,
+  setTemplateBackstop,
   setChromiumLauncher,
   setS3Client,
   setPlainPdfFallbackEngines,

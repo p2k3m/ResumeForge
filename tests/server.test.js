@@ -120,6 +120,7 @@ const {
   extractText,
   setGeneratePdf,
   generatePdfWithFallback,
+  setTemplateBackstop,
   parseContent,
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
@@ -1325,6 +1326,7 @@ describe('/api/generate-enhanced-docs', () => {
 describe('generatePdfWithFallback', () => {
   afterEach(() => {
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+    setTemplateBackstop();
   });
 
   test('records retry message when 2025 renderer fails', async () => {
@@ -1337,6 +1339,10 @@ describe('generatePdfWithFallback', () => {
       return Promise.resolve(Buffer.from(`pdf-${templateId}`));
     });
     setGeneratePdf(pdfMock);
+    const backstopMock = jest.fn().mockResolvedValue([
+      { templateId: '2025', bytes: 1024 }
+    ]);
+    setTemplateBackstop(backstopMock);
 
     const result = await generatePdfWithFallback({
       documentType: 'resume',
@@ -1349,6 +1355,11 @@ describe('generatePdfWithFallback', () => {
     });
 
     expect(pdfMock).toHaveBeenCalledTimes(2);
+    expect(backstopMock).toHaveBeenCalledTimes(1);
+    expect(backstopMock).toHaveBeenCalledWith({
+      templates: ['2025'],
+      logger: null,
+    });
     expect(result.template).toBe('modern');
     expect(result.messages).toContain(
       'Could not generate PDF for 2025 template, retrying with Modern'
