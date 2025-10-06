@@ -81,6 +81,8 @@ Deployments still expect the following AWS SAM parameters:
 - `CreateResumeTable` – set to `false` when reusing a DynamoDB table created outside the stack (defaults to `true`).
 - `WebAclArn` – optional ARN of an AWS WAFv2 web ACL to associate with the CloudFront distribution for upload abuse protection. Leave blank to skip WAF attachment.
 
+When the stack provisions the S3 bucket it automatically applies a bucket policy that allows the Lambda execution role to `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, and `s3:ListBucket`. If you reuse an existing bucket by setting `CreateDataBucket` to `false`, make sure an equivalent policy is attached so uploads for all artifact types continue to succeed.
+
 ## IAM Policy
 Minimal permissions required by the server:
 
