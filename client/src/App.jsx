@@ -21,6 +21,7 @@ import qrOptimisedResume from './assets/qr-optimised-resume.svg'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
 import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 import { normalizeOutputFiles } from './utils/normalizeOutputFiles.js'
+import { normalizePdfBlob } from './utils/assetValidation.js'
 import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
 import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
@@ -389,19 +390,20 @@ function deriveDownloadFileName(file, presentation = {}, response, options = {})
     segments.push(timestampSegment)
   }
 
-  const contentType = response?.headers?.get?.('content-type') || ''
+  const overrideType =
+    (typeof options?.contentTypeOverride === 'string' && options.contentTypeOverride.trim()) || ''
+  const headerContentType = response?.headers?.get?.('content-type') || ''
+  const contentType = overrideType || headerContentType
   const normalizedType = contentType.split(';')[0]?.trim().toLowerCase()
 
   let extension = '.pdf'
-  if (normalizedType) {
-    if (normalizedType === 'application/pdf') {
+  if (!options?.forcePdfExtension && normalizedType) {
+    if (normalizedType.includes('pdf')) {
       extension = '.pdf'
     } else if (normalizedType.includes('wordprocessingml')) {
       extension = '.docx'
     } else if (normalizedType.includes('msword')) {
       extension = '.doc'
-    } else if (normalizedType === 'text/plain') {
-      extension = '.txt'
     } else if (normalizedType === 'application/json') {
       extension = '.json'
     }
@@ -2871,15 +2873,22 @@ function App() {
         if (!response.ok) {
           throw new Error(`Download failed with status ${response.status}`)
         }
-        const blob = await response.blob()
+        const responseContentType = response.headers?.get?.('content-type') || ''
+        const rawBlob = await response.blob()
+        const { blob: pdfBlob, contentType: normalizedContentType } = await normalizePdfBlob(
+          rawBlob,
+          { contentType: responseContentType }
+        )
         const templateMeta = file.templateMeta || downloadTemplateMetadata[file.type] || {}
         const fileTimestamp = file.generatedAt || downloadGeneratedAt || Date.now()
         const fileName = deriveDownloadFileName(file, presentation, response, {
           templateName: templateMeta.name,
           templateId: templateMeta.id,
-          generatedAt: fileTimestamp
+          generatedAt: fileTimestamp,
+          contentTypeOverride: normalizedContentType,
+          forcePdfExtension: true
         })
-        const blobUrl = URL.createObjectURL(blob)
+        const blobUrl = URL.createObjectURL(pdfBlob)
         const link = document.createElement('a')
         link.href = blobUrl
         link.download = fileName
@@ -2895,7 +2904,15 @@ function App() {
         resetUiAfterDownload()
       } catch (err) {
         console.error('Download failed', err)
-        setError('Unable to download this document. Please try again.')
+        const downloadErrorMessage =
+          err?.code === 'NON_PDF_CONTENT'
+            ? 'The download link returned text instead of a PDF. Please regenerate the document.'
+            : err?.code === 'INVALID_PDF_SIGNATURE'
+              ? 'The downloaded file was corrupted. Please try regenerating the document.'
+              : err?.code === 'EMPTY_PDF_CONTENT'
+                ? 'The downloaded file was empty. Please regenerate the document.'
+                : 'Unable to download this document. Please try again.'
+        setError(downloadErrorMessage)
         setDownloadStates((prev) => ({
           ...prev,
           [stateKey]: {
