@@ -1791,6 +1791,57 @@ function App() {
     }
     setDownloadGeneratedAt(nextTimestamp)
   }, [])
+  const resetAnalysisState = useCallback(() => {
+    analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
+    updateOutputFiles([])
+    setMatch(null)
+    setScoreBreakdown([])
+    setBaselineScoreBreakdown([])
+    setResumeText('')
+    setJobDescriptionText('')
+    setJobSkills([])
+    setResumeSkills([])
+    setKnownCertificates([])
+    setManualCertificatesData([])
+    setCertificateInsights(null)
+    setSelectionInsights(null)
+    setImprovementResults([])
+    setChangeLog([])
+    setActiveImprovement('')
+    setError('')
+    setQueuedMessage('')
+    setInitialAnalysisSnapshot(null)
+    setJobId('')
+    setTemplateContext(null)
+    setIsGeneratingDocs(false)
+    setCoverLetterDrafts({})
+    setCoverLetterOriginals({})
+    setCoverLetterEditor(null)
+    setCoverLetterDownloadError('')
+    setCoverLetterClipboardStatus('')
+    setResumeHistory([])
+    setPreviewSuggestion(null)
+    setPreviewFile(null)
+    setEnhanceAllSummaryText('')
+    setIsCoverLetterDownloading(false)
+  }, [updateOutputFiles])
+  const resetUiAfterDownload = useCallback(
+    (message = POST_DOWNLOAD_INVITE_MESSAGE) => {
+      resetAnalysisState()
+      setPendingDownloadFile(null)
+      setManualJobDescription('')
+      setManualJobDescriptionRequired(false)
+      setManualCertificatesInput('')
+      setCvFile(null)
+      setSelectedTemplate('modern')
+      lastAutoScoreSignatureRef.current = ''
+      const inviteMessage = typeof message === 'string' ? message.trim() : ''
+      if (inviteMessage) {
+        setQueuedMessage(inviteMessage)
+      }
+    },
+    [resetAnalysisState]
+  )
   const improvementLockRef = useRef(false)
   const scoreUpdateLockRef = useRef(false)
   const autoPreviewSignatureRef = useRef('')
@@ -1989,24 +2040,6 @@ function App() {
     }
     setStoredTemplatePreference(userIdentifier, canonicalSelection)
   }, [selectedTemplate, userIdentifier])
-
-  useEffect(() => {
-    if (!cvFile || isProcessing) {
-      return
-    }
-    const manualText = manualJobDescription.trim()
-    if (!manualText) {
-      return
-    }
-    const signature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
-    if (!signature) {
-      return
-    }
-    if (lastAutoScoreSignatureRef.current === signature && (isProcessing || scoreComplete)) {
-      return
-    }
-    handleScoreSubmit()
-  }, [cvFile, handleScoreSubmit, isProcessing, manualJobDescription, scoreComplete])
 
   useEffect(() => {
     if (!cvFile) {
@@ -3050,6 +3083,11 @@ function App() {
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
+  const closePreview = useCallback(() => {
+    setPreviewActionBusy(false)
+    setPreviewActiveAction('')
+    setPreviewSuggestion(null)
+  }, [])
 
   useEffect(() => {
     if (!previewSuggestion || typeof window === 'undefined') {
@@ -3271,59 +3309,6 @@ function App() {
       setCvFile(file)
     }
   }
-
-  const resetAnalysisState = useCallback(() => {
-    analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
-    updateOutputFiles([])
-    setMatch(null)
-    setScoreBreakdown([])
-    setBaselineScoreBreakdown([])
-    setResumeText('')
-    setJobDescriptionText('')
-    setJobSkills([])
-    setResumeSkills([])
-    setKnownCertificates([])
-    setManualCertificatesData([])
-    setCertificateInsights(null)
-    setSelectionInsights(null)
-    setImprovementResults([])
-    setChangeLog([])
-    setActiveImprovement('')
-    setError('')
-    setQueuedMessage('')
-    setInitialAnalysisSnapshot(null)
-    setJobId('')
-    setTemplateContext(null)
-    setIsGeneratingDocs(false)
-    setCoverLetterDrafts({})
-    setCoverLetterOriginals({})
-    setCoverLetterEditor(null)
-    setCoverLetterDownloadError('')
-    setCoverLetterClipboardStatus('')
-    setResumeHistory([])
-    setPreviewSuggestion(null)
-    setPreviewFile(null)
-    setEnhanceAllSummaryText('')
-    setIsCoverLetterDownloading(false)
-  }, [updateOutputFiles])
-
-  const resetUiAfterDownload = useCallback(
-    (message = POST_DOWNLOAD_INVITE_MESSAGE) => {
-      resetAnalysisState()
-      setPendingDownloadFile(null)
-      setManualJobDescription('')
-      setManualJobDescriptionRequired(false)
-      setManualCertificatesInput('')
-      setCvFile(null)
-      setSelectedTemplate('modern')
-      lastAutoScoreSignatureRef.current = ''
-      const inviteMessage = typeof message === 'string' ? message.trim() : ''
-      if (inviteMessage) {
-        setQueuedMessage(inviteMessage)
-      }
-    },
-    [resetAnalysisState]
-  )
 
   useEffect(() => {
     const context = analysisContextRef.current || {}
@@ -3678,6 +3663,24 @@ function App() {
     templateContext,
     userIdentifier
   ])
+
+  useEffect(() => {
+    if (!cvFile || isProcessing) {
+      return
+    }
+    const manualText = manualJobDescription.trim()
+    if (!manualText) {
+      return
+    }
+    const signature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
+    if (!signature) {
+      return
+    }
+    if (lastAutoScoreSignatureRef.current === signature && (isProcessing || scoreComplete)) {
+      return
+    }
+    handleScoreSubmit()
+  }, [cvFile, handleScoreSubmit, isProcessing, manualJobDescription, scoreComplete])
 
   const hasAcceptedImprovements = useMemo(
     () => improvementResults.some((item) => item.accepted === true),
@@ -5437,12 +5440,6 @@ function App() {
     },
     [resumeText]
   )
-
-  const closePreview = useCallback(() => {
-    setPreviewActionBusy(false)
-    setPreviewActiveAction('')
-    setPreviewSuggestion(null)
-  }, [])
 
   const previewedSuggestion = useMemo(() => {
     if (!previewSuggestion) return null
