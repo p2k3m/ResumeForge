@@ -2993,6 +2993,33 @@ function App() {
     const isCoverLetterDownloadDisabled = isCoverLetter
       ? !downloadUrl || isExpired
       : isDownloadUnavailable
+    const templateNameValue =
+      (typeof templateMeta?.name === 'string' && templateMeta.name.trim()) ||
+      (typeof file.templateName === 'string' && file.templateName.trim()) ||
+      (typeof file.coverTemplateName === 'string' && file.coverTemplateName.trim()) ||
+      ''
+    const templateIdValue =
+      (typeof templateMeta?.id === 'string' && templateMeta.id.trim()) ||
+      (typeof file.templateId === 'string' && file.templateId.trim()) ||
+      (typeof file.coverTemplateId === 'string' && file.coverTemplateId.trim()) ||
+      (typeof file.template === 'string' && file.template.trim()) ||
+      ''
+    const directDownloadDisabled = !downloadUrl || isExpired
+    const directDownloadFileName = !directDownloadDisabled
+      ? deriveDownloadFileName(file, presentation, null, {
+          templateName: templateNameValue,
+          templateId: templateIdValue,
+          generatedAt: file.generatedAt,
+          contentTypeOverride: 'application/pdf',
+          forcePdfExtension: true,
+        })
+      : ''
+    const downloadLinkLabel = presentation.linkLabel || 'Download File'
+    const downloadLinkClass = `text-sm font-semibold transition ${
+      directDownloadDisabled
+        ? 'text-rose-500 cursor-not-allowed'
+        : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
+    }`
     const downloadButtonClass = `${buttonClass} ${
       isCoverLetter
         ? isCoverLetterDownloadDisabled
@@ -3026,7 +3053,7 @@ function App() {
           </div>
           {presentation.badgeText && <span className={badgeClass}>{presentation.badgeText}</span>}
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <button
               type="button"
@@ -3058,14 +3085,32 @@ function App() {
               {downloadButtonLabel}
             </button>
           </div>
-          {expiryLabel && !isExpired && (
-            <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
-          )}
-          {expiryLabel && isExpired && (
-            <p className="text-xs font-semibold text-rose-600">
-              Expired on {expiryLabel}. Generate the documents again to refresh the download link.
-            </p>
-          )}
+          <div className="flex flex-col items-start gap-1 sm:items-end">
+            <a
+              href={directDownloadDisabled ? undefined : downloadUrl}
+              onClick={(event) => {
+                if (directDownloadDisabled) {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }
+              }}
+              className={downloadLinkClass}
+              aria-disabled={directDownloadDisabled ? 'true' : undefined}
+              target={directDownloadDisabled ? undefined : '_blank'}
+              rel={directDownloadDisabled ? undefined : 'noopener noreferrer'}
+              download={directDownloadDisabled ? undefined : directDownloadFileName || undefined}
+            >
+              {downloadLinkLabel}
+            </a>
+            {expiryLabel && !isExpired && (
+              <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
+            )}
+            {expiryLabel && isExpired && (
+              <p className="text-xs font-semibold text-rose-600">
+                Expired on {expiryLabel}. Generate the documents again to refresh the download link.
+              </p>
+            )}
+          </div>
         </div>
         {!isCoverLetter && derivedDownloadError && (
           <p className="text-xs font-semibold text-rose-600">{derivedDownloadError}</p>
@@ -6398,7 +6443,38 @@ function App() {
             const expiryValid = expiryDate && !Number.isNaN(expiryDate.getTime())
             const previewExpired = Boolean(expiryValid && expiryDate.getTime() <= Date.now())
             const previewHasUrl = typeof previewFile.url === 'string' && previewFile.url
+            const previewPresentation =
+              previewFile.presentation || getDownloadPresentation(previewFile)
             const previewButtonDisabled = previewIsDownloading || previewExpired || !previewHasUrl
+            const previewLinkDisabled = previewExpired || !previewHasUrl
+            const previewTemplateMeta = previewFile.templateMeta || {}
+            const previewTemplateName =
+              (typeof previewTemplateMeta.name === 'string' && previewTemplateMeta.name.trim()) ||
+              (typeof previewFile.templateName === 'string' && previewFile.templateName.trim()) ||
+              (typeof previewFile.coverTemplateName === 'string' && previewFile.coverTemplateName.trim()) ||
+              ''
+            const previewTemplateId =
+              (typeof previewTemplateMeta.id === 'string' && previewTemplateMeta.id.trim()) ||
+              (typeof previewFile.templateId === 'string' && previewFile.templateId.trim()) ||
+              (typeof previewFile.coverTemplateId === 'string' &&
+                previewFile.coverTemplateId.trim()) ||
+              (typeof previewFile.template === 'string' && previewFile.template.trim()) ||
+              ''
+            const previewDownloadFileName = previewHasUrl
+              ? deriveDownloadFileName(previewFile, previewPresentation, null, {
+                  templateName: previewTemplateName,
+                  templateId: previewTemplateId,
+                  generatedAt: previewFile.generatedAt,
+                  contentTypeOverride: 'application/pdf',
+                  forcePdfExtension: true,
+                })
+              : ''
+            const previewDownloadLinkLabel = previewPresentation.linkLabel || 'Download File'
+            const previewDownloadLinkClass = `text-sm font-semibold transition ${
+              previewLinkDisabled
+                ? 'text-rose-500 cursor-not-allowed'
+                : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
+            }`
 
             const downloadButtonLabel = (() => {
               if (previewExpired) return 'Link expired'
@@ -6470,20 +6546,40 @@ function App() {
                         </span>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await handleDownloadFile(previewFile)
-                      }}
-                      disabled={previewButtonDisabled}
-                      className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
-                        previewButtonDisabled
-                          ? 'bg-purple-300 cursor-not-allowed'
-                          : 'bg-purple-600 hover:bg-purple-700'
-                      }`}
-                    >
-                      {downloadButtonLabel}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {previewHasUrl && (
+                        <a
+                          href={previewLinkDisabled ? undefined : previewFile.url}
+                          onClick={(event) => {
+                            if (previewLinkDisabled) {
+                              event.preventDefault()
+                              event.stopPropagation()
+                            }
+                          }}
+                          className={previewDownloadLinkClass}
+                          aria-disabled={previewLinkDisabled ? 'true' : undefined}
+                          target={previewLinkDisabled ? undefined : '_blank'}
+                          rel={previewLinkDisabled ? undefined : 'noopener noreferrer'}
+                          download={previewLinkDisabled ? undefined : previewDownloadFileName || undefined}
+                        >
+                          {previewDownloadLinkLabel}
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await handleDownloadFile(previewFile)
+                        }}
+                        disabled={previewButtonDisabled}
+                        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                          previewButtonDisabled
+                            ? 'bg-purple-300 cursor-not-allowed'
+                            : 'bg-purple-600 hover:bg-purple-700'
+                        }`}
+                      >
+                        {downloadButtonLabel}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
