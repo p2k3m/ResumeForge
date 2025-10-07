@@ -916,12 +916,22 @@ const deriveCoverTemplateFromResume = (templateId) => {
   return DEFAULT_COVER_TEMPLATE
 }
 
-const ensureCoverTemplateContext = (context, templateId) => {
+const ensureCoverTemplateContext = (
+  context,
+  templateId,
+  { linkCoverToResume } = {}
+) => {
   const derived = deriveCoverTemplateFromResume(templateId || DEFAULT_COVER_TEMPLATE)
   const base = context ? { ...context } : {}
+  const requestedLink =
+    typeof linkCoverToResume === 'boolean'
+      ? linkCoverToResume
+      : base.coverTemplateLinkedToResume !== false
+  let coverTemplate1 = canonicalizeCoverTemplateId(base.coverTemplate1)
+  if (requestedLink || !coverTemplate1) {
+    coverTemplate1 = derived
+  }
   const coverTemplates = normalizeCoverTemplateList(base.coverTemplates)
-  const coverTemplate1 =
-    canonicalizeCoverTemplateId(base.coverTemplate1) || derived
   const coverTemplate2 = canonicalizeCoverTemplateId(base.coverTemplate2)
   const mergedTemplates = normalizeCoverTemplateList([
     coverTemplate1,
@@ -949,6 +959,7 @@ const ensureCoverTemplateContext = (context, templateId) => {
   } else {
     base.coverTemplate2 = coverTemplate2
   }
+  base.coverTemplateLinkedToResume = requestedLink
 
   return base
 }
@@ -1063,7 +1074,10 @@ const normalizeTemplateContext = (context) => {
     )
   }
   const templateForCover = normalized.selectedTemplate || normalized.template1 || 'modern'
-  const contextWithCover = ensureCoverTemplateContext(normalized, templateForCover)
+  const shouldLinkCover = normalized.coverTemplateLinkedToResume !== false
+  const contextWithCover = ensureCoverTemplateContext(normalized, templateForCover, {
+    linkCoverToResume: shouldLinkCover
+  })
   return decorateTemplateContext(contextWithCover)
 }
 
@@ -2317,7 +2331,10 @@ function App() {
       if (!base.template1) {
         base.template1 = storedTemplate
       }
-      const nextContext = ensureCoverTemplateContext(base, storedTemplate)
+      const shouldLinkCover = base.coverTemplateLinkedToResume !== false
+      const nextContext = ensureCoverTemplateContext(base, storedTemplate, {
+        linkCoverToResume: shouldLinkCover
+      })
       return decorateTemplateContext(nextContext)
     })
   }, [userIdentifier])
@@ -2491,6 +2508,11 @@ function App() {
       null
     )
   }, [availableTemplateOptions, selectedTemplate])
+
+  const isCoverTemplateLinkedToResume = useMemo(
+    () => templateContext?.coverTemplateLinkedToResume !== false,
+    [templateContext]
+  )
 
   const selectedCoverTemplate = useMemo(() => {
     const fromContext = canonicalizeCoverTemplateId(templateContext?.coverTemplate1)
@@ -2773,7 +2795,10 @@ function App() {
           const filteredHistory = currentHistory.filter((item) => item !== canonical)
           base.templateHistory = [canonical, ...filteredHistory]
         }
-        const nextContext = ensureCoverTemplateContext(base, canonical)
+        const shouldLinkCover = base.coverTemplateLinkedToResume !== false
+        const nextContext = ensureCoverTemplateContext(base, canonical, {
+          linkCoverToResume: shouldLinkCover
+        })
         return decorateTemplateContext(nextContext)
       })
     },
@@ -2801,7 +2826,34 @@ function App() {
         }
         const resumeTemplateForContext =
           base.selectedTemplate || base.template1 || selectedTemplate || 'modern'
-        const nextContext = ensureCoverTemplateContext(base, resumeTemplateForContext)
+        const derivedForResume = deriveCoverTemplateFromResume(resumeTemplateForContext)
+        const wasLinked = base.coverTemplateLinkedToResume !== false
+        const shouldStayLinked = wasLinked && canonical === derivedForResume
+        base.coverTemplateLinkedToResume = shouldStayLinked ? true : false
+        const nextContext = ensureCoverTemplateContext(base, resumeTemplateForContext, {
+          linkCoverToResume: shouldStayLinked
+        })
+        return decorateTemplateContext(nextContext)
+      })
+    },
+    [selectedTemplate, setTemplateContext]
+  )
+
+  const handleCoverLinkToggle = useCallback(
+    (shouldLink) => {
+      setTemplateContext((prev) => {
+        const base = prev ? { ...prev } : {}
+        base.coverTemplateLinkedToResume = shouldLink
+        const resumeTemplateForContext =
+          base.selectedTemplate || base.template1 || selectedTemplate || 'modern'
+        if (shouldLink) {
+          base.coverTemplate1 = deriveCoverTemplateFromResume(resumeTemplateForContext)
+        }
+        const nextContext = ensureCoverTemplateContext(
+          base,
+          resumeTemplateForContext,
+          { linkCoverToResume: shouldLink }
+        )
         return decorateTemplateContext(nextContext)
       })
     },
@@ -3214,6 +3266,8 @@ function App() {
         selectedCoverTemplateName={formatCoverTemplateName(selectedCoverTemplate)}
         selectedCoverTemplateDescription={getCoverTemplateDescription(selectedCoverTemplate)}
         onCoverTemplateSelect={handleCoverTemplateSelect}
+        isCoverLinkedToResume={isCoverTemplateLinkedToResume}
+        onCoverLinkToggle={handleCoverLinkToggle}
         disabled={isProcessing}
         isApplying={isProcessing}
       />

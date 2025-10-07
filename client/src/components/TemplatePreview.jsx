@@ -227,6 +227,7 @@ function TemplatePreview({
   availableCoverTemplates = [],
   onResumeTemplateApply,
   onCoverTemplateApply,
+  isCoverLinkedToResume = false,
   isApplying = false
 }) {
   const normalizedResumeTemplates = useMemo(() => {
@@ -512,6 +513,8 @@ function TemplatePreview({
           style,
           note: isApplied
             ? 'This cover letter style is currently selected for your downloads.'
+            : isCoverLinkedToResume
+            ? 'Apply this cover letter style to break the sync with your CV template and use it for your downloads.'
             : 'Apply this cover letter style to use it for your downloads.',
           canApply: !isApplied && Boolean(onCoverTemplateApply)
         }
@@ -525,7 +528,9 @@ function TemplatePreview({
           option: previewCoverOption,
           style: coverStyle,
           note: isPreviewingDifferentCover
-            ? 'Apply this look to replace your current cover letter style.'
+            ? isCoverLinkedToResume
+              ? 'Apply this look to break the sync with your CV template and refresh your cover letter style.'
+              : 'Apply this look to replace your current cover letter style.'
             : 'Already applied to your downloads.',
           canApply: isPreviewingDifferentCover && Boolean(onCoverTemplateApply)
         },
@@ -680,6 +685,11 @@ function TemplatePreview({
                 ? `Currently applied: ${appliedCoverName}. Compare styles below before updating.`
                 : 'This template is already applied to your downloads.'}
             </p>
+            {isCoverLinkedToResume && (
+              <p className="mt-1 text-xs text-purple-500">
+                Cover letters stay synced with your CV until you pick a new style or turn off “Match CV style”.
+              </p>
+            )}
           </div>
           {normalizedCoverTemplates.length > 1 && (
             <div className="space-y-3">
