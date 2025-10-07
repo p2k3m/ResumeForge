@@ -269,7 +269,13 @@ describe('/api/process-cv', () => {
       .filter((cmd) => cmd.key.endsWith('.pdf'));
     expect(generatedPdfKeys).toHaveLength(4);
     generatedPdfKeys.forEach((cmd) => {
-      expect(cmd.key).toContain('/runs/');
+      const segments = cmd.key.split('/');
+      expect(segments.length).toBeGreaterThanOrEqual(5);
+      expect(segments[0]).toBe('cv');
+      expect(segments[1]).toBe(sanitized);
+      expect(segments[2]).toMatch(/[a-z0-9_-]+/);
+      expect(segments[3]).toMatch(/[a-z0-9_-]+/);
+      expect(segments[4]).toMatch(/[a-z0-9_-]+\.pdf$/);
     });
 
     const generatedJsonKeys = s3Commands
@@ -284,7 +290,7 @@ describe('/api/process-cv', () => {
       );
     expect(generatedJsonKeys).toHaveLength(4);
     generatedJsonKeys.forEach((cmd) => {
-      expect(cmd.key).toContain('/runs/');
+      expect(cmd.key).toContain('/artifacts/');
     });
 
     const putCall = mockDynamoSend.mock.calls.find(
@@ -565,7 +571,7 @@ describe('/api/process-cv', () => {
 
     test('resigns an existing artifact key for the active job', async () => {
       getSignedUrlMock.mockClear();
-      const storageKey = 'cv/candidate/2024-01-01/job-123/runs/run-1/resume.pdf';
+      const storageKey = 'cv/candidate/session-1/basic/version1.pdf';
 
       mockDynamoSend.mockImplementation((cmd) => {
         switch (cmd.__type) {
@@ -616,7 +622,7 @@ describe('/api/process-cv', () => {
                 jobId: { S: 'job-123' },
                 s3Bucket: { S: 'test-bucket' },
                 s3Key: { S: 'cv/candidate/original.pdf' },
-                cv1Url: { S: 'cv/candidate/runs/run-1/resume.pdf' },
+                cv1Url: { S: 'cv/candidate/session-1/basic/version1.pdf' },
               },
             });
           default:
@@ -626,7 +632,7 @@ describe('/api/process-cv', () => {
 
       const response = await request(app)
         .post('/api/refresh-download-link')
-        .send({ jobId: 'job-123', storageKey: 'cv/candidate/runs/run-2/resume.pdf' });
+        .send({ jobId: 'job-123', storageKey: 'cv/candidate/session-2/basic/version1.pdf' });
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual(

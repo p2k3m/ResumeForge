@@ -255,9 +255,14 @@ describe('resume lifecycle coverage', () => {
 
     expect(pdfKeys.length).toBeGreaterThanOrEqual(4);
     expect(pdfKeys.join('\n')).toContain('cv/');
-    expect(pdfKeys.join('\n')).toContain('/runs/');
-    expect(pdfKeys.some((key) => key.includes('enhanced_'))).toBe(true);
-    expect(pdfKeys.some((key) => key.includes('cover_letter_'))).toBe(true);
+    pdfKeys.forEach((key) => {
+      const segments = key.split('/');
+      expect(segments.length).toBeGreaterThanOrEqual(5);
+    });
+    expect(pdfKeys.some((key) => key.endsWith('/version1.pdf'))).toBe(true);
+    expect(pdfKeys.some((key) => key.endsWith('/version2.pdf'))).toBe(true);
+    expect(pdfKeys.some((key) => key.endsWith('/cover_letter1.pdf'))).toBe(true);
+    expect(pdfKeys.some((key) => key.endsWith('/cover_letter2.pdf'))).toBe(true);
     const pdfPutCommands = mocks.mockS3Send.mock.calls
       .map(([command]) => command)
       .filter(
@@ -396,11 +401,11 @@ describe('resume lifecycle coverage', () => {
       .filter((key) => typeof key === 'string' && key.endsWith('.pdf'));
 
     CV_TEMPLATES.forEach((template) => {
-      expect(pdfKeys.some((key) => key.includes(`enhanced_${template}`))).toBe(true);
+      expect(pdfKeys.some((key) => key.includes(`/${template}/`))).toBe(true);
     });
 
     CL_TEMPLATES.forEach((template) => {
-      expect(pdfKeys.some((key) => key.includes(`cover_letter_${template}`))).toBe(true);
+      expect(pdfKeys.some((key) => key.includes(`/${template}/`))).toBe(true);
     });
   }, TEST_TIMEOUT_MS);
 });
