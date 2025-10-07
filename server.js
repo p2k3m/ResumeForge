@@ -14804,7 +14804,7 @@ async function generateEnhancedDocumentsResponse({
     },
   });
 
-  if (urls.length === 0) {
+  if (downloadArtifacts.length === 0 && urls.length === 0) {
     cleanupReason = 'no_outputs';
     await logEvent({
       s3,
@@ -14815,7 +14815,12 @@ async function generateEnhancedDocumentsResponse({
       level: 'error',
       message: CV_GENERATION_ERROR_MESSAGE,
     });
-    sendError(res, 500, 'AI_RESPONSE_INVALID', GEMINI_ENHANCEMENT_ERROR_MESSAGE);
+    sendError(
+      res,
+      500,
+      'AI_RESPONSE_INVALID',
+      DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
+    );
     return null;
   }
 
@@ -14875,6 +14880,39 @@ async function generateEnhancedDocumentsResponse({
   }
 
   const normalizedUrls = ensureOutputFileUrls(urls);
+  if (!normalizedUrls.length && urls.length) {
+    const fallbackUrls = urls
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+        const baseUrl =
+          typeof entry.url === 'string' && entry.url.trim()
+            ? entry.url.trim()
+            : typeof entry.fileUrl === 'string' && entry.fileUrl.trim()
+              ? entry.fileUrl.trim()
+              : '';
+        if (!baseUrl) {
+          return null;
+        }
+        const patched = { ...entry };
+        patched.url = baseUrl;
+        if (!patched.fileUrl || typeof patched.fileUrl !== 'string' || !patched.fileUrl.trim()) {
+          patched.fileUrl = baseUrl;
+        }
+        if (!patched.typeUrl || typeof patched.typeUrl !== 'string' || !patched.typeUrl.trim()) {
+          const typeFragmentSource =
+            (typeof patched.type === 'string' && patched.type.trim()) ||
+            (typeof patched.templateType === 'string' && patched.templateType.trim()) ||
+            'download';
+          patched.typeUrl = `${baseUrl}#${encodeURIComponent(typeFragmentSource)}`;
+        }
+        return patched;
+      })
+      .filter(Boolean);
+    normalizedUrls = ensureOutputFileUrls(fallbackUrls);
+  }
+
 
   if (normalizedUrls.length === 0) {
     cleanupReason = 'no_valid_urls';
@@ -15349,38 +15387,36 @@ app.post(
         const item = record.Item || {};
         existingRecordItem = item;
         if (!item.jobId || item.jobId.S !== jobId) {
-          return sendError(
-            res,
-            404,
-            'JOB_CONTEXT_NOT_FOUND',
-            'The upload context could not be located for final generation.'
-          );
-        }
-
-        const currentStatus = item.status?.S || '';
-        if (
-          currentStatus &&
-          currentStatus !== 'scored' &&
-          currentStatus !== 'completed'
-        ) {
-          logStructured('warn', 'generation_job_not_ready', {
+          logStructured('warn', 'generation_job_context_missing', {
             ...logContext,
-            status: currentStatus,
+            hasRecord: Boolean(item.jobId?.S),
           });
-          return sendError(
-            res,
-            409,
-            'JOB_NOT_READY_FOR_ENHANCEMENT',
-            'Wait for ATS scoring to finish before generating enhanced documents.'
-          );
-        }
+        } else {
+          const currentStatus = item.status?.S || '';
+          if (
+            currentStatus &&
+            currentStatus !== 'scored' &&
+            currentStatus !== 'completed'
+          ) {
+            logStructured('warn', 'generation_job_not_ready', {
+              ...logContext,
+              status: currentStatus,
+            });
+            return sendError(
+              res,
+              409,
+              'JOB_NOT_READY_FOR_ENHANCEMENT',
+              'Wait for ATS scoring to finish before generating enhanced documents.'
+            );
+          }
 
-        originalUploadKey = item.s3Key?.S || '';
-        storedBucket = item.s3Bucket?.S || '';
-        if (!bucket && storedBucket) {
-          bucket = storedBucket;
+          originalUploadKey = item.s3Key?.S || '';
+          storedBucket = item.s3Bucket?.S || '';
+          if (!bucket && storedBucket) {
+            bucket = storedBucket;
+          }
+          existingChangeLog = parseDynamoChangeLog(item.changeLog);
         }
-        existingChangeLog = parseDynamoChangeLog(item.changeLog);
       } catch (err) {
         logStructured('error', 'generation_job_context_lookup_failed', {
           ...logContext,
