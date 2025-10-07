@@ -1469,6 +1469,75 @@ describe('/api/generate-enhanced-docs', () => {
     primeDefaultGeminiResponses();
   });
 
+  test('replaces whitespace cover letters with fallback copy', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary paragraph'],
+              experience: ['Delivered scalable APIs.'],
+              education: [],
+              certifications: [],
+              skills: ['Node.js'],
+              projects: [],
+              projectSnippet: 'Improved deployment speed.',
+              latestRoleTitle: 'Senior Engineer',
+              latestRoleDescription: 'Led engineering initiatives.',
+              mandatorySkills: ['Node.js'],
+              addedSkills: [],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Designed observability tooling.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              cover_letter1: '   ',
+              cover_letter2: '\n\n',
+            }),
+        },
+      });
+
+    const res = await request(app)
+      .post('/api/generate-enhanced-docs')
+      .send({
+        jobId: 'job-789',
+        resumeText: 'Jordan Smith\nExperience\n- Delivered solutions',
+        originalResumeText: 'Jordan Smith\nExperience\n- Delivered solutions',
+        jobDescriptionText: MANUAL_JOB_DESCRIPTION,
+        jobSkills: ['Node.js'],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.coverLetterStatus).toEqual({
+      fallbackApplied: ['cover_letter1', 'cover_letter2'],
+      unavailable: [],
+    });
+    expect(res.body.messages).toEqual(
+      expect.arrayContaining([
+        'Cover letters were generated using fallback copy because the AI response was incomplete.',
+      ])
+    );
+    const coverUrls = res.body.urls.filter((entry) =>
+      entry.type.startsWith('cover_letter')
+    );
+    expect(coverUrls).toHaveLength(2);
+    coverUrls.forEach((entry) => {
+      expect(entry.rawText).toMatch(/Dear Hiring Manager/i);
+    });
+
+    process.env.NODE_ENV = originalEnv;
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
+  });
+
   test('surfaces message when cover letters remain unavailable', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';

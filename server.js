@@ -14187,20 +14187,24 @@ async function generateEnhancedDocumentsResponse({
     resumeText: combinedProfile,
   });
   const missingCoverLetters = [];
-  if (!coverData.cover_letter1) {
-    const fallback = fallbackLetters.cover_letter1?.trim();
-    if (fallback) {
-      coverData.cover_letter1 = fallback;
-      missingCoverLetters.push('cover_letter1');
+  const ensureCoverLetterValue = (key) => {
+    const currentValue = coverData[key];
+    const hasUsableValue =
+      typeof currentValue === 'string' && currentValue.trim().length > 0;
+    if (hasUsableValue) {
+      return;
     }
-  }
-  if (!coverData.cover_letter2) {
-    const fallback = fallbackLetters.cover_letter2?.trim();
-    if (fallback) {
-      coverData.cover_letter2 = fallback;
-      missingCoverLetters.push('cover_letter2');
+    const fallbackValue = fallbackLetters?.[key];
+    const normalizedFallback =
+      typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
+    if (normalizedFallback) {
+      coverData[key] = normalizedFallback;
+      missingCoverLetters.push(key);
     }
-  }
+  };
+
+  ensureCoverLetterValue('cover_letter1');
+  ensureCoverLetterValue('cover_letter2');
   if (missingCoverLetters.length) {
     logStructured('warn', 'generation_cover_letters_fallback', {
       ...logContext,
