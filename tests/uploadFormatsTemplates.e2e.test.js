@@ -114,6 +114,12 @@ describe('resume lifecycle coverage', () => {
       ])
     );
 
+    const originalUploadEntry = uploadResponse.body.urls.find(
+      (entry) => entry.type === 'original_upload'
+    );
+    expect(originalUploadEntry).toBeDefined();
+    expect(originalUploadEntry.fileUrl).toContain('.pdf');
+
     const resumeText = uploadResponse.body.resumeText || uploadResponse.body.originalResumeText;
     expectResumeStructure(resumeText);
 
@@ -210,6 +216,12 @@ describe('resume lifecycle coverage', () => {
         'cover_letter2',
       ])
     );
+
+    const generationOriginalEntry = generationResponse.body.urls.find(
+      (entry) => entry.type === 'original_upload'
+    );
+    expect(generationOriginalEntry).toBeDefined();
+    expect(generationOriginalEntry.fileUrl).toContain('.pdf');
 
     generationResponse.body.urls.forEach((entry) => {
       expect(entry.url).toContain('https://example.com/');

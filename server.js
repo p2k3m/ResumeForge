@@ -14275,6 +14275,11 @@ async function generateEnhancedDocumentsResponse({
   const usedFileBaseNames = new Set();
   const generatedTemplates = {};
   const generationMessages = [];
+  const originalResumeForStorage =
+    typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
+      ? originalResumeTextInput
+      : resumeText;
+  let originalHandledViaArtifacts = false;
   const pushGenerationMessage = (value) => {
     if (typeof value !== 'string') return;
     const trimmed = value.trim();
@@ -14291,7 +14296,137 @@ async function generateEnhancedDocumentsResponse({
     });
   }
 
-  if (originalUploadKey) {
+  const normalizedOriginalUploadKey = normalizeArtifactKey(originalUploadKey);
+  const originalTemplateMetadata = {
+    templateId: 'original',
+    templateName: 'Original Upload',
+    templateType: 'resume',
+  };
+
+  if (normalizedOriginalUploadKey) {
+    const originalExtension = (path.extname(normalizedOriginalUploadKey) || '').toLowerCase();
+    if (!originalExtension || originalExtension === '.pdf') {
+      downloadArtifacts.unshift({
+        type: 'original_upload',
+        key: normalizedOriginalUploadKey,
+        templateMetadata: originalTemplateMetadata,
+        text: originalResumeForStorage,
+      });
+      originalHandledViaArtifacts = true;
+      usedFileBaseNames.add('original');
+    } else {
+      const originalBaseName = ensureUniqueFileBase(
+        buildDocumentFileBaseName({ type: 'original', templateId: 'original', variant: 'original_upload' }),
+        usedFileBaseNames
+      );
+      const originalPdfKey = `${generatedPrefix}${originalBaseName}.pdf`;
+      const contactLinesForOriginal = Array.isArray(contactDetails.contactLines)
+        ? contactDetails.contactLines
+        : [];
+      const originalFallbackPayload = {
+        requestedTemplateId: selection?.template1 || '',
+        templateId: selection?.template1 || '',
+        text: originalResumeForStorage,
+        name: applicantName,
+        jobTitle: versionsContext.jobTitle || applicantTitle || '',
+        contactLines: contactLinesForOriginal,
+        documentType: 'resume',
+        logContext: {
+          ...logContext,
+          documentType: 'resume',
+          outputName: 'original_upload',
+          outputKeyPrefix: generatedPrefix,
+          originalUploadKey: normalizedOriginalUploadKey,
+          originalUploadExtension: originalExtension,
+        },
+      };
+
+      let originalPdfBuffer = null;
+      let originalUsedMinimalFallback = false;
+
+      try {
+        originalPdfBuffer = await generatePlainPdfFallback(originalFallbackPayload);
+      } catch (err) {
+        logStructured('warn', 'original_upload_plain_pdf_failed', {
+          ...logContext,
+          error: serializeError(err),
+          originalUploadKey: normalizedOriginalUploadKey,
+          originalUploadExtension: originalExtension,
+        });
+      }
+
+      if (!originalPdfBuffer) {
+        try {
+          originalPdfBuffer = createMinimalPlainPdfBuffer({
+            lines: originalResumeForStorage.split('\n'),
+            name: applicantName,
+            jobTitle: versionsContext.jobTitle || applicantTitle || '',
+            contactLines: contactLinesForOriginal,
+            documentType: 'resume',
+            requestedTemplateId: selection?.template1 || '',
+          });
+          originalUsedMinimalFallback = true;
+        } catch (minimalErr) {
+          logStructured('error', 'original_upload_minimal_pdf_failed', {
+            ...logContext,
+            error: serializeError(minimalErr),
+            originalUploadKey: normalizedOriginalUploadKey,
+            originalUploadExtension: originalExtension,
+          });
+        }
+      }
+
+      if (originalPdfBuffer) {
+        try {
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: originalPdfKey,
+              Body: originalPdfBuffer,
+              ContentType: 'application/pdf',
+            })
+          );
+          registerArtifactKey(originalPdfKey);
+          uploadedArtifacts.push({ type: 'original_upload', key: originalPdfKey });
+          downloadArtifacts.unshift({
+            type: 'original_upload',
+            key: originalPdfKey,
+            templateMetadata: originalTemplateMetadata,
+            text: originalResumeForStorage,
+          });
+          originalHandledViaArtifacts = true;
+          logStructured(
+            originalUsedMinimalFallback ? 'warn' : 'info',
+            originalUsedMinimalFallback
+              ? 'original_upload_minimal_pdf_generated'
+              : 'original_upload_pdf_generated',
+            {
+              ...logContext,
+              storageKey: originalPdfKey,
+              originalUploadKey: normalizedOriginalUploadKey,
+              originalUploadExtension: originalExtension,
+            }
+          );
+        } catch (uploadErr) {
+          logStructured('error', 'original_upload_pdf_upload_failed', {
+            ...logContext,
+            error: serializeError(uploadErr),
+            originalUploadKey: normalizedOriginalUploadKey,
+            originalUploadExtension: originalExtension,
+            storageKey: originalPdfKey,
+          });
+        }
+      } else {
+        logStructured('error', 'original_upload_pdf_generation_failed', {
+          ...logContext,
+          originalUploadKey: normalizedOriginalUploadKey,
+          originalUploadExtension: originalExtension,
+        });
+      }
+    }
+  }
+
+  if (originalUploadKey && !originalHandledViaArtifacts) {
     try {
       const originalSignedUrl = await getSignedUrl(
         s3,
@@ -14510,10 +14645,6 @@ async function generateEnhancedDocumentsResponse({
   }
 
   const textArtifactPrefix = `${generatedPrefix}artifacts/`;
-  const originalResumeForStorage =
-    typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
-      ? originalResumeTextInput
-      : resumeText;
 
   const textArtifacts = [
     {
