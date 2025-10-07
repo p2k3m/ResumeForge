@@ -6104,12 +6104,25 @@ function renderSectionTokensToHtml(
   { sectionKey, enhancementTokenMap, presentation } = {}
 ) {
   let skipBullets = false;
-  if (presentation && Object.prototype.hasOwnProperty.call(presentation, 'showMarkers')) {
-    skipBullets = presentation.showMarkers === false;
+  let presentationMarkerClasses = [];
+  if (presentation) {
+    if (Object.prototype.hasOwnProperty.call(presentation, 'showMarkers')) {
+      skipBullets = presentation.showMarkers === false;
+    }
+    if (presentation.markerClass) {
+      presentationMarkerClasses = String(presentation.markerClass)
+        .split(/\s+/)
+        .filter(Boolean);
+    }
   } else if (sectionKey) {
     try {
       const resolvedPresentation = resolveTemplatePresentation(sectionKey);
       skipBullets = resolvedPresentation.showMarkers === false;
+      if (resolvedPresentation.markerClass) {
+        presentationMarkerClasses = String(resolvedPresentation.markerClass)
+          .split(/\s+/)
+          .filter(Boolean);
+      }
     } catch {
       skipBullets = sectionKey === 'summary' || sectionKey === 'contact';
     }
@@ -6133,10 +6146,11 @@ function renderSectionTokensToHtml(
       if (t.type === 'tab') return '<span class="tab"></span>';
       if (t.type === 'bullet') {
         if (skipBullets) return '';
-        if (sectionKey === 'education') {
-          return '<span class="edu-bullet">•</span> ';
-        }
-        return '<span class="bullet">•</span> ';
+        const baseClass = sectionKey === 'education' ? 'edu-bullet' : 'bullet';
+        const classNames = new Set([baseClass]);
+        presentationMarkerClasses.forEach((cls) => classNames.add(cls));
+        const classAttr = `class="${Array.from(classNames).join(' ')}"`;
+        return `<span ${classAttr}>•</span> `;
       }
       if (t.type === 'jobsep') return '';
       return text;
