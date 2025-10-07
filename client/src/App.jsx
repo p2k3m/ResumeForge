@@ -953,6 +953,59 @@ const ensureCoverTemplateContext = (context, templateId) => {
   return base
 }
 
+const buildResumeTemplateMetadata = (templateId) => {
+  const canonical = canonicalizeTemplateId(templateId)
+  if (!canonical) return null
+  const templateName = formatTemplateName(canonical)
+  const templateLabel = templateName ? `${templateName} Resume` : 'Resume Template'
+  return {
+    templateId: canonical,
+    templateName,
+    templateType: 'resume',
+    templateLabel
+  }
+}
+
+const buildCoverTemplateMetadata = (templateId) => {
+  const canonical = canonicalizeCoverTemplateId(templateId)
+  if (!canonical) return null
+  const templateName = formatCoverTemplateName(canonical)
+  const templateLabel = templateName || 'Cover Letter'
+  return {
+    templateId: canonical,
+    templateName,
+    templateType: 'cover',
+    templateLabel
+  }
+}
+
+const decorateTemplateContext = (context) => {
+  if (!context || typeof context !== 'object') return context
+  const canonicalPrimary = canonicalizeTemplateId(context.template1)
+  const canonicalSecondary = canonicalizeTemplateId(context.template2)
+  const canonicalSelected =
+    canonicalizeTemplateId(context.selectedTemplate) ||
+    canonicalPrimary ||
+    canonicalSecondary ||
+    ''
+  const canonicalCoverPrimary = canonicalizeCoverTemplateId(context.coverTemplate1)
+  const canonicalCoverSecondary = canonicalizeCoverTemplateId(context.coverTemplate2)
+
+  const templateMetadata = {
+    resume: {
+      primary: buildResumeTemplateMetadata(canonicalPrimary),
+      secondary: buildResumeTemplateMetadata(canonicalSecondary),
+      selected: buildResumeTemplateMetadata(canonicalSelected)
+    },
+    cover: {
+      primary: buildCoverTemplateMetadata(canonicalCoverPrimary),
+      secondary: buildCoverTemplateMetadata(canonicalCoverSecondary)
+    }
+  }
+
+  return { ...context, templateMetadata }
+}
+
 const normalizeTemplateContext = (context) => {
   if (!context || typeof context !== 'object') return null
   const normalized = { ...context }
@@ -1010,7 +1063,8 @@ const normalizeTemplateContext = (context) => {
     )
   }
   const templateForCover = normalized.selectedTemplate || normalized.template1 || 'modern'
-  return ensureCoverTemplateContext(normalized, templateForCover)
+  const contextWithCover = ensureCoverTemplateContext(normalized, templateForCover)
+  return decorateTemplateContext(contextWithCover)
 }
 
 const buildTemplateRequestContext = (templateContext, selectedTemplate) => {
@@ -2263,7 +2317,8 @@ function App() {
       if (!base.template1) {
         base.template1 = storedTemplate
       }
-      return ensureCoverTemplateContext(base, storedTemplate)
+      const nextContext = ensureCoverTemplateContext(base, storedTemplate)
+      return decorateTemplateContext(nextContext)
     })
   }, [userIdentifier])
 
@@ -2519,25 +2574,119 @@ function App() {
     const resolvedCoverSecondary =
       canonicalCoverSecondaryTemplate || resolvedCoverPrimary || DEFAULT_COVER_TEMPLATE
 
+    const resumeMetadata =
+      (templateContext && typeof templateContext === 'object'
+        ? templateContext.templateMetadata?.resume
+        : null) || {}
+    const coverMetadata =
+      (templateContext && typeof templateContext === 'object'
+        ? templateContext.templateMetadata?.cover
+        : null) || {}
+
+    const pickResumeName = (entry, fallbackId) => {
+      const fallbackName = fallbackId ? formatTemplateName(fallbackId) : ''
+      return (
+        (entry && typeof entry.templateName === 'string' && entry.templateName.trim()) ||
+        fallbackName
+      )
+    }
+
+    const pickResumeLabel = (entry, fallbackId) => {
+      const fallbackName = fallbackId ? formatTemplateName(fallbackId) : ''
+      const fallbackLabel = fallbackName ? `${fallbackName} Resume` : 'Resume Template'
+      return (
+        (entry && typeof entry.templateLabel === 'string' && entry.templateLabel.trim()) ||
+        fallbackLabel
+      )
+    }
+
+    const pickCoverName = (entry, fallbackId) => {
+      const fallbackName = fallbackId ? formatCoverTemplateName(fallbackId) : 'Cover Letter'
+      return (
+        (entry && typeof entry.templateName === 'string' && entry.templateName.trim()) ||
+        fallbackName
+      )
+    }
+
+    const pickCoverLabel = (entry, fallbackId) => {
+      const fallbackName = fallbackId ? formatCoverTemplateName(fallbackId) : 'Cover Letter'
+      return (
+        (entry && typeof entry.templateLabel === 'string' && entry.templateLabel.trim()) ||
+        fallbackName
+      )
+    }
+
     return {
-      original_upload: { id: 'original', name: 'Original Upload' },
+      original_upload: { id: 'original', name: 'Original Upload', label: 'Original Upload' },
       version1: {
         id: canonicalPrimaryTemplate,
-        name: formatTemplateName(canonicalPrimaryTemplate)
+        name: pickResumeName(resumeMetadata.primary, canonicalPrimaryTemplate),
+        label: pickResumeLabel(resumeMetadata.primary, canonicalPrimaryTemplate)
       },
       version2: {
         id: canonicalSecondaryTemplate,
-        name: formatTemplateName(canonicalSecondaryTemplate)
+        name: pickResumeName(resumeMetadata.secondary, canonicalSecondaryTemplate),
+        label: pickResumeLabel(resumeMetadata.secondary, canonicalSecondaryTemplate)
       },
       cover_letter1: {
         id: resolvedCoverPrimary,
-        name: formatCoverTemplateName(resolvedCoverPrimary)
+        name: pickCoverName(coverMetadata.primary, resolvedCoverPrimary),
+        label: pickCoverLabel(coverMetadata.primary, resolvedCoverPrimary)
       },
       cover_letter2: {
         id: resolvedCoverSecondary,
-        name: formatCoverTemplateName(resolvedCoverSecondary)
+        name: pickCoverName(coverMetadata.secondary, resolvedCoverSecondary),
+        label: pickCoverLabel(coverMetadata.secondary, resolvedCoverSecondary)
       }
     }
+  }, [selectedTemplate, templateContext])
+
+  const downloadTemplateSummaryMessage = useMemo(() => {
+    const metadata =
+      templateContext && typeof templateContext === 'object'
+        ? templateContext.templateMetadata || {}
+        : {}
+    const resumeMetadata =
+      (metadata && typeof metadata === 'object' ? metadata.resume : null) || {}
+    const selectedResumeMeta =
+      (resumeMetadata && typeof resumeMetadata === 'object'
+        ? resumeMetadata.selected || resumeMetadata.primary
+        : null) || null
+    const canonicalSelected =
+      canonicalizeTemplateId(selectedResumeMeta?.templateId) ||
+      canonicalizeTemplateId(
+        templateContext && typeof templateContext === 'object'
+          ? templateContext.selectedTemplate
+          : ''
+      ) ||
+      canonicalizeTemplateId(
+        templateContext && typeof templateContext === 'object'
+          ? templateContext.template1
+          : ''
+      ) ||
+      canonicalizeTemplateId(selectedTemplate) ||
+      ''
+    const baseName =
+      (selectedResumeMeta &&
+        typeof selectedResumeMeta.templateLabel === 'string' &&
+        selectedResumeMeta.templateLabel.trim()) ||
+      (selectedResumeMeta &&
+        typeof selectedResumeMeta.templateName === 'string' &&
+        selectedResumeMeta.templateName.trim()) ||
+      (canonicalSelected ? `${formatTemplateName(canonicalSelected)} Resume` : '')
+    if (!baseName && !canonicalSelected) {
+      return ''
+    }
+    const badgeSource =
+      (selectedResumeMeta &&
+        typeof selectedResumeMeta.templateId === 'string' &&
+        selectedResumeMeta.templateId.trim()) ||
+      canonicalSelected ||
+      ''
+    if (badgeSource) {
+      return `You chose: ${baseName} (${badgeSource})`
+    }
+    return `You chose: ${baseName}`
   }, [selectedTemplate, templateContext])
 
   const templateHistorySummary = useMemo(() => {
@@ -2624,7 +2773,8 @@ function App() {
           const filteredHistory = currentHistory.filter((item) => item !== canonical)
           base.templateHistory = [canonical, ...filteredHistory]
         }
-        return ensureCoverTemplateContext(base, canonical)
+        const nextContext = ensureCoverTemplateContext(base, canonical)
+        return decorateTemplateContext(nextContext)
       })
     },
     [setTemplateContext]
@@ -2649,10 +2799,10 @@ function App() {
         } else {
           base.coverTemplate2 = secondary
         }
-        return ensureCoverTemplateContext(
-          base,
+        const resumeTemplateForContext =
           base.selectedTemplate || base.template1 || selectedTemplate || 'modern'
-        )
+        const nextContext = ensureCoverTemplateContext(base, resumeTemplateForContext)
+        return decorateTemplateContext(nextContext)
       })
     },
     [selectedTemplate, setTemplateContext]
@@ -6950,6 +7100,12 @@ function App() {
             <div className="space-y-6">
               {renderTemplateSelection('downloads')}
 
+              {downloadTemplateSummaryMessage && (
+                <p className="text-sm font-semibold text-purple-700/90">
+                  {downloadTemplateSummaryMessage}
+                </p>
+              )}
+
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <button
                   type="button"
@@ -6975,6 +7131,12 @@ function App() {
             </header>
             <div className="space-y-6">
               {renderTemplateSelection('downloads')}
+
+              {downloadTemplateSummaryMessage && (
+                <p className="text-sm font-semibold text-purple-700/90">
+                  {downloadTemplateSummaryMessage}
+                </p>
+              )}
 
               {downloadGroups.resume.length > 0 && (
                 <div className="space-y-3">

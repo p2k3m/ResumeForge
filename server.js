@@ -14466,6 +14466,38 @@ async function generateEnhancedDocumentsResponse({
     resume: { primary: template1, secondary: template2 },
     cover: { primary: coverTemplate1, secondary: coverTemplate2 },
   };
+
+  const buildResumeTemplateContextEntry = (templateId) => {
+    const canonical = canonicalizeCvTemplateId(templateId || '');
+    if (!canonical) {
+      return null;
+    }
+    const templateName = formatTemplateDisplayName(canonical);
+    const templateLabel = templateName
+      ? `${templateName} Resume`
+      : 'Resume Template';
+    return {
+      templateId: canonical,
+      templateName,
+      templateType: 'resume',
+      templateLabel,
+    };
+  };
+
+  const buildCoverTemplateContextEntry = (templateId) => {
+    const canonical = canonicalizeCoverTemplateId(templateId || '');
+    if (!canonical) {
+      return null;
+    }
+    const templateName = formatCoverTemplateDisplayName(canonical);
+    const templateLabel = templateName || 'Cover Letter';
+    return {
+      templateId: canonical,
+      templateName,
+      templateType: 'cover',
+      templateLabel,
+    };
+  };
   const originalResumeForStorage =
     typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
       ? originalResumeTextInput
@@ -15433,6 +15465,19 @@ async function generateEnhancedDocumentsResponse({
       coverTemplates: availableCoverTemplates,
       selectedTemplate: canonicalSelectedTemplate,
       templateHistory,
+      templateMetadata: {
+        resume: {
+          primary: buildResumeTemplateContextEntry(template1),
+          secondary: buildResumeTemplateContextEntry(template2),
+          selected: buildResumeTemplateContextEntry(
+            canonicalSelectedTemplate || template1 || template2,
+          ),
+        },
+        cover: {
+          primary: buildCoverTemplateContextEntry(coverTemplate1),
+          secondary: buildCoverTemplateContextEntry(coverTemplate2),
+        },
+      },
     },
     coverLetterStatus,
     messages: generationMessages,
