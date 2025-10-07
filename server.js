@@ -10205,20 +10205,19 @@ function buildDocumentSessionPrefix({
 } = {}) {
   const safeOwner =
     sanitizeS3KeyComponent(ownerSegment, { fallback: 'candidate' }) || 'candidate';
-  const safeDate = sanitizeS3KeyComponent(dateSegment, {
-    fallback: new Date().toISOString().slice(0, 10),
-  });
-  const safeJob = sanitizeS3KeyComponent(jobSegment);
   const safeSession = sanitizeS3KeyComponent(sessionSegment);
+  const safeDate = sanitizeS3KeyComponent(dateSegment);
+  const safeJob = sanitizeS3KeyComponent(jobSegment);
   const segments = ['cv', safeOwner];
-  if (safeDate) {
-    segments.push(safeDate);
-  }
-  if (safeJob) {
-    segments.push(safeJob);
-  }
   if (safeSession) {
     segments.push(safeSession);
+  } else {
+    if (safeDate) {
+      segments.push(safeDate);
+    }
+    if (safeJob) {
+      segments.push(safeJob);
+    }
   }
   return `${segments.join('/')}/`;
 }
@@ -10439,20 +10438,70 @@ function buildDocumentFileBaseName({ type, templateId, variant }) {
   return variantSegment || sanitizeS3KeyComponent(type, { fallback: 'document' }) || 'document';
 }
 
-function ensureUniqueFileBase(baseName, usedNames) {
-  const safeBase = baseName || 'document';
-  if (!usedNames.has(safeBase)) {
-    usedNames.add(safeBase);
-    return safeBase;
+function ensureTrailingSlash(prefix = '') {
+  if (!prefix) {
+    return '';
   }
+  return prefix.endsWith('/') ? prefix : `${prefix}/`;
+}
+
+function ensureUniquePdfKey(candidateKey, usedKeys) {
+  if (!usedKeys) {
+    return candidateKey;
+  }
+  if (!usedKeys.has(candidateKey)) {
+    return candidateKey;
+  }
+  const lastSlashIndex = candidateKey.lastIndexOf('/');
+  const directory = lastSlashIndex >= 0 ? candidateKey.slice(0, lastSlashIndex + 1) : '';
+  const fileName = lastSlashIndex >= 0 ? candidateKey.slice(lastSlashIndex + 1) : candidateKey;
+  const lastDotIndex = fileName.lastIndexOf('.');
+  const baseName = lastDotIndex >= 0 ? fileName.slice(0, lastDotIndex) : fileName;
+  const extension = lastDotIndex >= 0 ? fileName.slice(lastDotIndex) : '';
   let index = 2;
-  let candidate;
+  let nextCandidate;
   do {
-    candidate = `${safeBase}_${index}`;
+    nextCandidate = `${directory}${baseName}_${index}${extension}`;
     index += 1;
-  } while (usedNames.has(candidate));
-  usedNames.add(candidate);
-  return candidate;
+  } while (usedKeys.has(nextCandidate));
+  return nextCandidate;
+}
+
+function buildTemplateScopedPdfKey({
+  basePrefix,
+  documentType,
+  templateId,
+  variant,
+  usedKeys,
+}) {
+  const normalizedPrefix = ensureTrailingSlash(basePrefix);
+  const templateFallback =
+    documentType === 'cover_letter'
+      ? 'cover-letter'
+      : documentType === 'resume'
+      ? 'resume'
+      : documentType === 'original'
+      ? 'original'
+      : 'document';
+  const templateSegment =
+    sanitizeS3KeyComponent(templateId, { fallback: templateFallback }) ||
+    templateFallback;
+  const variantFallback =
+    documentType === 'cover_letter'
+      ? 'cover-letter'
+      : documentType === 'resume'
+      ? 'version'
+      : documentType === 'original'
+      ? 'original'
+      : 'document';
+  const versionSegment =
+    sanitizeS3KeyComponent(variant, { fallback: variantFallback }) || variantFallback;
+  const candidateKey = `${normalizedPrefix}${templateSegment}/${versionSegment}.pdf`;
+  const uniqueKey = ensureUniquePdfKey(candidateKey, usedKeys);
+  if (usedKeys) {
+    usedKeys.add(uniqueKey);
+  }
+  return uniqueKey;
 }
 
 function sanitizeJobSegment(jobId) {
@@ -14355,7 +14404,7 @@ async function generateEnhancedDocumentsResponse({
         jobSegment: jobSegmentForKeys,
         sessionSegment: generationRunSegment,
       });
-  const generatedPrefix = `${prefix}runs/${generationRunSegment}/`;
+  const sessionPrefix = prefix;
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
   });
@@ -14404,7 +14453,7 @@ async function generateEnhancedDocumentsResponse({
   const artifactTimestamp = new Date().toISOString();
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
-  const usedFileBaseNames = new Set();
+  const usedPdfKeys = new Set();
   const generatedTemplates = {};
   const generationMessages = [];
   const templateFallbackApplied = {
@@ -14471,13 +14520,14 @@ async function generateEnhancedDocumentsResponse({
         text: originalResumeForStorage,
       });
       originalHandledViaArtifacts = true;
-      usedFileBaseNames.add('original');
     } else {
-      const originalBaseName = ensureUniqueFileBase(
-        buildDocumentFileBaseName({ type: 'original', templateId: 'original', variant: 'original_upload' }),
-        usedFileBaseNames
-      );
-      const originalPdfKey = `${generatedPrefix}${originalBaseName}.pdf`;
+      const originalPdfKey = buildTemplateScopedPdfKey({
+        basePrefix: sessionPrefix,
+        documentType: 'original',
+        templateId: 'original',
+        variant: 'original_upload',
+        usedKeys: usedPdfKeys,
+      });
       const contactLinesForOriginal = Array.isArray(contactDetails.contactLines)
         ? contactDetails.contactLines
         : [];
@@ -14493,7 +14543,7 @@ async function generateEnhancedDocumentsResponse({
           ...logContext,
           documentType: 'resume',
           outputName: 'original_upload',
-          outputKeyPrefix: generatedPrefix,
+          outputKeyPrefix: sessionPrefix,
           originalUploadKey: normalizedOriginalUploadKey,
           originalUploadExtension: originalExtension,
         },
@@ -14687,14 +14737,14 @@ async function generateEnhancedDocumentsResponse({
       templates: candidateTemplates,
       inputText: templateText,
       generativeModel,
-      logContext: {
-        ...logContext,
-        documentType,
-        outputName: name,
-        outputKeyPrefix: generatedPrefix,
-        sessionId: logContext?.sessionId || generationRunSegment,
-        generationRunId: generationRunSegment,
-      },
+        logContext: {
+          ...logContext,
+          documentType,
+          outputName: name,
+          outputKeyPrefix: sessionPrefix,
+          sessionId: logContext?.sessionId || generationRunSegment,
+          generationRunId: generationRunSegment,
+        },
       buildOptionsForTemplate: (templateId) => {
         const resolvedTemplateParams = resolveTemplateParamsConfig(
           templateParamsConfig,
@@ -14772,13 +14822,13 @@ async function generateEnhancedDocumentsResponse({
       }
     }
 
-    const baseName = buildDocumentFileBaseName({
-      type: documentType,
+    const key = buildTemplateScopedPdfKey({
+      basePrefix: sessionPrefix,
+      documentType,
       templateId: effectiveTemplateId,
       variant: name,
+      usedKeys: usedPdfKeys,
     });
-    const uniqueBaseName = ensureUniqueFileBase(baseName, usedFileBaseNames);
-    const key = `${generatedPrefix}${uniqueBaseName}.pdf`;
 
     await s3.send(
       new PutObjectCommand({
@@ -14885,7 +14935,7 @@ async function generateEnhancedDocumentsResponse({
     });
   }
 
-  const textArtifactPrefix = `${generatedPrefix}artifacts/`;
+  const textArtifactPrefix = `${sessionPrefix}artifacts/`;
 
   const textArtifacts = [
     {

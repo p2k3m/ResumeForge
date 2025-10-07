@@ -180,7 +180,11 @@ describe('upload to download flow (e2e)', () => {
 
     expect(pdfKeys.length).toBeGreaterThanOrEqual(4);
     expect(pdfKeys.join('\n')).toContain('cv/');
-    expect(pdfKeys.join('\n')).toContain('cover_letter_');
-    expect(pdfKeys.join('\n')).toContain('/runs/');
+    pdfKeys.forEach((key) => {
+      const segments = key.split('/');
+      expect(segments.length).toBeGreaterThanOrEqual(5);
+    });
+    expect(pdfKeys.some((key) => key.endsWith('/cover_letter1.pdf'))).toBe(true);
+    expect(pdfKeys.some((key) => key.endsWith('/cover_letter2.pdf'))).toBe(true);
   });
 });

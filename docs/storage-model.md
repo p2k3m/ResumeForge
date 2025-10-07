@@ -35,25 +35,23 @@ without reverse-engineering `server.js`.
 
 Canonical prefixes are built by `buildDocumentSessionPrefix()` using sanitised
 segments to avoid unsafe characters and to keep paths deterministic for Ops.
-Segments are appended in the following order: `cv/<owner>/<ISO-date>/<job>/<session>/`.
-Each segment is optional except for the owner, which falls back to `candidate`.
-All values are lower-cased, trimmed, and truncated where appropriate.
+Segments are appended in the following order: `cv/<owner>/<session>/`. Each
+segment is optional except for the owner, which falls back to `candidate`. The
+session segment is normally derived from the request id; when unavailable the
+code falls back to sanitised job/date metadata to keep paths unique. All values
+are lower-cased, trimmed, and truncated where appropriate.
 
-Generation runs add a secondary `runs/<request-id>/` directory under the session
-prefix. Every call to the generator computes a `generationRunSegment` by
-sanitising the request id or falling back to a random identifier. That ensures a
-new run never overwrites artefacts from prior attempts in the same session.
-
-Within each run the service writes:
+Within each session the service writes:
 
 * **PDF artefacts** – Enhanced CVs and cover letters are uploaded as
-  `<generatedPrefix>/<slug>.pdf`. The slug is derived from the template id and
-  document type and is deduplicated with `ensureUniqueFileBase()` so collisions
-  append `_2`, `_3`, etc.
+  `<sessionPrefix>/<template>/<variant>.pdf`. The helper
+  `buildTemplateScopedPdfKey()` sanitises both the template id and variant (for
+  example `version1` or `cover_letter2`) and appends numeric suffixes when a key
+  would otherwise collide during the same request.
 * **Text artefacts** – JSON snapshots (original text, generated versions, and
-  run-specific change logs) live under `<generatedPrefix>/artifacts/*.json` so
-  they are co-located with the PDFs that produced them. The session-wide change
-  history is mirrored to `<prefix>/logs/change-log.json` after each update so
+  change logs) live under `<sessionPrefix>/artifacts/*.json` so they are
+  co-located with the PDFs that produced them. The session-wide change history
+  is mirrored to `<sessionPrefix>/logs/change-log.json` after each update so
   DynamoDB retains only lightweight pointers.
 * **Activity logs** – Structured log events for uploads, generation, and
   failures are appended to the JSONL file in the same session prefix for easy
@@ -62,12 +60,12 @@ Within each run the service writes:
 ## Retention expectations
 
 * The relocation step deletes the temporary upload, but canonical prefixes are
-  never pruned in application code. S3 therefore retains a full history of runs
-  per candidate/job until a lifecycle policy deletes them manually.
-* Because each generation uses a unique `runs/<request-id>/` directory and file
-  slugs are deduplicated, regenerated résumés accumulate instead of overwriting
-  older ones. Operations can safely archive or expire entire prefixes without
-  risking cross-run conflicts.
+  never pruned in application code. S3 therefore retains a full history of
+  sessions per candidate/job until a lifecycle policy deletes them manually.
+* Because each template/variant combination maps to a stable key inside the
+  session prefix, the latest run overwrites the previous PDF for that slot while
+  preserving historical JSON logs. Operators can still apply lifecycle rules at
+  the session level without worrying about orphaned directories.
 
 ## Download logic
 
@@ -85,8 +83,8 @@ Within each run the service writes:
 ## Operational considerations
 
 * Apply S3 lifecycle policies at the prefix level to manage growth; the
-  application never deletes completed runs automatically.
+  application never deletes completed sessions automatically.
 * When triaging incidents, inspect the session prefix: the logs directory shows
-  the processing trail (including `change-log.json`), the `runs/` subfolders
-  enumerate each attempt, and the `artifacts/` directory contains the JSON
+  the processing trail (including `change-log.json`), the per-template folders
+  hold the generated PDFs, and the `artifacts/` directory contains the JSON
   representation of what users saw.

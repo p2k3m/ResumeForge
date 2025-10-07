@@ -100,7 +100,11 @@ describe('AWS integrations for /api/process-cv', () => {
         command.key.includes('cv/')
     );
     expect(generatedPdf).toBeTruthy();
-    expect(generatedPdf.key).toContain('/runs/');
+    const pdfSegments = generatedPdf.key.split('/');
+    expect(pdfSegments.length).toBeGreaterThanOrEqual(5);
+    expect(pdfSegments[0]).toBe('cv');
+    expect(pdfSegments[3]).toMatch(/[a-z0-9_-]+/);
+    expect(pdfSegments[4]).toMatch(/[a-z0-9_-]+\.pdf$/);
 
     const dynamoPut = mocks.mockDynamoSend.mock.calls.find(
       ([command]) => command.__type === 'PutItemCommand'
