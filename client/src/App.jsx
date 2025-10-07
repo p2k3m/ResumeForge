@@ -46,6 +46,69 @@ const FRIENDLY_ERROR_MESSAGES = {
     'Gemini enhancements are temporarily offline. Please try again soon.'
 }
 
+const SERVICE_ERROR_SOURCE_BY_CODE = {
+  INITIAL_UPLOAD_FAILED: 's3',
+  STORAGE_UNAVAILABLE: 's3',
+  CHANGE_LOG_PERSISTENCE_FAILED: 's3',
+  DOCUMENT_GENERATION_FAILED: 'lambda',
+  PROCESSING_FAILED: 'lambda',
+  GENERATION_FAILED: 'lambda',
+  AI_RESPONSE_INVALID: 'gemini'
+}
+
+const SERVICE_ERROR_STEP_BY_CODE = {
+  INITIAL_UPLOAD_FAILED: 'upload',
+  STORAGE_UNAVAILABLE: 'download',
+  CHANGE_LOG_PERSISTENCE_FAILED: 'improvements',
+  DOCUMENT_GENERATION_FAILED: 'score',
+  PROCESSING_FAILED: 'score',
+  GENERATION_FAILED: 'score',
+  AI_RESPONSE_INVALID: 'improvements'
+}
+
+const SERVICE_ERROR_STEP_BY_SOURCE = {
+  s3: 'download',
+  lambda: 'score',
+  gemini: 'improvements'
+}
+
+function normalizeServiceSource(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+  const normalized = value.trim().toLowerCase()
+  return ['s3', 'lambda', 'gemini'].includes(normalized) ? normalized : ''
+}
+
+function deriveServiceContextFromError(err) {
+  if (!err || typeof err !== 'object') {
+    return { source: '', code: '' }
+  }
+  const rawCode =
+    typeof err.code === 'string'
+      ? err.code.trim().toUpperCase()
+      : ''
+  const sourceCandidates = [
+    err.serviceError,
+    err.source,
+    err?.details?.source,
+    err?.error?.details?.source
+  ]
+  let normalizedSourceCandidate = ''
+  for (const candidate of sourceCandidates) {
+    const normalized = normalizeServiceSource(candidate)
+    if (normalized) {
+      normalizedSourceCandidate = normalized
+      break
+    }
+  }
+  const mappedSourceFromCode = rawCode
+    ? normalizeServiceSource(SERVICE_ERROR_SOURCE_BY_CODE[rawCode] || '')
+    : ''
+  const source = normalizedSourceCandidate || mappedSourceFromCode
+  return { source, code: rawCode }
+}
+
 function resolveApiError({ data, fallback, status }) {
   const normalizedFallback =
     typeof fallback === 'string' && fallback.trim()
@@ -53,10 +116,8 @@ function resolveApiError({ data, fallback, status }) {
       : 'Request failed. Please try again.'
   const errorCode =
     typeof data?.error?.code === 'string' ? data.error.code.trim() : ''
-  const errorSource =
-    typeof data?.error?.details?.source === 'string'
-      ? data.error.details.source.trim().toLowerCase()
-      : ''
+  const normalizedCode = errorCode ? errorCode.toUpperCase() : ''
+  const errorSource = normalizeServiceSource(data?.error?.details?.source)
   const rawMessage =
     (typeof data?.error?.message === 'string' && data.error.message.trim()) ||
     (typeof data?.message === 'string' && data.message.trim()) ||
@@ -64,12 +125,20 @@ function resolveApiError({ data, fallback, status }) {
     ''
 
   let friendlyFromCode = ''
-  if (errorSource === 's3') {
+  let normalizedSource = errorSource
+  if (!normalizedSource && normalizedCode) {
+    normalizedSource = normalizeServiceSource(
+      SERVICE_ERROR_SOURCE_BY_CODE[normalizedCode] || ''
+    )
+  }
+  if (normalizedCode && FRIENDLY_ERROR_MESSAGES[normalizedCode]) {
+    friendlyFromCode = FRIENDLY_ERROR_MESSAGES[normalizedCode]
+  } else if (normalizedSource === 's3') {
     friendlyFromCode = FRIENDLY_ERROR_MESSAGES.STORAGE_UNAVAILABLE
-  } else if (errorSource === 'gemini') {
+  } else if (normalizedSource === 'gemini') {
     friendlyFromCode = FRIENDLY_ERROR_MESSAGES.AI_RESPONSE_INVALID
-  } else if (errorCode) {
-    friendlyFromCode = FRIENDLY_ERROR_MESSAGES[errorCode] || ''
+  } else if (normalizedSource === 'lambda') {
+    friendlyFromCode = FRIENDLY_ERROR_MESSAGES.DOCUMENT_GENERATION_FAILED
   }
   let message = friendlyFromCode || rawMessage
 
@@ -80,16 +149,25 @@ function resolveApiError({ data, fallback, status }) {
   if (!friendlyFromCode && status >= 500) {
     if (/gemini/i.test(rawMessage)) {
       message = FRIENDLY_ERROR_MESSAGES.AI_RESPONSE_INVALID
+      if (!normalizedSource) {
+        normalizedSource = 'gemini'
+      }
     } else if (/s3|bucket|accessdenied/i.test(rawMessage)) {
       message = FRIENDLY_ERROR_MESSAGES.STORAGE_UNAVAILABLE
+      if (!normalizedSource) {
+        normalizedSource = 's3'
+      }
     } else if (/lambda|serverless|invocation|timeout/i.test(rawMessage)) {
       message = FRIENDLY_ERROR_MESSAGES.DOCUMENT_GENERATION_FAILED
+      if (!normalizedSource) {
+        normalizedSource = 'lambda'
+      }
     }
   }
 
   const isFriendly = Boolean(friendlyFromCode) || message !== rawMessage
 
-  return { message, code: errorCode, isFriendly }
+  return { message, code: normalizedCode, isFriendly, source: normalizedSource }
 }
 
 const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
@@ -1803,6 +1881,7 @@ function App() {
   const [activeImprovement, setActiveImprovement] = useState('')
   const [error, setErrorState] = useState('')
   const [errorRecovery, setErrorRecovery] = useState(null)
+  const [errorContext, setErrorContext] = useState({ source: '', code: '' })
   const setError = useCallback((value, options = {}) => {
     const nextMessage =
       typeof value === 'string'
@@ -1810,13 +1889,35 @@ function App() {
         : typeof value === 'number'
           ? String(value)
           : ''
-    setErrorState(nextMessage)
-    if (nextMessage && options?.allowRetry) {
+    const trimmedMessage = nextMessage.trim()
+    setErrorState(trimmedMessage)
+    if (trimmedMessage && options?.allowRetry) {
       setErrorRecovery('generation')
     } else {
       setErrorRecovery(null)
     }
-  }, [])
+    if (trimmedMessage) {
+      const providedCode =
+        typeof options?.errorCode === 'string'
+          ? options.errorCode.trim().toUpperCase()
+          : ''
+      const providedSource = normalizeServiceSource(options?.serviceError)
+      const derivedSource =
+        providedSource ||
+        (providedCode
+          ? normalizeServiceSource(
+              SERVICE_ERROR_SOURCE_BY_CODE[providedCode] || ''
+            )
+          : '')
+      if (derivedSource || providedCode) {
+        setErrorContext({ source: derivedSource, code: providedCode })
+      } else {
+        setErrorContext({ source: '', code: '' })
+      }
+    } else {
+      setErrorContext({ source: '', code: '' })
+    }
+  }, [setErrorContext])
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
@@ -2504,6 +2605,23 @@ function App() {
   const flowSteps = useMemo(() => {
     const improvementsComplete = improvementCount > 0 || changeCount > 0
     const downloadComplete = downloadCount > 0
+    const normalizedErrorMessage = typeof error === 'string' ? error.trim() : ''
+    const normalizedErrorCode =
+      typeof errorContext?.code === 'string'
+        ? errorContext.code.trim().toUpperCase()
+        : ''
+    const normalizedErrorSource = normalizeServiceSource(errorContext?.source)
+    let errorStep = ''
+    if (normalizedErrorMessage) {
+      if (normalizedErrorCode && SERVICE_ERROR_STEP_BY_CODE[normalizedErrorCode]) {
+        errorStep = SERVICE_ERROR_STEP_BY_CODE[normalizedErrorCode]
+      } else if (
+        normalizedErrorSource &&
+        SERVICE_ERROR_STEP_BY_SOURCE[normalizedErrorSource]
+      ) {
+        errorStep = SERVICE_ERROR_STEP_BY_SOURCE[normalizedErrorSource]
+      }
+    }
 
     const baseSteps = [
       {
@@ -2631,12 +2749,19 @@ function App() {
         noteTone = 'info'
       }
 
+      if (errorStep && normalizedErrorMessage && errorStep === step.key) {
+        note = normalizedErrorMessage
+        noteTone = 'warning'
+      }
+
       return { ...step, status, note, noteTone }
     })
   }, [
     changeCount,
     coverLetterContentMissing,
     downloadCount,
+    error,
+    errorContext,
     hasAnalysisData,
     hasCvFile,
     hasManualJobDescriptionInput,
@@ -2955,7 +3080,11 @@ function App() {
       }
 
       const data = await response.json().catch(() => ({}))
-      const { message: errorMessage, code: errorCode } = resolveApiError({
+      const {
+        message: errorMessage,
+        code: errorCode,
+        source: errorSource
+      } = resolveApiError({
         data,
         fallback: fallbackMessage,
         status: response.status
@@ -2963,10 +3092,13 @@ function App() {
 
       if (!response.ok) {
         if (!silent) {
-          setError(errorMessage)
+          setError(errorMessage, { serviceError: errorSource, errorCode })
         }
         const err = new Error(errorMessage)
         err.code = errorCode || 'DOWNLOAD_REFRESH_FAILED'
+        if (errorSource) {
+          err.serviceError = errorSource
+        }
         throw err
       }
 
@@ -3784,7 +3916,12 @@ function App() {
         }
         const fallbackMessage =
           response.status >= 500 ? CV_GENERATION_ERROR_MESSAGE : 'Request failed'
-        const { message: resolvedMessage, code: errorCode, isFriendly } = resolveApiError({
+        const {
+          message: resolvedMessage,
+          code: errorCode,
+          isFriendly,
+          source: errorSource
+        } = resolveApiError({
           data,
           fallback: fallbackMessage,
           status: response.status
@@ -3807,7 +3944,14 @@ function App() {
           statusText: response.statusText,
           message
         })
-        throw new Error(message)
+        const error = new Error(message)
+        if (errorCode) {
+          error.code = errorCode
+        }
+        if (errorSource) {
+          error.serviceError = errorSource
+        }
+        throw error
       }
 
       const contentType = response.headers.get('content-type') || ''
@@ -4017,7 +4161,8 @@ function App() {
       const errorMessage =
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
-      setError(errorMessage)
+      const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
+      setError(errorMessage, { serviceError: serviceErrorSource, errorCode })
       lastAutoScoreSignatureRef.current = ''
     } finally {
       setIsProcessing(false)
@@ -4727,12 +4872,19 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message } = resolveApiError({
+        const { message, code, source } = resolveApiError({
           data: errPayload,
           fallback: 'Unable to store the change log entry.',
           status: response.status
         })
-        throw new Error(message)
+        const error = new Error(message)
+        if (code) {
+          error.code = code
+        }
+        if (source) {
+          error.serviceError = source
+        }
+        throw error
       }
 
       const data = await response.json()
@@ -4865,7 +5017,12 @@ function App() {
             await persistChangeLogEntry(entryPayload)
           } catch (err) {
             console.error('Persisting change log entry failed', err)
-            setError(err.message || 'Unable to store the change log entry.')
+            const { source: serviceErrorSource, code: errorCode } =
+              deriveServiceContextFromError(err)
+            setError(err.message || 'Unable to store the change log entry.', {
+              serviceError: serviceErrorSource,
+              errorCode
+            })
             setChangeLog(previousChangeLog || [])
           }
         }
@@ -4885,15 +5042,20 @@ function App() {
                 entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
               )
             )
-            try {
-              const payloadWithDelta = persistedEntryPayload
-                ? { ...persistedEntryPayload, scoreDelta: deltaValue }
-                : { ...changeLogEntry, scoreDelta: deltaValue }
-              await persistChangeLogEntry(payloadWithDelta)
-            } catch (err) {
-              console.error('Updating change log entry failed', err)
-              setError(err.message || 'Unable to update the change log entry.')
-            }
+          try {
+            const payloadWithDelta = persistedEntryPayload
+              ? { ...persistedEntryPayload, scoreDelta: deltaValue }
+              : { ...changeLogEntry, scoreDelta: deltaValue }
+            await persistChangeLogEntry(payloadWithDelta)
+          } catch (err) {
+            console.error('Updating change log entry failed', err)
+            const { source: serviceErrorSource, code: errorCode } =
+              deriveServiceContextFromError(err)
+            setError(err.message || 'Unable to update the change log entry.', {
+              serviceError: serviceErrorSource,
+              errorCode
+            })
+          }
           }
 
           setImprovementResults((prev) =>
@@ -4910,7 +5072,12 @@ function App() {
           )
         } catch (err) {
           console.error('Improvement rescore failed', err)
-          setError(err.message || 'Unable to update scores after applying improvement.')
+          const { source: serviceErrorSource, code: errorCode } =
+            deriveServiceContextFromError(err)
+          setError(err.message || 'Unable to update scores after applying improvement.', {
+            serviceError: serviceErrorSource,
+            errorCode
+          })
           setImprovementResults((prev) =>
             prev.map((item) =>
               item.id === id
@@ -5177,12 +5344,19 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message } = resolveApiError({
+        const { message, code, source } = resolveApiError({
           data: errPayload,
           fallback: 'Unable to remove the change log entry.',
           status: response.status
         })
-        throw new Error(message)
+        const error = new Error(message)
+        if (code) {
+          error.code = code
+        }
+        if (source) {
+          error.serviceError = source
+        }
+        throw error
       }
 
       const data = await response.json()
@@ -5266,7 +5440,7 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message, code, isFriendly } = resolveApiError({
+        const { message, code, isFriendly, source } = resolveApiError({
           data: errPayload,
           fallback: CV_GENERATION_ERROR_MESSAGE,
           status: response.status
@@ -5275,7 +5449,14 @@ function App() {
           !isFriendly && code && code !== 'PROCESSING_FAILED'
             ? `${message} (${code})`
             : message
-        throw new Error(finalMessage)
+        const error = new Error(finalMessage)
+        if (code) {
+          error.code = code
+        }
+        if (source) {
+          error.serviceError = source
+        }
+        throw error
       }
 
       const data = await response.json()
@@ -5393,7 +5574,12 @@ function App() {
       const message =
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
-      setError(message, { allowRetry: true })
+      const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
+      setError(message, {
+        allowRetry: true,
+        serviceError: serviceErrorSource,
+        errorCode
+      })
     } finally {
       setIsGeneratingDocs(false)
     }
@@ -5516,7 +5702,7 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message } = resolveApiError({
+        const { message, code, source } = resolveApiError({
           data: errPayload,
           fallback:
             response.status >= 500
@@ -5524,7 +5710,14 @@ function App() {
               : 'Unable to generate improvement.',
           status: response.status
         })
-        throw new Error(message)
+        const error = new Error(message)
+        if (code) {
+          error.code = code
+        }
+        if (source) {
+          error.serviceError = source
+        }
+        throw error
       }
 
       const data = await response.json()
@@ -5598,7 +5791,8 @@ function App() {
       const errorMessage =
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
-      setError(errorMessage)
+      const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
+      setError(errorMessage, { serviceError: serviceErrorSource, errorCode })
       if (type === 'enhance-all') {
         setEnhanceAllSummaryText('')
       }
@@ -5760,7 +5954,15 @@ function App() {
           )
         } catch (err) {
           console.error('Improvement rescore failed after rejection', err)
-          setError(err.message || 'Unable to refresh ATS scores after rejecting the improvement.')
+          const { source: serviceErrorSource, code: errorCode } =
+            deriveServiceContextFromError(err)
+          setError(
+            err.message || 'Unable to refresh ATS scores after rejecting the improvement.',
+            {
+              serviceError: serviceErrorSource,
+              errorCode
+            }
+          )
           setImprovementResults((prev) =>
             prev.map((item) =>
               item.id === id
@@ -5781,7 +5983,12 @@ function App() {
         success = true
       } catch (err) {
         console.error('Removing change log entry failed', err)
-        setError(err.message || 'Unable to remove the change log entry.')
+        const { source: serviceErrorSource, code: errorCode } =
+          deriveServiceContextFromError(err)
+        setError(err.message || 'Unable to remove the change log entry.', {
+          serviceError: serviceErrorSource,
+          errorCode
+        })
         setChangeLog(previousChangeLogState || [])
         setImprovementResults(previousImprovementResults || [])
         setResumeHistory(previousResumeHistoryValue || [])
@@ -5876,7 +6083,12 @@ function App() {
           action === 'reject'
             ? 'Unable to reject this improvement from the preview.'
             : 'Unable to accept this improvement from the preview.'
-        setError(err?.message || fallbackMessage)
+        const { source: serviceErrorSource, code: errorCode } =
+          deriveServiceContextFromError(err)
+        setError(err?.message || fallbackMessage, {
+          serviceError: serviceErrorSource,
+          errorCode
+        })
       } finally {
         setPreviewActionBusy(false)
         setPreviewActiveAction('')
