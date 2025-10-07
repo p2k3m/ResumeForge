@@ -1642,7 +1642,62 @@ describe('generatePdfWithFallback', () => {
     });
     expect(result.template).toBe('modern');
     expect(result.messages).toContain(
-      'Could not generate PDF for 2025 template, retrying with Modern'
+      'Could not generate PDF for Future Vision 2025 template, retrying with Modern'
+    );
+  });
+
+  test('announces next template when fallback occurs for non-2025 resume', async () => {
+    const pdfMock = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('Modern renderer unavailable'))
+      .mockResolvedValueOnce(Buffer.from('pdf-professional'));
+    setGeneratePdf(pdfMock);
+
+    const result = await generatePdfWithFallback({
+      documentType: 'resume',
+      templates: ['modern', 'professional', 'classic'],
+      buildOptionsForTemplate: () => ({}),
+      inputText: 'Jane Doe',
+      generativeModel: null,
+      logContext: {},
+      allowPlainFallback: false,
+    });
+
+    expect(pdfMock).toHaveBeenCalledTimes(2);
+    expect(result.template).toBe('professional');
+    expect(result.messages).toContain(
+      'Could not generate PDF for Modern template, retrying with Professional'
+    );
+  });
+
+  test('announces actual next template when 2025 fallback prefers contrast option', async () => {
+    const renderError = new Error('Renderer unavailable');
+    renderError.code = 'TEMPLATE_RENDER_FAILED';
+    const pdfMock = jest.fn((text, templateId) => {
+      if (templateId === '2025') {
+        return Promise.reject(renderError);
+      }
+      if (templateId === 'professional') {
+        return Promise.resolve(Buffer.from('pdf-professional'));
+      }
+      return Promise.resolve(Buffer.from(`pdf-${templateId}`));
+    });
+    setGeneratePdf(pdfMock);
+
+    const result = await generatePdfWithFallback({
+      documentType: 'resume',
+      templates: ['2025', 'professional', 'modern'],
+      buildOptionsForTemplate: () => ({}),
+      inputText: 'Jane Doe',
+      generativeModel: null,
+      logContext: {},
+      allowPlainFallback: false,
+    });
+
+    expect(pdfMock).toHaveBeenCalledTimes(2);
+    expect(result.template).toBe('professional');
+    expect(result.messages).toContain(
+      'Could not generate PDF for Future Vision 2025 template, retrying with Professional'
     );
   });
 });
