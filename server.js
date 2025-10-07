@@ -171,8 +171,28 @@ const S3_STORAGE_ERROR_MESSAGE =
   'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.';
 const S3_CHANGE_LOG_ERROR_MESSAGE =
   'Amazon S3 is currently unavailable, so we could not save your updates. Please retry shortly.';
-const TEMPLATE_RENDER_RETRY_MESSAGE =
-  'Could not generate PDF for 2025 template, retrying with Modern';
+function formatRetryTemplateDisplayName(templateId) {
+  if (!templateId) return '';
+  const normalized = String(templateId).trim();
+  if (!normalized) return '';
+  if (normalized.startsWith('cover_')) {
+    return formatCoverTemplateDisplayName(normalized);
+  }
+  return formatTemplateDisplayName(normalized);
+}
+
+function buildTemplateRetryMessage(failedTemplateId, fallbackTemplateId) {
+  if (!fallbackTemplateId) return '';
+  const fallbackLabel = formatRetryTemplateDisplayName(fallbackTemplateId);
+  if (!fallbackLabel) return '';
+  const failedLabel = formatRetryTemplateDisplayName(failedTemplateId);
+  const failedSegment = failedLabel
+    ? failedLabel.toLowerCase().includes('template')
+      ? failedLabel
+      : `${failedLabel} template`
+    : 'selected template';
+  return `Could not generate PDF for ${failedSegment}, retrying with ${fallbackLabel}`;
+}
 
 let chromium;
 let puppeteerCore;
@@ -8159,9 +8179,24 @@ async function generatePdfWithFallback({
         environment: environmentDetails,
       });
       const templateIdString = typeof templateId === 'string' ? templateId : '';
+      const nextTemplateId = (() => {
+        for (let offset = index + 1; offset < candidates.length; offset += 1) {
+          const candidate = candidates[offset];
+          if (typeof candidate === 'string' && candidate.trim()) {
+            return candidate;
+          }
+        }
+        return '';
+      })();
+      const retryMessage = buildTemplateRetryMessage(
+        templateIdString,
+        nextTemplateId
+      );
+      if (retryMessage) {
+        appendMessage(retryMessage);
+      }
       const is2025Template = templateIdString.startsWith('2025');
       if (is2025Template) {
-        appendMessage(TEMPLATE_RENDER_RETRY_MESSAGE);
         if (typeof templateBackstop === 'function') {
           const templatesToBackstop = uniqueTemplates(
             [templateIdString, '2025'].filter(Boolean)
