@@ -825,25 +825,51 @@ const TEMPLATE_ALIASES = {
   creative: 'modern'
 }
 
-const COVER_TEMPLATE_IDS = ['cover_modern', 'cover_classic']
+const COVER_TEMPLATE_IDS = [
+  'cover_modern',
+  'cover_classic',
+  'cover_professional',
+  'cover_ats',
+  'cover_2025'
+]
 
 const COVER_TEMPLATE_ALIASES = {
   modern: 'cover_modern',
   classic: 'cover_classic',
+  professional: 'cover_professional',
+  ats: 'cover_ats',
+  '2025': 'cover_2025',
+  futuristic: 'cover_2025',
   'cover-modern': 'cover_modern',
   'cover-classic': 'cover_classic',
+  'cover-professional': 'cover_professional',
+  'cover-ats': 'cover_ats',
+  'cover-2025': 'cover_2025',
   'modern-cover': 'cover_modern',
   'classic-cover': 'cover_classic',
+  'professional-cover': 'cover_professional',
+  'ats-cover': 'cover_ats',
+  '2025-cover': 'cover_2025',
   'cover modern': 'cover_modern',
   'cover classic': 'cover_classic',
+  'cover professional': 'cover_professional',
+  'cover ats': 'cover_ats',
+  'cover 2025': 'cover_2025',
   covermodern: 'cover_modern',
   coverclassic: 'cover_classic',
+  coverprofessional: 'cover_professional',
+  coverats: 'cover_ats',
+  cover2025: 'cover_2025',
   covermidnight: 'cover_classic'
 }
 
-const CLASSIC_STYLE_TEMPLATE_IDS = new Set(['classic', 'professional'])
-
-const RESUME_TO_COVER_TEMPLATE = {}
+const RESUME_TO_COVER_TEMPLATE = {
+  modern: 'cover_modern',
+  professional: 'cover_professional',
+  classic: 'cover_classic',
+  ats: 'cover_ats',
+  2025: 'cover_2025'
+}
 
 const DEFAULT_COVER_TEMPLATE = 'cover_modern'
 
@@ -858,16 +884,19 @@ const canonicalizeCoverTemplateId = (value, fallback = '') => {
   if (typeof value !== 'string') return fallback
   const trimmed = value.trim()
   if (!trimmed) return fallback
-  if (COVER_TEMPLATE_IDS.includes(trimmed)) return trimmed
-  const normalized = trimmed.replace(/\s+/g, '_').toLowerCase()
+  const lowerTrimmed = trimmed.toLowerCase()
+  if (COVER_TEMPLATE_IDS.includes(lowerTrimmed)) return lowerTrimmed
+  const normalized = lowerTrimmed.replace(/\s+/g, '_')
   if (COVER_TEMPLATE_IDS.includes(normalized)) {
     return normalized
   }
-  const alias =
-    COVER_TEMPLATE_ALIASES[normalized] || COVER_TEMPLATE_ALIASES[trimmed.toLowerCase()]
+  const alias = COVER_TEMPLATE_ALIASES[normalized] || COVER_TEMPLATE_ALIASES[lowerTrimmed]
   if (alias) return alias
   if (normalized.includes('classic')) return 'cover_classic'
   if (normalized.includes('modern')) return 'cover_modern'
+  if (normalized.includes('professional')) return 'cover_professional'
+  if (normalized.includes('2025')) return 'cover_2025'
+  if (normalized.includes('ats')) return 'cover_ats'
   return fallback
 }
 
@@ -884,7 +913,7 @@ const deriveCoverTemplateFromResume = (templateId) => {
   if (RESUME_TO_COVER_TEMPLATE[canonical]) {
     return RESUME_TO_COVER_TEMPLATE[canonical]
   }
-  return CLASSIC_STYLE_TEMPLATE_IDS.has(canonical) ? 'cover_classic' : DEFAULT_COVER_TEMPLATE
+  return DEFAULT_COVER_TEMPLATE
 }
 
 const ensureCoverTemplateContext = (context, templateId) => {
@@ -1140,10 +1169,28 @@ const COVER_TEMPLATE_DETAILS = {
   cover_classic: {
     name: 'Classic Cover Letter',
     description: 'Elegant serif presentation with letterhead-inspired spacing and signature close.'
+  },
+  cover_professional: {
+    name: 'Professional Cover Letter',
+    description: 'Boardroom-ready styling with navy accents and structured paragraph spacing.'
+  },
+  cover_ats: {
+    name: 'ATS Cover Letter',
+    description: 'Single-column focus with neutral tones engineered for parsing clarity.'
+  },
+  cover_2025: {
+    name: 'Future Vision 2025 Cover Letter',
+    description: 'Futuristic layout with dark canvas, neon accents, and confident typography.'
   }
 }
 
-const COVER_TEMPLATE_ORDER = ['cover_modern', 'cover_classic']
+const COVER_TEMPLATE_ORDER = [
+  'cover_modern',
+  'cover_classic',
+  'cover_professional',
+  'cover_ats',
+  'cover_2025'
+]
 
 const COVER_TEMPLATE_OPTIONS = COVER_TEMPLATE_ORDER.filter((id) => COVER_TEMPLATE_DETAILS[id]).map(
   (id) => ({

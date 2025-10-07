@@ -13,9 +13,14 @@ describe('selectTemplates respects preferred templates and contrast', () => {
     expect(CV_TEMPLATE_GROUPS[template1]).not.toBe(
       CV_TEMPLATE_GROUPS[template2]
     );
-    const expectedCover = ['classic', 'professional'].includes(template1)
-      ? 'cover_classic'
-      : 'cover_modern';
+    const expectedCoverMap = {
+      modern: 'cover_modern',
+      professional: 'cover_professional',
+      classic: 'cover_classic',
+      ats: 'cover_ats',
+      2025: 'cover_2025'
+    };
+    const expectedCover = expectedCoverMap[template1] || 'cover_modern';
     expect(coverTemplate1).toBe(expectedCover);
   });
 
@@ -26,8 +31,8 @@ describe('selectTemplates respects preferred templates and contrast', () => {
     expect(template1).toBe('ats');
     expect(template2).not.toBe('ats');
     expect(CV_TEMPLATE_GROUPS[template2]).not.toBe(CV_TEMPLATE_GROUPS['ats']);
-    expect(coverTemplate1).toBe('cover_modern');
-    expect(coverTemplates[0]).toBe('cover_modern');
+    expect(coverTemplate1).toBe('cover_ats');
+    expect(coverTemplates[0]).toBe('cover_ats');
   });
 
   test('derives cover template from resume style when not provided', () => {

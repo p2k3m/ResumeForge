@@ -81,6 +81,9 @@ const axiosResponseInterceptor = ensureAxiosResponseInterceptor(axios);
 const COVER_TEMPLATE_DISPLAY_NAMES = {
   cover_modern: 'Modern Cover Letter',
   cover_classic: 'Classic Cover Letter',
+  cover_professional: 'Professional Cover Letter',
+  cover_ats: 'ATS Cover Letter',
+  cover_2025: 'Future Vision 2025 Cover Letter',
 };
 
 function formatTemplateDisplayName(templateId) {
@@ -1560,9 +1563,29 @@ const CV_TEMPLATE_ALIASES = {
 
 const CV_TEMPLATES = ['modern', 'professional', 'classic', 'ats', '2025'];
 const LEGACY_CV_TEMPLATES = Object.keys(CV_TEMPLATE_ALIASES);
-const CL_TEMPLATES = ['cover_modern', 'cover_classic'];
+const CL_TEMPLATES = [
+  'cover_modern',
+  'cover_classic',
+  'cover_professional',
+  'cover_ats',
+  'cover_2025',
+];
 const COVER_LETTER_VARIANT_KEYS = ['cover_letter1', 'cover_letter2'];
-const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional']);
+const COVER_TEMPLATE_ALIASES = {
+  modern: 'cover_modern',
+  classic: 'cover_classic',
+  professional: 'cover_professional',
+  ats: 'cover_ats',
+  '2025': 'cover_2025',
+  futuristic: 'cover_2025',
+};
+const COVER_TEMPLATE_BY_RESUME = {
+  modern: 'cover_modern',
+  classic: 'cover_classic',
+  professional: 'cover_professional',
+  ats: 'cover_ats',
+  2025: 'cover_2025',
+};
 const USER_TEMPLATE_ITEM_TYPE = 'USER_TEMPLATE_PREFERENCE';
 const USER_TEMPLATE_PREFIX = 'user_template#';
 const TEMPLATE_IDS = [...CV_TEMPLATES, ...LEGACY_CV_TEMPLATES]; // Backwards compatibility
@@ -1769,16 +1792,29 @@ function canonicalizeCoverTemplateId(templateId, fallback = CL_TEMPLATES[0]) {
   if (!templateId || typeof templateId !== 'string') {
     return fallback;
   }
-  const normalized = templateId.trim();
-  if (!normalized) {
+  const trimmed = templateId.trim();
+  if (!trimmed) {
     return fallback;
   }
+  const lowerTrimmed = trimmed.toLowerCase();
+  if (CL_TEMPLATES.includes(lowerTrimmed)) {
+    return lowerTrimmed;
+  }
+  const normalized = lowerTrimmed.replace(/\s+/g, '_');
   if (CL_TEMPLATES.includes(normalized)) {
     return normalized;
   }
-  const base = normalized.split(/[-_]/)[0];
-  if (base && CL_TEMPLATES.includes(base)) {
-    return base;
+  if (COVER_TEMPLATE_ALIASES[normalized]) {
+    return COVER_TEMPLATE_ALIASES[normalized];
+  }
+  if (COVER_TEMPLATE_ALIASES[lowerTrimmed]) {
+    return COVER_TEMPLATE_ALIASES[lowerTrimmed];
+  }
+  if (normalized.startsWith('cover_')) {
+    const suffix = normalized.slice('cover_'.length);
+    if (COVER_TEMPLATE_ALIASES[suffix]) {
+      return COVER_TEMPLATE_ALIASES[suffix];
+    }
   }
   return fallback;
 }
@@ -1788,10 +1824,7 @@ function deriveCoverTemplateFromCv(templateId) {
   if (!canonical) {
     return CL_TEMPLATES[0];
   }
-  if (CLASSIC_CV_TEMPLATES.has(canonical)) {
-    return 'cover_classic';
-  }
-  return 'cover_modern';
+  return COVER_TEMPLATE_BY_RESUME[canonical] || CL_TEMPLATES[0];
 }
 
 function uniqueValidCoverTemplates(list = []) {
@@ -7410,6 +7443,37 @@ let generatePdf = async function (
       nameFontSize: 30,
       bodyFontSize: 12,
       margin: 56
+    },
+    cover_professional: {
+      ...baseStyle,
+      headingColor: '#1d4ed8',
+      textColor: '#0f172a',
+      nameColor: '#0f172a',
+      headingFontSize: 16,
+      nameFontSize: 30,
+      bodyFontSize: 12,
+      margin: 56
+    },
+    cover_ats: {
+      ...baseStyle,
+      headingColor: '#1f2937',
+      textColor: '#1f2937',
+      nameColor: '#111827',
+      headingFontSize: 15,
+      nameFontSize: 28,
+      bodyFontSize: 11,
+      margin: 58
+    },
+    cover_2025: {
+      ...baseStyle,
+      headingColor: '#22d3ee',
+      textColor: '#e0f2fe',
+      nameColor: '#22d3ee',
+      headingFontSize: 17,
+      nameFontSize: 32,
+      bodyFontSize: 12,
+      margin: 60,
+      backgroundColor: '#0f172a'
     }
   };
 
@@ -7613,7 +7677,17 @@ let generatePdf = async function (
         if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
       } catch {}
       if (robotoAvailable) {
-        ['modern', 'professional', 'classic', 'ats', '2025', 'cover_modern'].forEach((tpl) => {
+        [
+          'modern',
+          'professional',
+          'classic',
+          'ats',
+          '2025',
+          'cover_modern',
+          'cover_professional',
+          'cover_ats',
+          'cover_2025'
+        ].forEach((tpl) => {
           if (styleMap[tpl]) {
             styleMap[tpl].font = 'Roboto';
             styleMap[tpl].bold = 'Roboto-Bold';

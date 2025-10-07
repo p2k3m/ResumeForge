@@ -16,10 +16,16 @@ import fs from 'fs/promises';
 import path from 'path';
 import Handlebars from '../lib/handlebars.js';
 
-const CLASSIC_CV_TEMPLATES = new Set(['classic', 'professional']);
+const EXPECTED_COVER_BY_TEMPLATE = {
+  modern: 'cover_modern',
+  professional: 'cover_professional',
+  classic: 'cover_classic',
+  ats: 'cover_ats',
+  2025: 'cover_2025',
+};
 
 const expectedCoverForTemplate = (templateId) =>
-  CLASSIC_CV_TEMPLATES.has(templateId) ? 'cover_classic' : 'cover_modern';
+  EXPECTED_COVER_BY_TEMPLATE[templateId] || 'cover_modern';
 
 function escapeHtml(str = '') {
   return str

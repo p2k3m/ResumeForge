@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cover Letter</title>
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 48px; color: #0f172a; line-height: 1.6; }
+    h1 { color: #1d4ed8; margin-bottom: 18px; font-size: 30px; font-weight: 700; letter-spacing: 0.04em; }
+    p { margin: 0 0 14px; }
+  </style>
+</head>
+<body>
+  <h1>{{name}}</h1>
+  {{#each sections}}
+    {{#each items}}
+      <p>{{{this}}}</p>
+    {{/each}}
+  {{/each}}
+</body>
+</html>
