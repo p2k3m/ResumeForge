@@ -6984,13 +6984,14 @@ function setTemplateBackstop(fn) {
   templateBackstop = typeof fn === 'function' ? fn : runPdfTemplateBackstop;
 }
 
-let generatePdf = async function (
-  text,
-  templateId = 'modern',
-  options = {},
-  generativeModel,
-  invocationContext = {}
-) {
+let generatePdf = async function (text, templateId = 'modern', options = {}) {
+  const invocationContext =
+    options && typeof options.__invocationContext === 'object'
+      ? options.__invocationContext
+      : {};
+  if (options && typeof options === 'object' && options.__invocationContext) {
+    delete options.__invocationContext;
+  }
   const resolvedInvocationContext =
     invocationContext && typeof invocationContext === 'object'
       ? { ...invocationContext }
@@ -8115,17 +8116,18 @@ async function generatePdfWithFallback({
       const buffer = await generatePdf(
         inputText,
         templateId,
-        options,
-        generativeModel,
         {
-          ...logContext,
-          documentType,
-          template: templateId,
-          attempt,
-          totalAttempts: candidates.length,
-          targetFileName: attemptFileName,
-          targetFilePath: attemptFilePath,
-          environment: environmentDetails,
+          ...options,
+          __invocationContext: {
+            ...logContext,
+            documentType,
+            template: templateId,
+            attempt,
+            totalAttempts: candidates.length,
+            targetFileName: attemptFileName,
+            targetFilePath: attemptFilePath,
+            environment: environmentDetails,
+          },
         }
       );
 
@@ -14339,16 +14341,6 @@ async function generateEnhancedDocumentsResponse({
   }
 
   const outputs = {
-    cover_letter1: {
-      text: coverData.cover_letter1,
-      templateText:
-        coverLetter1Tokens.tokenizedText || coverData.cover_letter1 || '',
-    },
-    cover_letter2: {
-      text: coverData.cover_letter2,
-      templateText:
-        coverLetter2Tokens.tokenizedText || coverData.cover_letter2 || '',
-    },
     version1: {
       text: version1Resolved,
       templateText: version1Resolved,
@@ -14358,6 +14350,16 @@ async function generateEnhancedDocumentsResponse({
       text: version2Resolved,
       templateText: version2Resolved,
       tokenizedText: version2Tokenized,
+    },
+    cover_letter1: {
+      text: coverData.cover_letter1,
+      templateText:
+        coverLetter1Tokens.tokenizedText || coverData.cover_letter1 || '',
+    },
+    cover_letter2: {
+      text: coverData.cover_letter2,
+      templateText:
+        coverLetter2Tokens.tokenizedText || coverData.cover_letter2 || '',
     },
   };
   const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
