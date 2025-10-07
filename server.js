@@ -14879,7 +14879,7 @@ async function generateEnhancedDocumentsResponse({
     urls.push(urlEntry);
   }
 
-  const normalizedUrls = ensureOutputFileUrls(urls);
+  let normalizedUrls = ensureOutputFileUrls(urls);
   if (!normalizedUrls.length && urls.length) {
     const fallbackUrls = urls
       .map((entry) => {
