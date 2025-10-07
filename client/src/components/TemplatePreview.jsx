@@ -99,6 +99,123 @@ const DEFAULT_COVER_PREVIEW = {
   highlight: 'bg-slate-500/10'
 }
 
+const ResumeMockup = ({ style = {} }) => (
+  <div
+    className={cx('relative overflow-hidden rounded-3xl border shadow-inner', style.container)}
+    aria-hidden="true"
+  >
+    <div className={cx('h-20 rounded-t-3xl bg-gradient-to-r', style.accent)}>
+      <div className="absolute top-4 left-6 text-white">
+        <div className="text-sm font-semibold tracking-wide uppercase">Alex Morgan</div>
+        <div className="text-xs opacity-80">Product Manager</div>
+      </div>
+    </div>
+    <div className="grid grid-cols-5 gap-4 p-5">
+      <div className="col-span-2 space-y-3">
+        <div className={cx('h-3 w-24 rounded-full', style.line)} />
+        <div className={cx('h-3 w-20 rounded-full', style.line)} />
+        <div className={cx('h-3 w-28 rounded-full', style.line)} />
+        <div className={cx('h-24 rounded-2xl p-3 text-[10px] leading-relaxed', style.highlight)}>
+          "Grew ARR 3x by orchestrating global product launches and data-informed iteration."
+        </div>
+        <div className={cx('h-3 w-16 rounded-full', style.line)} />
+        <div className={cx('h-3 w-24 rounded-full', style.line)} />
+        <div className={cx('h-16 rounded-2xl p-3 text-[10px] leading-relaxed', style.highlight)}>
+          Keyword-rich skills, certifications, and JD-aligned highlights land here.
+        </div>
+      </div>
+      <div className="col-span-3 space-y-3">
+        <div className={cx('h-3 w-32 rounded-full', style.line)} />
+        <div className={cx('h-3 w-40 rounded-full', style.line)} />
+        <div className={cx('h-16 rounded-2xl p-3 text-[10px] leading-relaxed', style.highlight)}>
+          Impact bullet points spotlight measurable wins using JD keywords.
+        </div>
+        <div className={cx('h-3 w-36 rounded-full', style.line)} />
+        <div className={cx('h-24 rounded-2xl p-3 text-[10px] leading-relaxed', style.highlight)}>
+          Modern typography, subtle dividers, and ATS-safe spacing keep recruiters engaged.
+        </div>
+      </div>
+    </div>
+    <div className={cx('absolute inset-y-20 left-0 w-20 rounded-r-3xl', style.sidebar)} />
+  </div>
+)
+
+const CoverMockup = ({ style = {} }) => (
+  <div
+    className={cx('relative overflow-hidden rounded-3xl border shadow-inner', style.border)}
+    aria-hidden="true"
+  >
+    <div className={cx('h-16 flex items-end px-6 pb-3 rounded-t-3xl', style.header)}>
+      <div>
+        <div className="text-sm font-semibold tracking-wide uppercase">Alex Morgan</div>
+        <div className="text-xs opacity-80">alex.morgan@email.com</div>
+      </div>
+    </div>
+    <div className="space-y-3 p-6">
+      <div className={cx('h-3 w-40 rounded-full', style.line)} />
+      <div className={cx('h-3 w-32 rounded-full', style.line)} />
+      <div className={cx('h-24 rounded-2xl p-4 text-[10px] leading-relaxed', style.highlight)}>
+        Engaging opener tailored to the role, mirroring the JD tone and priority keywords.
+      </div>
+      <div className={cx('h-3 w-36 rounded-full', style.line)} />
+      <div className={cx('h-24 rounded-2xl p-4 text-[10px] leading-relaxed', style.highlight)}>
+        Body paragraphs connect achievements to business outcomes, showing cultural and skills fit.
+      </div>
+      <div className={cx('h-3 w-28 rounded-full', style.line)} />
+    </div>
+  </div>
+)
+
+const ResumeCard = ({ label, option, style = {}, note, children }) => (
+  <article className="space-y-4 rounded-3xl border border-purple-100 bg-white/80 p-5 shadow-sm">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">{label}</p>
+        <h3 className="text-xl font-bold text-purple-800">{option?.name || 'CV Template'}</h3>
+        {option?.description && (
+          <p className="mt-1 text-sm text-purple-600">{option.description}</p>
+        )}
+        {note && <p className="mt-2 text-xs font-semibold text-purple-500">{note}</p>}
+      </div>
+      <span
+        className={cx(
+          'px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide',
+          style.chip || 'bg-purple-100 text-purple-700'
+        )}
+      >
+        CV
+      </span>
+    </div>
+    <ResumeMockup style={style} />
+    {children ? <div className="pt-2">{children}</div> : null}
+  </article>
+)
+
+const CoverCard = ({ label, option, style = {}, note, children }) => (
+  <article className="space-y-4 rounded-3xl border border-purple-100 bg-white/80 p-5 shadow-sm">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">{label}</p>
+        <h3 className="text-xl font-bold text-purple-800">{option?.name || 'Cover Letter'}</h3>
+        {option?.description && (
+          <p className="mt-1 text-sm text-purple-600">{option.description}</p>
+        )}
+        {note && <p className="mt-2 text-xs font-semibold text-purple-500">{note}</p>}
+      </div>
+      <span
+        className={cx(
+          'px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide',
+          style.badge || 'bg-purple-100 text-purple-700'
+        )}
+      >
+        Cover
+      </span>
+    </div>
+    <CoverMockup style={style} />
+    {children ? <div className="pt-2">{children}</div> : null}
+  </article>
+)
+
 function TemplatePreview({
   resumeTemplateId,
   resumeTemplateName,
@@ -219,10 +336,52 @@ function TemplatePreview({
     previewCoverTemplateId
   ])
 
+  const appliedResumeOption = useMemo(() => {
+    if (!resumeTemplateId) return null
+    return (
+      normalizedResumeTemplates.find((option) => option.id === resumeTemplateId) || {
+        id: resumeTemplateId,
+        name: resumeTemplateName || resumeTemplateId,
+        description: resumeTemplateDescription || ''
+      }
+    )
+  }, [
+    normalizedResumeTemplates,
+    resumeTemplateDescription,
+    resumeTemplateId,
+    resumeTemplateName
+  ])
+
+  const appliedCoverOption = useMemo(() => {
+    if (!coverTemplateId) return null
+    return (
+      normalizedCoverTemplates.find((option) => option.id === coverTemplateId) || {
+        id: coverTemplateId,
+        name: coverTemplateName || coverTemplateId,
+        description: coverTemplateDescription || ''
+      }
+    )
+  }, [
+    coverTemplateDescription,
+    coverTemplateId,
+    coverTemplateName,
+    normalizedCoverTemplates
+  ])
+
   const resumeStyle =
     RESUME_TEMPLATE_PREVIEWS[previewResumeOption?.id] || DEFAULT_RESUME_PREVIEW
   const coverStyle =
     COVER_TEMPLATE_PREVIEWS[previewCoverOption?.id] || DEFAULT_COVER_PREVIEW
+
+  const appliedResumeStyle =
+    RESUME_TEMPLATE_PREVIEWS[appliedResumeOption?.id] || DEFAULT_RESUME_PREVIEW
+  const appliedCoverStyle =
+    COVER_TEMPLATE_PREVIEWS[appliedCoverOption?.id] || DEFAULT_COVER_PREVIEW
+
+  const appliedResumeName =
+    appliedResumeOption?.name || resumeTemplateName || resumeTemplateId || 'your current CV style'
+  const appliedCoverName =
+    appliedCoverOption?.name || coverTemplateName || coverTemplateId || 'your current cover style'
 
   const isPreviewingDifferentResume =
     previewResumeOption?.id && resumeTemplateId && previewResumeOption.id !== resumeTemplateId
@@ -245,22 +404,17 @@ function TemplatePreview({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">CV Template</p>
-              <h3 className="text-xl font-bold text-purple-800">{previewResumeOption?.name}</h3>
-              {previewResumeOption?.description && (
-                <p className="mt-1 text-sm text-purple-600">{previewResumeOption.description}</p>
-              )}
-              {isPreviewingDifferentResume && (
-                <p className="mt-2 text-xs font-semibold text-purple-500">
-                  Selected style: {resumeTemplateName}
-                </p>
-              )}
-            </div>
-            <span className={cx('px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide', resumeStyle.chip)}>
-              CV
-            </span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">CV Template Preview</p>
+            <h3 className="text-xl font-bold text-purple-800">{previewResumeOption?.name}</h3>
+            {previewResumeOption?.description && (
+              <p className="mt-1 text-sm text-purple-600">{previewResumeOption.description}</p>
+            )}
+            <p className="mt-2 text-xs font-semibold text-purple-500">
+              {isPreviewingDifferentResume
+                ? `Currently applied: ${appliedResumeName}. Compare them below before updating.`
+                : 'This template is already applied to your downloads.'}
+            </p>
           </div>
           {normalizedResumeTemplates.length > 1 && (
             <div className="flex flex-wrap gap-2" role="group" aria-label="Preview CV templates">
@@ -289,81 +443,51 @@ function TemplatePreview({
               })}
             </div>
           )}
-          <div
-            className={cx(
-              'relative overflow-hidden rounded-3xl border shadow-inner',
-              resumeStyle.container
-            )}
-            aria-hidden="true"
-          >
-            <div className={cx('h-20 rounded-t-3xl bg-gradient-to-r', resumeStyle.accent)}>
-              <div className="absolute top-4 left-6 text-white">
-                <div className="text-sm font-semibold tracking-wide uppercase">Alex Morgan</div>
-                <div className="text-xs opacity-80">Product Manager</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-5 gap-4 p-5">
-              <div className="col-span-2 space-y-3">
-                <div className={cx('h-3 w-24 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-3 w-20 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-3 w-28 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-24 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
-                  "Grew ARR 3x by orchestrating global product launches and data-informed iteration."
-                </div>
-                <div className={cx('h-3 w-16 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-3 w-24 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-16 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
-                  Keyword-rich skills, certifications, and JD-aligned highlights land here.
-                </div>
-              </div>
-              <div className="col-span-3 space-y-3">
-                <div className={cx('h-3 w-32 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-3 w-40 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-16 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
-                  Impact bullet points spotlight measurable wins using JD keywords.
-                </div>
-                <div className={cx('h-3 w-36 rounded-full', resumeStyle.line)} />
-                <div className={cx('h-24 rounded-2xl p-3 text-[10px] leading-relaxed', resumeStyle.highlight)}>
-                  Modern typography, subtle dividers, and ATS-safe spacing keep recruiters engaged.
-                </div>
-              </div>
-            </div>
-            <div className={cx('absolute inset-y-20 left-0 w-20 rounded-r-3xl', resumeStyle.sidebar)} />
-          </div>
-          {isPreviewingDifferentResume && onResumeTemplateApply && (
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => onResumeTemplateApply(previewResumeOption.id)}
-              disabled={isApplying}
+          <div className={cx('grid gap-4', isPreviewingDifferentResume ? 'md:grid-cols-2' : 'grid-cols-1')}>
+            <ResumeCard
+              label={isPreviewingDifferentResume ? 'Previewing CV template' : 'Selected CV template'}
+              option={previewResumeOption}
+              style={resumeStyle}
+              note={
+                isPreviewingDifferentResume
+                  ? 'Apply this look to replace your current selection.'
+                  : 'Already applied to your downloads.'
+              }
             >
-              {isApplying ? 'Updating…' : 'Use this CV style'}
-            </button>
-          )}
+              {isPreviewingDifferentResume && onResumeTemplateApply && (
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => onResumeTemplateApply(previewResumeOption.id)}
+                  disabled={isApplying}
+                >
+                  {isApplying ? 'Updating…' : 'Use this CV style'}
+                </button>
+              )}
+            </ResumeCard>
+            {isPreviewingDifferentResume && appliedResumeOption && (
+              <ResumeCard
+                label="Currently selected CV"
+                option={appliedResumeOption}
+                style={appliedResumeStyle}
+                note="This is the template currently used for your downloads."
+              />
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Cover Letter</p>
-              <h3 className="text-xl font-bold text-purple-800">{previewCoverOption?.name}</h3>
-              {previewCoverOption?.description && (
-                <p className="mt-1 text-sm text-purple-600">{previewCoverOption.description}</p>
-              )}
-              {isPreviewingDifferentCover && (
-                <p className="mt-2 text-xs font-semibold text-purple-500">
-                  Selected style: {coverTemplateName}
-                </p>
-              )}
-            </div>
-            <span
-              className={cx(
-                'px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide',
-                coverStyle.badge || 'bg-purple-100 text-purple-700'
-              )}
-            >
-              Cover
-            </span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Cover Letter Preview</p>
+            <h3 className="text-xl font-bold text-purple-800">{previewCoverOption?.name}</h3>
+            {previewCoverOption?.description && (
+              <p className="mt-1 text-sm text-purple-600">{previewCoverOption.description}</p>
+            )}
+            <p className="mt-2 text-xs font-semibold text-purple-500">
+              {isPreviewingDifferentCover
+                ? `Currently applied: ${appliedCoverName}. Compare styles below before updating.`
+                : 'This template is already applied to your downloads.'}
+            </p>
           </div>
           {normalizedCoverTemplates.length > 1 && (
             <div className="flex flex-wrap gap-2" role="group" aria-label="Preview cover letter templates">
@@ -392,47 +516,46 @@ function TemplatePreview({
               })}
             </div>
           )}
-          <div
-            className={cx(
-              'relative overflow-hidden rounded-3xl border shadow-inner',
-              coverStyle.border
-            )}
-            aria-hidden="true"
-          >
-            <div className={cx('h-16 flex items-end px-6 pb-3 rounded-t-3xl', coverStyle.header)}>
-              <div>
-                <div className="text-sm font-semibold tracking-wide uppercase">Alex Morgan</div>
-                <div className="text-xs opacity-80">alex.morgan@email.com</div>
-              </div>
-            </div>
-            <div className="space-y-3 p-6">
-              <div className={cx('h-3 w-40 rounded-full', coverStyle.line)} />
-              <div className={cx('h-3 w-32 rounded-full', coverStyle.line)} />
-              <div className={cx('h-24 rounded-2xl p-4 text-[10px] leading-relaxed', coverStyle.highlight)}>
-                Engaging opener tailored to the role, mirroring the JD tone and priority keywords.
-              </div>
-              <div className={cx('h-3 w-36 rounded-full', coverStyle.line)} />
-              <div className={cx('h-24 rounded-2xl p-4 text-[10px] leading-relaxed', coverStyle.highlight)}>
-                Body paragraphs connect achievements to business outcomes, showing cultural and skills fit.
-              </div>
-              <div className={cx('h-3 w-28 rounded-full', coverStyle.line)} />
-            </div>
-          </div>
-          {isPreviewingDifferentCover && onCoverTemplateApply && (
-            <button
-              type="button"
-              className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => onCoverTemplateApply(previewCoverOption.id)}
-              disabled={isApplying}
+          <div className={cx('grid gap-4', isPreviewingDifferentCover ? 'md:grid-cols-2' : 'grid-cols-1')}>
+            <CoverCard
+              label={
+                isPreviewingDifferentCover
+                  ? 'Previewing cover letter template'
+                  : 'Selected cover letter template'
+              }
+              option={previewCoverOption}
+              style={coverStyle}
+              note={
+                isPreviewingDifferentCover
+                  ? 'Apply this look to replace your current cover letter style.'
+                  : 'Already applied to your downloads.'
+              }
             >
-              {isApplying ? 'Updating…' : 'Use this cover style'}
-            </button>
-          )}
+              {isPreviewingDifferentCover && onCoverTemplateApply && (
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => onCoverTemplateApply(previewCoverOption.id)}
+                  disabled={isApplying}
+                >
+                  {isApplying ? 'Updating…' : 'Use this cover style'}
+                </button>
+              )}
+            </CoverCard>
+            {isPreviewingDifferentCover && appliedCoverOption && (
+              <CoverCard
+                label="Currently selected cover letter"
+                option={appliedCoverOption}
+                style={appliedCoverStyle}
+                note="This is the template currently used for your downloads."
+              />
+            )}
+          </div>
         </div>
       </div>
 
       <p className="text-xs text-purple-500">
-        Tap through the template chips to see how different styles will look with your CV before you commit to a download.
+        Tap through the template chips to compare styles side-by-side and lock in your favourite look before downloading.
       </p>
     </section>
   )
