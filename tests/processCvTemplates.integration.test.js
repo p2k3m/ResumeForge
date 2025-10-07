@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
@@ -69,5 +70,56 @@ describe('template coverage for /api/process-cv', () => {
     }
 
     expect(seenTemplates.size).toBe(serverModule.CV_TEMPLATES.length);
+  });
+
+  test('maintains fallback template mapping when primary render fails', async () => {
+    const { app, serverModule } = await setupTestServer();
+
+    await primeSuccessfulAi();
+
+    const pdfMock = jest.fn((text, templateId) => {
+      if (templateId === 'modern' || templateId === 'cover_modern') {
+        throw new Error(`render failed for ${templateId}`);
+      }
+      return Promise.resolve(Buffer.from(`pdf:${templateId}`));
+    });
+
+    serverModule.setGeneratePdf(pdfMock);
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .attach('resume', Buffer.from('dummy pdf content'), 'resume.pdf');
+
+    serverModule.setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const templateContext = response.body.templateContext;
+    expect(templateContext).toBeDefined();
+    expect(templateContext.template1).toBeDefined();
+    expect(templateContext.template1).not.toBe('modern');
+    expect(templateContext.selectedTemplate).toBe(templateContext.template1);
+    expect(Array.isArray(templateContext.templates)).toBe(true);
+    expect(templateContext.templates[0]).toBe(templateContext.template1);
+
+    const version1Entry = response.body.urls.find((entry) => entry.type === 'version1');
+    expect(version1Entry).toBeDefined();
+    expect(version1Entry.templateId).toBe(templateContext.template1);
+
+    const coverEntry = response.body.urls.find((entry) => entry.type === 'cover_letter1');
+    expect(coverEntry).toBeDefined();
+    expect(coverEntry.templateId).toBe(templateContext.coverTemplate1);
+    expect(templateContext.coverTemplate1).not.toBe('cover_modern');
+
+    expect(pdfMock).toHaveBeenCalledWith(expect.any(String), 'modern', expect.any(Object));
+    expect(pdfMock).toHaveBeenCalledWith(expect.any(String), templateContext.template1, expect.any(Object));
+    expect(pdfMock).toHaveBeenCalledWith(expect.any(String), 'cover_modern', expect.any(Object));
+    expect(pdfMock).toHaveBeenCalledWith(
+      expect.any(String),
+      templateContext.coverTemplate1,
+      expect.objectContaining({ skipRequiredSections: true })
+    );
   });
 });

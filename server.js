@@ -13886,7 +13886,7 @@ async function generateEnhancedDocumentsResponse({
     availableCoverTemplates = [...CL_TEMPLATES];
   }
 
-  const templateHistory = normalizeTemplateHistory(
+  let templateHistory = normalizeTemplateHistory(
     templateContextInput.templateHistory,
     [
       template1,
@@ -13895,19 +13895,10 @@ async function generateEnhancedDocumentsResponse({
       templateContextInput.template2,
     ]
   );
-
-  const canonicalSelectedTemplate =
-    canonicalizeCvTemplateId(templateContextInput.selectedTemplate) || template1;
-
-  if (dynamo && tableName && userId && canonicalSelectedTemplate) {
-    await persistUserTemplatePreference({
-      dynamo,
-      tableName,
-      userId,
-      templateId: canonicalSelectedTemplate,
-      logContext,
-    });
-  }
+  const requestedCanonicalTemplate = canonicalizeCvTemplateId(
+    templateContextInput.selectedTemplate
+  );
+  let canonicalSelectedTemplate = requestedCanonicalTemplate || '';
 
   const templateParamsConfig =
     templateParamConfig ?? parseTemplateParamsConfig(undefined);
@@ -14379,6 +14370,16 @@ async function generateEnhancedDocumentsResponse({
   const usedFileBaseNames = new Set();
   const generatedTemplates = {};
   const generationMessages = [];
+  const templateFallbackApplied = {
+    resumePrimary: false,
+    resumeSecondary: false,
+    coverPrimary: false,
+    coverSecondary: false,
+  };
+  const finalTemplateMapping = {
+    resume: { primary: template1, secondary: template2 },
+    cover: { primary: coverTemplate1, secondary: coverTemplate2 },
+  };
   const originalResumeForStorage =
     typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
       ? originalResumeTextInput
@@ -14688,6 +14689,52 @@ async function generateEnhancedDocumentsResponse({
     const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
     generatedTemplates[name] = effectiveTemplateId;
 
+    if (effectiveTemplateId) {
+      if (isCvDocument) {
+        if (name === 'version1') {
+          if (effectiveTemplateId !== finalTemplateMapping.resume.primary) {
+            if (effectiveTemplateId !== primaryTemplate) {
+              templateFallbackApplied.resumePrimary = true;
+            }
+            finalTemplateMapping.resume.primary = effectiveTemplateId;
+          }
+        } else if (name === 'version2') {
+          if (effectiveTemplateId !== finalTemplateMapping.resume.secondary) {
+            if (effectiveTemplateId !== primaryTemplate) {
+              templateFallbackApplied.resumeSecondary = true;
+            }
+            finalTemplateMapping.resume.secondary = effectiveTemplateId;
+          }
+        }
+        const nextTemplates = [
+          effectiveTemplateId,
+          ...(Array.isArray(availableCvTemplates) ? availableCvTemplates : []),
+        ];
+        availableCvTemplates = uniqueValidCvTemplates(nextTemplates);
+      } else if (isCoverLetter) {
+        if (name === 'cover_letter1') {
+          if (effectiveTemplateId !== finalTemplateMapping.cover.primary) {
+            if (effectiveTemplateId !== primaryTemplate) {
+              templateFallbackApplied.coverPrimary = true;
+            }
+            finalTemplateMapping.cover.primary = effectiveTemplateId;
+          }
+        } else if (name === 'cover_letter2') {
+          if (effectiveTemplateId !== finalTemplateMapping.cover.secondary) {
+            if (effectiveTemplateId !== primaryTemplate) {
+              templateFallbackApplied.coverSecondary = true;
+            }
+            finalTemplateMapping.cover.secondary = effectiveTemplateId;
+          }
+        }
+        const nextCoverTemplates = [
+          effectiveTemplateId,
+          ...(Array.isArray(availableCoverTemplates) ? availableCoverTemplates : []),
+        ];
+        availableCoverTemplates = uniqueValidCoverTemplates(nextCoverTemplates);
+      }
+    }
+
     const baseName = buildDocumentFileBaseName({
       type: documentType,
       templateId: effectiveTemplateId,
@@ -14762,6 +14809,43 @@ async function generateEnhancedDocumentsResponse({
     }
 
     downloadArtifacts.push(artifactDownloadEntry);
+  }
+
+  template1 = finalTemplateMapping.resume.primary || template1;
+  template2 = finalTemplateMapping.resume.secondary || template2;
+  coverTemplate1 = finalTemplateMapping.cover.primary || coverTemplate1;
+  coverTemplate2 = finalTemplateMapping.cover.secondary || coverTemplate2;
+
+  availableCvTemplates = uniqueValidCvTemplates([
+    template1,
+    template2,
+    ...(Array.isArray(availableCvTemplates) ? availableCvTemplates : []),
+  ]);
+  availableCoverTemplates = uniqueValidCoverTemplates([
+    coverTemplate1,
+    coverTemplate2,
+    ...(Array.isArray(availableCoverTemplates) ? availableCoverTemplates : []),
+  ]);
+
+  if (!canonicalSelectedTemplate || templateFallbackApplied.resumePrimary) {
+    const normalizedPrimary = canonicalizeCvTemplateId(template1);
+    canonicalSelectedTemplate = normalizedPrimary || template1;
+  }
+
+  templateHistory = normalizeTemplateHistory(templateHistory, [
+    template1,
+    template2,
+    canonicalSelectedTemplate,
+  ]);
+
+  if (dynamo && tableName && userId && canonicalSelectedTemplate) {
+    await persistUserTemplatePreference({
+      dynamo,
+      tableName,
+      userId,
+      templateId: canonicalSelectedTemplate,
+      logContext,
+    });
   }
 
   const textArtifactPrefix = `${generatedPrefix}artifacts/`;
