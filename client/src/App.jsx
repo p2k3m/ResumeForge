@@ -1891,8 +1891,17 @@ function App() {
           : ''
     const trimmedMessage = nextMessage.trim()
     setErrorState(trimmedMessage)
-    if (trimmedMessage && options?.allowRetry) {
-      setErrorRecovery('generation')
+    const rawRecoveryKey =
+      typeof options?.recovery === 'string' && options.recovery.trim()
+        ? options.recovery.trim()
+        : options?.allowRetry
+          ? 'generation'
+          : ''
+    const normalizedRecoveryKey = rawRecoveryKey
+      ? rawRecoveryKey.toLowerCase()
+      : ''
+    if (trimmedMessage && normalizedRecoveryKey) {
+      setErrorRecovery(normalizedRecoveryKey)
     } else {
       setErrorRecovery(null)
     }
@@ -5577,6 +5586,7 @@ function App() {
       const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
       setError(message, {
         allowRetry: true,
+        recovery: 'generation',
         serviceError: serviceErrorSource,
         errorCode
       })
