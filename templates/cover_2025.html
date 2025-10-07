@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cover Letter</title>
+  <style>
+    body { font-family: 'Poppins', 'Segoe UI', sans-serif; margin: 56px; background: #0f172a; color: #e0f2fe; line-height: 1.7; }
+    h1 { color: #22d3ee; margin-bottom: 20px; font-size: 32px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    p { margin: 0 0 16px; }
+  </style>
+</head>
+<body>
+  <h1>{{name}}</h1>
+  {{#each sections}}
+    {{#each items}}
+      <p>{{{this}}}</p>
+    {{/each}}
+  {{/each}}
+</body>
+</html>
