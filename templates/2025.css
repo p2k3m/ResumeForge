@@ -195,6 +195,11 @@ body {
   min-width: 0;
 }
 
+.section-item .item-content .bullet,
+.section-item .item-content .edu-bullet {
+  display: none;
+}
+
 .section-item strong {
   color: var(--accent);
 }

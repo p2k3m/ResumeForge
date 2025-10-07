@@ -57,12 +57,14 @@ describe('buildTemplateSectionContext', () => {
     expect(contactSection.showMarkers).toBe(false);
 
     const experienceSection = context.sections.find((sec) => sec.key === 'experience');
-    expect(experienceSection.htmlItems[0]).toContain('class="bullet"');
+    expect(experienceSection.htmlItems[0]).toContain('class="bullet');
+    expect(experienceSection.htmlItems[0]).toContain('marker--experience');
     expect(experienceSection.showMarkers).toBe(true);
     expect(experienceSection.markerClass).toContain('marker--experience');
 
     const educationSection = context.sections.find((sec) => sec.key === 'education');
-    expect(educationSection.htmlItems[0]).toContain('class="edu-bullet"');
+    expect(educationSection.htmlItems[0]).toContain('class="edu-bullet');
+    expect(educationSection.htmlItems[0]).toContain('marker--education');
     expect(educationSection.markerClass).toContain('marker--education');
 
     const skillsSection = context.sections.find((sec) => sec.key === 'skills');
