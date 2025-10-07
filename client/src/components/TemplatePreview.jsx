@@ -291,6 +291,14 @@ function TemplatePreview({
   const [previewCoverTemplateId, setPreviewCoverTemplateId] = useState(
     coverTemplateId || normalizedCoverTemplates[0]?.id || ''
   )
+  const [resumeComparisonSelections, setResumeComparisonSelections] = useState(() => {
+    const initialId = resumeTemplateId || normalizedResumeTemplates[0]?.id
+    return initialId ? [initialId] : []
+  })
+  const [coverComparisonSelections, setCoverComparisonSelections] = useState(() => {
+    const initialId = coverTemplateId || normalizedCoverTemplates[0]?.id
+    return initialId ? [initialId] : []
+  })
 
   useEffect(() => {
     if (!resumeTemplateId) return
@@ -301,6 +309,24 @@ function TemplatePreview({
     if (!coverTemplateId) return
     setPreviewCoverTemplateId(coverTemplateId)
   }, [coverTemplateId])
+
+  useEffect(() => {
+    setResumeComparisonSelections((prev) => {
+      if (!prev?.length) return prev
+      const validOptions = new Set(normalizedResumeTemplates.map((option) => option.id))
+      const filtered = prev.filter((id) => validOptions.has(id))
+      return filtered.length ? filtered : []
+    })
+  }, [normalizedResumeTemplates])
+
+  useEffect(() => {
+    setCoverComparisonSelections((prev) => {
+      if (!prev?.length) return prev
+      const validOptions = new Set(normalizedCoverTemplates.map((option) => option.id))
+      const filtered = prev.filter((id) => validOptions.has(id))
+      return filtered.length ? filtered : []
+    })
+  }, [normalizedCoverTemplates])
 
   const previewResumeOption = useMemo(() => {
     return (
@@ -388,6 +414,147 @@ function TemplatePreview({
   const isPreviewingDifferentCover =
     previewCoverOption?.id && coverTemplateId && previewCoverOption.id !== coverTemplateId
 
+  const normalizedResumeComparisonSelections = useMemo(() => {
+    if (!resumeComparisonSelections?.length) return []
+    const unique = Array.from(new Set(resumeComparisonSelections))
+    const resolved = unique
+      .map((id) => normalizedResumeTemplates.find((option) => option.id === id))
+      .filter(Boolean)
+      .slice(0, 2)
+    return resolved
+  }, [resumeComparisonSelections, normalizedResumeTemplates])
+
+  const normalizedCoverComparisonSelections = useMemo(() => {
+    if (!coverComparisonSelections?.length) return []
+    const unique = Array.from(new Set(coverComparisonSelections))
+    const resolved = unique
+      .map((id) => normalizedCoverTemplates.find((option) => option.id === id))
+      .filter(Boolean)
+      .slice(0, 2)
+    return resolved
+  }, [coverComparisonSelections, normalizedCoverTemplates])
+
+  const hasCustomResumeComparison = normalizedResumeComparisonSelections.length >= 2
+  const hasCustomCoverComparison = normalizedCoverComparisonSelections.length >= 2
+
+  const toggleResumeComparisonSelection = (templateId) => {
+    if (!templateId) return
+    setResumeComparisonSelections((prev = []) => {
+      const exists = prev.includes(templateId)
+      let next = exists ? prev.filter((id) => id !== templateId) : [...prev, templateId]
+      if (next.length > 2) {
+        next = next.slice(next.length - 2)
+      }
+      return next
+    })
+  }
+
+  const toggleCoverComparisonSelection = (templateId) => {
+    if (!templateId) return
+    setCoverComparisonSelections((prev = []) => {
+      const exists = prev.includes(templateId)
+      let next = exists ? prev.filter((id) => id !== templateId) : [...prev, templateId]
+      if (next.length > 2) {
+        next = next.slice(next.length - 2)
+      }
+      return next
+    })
+  }
+
+  const resumeCards = hasCustomResumeComparison
+    ? normalizedResumeComparisonSelections.map((option, index) => {
+        const style = RESUME_TEMPLATE_PREVIEWS[option?.id] || DEFAULT_RESUME_PREVIEW
+        const isApplied = option?.id === resumeTemplateId
+        return {
+          key: option?.id || `resume-comparison-${index}`,
+          label: `Comparison choice ${index + 1}`,
+          option,
+          style,
+          note: isApplied
+            ? 'This template is currently selected for your downloads.'
+            : 'Apply this template to use it for your downloads.',
+          canApply: !isApplied && Boolean(onResumeTemplateApply)
+        }
+      })
+    : [
+        {
+          key: previewResumeOption?.id || 'resume-preview',
+          label: isPreviewingDifferentResume ? 'Previewing CV template' : 'Selected CV template',
+          option: previewResumeOption,
+          style: resumeStyle,
+          note: isPreviewingDifferentResume
+            ? 'Apply this look to replace your current selection.'
+            : 'Already applied to your downloads.',
+          canApply: isPreviewingDifferentResume && Boolean(onResumeTemplateApply)
+        },
+        ...(isPreviewingDifferentResume && appliedResumeOption
+          ? [
+              {
+                key: appliedResumeOption.id,
+                label: 'Currently selected CV',
+                option: appliedResumeOption,
+                style: appliedResumeStyle,
+                note: 'This is the template currently used for your downloads.',
+                canApply: false
+              }
+            ]
+          : [])
+      ]
+
+  const coverCards = hasCustomCoverComparison
+    ? normalizedCoverComparisonSelections.map((option, index) => {
+        const style = COVER_TEMPLATE_PREVIEWS[option?.id] || DEFAULT_COVER_PREVIEW
+        const isApplied = option?.id === coverTemplateId
+        return {
+          key: option?.id || `cover-comparison-${index}`,
+          label: `Comparison choice ${index + 1}`,
+          option,
+          style,
+          note: isApplied
+            ? 'This cover letter style is currently selected for your downloads.'
+            : 'Apply this cover letter style to use it for your downloads.',
+          canApply: !isApplied && Boolean(onCoverTemplateApply)
+        }
+      })
+    : [
+        {
+          key: previewCoverOption?.id || 'cover-preview',
+          label: isPreviewingDifferentCover
+            ? 'Previewing cover letter template'
+            : 'Selected cover letter template',
+          option: previewCoverOption,
+          style: coverStyle,
+          note: isPreviewingDifferentCover
+            ? 'Apply this look to replace your current cover letter style.'
+            : 'Already applied to your downloads.',
+          canApply: isPreviewingDifferentCover && Boolean(onCoverTemplateApply)
+        },
+        ...(isPreviewingDifferentCover && appliedCoverOption
+          ? [
+              {
+                key: appliedCoverOption.id,
+                label: 'Currently selected cover letter',
+                option: appliedCoverOption,
+                style: appliedCoverStyle,
+                note: 'This is the template currently used for your downloads.',
+                canApply: false
+              }
+            ]
+          : [])
+      ]
+
+  const resumeGridColumns = hasCustomResumeComparison
+    ? 'md:grid-cols-2'
+    : resumeCards.length > 1
+      ? 'md:grid-cols-2'
+      : 'grid-cols-1'
+
+  const coverGridColumns = hasCustomCoverComparison
+    ? 'md:grid-cols-2'
+    : coverCards.length > 1
+      ? 'md:grid-cols-2'
+      : 'grid-cols-1'
+
   return (
     <section className="rounded-3xl border border-purple-100 bg-white/80 shadow-xl p-6 space-y-6" aria-label="Template previews">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -417,62 +584,87 @@ function TemplatePreview({
             </p>
           </div>
           {normalizedResumeTemplates.length > 1 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Preview CV templates">
-              {normalizedResumeTemplates.map((option) => {
-                const isActive = option.id === previewResumeOption?.id
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={cx(
-                      'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
-                      isActive
-                        ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
-                        : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
-                    )}
-                    onClick={() => setPreviewResumeTemplateId(option.id)}
-                  >
-                    {option.name}
-                    {option.id === resumeTemplateId && (
-                      <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
-                        Selected
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Preview CV templates">
+                {normalizedResumeTemplates.map((option) => {
+                  const isActive = option.id === previewResumeOption?.id
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={cx(
+                        'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
+                        isActive
+                          ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
+                          : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                      )}
+                      onClick={() => setPreviewResumeTemplateId(option.id)}
+                    >
+                      {option.name}
+                      {option.id === resumeTemplateId && (
+                        <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
+                          Selected
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-purple-500">
+                  Compare CV templates
+                </p>
+                <p className="mt-1 text-[11px] text-purple-600">
+                  Pick two styles to see them side-by-side before applying.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3" role="group" aria-label="Select CV templates to compare">
+                  {normalizedResumeTemplates.map((option) => {
+                    const isSelected = resumeComparisonSelections.includes(option.id)
+                    return (
+                      <label
+                        key={`resume-compare-${option.id}`}
+                        className={cx(
+                          'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-within:outline-none focus-within:ring-2 focus-within:ring-purple-300',
+                          isSelected
+                            ? 'border-purple-400 bg-white text-purple-700 shadow-sm'
+                            : 'border-purple-200 bg-white/70 text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3 w-3 rounded border-purple-300 text-purple-500 focus:ring-purple-400"
+                          checked={isSelected}
+                          onChange={() => toggleResumeComparisonSelection(option.id)}
+                          aria-label={`Compare ${option.name} CV template`}
+                        />
+                        <span>{option.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {hasCustomResumeComparison ? null : (
+                  <p className="mt-2 text-[10px] text-purple-500">
+                    Select two templates to activate the comparison view.
+                  </p>
+                )}
+              </div>
             </div>
           )}
-          <div className={cx('grid gap-4', isPreviewingDifferentResume ? 'md:grid-cols-2' : 'grid-cols-1')}>
-            <ResumeCard
-              label={isPreviewingDifferentResume ? 'Previewing CV template' : 'Selected CV template'}
-              option={previewResumeOption}
-              style={resumeStyle}
-              note={
-                isPreviewingDifferentResume
-                  ? 'Apply this look to replace your current selection.'
-                  : 'Already applied to your downloads.'
-              }
-            >
-              {isPreviewingDifferentResume && onResumeTemplateApply && (
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => onResumeTemplateApply(previewResumeOption.id)}
-                  disabled={isApplying}
-                >
-                  {isApplying ? 'Updating…' : 'Use this CV style'}
-                </button>
-              )}
-            </ResumeCard>
-            {isPreviewingDifferentResume && appliedResumeOption && (
-              <ResumeCard
-                label="Currently selected CV"
-                option={appliedResumeOption}
-                style={appliedResumeStyle}
-                note="This is the template currently used for your downloads."
-              />
-            )}
+          <div className={cx('grid gap-4', resumeGridColumns)}>
+            {resumeCards.map(({ key, label, option, style, note, canApply }) => (
+              <ResumeCard key={key} label={label} option={option} style={style} note={note}>
+                {canApply && option?.id && onResumeTemplateApply && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => onResumeTemplateApply(option.id)}
+                    disabled={isApplying}
+                  >
+                    {isApplying ? 'Updating…' : 'Use this CV style'}
+                  </button>
+                )}
+              </ResumeCard>
+            ))}
           </div>
         </div>
 
@@ -490,72 +682,94 @@ function TemplatePreview({
             </p>
           </div>
           {normalizedCoverTemplates.length > 1 && (
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Preview cover letter templates">
-              {normalizedCoverTemplates.map((option) => {
-                const isActive = option.id === previewCoverOption?.id
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={cx(
-                      'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
-                      isActive
-                        ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
-                        : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
-                    )}
-                    onClick={() => setPreviewCoverTemplateId(option.id)}
-                  >
-                    {option.name}
-                    {option.id === coverTemplateId && (
-                      <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
-                        Selected
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Preview cover letter templates">
+                {normalizedCoverTemplates.map((option) => {
+                  const isActive = option.id === previewCoverOption?.id
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      className={cx(
+                        'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
+                        isActive
+                          ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
+                          : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                      )}
+                      onClick={() => setPreviewCoverTemplateId(option.id)}
+                    >
+                      {option.name}
+                      {option.id === coverTemplateId && (
+                        <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
+                          Selected
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-purple-500">
+                  Compare cover letter templates
+                </p>
+                <p className="mt-1 text-[11px] text-purple-600">
+                  Pick two styles to review side-by-side before applying.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3" role="group" aria-label="Select cover letter templates to compare">
+                  {normalizedCoverTemplates.map((option) => {
+                    const isSelected = coverComparisonSelections.includes(option.id)
+                    return (
+                      <label
+                        key={`cover-compare-${option.id}`}
+                        className={cx(
+                          'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide transition focus-within:outline-none focus-within:ring-2 focus-within:ring-purple-300',
+                          isSelected
+                            ? 'border-purple-400 bg-white text-purple-700 shadow-sm'
+                            : 'border-purple-200 bg-white/70 text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3 w-3 rounded border-purple-300 text-purple-500 focus:ring-purple-400"
+                          checked={isSelected}
+                          onChange={() => toggleCoverComparisonSelection(option.id)}
+                          aria-label={`Compare ${option.name} cover letter template`}
+                        />
+                        <span>{option.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                {hasCustomCoverComparison ? null : (
+                  <p className="mt-2 text-[10px] text-purple-500">
+                    Select two templates to activate the comparison view.
+                  </p>
+                )}
+              </div>
             </div>
           )}
-          <div className={cx('grid gap-4', isPreviewingDifferentCover ? 'md:grid-cols-2' : 'grid-cols-1')}>
-            <CoverCard
-              label={
-                isPreviewingDifferentCover
-                  ? 'Previewing cover letter template'
-                  : 'Selected cover letter template'
-              }
-              option={previewCoverOption}
-              style={coverStyle}
-              note={
-                isPreviewingDifferentCover
-                  ? 'Apply this look to replace your current cover letter style.'
-                  : 'Already applied to your downloads.'
-              }
-            >
-              {isPreviewingDifferentCover && onCoverTemplateApply && (
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => onCoverTemplateApply(previewCoverOption.id)}
-                  disabled={isApplying}
-                >
-                  {isApplying ? 'Updating…' : 'Use this cover style'}
-                </button>
-              )}
-            </CoverCard>
-            {isPreviewingDifferentCover && appliedCoverOption && (
-              <CoverCard
-                label="Currently selected cover letter"
-                option={appliedCoverOption}
-                style={appliedCoverStyle}
-                note="This is the template currently used for your downloads."
-              />
-            )}
+          <div className={cx('grid gap-4', coverGridColumns)}>
+            {coverCards.map(({ key, label, option, style, note, canApply }) => (
+              <CoverCard key={key} label={label} option={option} style={style} note={note}>
+                {canApply && option?.id && onCoverTemplateApply && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => onCoverTemplateApply(option.id)}
+                    disabled={isApplying}
+                  >
+                    {isApplying ? 'Updating…' : 'Use this cover style'}
+                  </button>
+                )}
+              </CoverCard>
+            ))}
           </div>
         </div>
       </div>
 
       <p className="text-xs text-purple-500">
-        Tap through the template chips to compare styles side-by-side and lock in your favourite look before downloading.
+        Tap through the template chips or choose two templates to compare side-by-side and lock in your favourite look
+        before downloading.
       </p>
     </section>
   )
