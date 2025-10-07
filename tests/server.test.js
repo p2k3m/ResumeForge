@@ -125,6 +125,7 @@ const {
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
   CHANGE_LOG_DYNAMO_LIMITS,
+  setCoverLetterFallbackBuilder,
 } = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
 const mammothMock = (await import('mammoth')).default;
@@ -152,6 +153,7 @@ beforeEach(() => {
   axios.get.mockResolvedValue({
     data: '<html><title>Software Engineer</title><p>Design and build APIs.</p></html>'
   });
+  setCoverLetterFallbackBuilder();
 });
 
 describe('health check', () => {
@@ -1402,6 +1404,133 @@ describe('/api/generate-enhanced-docs', () => {
         details: {},
       }),
     });
+  });
+
+  test('queues message when fallback cover letters are used', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary paragraph'],
+              experience: ['Delivered scalable APIs.'],
+              education: [],
+              certifications: [],
+              skills: ['Node.js'],
+              projects: [],
+              projectSnippet: 'Improved deployment speed.',
+              latestRoleTitle: 'Senior Engineer',
+              latestRoleDescription: 'Led engineering initiatives.',
+              mandatorySkills: ['Node.js'],
+              addedSkills: [],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Designed observability tooling.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () => JSON.stringify({ cover_letter1: '', cover_letter2: '' }),
+        },
+      });
+
+    const res = await request(app)
+      .post('/api/generate-enhanced-docs')
+      .send({
+        jobId: 'job-123',
+        resumeText: 'Jane Doe\nExperience\n- Built systems',
+        originalResumeText: 'Jane Doe\nExperience\n- Built systems',
+        jobDescriptionText: MANUAL_JOB_DESCRIPTION,
+        jobSkills: ['Node.js'],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.coverLetterStatus).toEqual({
+      fallbackApplied: ['cover_letter1', 'cover_letter2'],
+      unavailable: [],
+    });
+    expect(res.body.messages).toEqual(
+      expect.arrayContaining([
+        'Cover letters were generated using fallback copy because the AI response was incomplete.',
+      ])
+    );
+    const coverUrls = res.body.urls.filter((entry) => entry.type.startsWith('cover_letter'));
+    expect(coverUrls).toHaveLength(2);
+    coverUrls.forEach((entry) => {
+      expect(entry.rawText).toMatch(/Dear Hiring Manager/i);
+    });
+
+    process.env.NODE_ENV = originalEnv;
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
+  });
+
+  test('surfaces message when cover letters remain unavailable', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary paragraph'],
+              experience: ['Delivered scalable APIs.'],
+              education: [],
+              certifications: [],
+              skills: ['Node.js'],
+              projects: [],
+              projectSnippet: 'Improved deployment speed.',
+              latestRoleTitle: 'Senior Engineer',
+              latestRoleDescription: 'Led engineering initiatives.',
+              mandatorySkills: ['Node.js'],
+              addedSkills: [],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Designed observability tooling.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () => JSON.stringify({ cover_letter1: '', cover_letter2: '' }),
+        },
+      });
+
+    setCoverLetterFallbackBuilder(() => ({
+      cover_letter1: '',
+      cover_letter2: '',
+    }));
+
+    const res = await request(app)
+      .post('/api/generate-enhanced-docs')
+      .send({
+        jobId: 'job-456',
+        resumeText: 'Jamie Doe\nExperience\n- Scaled infrastructure',
+        originalResumeText: 'Jamie Doe\nExperience\n- Scaled infrastructure',
+        jobDescriptionText: MANUAL_JOB_DESCRIPTION,
+        jobSkills: ['Node.js'],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.coverLetterStatus).toEqual({
+      fallbackApplied: [],
+      unavailable: ['cover_letter1', 'cover_letter2'],
+    });
+    expect(res.body.messages).toEqual(
+      expect.arrayContaining(['CV generated, cover letter unavailable.'])
+    );
+    const coverUrls = res.body.urls.filter((entry) => entry.type.startsWith('cover_letter'));
+    expect(coverUrls).toHaveLength(0);
+
+    process.env.NODE_ENV = originalEnv;
+    setCoverLetterFallbackBuilder();
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
   });
 });
 
