@@ -11069,6 +11069,16 @@ function buildFallbackCoverLetters({
   };
 }
 
+let activeCoverLetterFallbackBuilder = buildFallbackCoverLetters;
+
+function setCoverLetterFallbackBuilder(overrides) {
+  if (typeof overrides === 'function') {
+    activeCoverLetterFallbackBuilder = overrides;
+    return;
+  }
+  activeCoverLetterFallbackBuilder = buildFallbackCoverLetters;
+}
+
 function removeGuidanceLines(text = '') {
   const guidanceRegex =
     /^\s*(?:-\s*\([^)]*\)|\([^)]*\)|\[[^\]]*\])\s*$|\b(?:consolidate relevant experience|add other relevant experience|list key skills|previous roles summarized|for brevity)\b/i;
@@ -14169,7 +14179,7 @@ async function generateEnhancedDocumentsResponse({
 
   coverData = normalizedCoverData;
 
-  const fallbackLetters = buildFallbackCoverLetters({
+  const fallbackLetters = activeCoverLetterFallbackBuilder({
     applicantName,
     jobTitle: versionsContext.jobTitle || applicantTitle,
     jobDescription,
@@ -14197,6 +14207,22 @@ async function generateEnhancedDocumentsResponse({
       missing: missingCoverLetters,
     });
   }
+  const fallbackAppliedCoverLetters = [...missingCoverLetters];
+  const unavailableCoverLetters = COVER_LETTER_VARIANT_KEYS.filter(
+    (key) => typeof coverData[key] !== 'string' || !coverData[key].trim()
+  );
+
+  if (unavailableCoverLetters.length) {
+    logStructured('warn', 'generation_cover_letters_unavailable', {
+      ...logContext,
+      unavailable: unavailableCoverLetters,
+    });
+  }
+
+  const coverLetterStatus = {
+    fallbackApplied: fallbackAppliedCoverLetters,
+    unavailable: unavailableCoverLetters,
+  };
   const coverVariants = COVER_LETTER_VARIANT_KEYS.filter(
     (key) => typeof coverData[key] === 'string' && coverData[key].trim()
   ).length;
@@ -14288,6 +14314,22 @@ async function generateEnhancedDocumentsResponse({
       generationMessages.push(trimmed);
     }
   };
+
+  if (coverLetterStatus.fallbackApplied.length) {
+    const fallbackMessage =
+      coverLetterStatus.fallbackApplied.length === COVER_LETTER_VARIANT_KEYS.length
+        ? 'Cover letters were generated using fallback copy because the AI response was incomplete.'
+        : 'At least one cover letter was generated using fallback copy because the AI response was incomplete.';
+    pushGenerationMessage(fallbackMessage);
+  }
+
+  if (coverLetterStatus.unavailable.length) {
+    const unavailableMessage =
+      coverLetterStatus.unavailable.length === COVER_LETTER_VARIANT_KEYS.length
+        ? 'CV generated, cover letter unavailable.'
+        : 'CV generated successfully, but at least one cover letter variant was unavailable.';
+    pushGenerationMessage(unavailableMessage);
+  }
   if (downloadsRestricted) {
     logStructured('info', 'generation_downloads_restricted', {
       ...logContext,
@@ -15105,6 +15147,7 @@ async function generateEnhancedDocumentsResponse({
       selectedTemplate: canonicalSelectedTemplate,
       templateHistory,
     },
+    coverLetterStatus,
     messages: generationMessages,
   };
   } catch (err) {
@@ -17373,4 +17416,5 @@ export {
   mapCoverLetterFields,
   ensureOutputFileUrls,
   determineUploadContentType,
+  setCoverLetterFallbackBuilder,
 };
