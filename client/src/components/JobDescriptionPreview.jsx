@@ -20,7 +20,7 @@ function JobDescriptionPreview({ text }) {
             Confirm the parsed JD content below before running the ATS score so we analyse the exact role you pasted.
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">
+        <div className="caps-label flex items-center gap-3 text-xs font-semibold text-purple-500">
           <span data-testid="jd-word-count">{wordCount} words</span>
           {sections.length > 0 && <span data-testid="jd-section-count">{sections.length} sections</span>}
         </div>
@@ -57,7 +57,7 @@ function JobDescriptionPreview({ text }) {
       <div className="space-y-4">
         {sections.map((section) => (
           <article key={section.heading} className="space-y-2 rounded-xl border border-purple-100 bg-white/90 p-4">
-            <h4 className="text-sm font-semibold uppercase tracking-[0.3em] text-purple-500" data-testid="jd-section-title">
+            <h4 className="caps-label text-sm font-semibold text-purple-500" data-testid="jd-section-title">
               {section.heading}
             </h4>
             <div className="space-y-2 text-sm leading-relaxed text-purple-900" data-testid="jd-section-content">

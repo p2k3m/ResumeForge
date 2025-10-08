@@ -6359,7 +6359,7 @@ function App() {
         <section className="rounded-3xl border border-slate-200/80 bg-white/70 p-6 shadow-lg">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-3 md:max-w-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-slate-500">
+              <p className="caps-label text-xs font-semibold text-slate-500">
                 Explore the output
               </p>
               <h2 className="text-2xl font-bold text-slate-900">Preview an optimised resume</h2>
@@ -6374,7 +6374,7 @@ function App() {
                 alt="QR code linking to a sample optimised resume"
                 className="h-32 w-32 md:h-36 md:w-36"
               />
-              <figcaption className="text-xs font-medium uppercase tracking-[0.25em] text-slate-500">
+              <figcaption className="caps-label-tight text-xs font-medium text-slate-500">
                 Scan &amp; explore
               </figcaption>
             </figure>
@@ -6385,7 +6385,7 @@ function App() {
 
         <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
           <header className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 1 · Upload</p>
+            <p className="caps-label text-xs font-semibold text-purple-500">Step 1 · Upload</p>
             <h2 className="text-2xl font-bold text-purple-900">Upload your resume &amp; target JD</h2>
             <p className="text-sm text-purple-700/80">
               Drag in your CV, add the job description, and we&apos;ll automatically score all ATS metrics as soon as both are in place.
@@ -6722,7 +6722,7 @@ function App() {
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">
+                <p className="caps-label text-xs font-semibold text-emerald-600">
                   Selection Probability
                 </p>
                 <p className="mt-3 text-5xl font-black text-emerald-700">
@@ -6734,7 +6734,7 @@ function App() {
                 </p>
               </div>
               {selectionInsights.level && (
-                <span className="self-start rounded-full bg-emerald-100 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-emerald-700">
+                <span className="caps-label-tight self-start rounded-full bg-emerald-100 px-4 py-1 text-xs font-semibold text-emerald-700">
                   {selectionInsights.level} Outlook
                 </span>
               )}
@@ -6746,7 +6746,7 @@ function App() {
             {jobFitScores.length > 0 && (
               <div className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">
+                  <h3 className="caps-label text-xs font-semibold text-emerald-600">
                     Job Fit Breakdown
                   </h3>
                   {typeof jobFitAverage === 'number' && (
@@ -6964,7 +6964,7 @@ function App() {
         {improvementActions.length > 0 && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
             <header className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 3 · Improve</p>
+              <p className="caps-label text-xs font-semibold text-purple-500">Step 3 · Improve</p>
               <h2 className="text-2xl font-bold text-purple-900">Targeted Improvements</h2>
               <p className="text-sm text-purple-700/80">
                 Choose which section to enhance after reviewing your ATS dashboard. Each rewrite keeps your experience truthful while aligning to the JD.
@@ -7103,12 +7103,12 @@ function App() {
           </section>
         )}
 
-        {outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
-          <section className="space-y-4">
-            <header className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 4 · Download</p>
-              <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
-              <p className="text-sm text-purple-700/80">
+          {outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
+            <section className="space-y-4">
+              <header className="space-y-1">
+                <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Download</p>
+                <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
+                <p className="text-sm text-purple-700/80">
                 {improvementsRequireAcceptance
                   ? 'Apply the improvements you like, then create polished CV and cover letter downloads tailored to the JD.'
                   : 'Great news — no manual fixes were required. Generate polished CV and cover letter downloads tailored to the JD.'}
@@ -7137,12 +7137,12 @@ function App() {
           </section>
         )}
 
-        {outputFiles.length > 0 && (
-          <section className="space-y-5">
-            <header className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step 4 · Download</p>
-              <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
-              <p className="text-sm text-purple-700/80">
+          {outputFiles.length > 0 && (
+            <section className="space-y-5">
+              <header className="space-y-1">
+                <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Download</p>
+                <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
+                <p className="text-sm text-purple-700/80">
                 Download tailored cover letters plus your original and AI-enhanced CVs. Links remain active for 60 minutes.
               </p>
             </header>

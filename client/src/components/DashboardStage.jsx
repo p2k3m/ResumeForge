@@ -46,7 +46,7 @@ function DashboardStage({
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
           {stageLabel && (
-            <p className={joinClasses('text-xs font-semibold uppercase tracking-[0.35em]', theme.stage)}>
+            <p className={joinClasses('caps-label text-xs font-semibold', theme.stage)}>
               {stageLabel}
             </p>
           )}

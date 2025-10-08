@@ -170,7 +170,7 @@ const ResumeCard = ({ label, option, style = {}, note, children }) => (
   <article className="space-y-4 rounded-3xl border border-purple-100 bg-white/80 p-5 shadow-sm">
     <div className="flex items-start justify-between gap-3">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">{label}</p>
+        <p className="caps-label text-xs font-semibold text-purple-500">{label}</p>
         <h3 className="text-xl font-bold text-purple-800">{option?.name || 'CV Template'}</h3>
         {option?.description && (
           <p className="mt-1 text-sm text-purple-600">{option.description}</p>
@@ -195,7 +195,7 @@ const CoverCard = ({ label, option, style = {}, note, children }) => (
   <article className="space-y-4 rounded-3xl border border-purple-100 bg-white/80 p-5 shadow-sm">
     <div className="flex items-start justify-between gap-3">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">{label}</p>
+        <p className="caps-label text-xs font-semibold text-purple-500">{label}</p>
         <h3 className="text-xl font-bold text-purple-800">{option?.name || 'Cover Letter'}</h3>
         {option?.description && (
           <p className="mt-1 text-sm text-purple-600">{option.description}</p>
@@ -583,7 +583,7 @@ function TemplatePreview({
             See how your enhanced CV and cover letter will be styled before you download them.
           </p>
         </div>
-        <span className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">
+        <span className="caps-label text-xs font-semibold text-purple-500">
           Live Preview
         </span>
       </div>
@@ -591,7 +591,7 @@ function TemplatePreview({
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">CV Template Preview</p>
+            <p className="caps-label text-xs font-semibold text-purple-500">CV Template Preview</p>
             <h3 className="text-xl font-bold text-purple-800">{previewResumeOption?.name}</h3>
             {previewResumeOption?.description && (
               <p className="mt-1 text-sm text-purple-600">{previewResumeOption.description}</p>
@@ -630,7 +630,7 @@ function TemplatePreview({
                 })}
               </div>
               <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-purple-500">
+                <p className="caps-label-tight text-[11px] font-semibold text-purple-500">
                   Compare CV templates
                 </p>
                 <p className="mt-1 text-[11px] text-purple-600">
@@ -689,7 +689,7 @@ function TemplatePreview({
 
         <div className="space-y-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-purple-500">Cover Letter Preview</p>
+            <p className="caps-label text-xs font-semibold text-purple-500">Cover Letter Preview</p>
             <h3 className="text-xl font-bold text-purple-800">{previewCoverOption?.name}</h3>
             {previewCoverOption?.description && (
               <p className="mt-1 text-sm text-purple-600">{previewCoverOption.description}</p>
@@ -733,7 +733,7 @@ function TemplatePreview({
                 })}
               </div>
               <div className="rounded-2xl border border-purple-100 bg-purple-50/40 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-purple-500">
+                <p className="caps-label-tight text-[11px] font-semibold text-purple-500">
                   Compare cover letter templates
                 </p>
                 <p className="mt-1 text-[11px] text-purple-600">
