@@ -67,4 +67,12 @@ describe('TemplatePreview comparison support', () => {
     ).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /Use this cover style/i })).toHaveLength(2)
   })
+
+  it('explains when the cover letter style is independent from the CV', () => {
+    renderComponent({ isCoverLinkedToResume: false })
+
+    expect(
+      screen.getByText(/Cover letters stay in the Modern Cover even if you swap CV templates/i)
+    ).toBeInTheDocument()
+  })
 })
