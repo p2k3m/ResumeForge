@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import TemplateSelector from '../TemplateSelector.jsx'
 
 describe('TemplateSelector', () => {
@@ -10,20 +10,23 @@ describe('TemplateSelector', () => {
     { id: 'professional', name: 'Professional Blue', description: 'Classic layout.' }
   ]
 
-  it('renders options and reflects the selected template', () => {
+  it('renders options with previews and reflects the selected template', () => {
     const { rerender } = render(
       <TemplateSelector options={options} selectedTemplate="modern" onSelect={jest.fn()} />
     )
 
-    const select = screen.getByRole('combobox', { name: /Template Style/i })
-    expect(select).toHaveValue('modern')
+    const group = screen.getByRole('radiogroup', { name: /Template Style/i })
+    const modernOption = within(group).getByRole('radio', { name: /Modern Minimal/i })
+    expect(modernOption).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('template-selector-preview-modern')).toBeInTheDocument()
     expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
       /Two-column balance\./i
     )
 
     rerender(<TemplateSelector options={options} selectedTemplate="professional" onSelect={jest.fn()} />)
 
-    expect(select).toHaveValue('professional')
+    const professionalOption = within(group).getByRole('radio', { name: /Professional Blue/i })
+    expect(professionalOption).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
       /Classic layout\./i
     )
@@ -35,8 +38,8 @@ describe('TemplateSelector', () => {
       <TemplateSelector options={options} selectedTemplate="modern" onSelect={handleSelect} />
     )
 
-    const select = screen.getByRole('combobox', { name: /Template Style/i })
-    fireEvent.change(select, { target: { value: 'professional' } })
+    const professionalOption = screen.getByRole('radio', { name: /Professional Blue/i })
+    fireEvent.click(professionalOption)
 
     expect(handleSelect).toHaveBeenCalledWith('professional')
   })
@@ -52,9 +55,9 @@ describe('TemplateSelector', () => {
       />
     )
 
-    const select = screen.getByRole('combobox', { name: /Template Style/i })
-    expect(select).toBeDisabled()
-    fireEvent.change(select, { target: { value: 'professional' } })
+    const modernOption = screen.getByRole('radio', { name: /Modern Minimal/i })
+    expect(modernOption).toBeDisabled()
+    fireEvent.click(modernOption)
     expect(handleSelect).not.toHaveBeenCalled()
   })
 })

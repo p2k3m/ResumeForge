@@ -1,7 +1,7 @@
 /**
  * @jest-environment jsdom
  */
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import TemplateSelector from '../components/TemplateSelector.jsx'
 
 describe('TemplateSelector', () => {
@@ -18,13 +18,15 @@ describe('TemplateSelector', () => {
     const handleSelect = jest.fn()
     render(<TemplateSelector options={options} selectedTemplate="modern" onSelect={handleSelect} />)
 
-    const dropdown = screen.getByRole('combobox', { name: /Template Style/i })
-    expect(dropdown).toHaveValue('modern')
+    const group = screen.getByRole('radiogroup', { name: /Template Style/i })
+    const modernOption = within(group).getByRole('radio', { name: /Modern Minimal/i })
+    expect(modernOption).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
       /Minimal layout with ATS-safe spacing\./i
     )
 
-    fireEvent.change(dropdown, { target: { value: 'professional' } })
+    const professionalOption = within(group).getByRole('radio', { name: /Professional Blue/i })
+    fireEvent.click(professionalOption)
     expect(handleSelect).toHaveBeenCalledWith('professional')
   })
 
