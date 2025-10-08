@@ -25,11 +25,11 @@ The audit reviews each template in `templates/` for stylistic complexity, spacin
 - **Sections & headers:** Uppercase headings with decorative bullets remain readable, yet QR/image slots risk parser misinterpretation.【F:templates/classic.html†L65-L124】【F:templates/classic.html†L188-L199】
 - **Compliance assessment:** ⚠️ **Moderate ATS risk** due to imagery placeholders and ornate styling.
 
-### `minimalist.html`
-- **Style & layout:** Clean card with light borders; switches to two-column layout on large screens which may break reading order when exported.【F:templates/minimalist.html†L61-L148】
-- **Spacing:** Consistent clamp-based spacing supports readability.【F:templates/minimalist.html†L24-L70】
-- **Fonts:** Work Sans import is legible but consider system defaults to avoid external dependency.【F:templates/minimalist.html†L7-L28】
-- **Sections & headers:** Uppercase headings and simple bullets are ATS safe; contact/skills lists remove bullets for clarity.【F:templates/minimalist.html†L71-L181】
+### `minimalist.html` *(retired; archived under `templates/retired/`)*
+- **Style & layout:** Clean card with light borders; switches to two-column layout on large screens which may break reading order when exported.【F:templates/retired/minimalist.html†L61-L148】
+- **Spacing:** Consistent clamp-based spacing supports readability.【F:templates/retired/minimalist.html†L24-L70】
+- **Fonts:** Work Sans import is legible but consider system defaults to avoid external dependency.【F:templates/retired/minimalist.html†L7-L28】
+- **Sections & headers:** Uppercase headings and simple bullets are ATS safe; contact/skills lists remove bullets for clarity.【F:templates/retired/minimalist.html†L71-L181】
 - **Compliance assessment:** ⚠️ **Generally ATS-compatible**, but ensure exports flatten to single column and consider removing custom bullets.
 
 ### `modern.html`
@@ -46,24 +46,24 @@ The audit reviews each template in `templates/` for stylistic complexity, spacin
 - **Sections & headers:** Semantic headings and list items, yet circular markers may be ignored.【F:templates/professional.html†L108-L199】
 - **Compliance assessment:** ⚠️ **Moderate ATS risk** from two-column layout and decorative markers.
 
-### `structured.html`
-- **Style & layout:** Gradient-backed cards and two-column responsive grid add complexity beyond ATS-safe design.【F:templates/structured.html†L54-L178】
-- **Spacing:** Uses consistent clamp spacing but adds hover overlays and pseudo-elements.【F:templates/structured.html†L59-L102】
-- **Fonts:** IBM Plex Sans import is modern but non-standard; ensure fallbacks are acceptable.【F:templates/structured.html†L7-L18】
-- **Sections & headers:** Section bullets rely on pseudo-elements; contact/skills remove them for clarity.【F:templates/structured.html†L85-L160】
+### `structured.html` *(retired; archived under `templates/retired/`)*
+- **Style & layout:** Gradient-backed cards and two-column responsive grid add complexity beyond ATS-safe design.【F:templates/retired/structured.html†L54-L178】
+- **Spacing:** Uses consistent clamp spacing but adds hover overlays and pseudo-elements.【F:templates/retired/structured.html†L59-L102】
+- **Fonts:** IBM Plex Sans import is modern but non-standard; ensure fallbacks are acceptable.【F:templates/retired/structured.html†L7-L18】
+- **Sections & headers:** Section bullets rely on pseudo-elements; contact/skills remove them for clarity.【F:templates/retired/structured.html†L85-L160】
 - **Compliance assessment:** ⚠️ **Moderate ATS risk**; consider simplifying styling and fixing to one column.
 
-### `precision.html`
-- **Style & layout:** Gradient header, card outlines, and two-column responsive grid increase parsing difficulty.【F:templates/precision.html†L31-L166】
-- **Spacing:** Generous padding but uses decorative side rules via pseudo-elements.【F:templates/precision.html†L71-L125】
-- **Fonts:** Inter import with system fallbacks; still reliant on external font load.【F:templates/precision.html†L7-L28】
-- **Sections & headers:** Pseudo-element bullets and uppercase headings remain readable yet may be stripped by ATS.【F:templates/precision.html†L89-L147】
+### `precision.html` *(retired; archived under `templates/retired/`)*
+- **Style & layout:** Gradient header, card outlines, and two-column responsive grid increase parsing difficulty.【F:templates/retired/precision.html†L31-L166】
+- **Spacing:** Generous padding but uses decorative side rules via pseudo-elements.【F:templates/retired/precision.html†L71-L125】
+- **Fonts:** Inter import with system fallbacks; still reliant on external font load.【F:templates/retired/precision.html†L7-L28】
+- **Sections & headers:** Pseudo-element bullets and uppercase headings remain readable yet may be stripped by ATS.【F:templates/retired/precision.html†L89-L147】
 - **Compliance assessment:** ⚠️ **Moderate ATS risk** from decorative framing and multi-column layout.
 
-### `portal.html`
-- **Style & layout:** Portal interface uses dark glassmorphism, not meant for ATS export; design is heavy but acceptable as UI.【F:templates/portal.html†L12-L180】
-- **Spacing & fonts:** Inter/system stack with responsive spacing suits web use.【F:templates/portal.html†L8-L139】
-- **Sections & header:** Form labels and headings are semantic; ATS compliance not applicable because it is not a resume template.【F:templates/portal.html†L183-L199】
+### `portal.html` *(retired; archived under `templates/retired/`)*
+- **Style & layout:** Portal interface uses dark glassmorphism, not meant for ATS export; design is heavy but acceptable as UI.【F:templates/retired/portal.html†L12-L180】
+- **Spacing & fonts:** Inter/system stack with responsive spacing suits web use.【F:templates/retired/portal.html†L8-L139】
+- **Sections & header:** Form labels and headings are semantic; ATS compliance not applicable because it is not a resume template.【F:templates/retired/portal.html†L183-L199】
 - **Compliance assessment:** ℹ️ **Out of scope** for ATS parsing but ensure contrast for accessibility if exporting content.
 
 ## Cover Letter Templates

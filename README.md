@@ -284,6 +284,10 @@ Available template values:
 
 Any missing or invalid ID falls back to `modern`.
 
+### Template rotation and Q4 2025 palettes
+
+Run `npm run refresh:templates` at the start of every Q4 to archive unsupported layouts and regenerate the seasonal `2025` palette files inside `templates/`. The script moves retired HTML into `templates/retired/` and rewrites the four Q4 variants (`2025-q4-slate`, `2025-q4-midnight`, `2025-q4-sunrise`, `2025-q4-emerald`) so downstream tooling always has the latest colour treatments for the Future Vision resume. Committing the refreshed assets keeps the repository aligned with the quarterly design refresh without manual copy/paste chores.
+
 
 ## Edge Cases
 - **Name extraction fallback:** If the résumé text lacks a detectable name, the generated content defaults to a generic placeholder such as "Candidate".
