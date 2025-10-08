@@ -15484,6 +15484,72 @@ async function generateEnhancedDocumentsResponse({
     artifactCount: uploadedArtifacts.length,
   };
 
+  const resumeTemplatesForStage = {};
+  const canonicalResumeSelected =
+    typeof canonicalSelectedTemplate === 'string' && canonicalSelectedTemplate.trim()
+      ? canonicalizeCvTemplateId(canonicalSelectedTemplate, canonicalSelectedTemplate)
+      : '';
+  const canonicalResumePrimary =
+    typeof template1 === 'string' && template1.trim()
+      ? canonicalizeCvTemplateId(template1, template1)
+      : '';
+  const canonicalResumeSecondary =
+    typeof template2 === 'string' && template2.trim()
+      ? canonicalizeCvTemplateId(template2, template2)
+      : '';
+  if (canonicalResumeSelected) {
+    resumeTemplatesForStage.selected = canonicalResumeSelected;
+  }
+  if (canonicalResumePrimary) {
+    resumeTemplatesForStage.primary = canonicalResumePrimary;
+  }
+  if (canonicalResumeSecondary) {
+    resumeTemplatesForStage.secondary = canonicalResumeSecondary;
+  }
+  if (Array.isArray(templateHistory) && templateHistory.length) {
+    const dedupedHistory = templateHistory.filter((entry, index, list) => {
+      return typeof entry === 'string' && entry && list.indexOf(entry) === index;
+    });
+    if (dedupedHistory.length) {
+      resumeTemplatesForStage.history = dedupedHistory;
+    }
+  }
+  const resumeAvailableTemplates = uniqueValidCvTemplates(availableCvTemplates);
+  if (resumeAvailableTemplates.length) {
+    resumeTemplatesForStage.available = resumeAvailableTemplates;
+  }
+
+  const coverTemplatesForStage = {};
+  const canonicalCoverPrimary =
+    typeof coverTemplate1 === 'string' && coverTemplate1.trim()
+      ? canonicalizeCoverTemplateId(coverTemplate1, coverTemplate1)
+      : '';
+  const canonicalCoverSecondary =
+    typeof coverTemplate2 === 'string' && coverTemplate2.trim()
+      ? canonicalizeCoverTemplateId(coverTemplate2, coverTemplate2)
+      : '';
+  if (canonicalCoverPrimary) {
+    coverTemplatesForStage.primary = canonicalCoverPrimary;
+  }
+  if (canonicalCoverSecondary) {
+    coverTemplatesForStage.secondary = canonicalCoverSecondary;
+  }
+  const coverAvailableTemplates = uniqueValidCoverTemplates(availableCoverTemplates);
+  if (coverAvailableTemplates.length) {
+    coverTemplatesForStage.available = coverAvailableTemplates;
+  }
+
+  const templatesForStage = {};
+  if (Object.keys(resumeTemplatesForStage).length) {
+    templatesForStage.resume = resumeTemplatesForStage;
+  }
+  if (Object.keys(coverTemplatesForStage).length) {
+    templatesForStage.cover = coverTemplatesForStage;
+  }
+  if (Object.keys(templatesForStage).length) {
+    downloadStageMetadata.templates = templatesForStage;
+  }
+
   if (templateCreationMessages.length) {
     downloadStageMetadata.templateCreationErrors = templateCreationMessages;
   }
