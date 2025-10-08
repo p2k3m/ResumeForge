@@ -1691,6 +1691,17 @@ describe('/api/generate-enhanced-docs', () => {
     expect(downloadStage?.documentPopulationErrors).toEqual(
       expect.arrayContaining([populationFallbackMessage])
     );
+    expect(downloadStage?.templates).toEqual(
+      expect.objectContaining({
+        resume: expect.objectContaining({
+          primary: expect.any(String),
+          selected: expect.any(String),
+        }),
+        cover: expect.objectContaining({
+          primary: expect.any(String),
+        }),
+      })
+    );
 
     process.env.NODE_ENV = originalEnv;
     generateContentMock.mockReset();

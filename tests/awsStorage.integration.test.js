@@ -92,6 +92,20 @@ describe('AWS integrations for /api/process-cv', () => {
     expect(metadataPayload.stages.download).not.toHaveProperty('textArtifactCount');
     expect(metadataPayload.stages.download).not.toHaveProperty('urlCount');
 
+    expect(metadataPayload.stages.download.templates).toEqual(
+      expect.objectContaining({
+        resume: expect.objectContaining({
+          primary: expect.any(String),
+          selected: expect.any(String),
+          available: expect.arrayContaining([expect.any(String)]),
+        }),
+        cover: expect.objectContaining({
+          primary: expect.any(String),
+          available: expect.arrayContaining([expect.any(String)]),
+        }),
+      })
+    );
+
     const generatedPdf = commandSummaries.find(
       (command) =>
         command.type === 'PutObjectCommand' &&
