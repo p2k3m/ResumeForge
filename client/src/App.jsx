@@ -25,6 +25,10 @@ import { normalizePdfBlob } from './utils/assetValidation.js'
 import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
 import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
+import { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
+
+export { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
+export { SUPPORTED_RESUME_TEMPLATE_IDS } from './templateRegistry.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Our Lambda resume engine could not generate your PDFs. Please try again shortly.'
@@ -819,12 +823,6 @@ const jobFitToneStyles = {
   }
 }
 
-const TEMPLATE_ALIASES = {
-  ucmo: 'classic',
-  vibrant: 'modern',
-  creative: 'modern'
-}
-
 const COVER_TEMPLATE_IDS = [
   'cover_modern',
   'cover_classic',
@@ -872,13 +870,6 @@ const RESUME_TO_COVER_TEMPLATE = {
 }
 
 const DEFAULT_COVER_TEMPLATE = 'cover_modern'
-
-const canonicalizeTemplateId = (value) => {
-  if (typeof value !== 'string') return ''
-  const trimmed = value.trim().toLowerCase()
-  if (!trimmed) return ''
-  return TEMPLATE_ALIASES[trimmed] || trimmed
-}
 
 const canonicalizeCoverTemplateId = (value, fallback = '') => {
   if (typeof value !== 'string') return fallback
@@ -1200,34 +1191,6 @@ const formatTemplateName = (id) => {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
 }
-
-const BASE_TEMPLATE_OPTIONS = [
-  {
-    id: 'modern',
-    name: 'Modern Minimal',
-    description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.'
-  },
-  {
-    id: 'professional',
-    name: 'Professional Edge',
-    description: 'Refined corporate styling with confident headings and balanced whitespace.'
-  },
-  {
-    id: 'classic',
-    name: 'Classic Heritage',
-    description: 'Timeless serif typography with structured section framing.'
-  },
-  {
-    id: 'ats',
-    name: 'ATS Optimized',
-    description: 'Single-column structure engineered for parsing accuracy.'
-  },
-  {
-    id: '2025',
-    name: 'Future Vision 2025',
-    description: 'Futuristic grid layout with crisp typography and subtle neon cues.'
-  }
-]
 
 const COVER_TEMPLATE_DETAILS = {
   cover_modern: {
