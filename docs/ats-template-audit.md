@@ -35,7 +35,7 @@ The audit reviews each template in `templates/` for stylistic complexity, spacin
 ### `modern.html`
 - **Style & layout:** Neon gradients, dark background, and card hover states add heavy visuals that frequently fail ATS parsing, especially due to two-column grid.【F:templates/modern.html†L25-L174】
 - **Spacing:** Adequate spacing but reliant on decorative overlays that can obscure text in conversions.【F:templates/modern.html†L36-L135】
-- **Fonts:** Poppins import is readable; fallback exists but color contrast (light text on dark background) may degrade in ATS.【F:templates/modern.html†L7-L34】
+- **Fonts:** Inter import is readable; fallback exists but color contrast (light text on dark background) may degrade in ATS.【F:templates/modern.html†L7-L34】
 - **Sections & headers:** Uses custom markers and icon boxes that some parsers ignore, risking content loss.【F:templates/modern.html†L95-L195】
 - **Compliance assessment:** ❌ **Not ATS-friendly**; needs simplification to light background, single column, and standard bullets.
 
@@ -75,7 +75,7 @@ The audit reviews each template in `templates/` for stylistic complexity, spacin
 
 ### `cover_2025.html`
 - **Style & layout:** Dark background with bright accent header may create contrast issues in parsing/export.【F:templates/cover_2025.html†L6-L19】
-- **Fonts:** Poppins stack is fine, but uppercase neon header feels decorative.【F:templates/cover_2025.html†L7-L9】
+- **Fonts:** Inter stack is fine, but uppercase neon header feels decorative.【F:templates/cover_2025.html†L7-L9】
 - **Compliance assessment:** ⚠️ **Moderate risk**; recommend light background and standard header formatting.
 
 ### `cover_classic.html`
