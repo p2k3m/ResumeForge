@@ -1,0 +1,24 @@
+{
+  "resumeText": "SOFIA RAMIREZ\nSan Francisco, CA • sofia@example.com • github.com/sofiaramirez\n\nSUMMARY\nProduct-focused software engineer delivering reliable, accessible web experiences for 15M monthly users. Led experimentation and mentoring initiatives that lifted growth KPIs.\n\nEXPERIENCE\nSenior Product Engineer — Loop Labs (2021–Present)\n- Directed React and Node.js modernization of experimentation platform, cutting test launch time 40% while raising velocity by 18%.\n- Designed resilient APIs with TypeScript and GraphQL, processing 65M events/day with <0.2% error rate.\n- Partnered with design to ship WCAG AA accessible UI kits across 12 surfaces.\n- Mentored 6 engineers, establishing instrumentation guardrails adopted org-wide.\n\nProduct Engineer — Brightline (2018–2021)\n- Built experimentation dashboards that improved activation by 9%.\n- Introduced growth mindset workshops for engineers and PMs.\n\nPROJECTS\nImpact Review Automation — Automated insight pack generation for experiment reviews using GPT APIs, saving 30 hours/quarter.\n\nEDUCATION\nB.S. Computer Science, University of Texas at Austin\n\nSKILLS\nReact, Node.js, GraphQL, Accessibility, Experimentation, Mentoring, Data instrumentation, TypeScript",
+  "jobDescription": "We need a senior product engineer to lead end-to-end delivery of web experiences. Key focuses: React, Node.js, experimentation, API design, accessibility, data instrumentation, mentoring, growth mindset.",
+  "jobSkills": [
+    "React",
+    "Node.js",
+    "Experimentation",
+    "API design",
+    "Accessibility",
+    "Data instrumentation",
+    "Mentoring",
+    "Growth mindset"
+  ],
+  "resumeSkills": [
+    "React",
+    "Node.js",
+    "GraphQL",
+    "Accessibility",
+    "Experimentation",
+    "Mentoring",
+    "Data instrumentation",
+    "TypeScript"
+  ]
+}
