@@ -28,9 +28,19 @@ function TemplatePicker({
   const hasCoverOptions = Array.isArray(coverOptions) && coverOptions.length > 0
   const showPreview = hasResumeOptions || hasCoverOptions
 
+  const normalizedCoverTemplateName = (() => {
+    if (typeof selectedCoverTemplateName !== 'string') {
+      return 'your selected cover letter style'
+    }
+    const trimmed = selectedCoverTemplateName.trim()
+    return trimmed || 'your selected cover letter style'
+  })()
   const coverSelectorDescription = isCoverLinkedToResume
     ? 'Cover letters mirror your selected CV template. Choose another style or switch off “Match CV style” to decouple them.'
-    : 'Choose a cover letter design to use even if your CV keeps a different look.'
+    : `Cover letters stay in the ${normalizedCoverTemplateName} design even if your CV uses another template. Pick a new style whenever you like.`
+  const coverLinkHelperText = isCoverLinkedToResume
+    ? 'Uncheck or pick a new cover letter template to mix and match styles.'
+    : 'Cover letters stay in this design when you swap CV templates.'
 
   const handleCoverLinkChange = (event) => {
     const nextValue = event.target.checked
@@ -68,9 +78,7 @@ function TemplatePicker({
                   <span className="block text-sm font-semibold text-purple-700">
                     Match cover letter style to CV template
                   </span>
-                  <span className="mt-1 block text-xs text-purple-600">
-                    Uncheck or pick a new cover letter template to mix and match styles.
-                  </span>
+                  <span className="mt-1 block text-xs text-purple-600">{coverLinkHelperText}</span>
                 </span>
               </label>
             </div>

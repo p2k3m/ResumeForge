@@ -410,6 +410,20 @@ function TemplatePreview({
   const appliedCoverName =
     appliedCoverOption?.name || coverTemplateName || coverTemplateId || 'your current cover style'
 
+  const independentCoverDescriptor = useMemo(() => {
+    if (!appliedCoverName || typeof appliedCoverName !== 'string') {
+      return 'your selected cover letter style'
+    }
+    const trimmed = appliedCoverName.trim()
+    if (!trimmed) {
+      return 'your selected cover letter style'
+    }
+    if (/cover/i.test(trimmed)) {
+      return trimmed
+    }
+    return `${trimmed} cover letter style`
+  }, [appliedCoverName])
+
   const isPreviewingDifferentResume =
     previewResumeOption?.id && resumeTemplateId && previewResumeOption.id !== resumeTemplateId
   const isPreviewingDifferentCover =
@@ -685,11 +699,11 @@ function TemplatePreview({
                 ? `Currently applied: ${appliedCoverName}. Compare styles below before updating.`
                 : 'This template is already applied to your downloads.'}
             </p>
-            {isCoverLinkedToResume && (
-              <p className="mt-1 text-xs text-purple-500">
-                Cover letters stay synced with your CV until you pick a new style or turn off “Match CV style”.
-              </p>
-            )}
+            <p className="mt-1 text-xs text-purple-500">
+              {isCoverLinkedToResume
+                ? 'Cover letters stay synced with your CV until you pick a new style or turn off “Match CV style”.'
+                : `Cover letters stay in the ${independentCoverDescriptor} even if you swap CV templates.`}
+            </p>
           </div>
           {normalizedCoverTemplates.length > 1 && (
             <div className="space-y-3">
