@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Generated Q4 2025 via scripts/refresh-templates.mjs -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume</title>
+    <link rel="stylesheet" href="2025-q4-midnight.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="masthead">
+        <div class="identity">
+          <h1>{{name}}</h1>
+          <p class="tagline">Future Vision 2025 – Midnight Pulse &mdash; Midnight Pulse palette built for late-stage growth teams.</p>
+        </div>
+        <div class="meta-pills">
+          <span class="pill">ATS optimised</span>
+          <span class="pill">Two-column layout</span>
+          <span class="pill">Keyword aligned</span>
+        </div>
+      </header>
+      <main class="resume-grid">
+        {{#each sections}}
+        <section class="resume-section{{#if @first}} span-2{{/if}}{{#if sectionClass}} {{sectionClass}}{{/if}}">
+          {{#if heading}}
+          <div class="section-header">
+            <h2 class="section-title{{#if headingClass}} {{headingClass}}{{/if}}">{{heading}}</h2>
+            <span class="section-accent"></span>
+          </div>
+          {{/if}}
+          {{#if items}}
+          <ul class="section-list{{#if listClass}} {{listClass}}{{/if}}">
+            {{#each items}}
+            <li class="section-item{{#if ../itemClass}} {{../itemClass}}{{/if}}">
+              {{#if ../showMarkers}}
+              <span class="bullet{{#if ../markerClass}} {{../markerClass}}{{/if}}">◆</span>
+              {{/if}}
+              <span class="item-content{{#if ../textClass}} {{../textClass}}{{/if}}">{{{this}}}</span>
+            </li>
+            {{/each}}
+          </ul>
+          {{/if}}
+        </section>
+        {{/each}}
+      </main>
+    </div>
+  </body>
+</html>
