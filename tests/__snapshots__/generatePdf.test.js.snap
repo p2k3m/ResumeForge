@@ -22,7 +22,7 @@ exports[`generatePdf and parsing 2025 template renders expected HTML snapshot 1`
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
   margin: 0;
   padding: 32px;
   color: var(--text);
