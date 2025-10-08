@@ -31,7 +31,7 @@ const categories = [
 const addedBadgeClass = 'bg-emerald-100 text-emerald-700 border border-emerald-200'
 const missingBadgeClass = 'bg-rose-100 text-rose-700 border border-rose-200'
 const actionBadgeClass =
-  'inline-flex items-center rounded-full bg-purple-100 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-purple-700'
+  'caps-label-tight inline-flex items-center rounded-full bg-purple-100 px-2.5 py-1 text-[0.65rem] font-semibold text-purple-700'
 
 function formatList(items = []) {
   const values = Array.isArray(items) ? items.filter(Boolean) : []
@@ -111,11 +111,11 @@ function DeltaSummaryPanel({ summary }) {
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">Added</p>
+                  <p className="caps-label text-xs font-semibold text-emerald-600">Added</p>
                   {renderItems(bucket.added, 'added', category.label)}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.3em] text-rose-600">Missing</p>
+                  <p className="caps-label text-xs font-semibold text-rose-600">Missing</p>
                   {renderItems(bucket.missing, 'missing', category.label)}
                 </div>
               </div>

@@ -36,7 +36,7 @@ function ProcessFlow({ steps }) {
 
   return (
     <div className="rounded-3xl border border-purple-200/60 bg-white/80 p-5 shadow-lg">
-      <p className="text-xs font-semibold uppercase tracking-[0.35em] text-purple-500">Step-by-step flow</p>
+      <p className="caps-label text-xs font-semibold text-purple-500">Step-by-step flow</p>
       <ol className="mt-4 grid gap-3 md:grid-cols-5">
         {items.map((step, index) => {
           const theme = statusThemes[step.status] || statusThemes.upcoming

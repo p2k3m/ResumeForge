@@ -1,6 +1,11 @@
 import React from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import App from './App.jsx'
+import '@fontsource-variable/inter/wght.css'
+import '@fontsource-variable/inter/wght-italic.css'
+import '@fontsource/jetbrains-mono/400.css'
+import '@fontsource/jetbrains-mono/500.css'
+import '@fontsource/jetbrains-mono/700.css'
 import './index.css'
 
 const container = document.getElementById('root')

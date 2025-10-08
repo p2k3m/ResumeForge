@@ -5,11 +5,13 @@
 @layer base {
   :root {
     color-scheme: light;
-    --font-sans: 'Inter', 'Inter var', 'SF Pro Text', 'SF Pro Display', -apple-system,
+    --font-sans: 'Inter Variable', 'Inter', 'SF Pro Text', 'SF Pro Display', -apple-system,
       BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, 'Noto Sans',
       sans-serif;
     --font-mono: 'JetBrains Mono', 'SFMono-Regular', 'Roboto Mono', 'Menlo', 'Monaco',
       'Consolas', 'Liberation Mono', 'Courier New', monospace;
+    --caps-letter-spacing: 0.28em;
+    --caps-letter-spacing-tight: 0.22em;
   }
 
   html {
@@ -43,5 +45,40 @@
   li,
   dd {
     text-wrap: pretty;
+  }
+
+  code,
+  pre,
+  kbd,
+  samp {
+    font-family: var(--font-mono);
+    font-feature-settings: 'calt' 0, 'liga' 0, 'tnum' 1;
+  }
+
+  @media (min-width: 768px) {
+    :root {
+      --caps-letter-spacing: 0.32em;
+      --caps-letter-spacing-tight: 0.26em;
+    }
+  }
+
+  @media (max-width: 640px) {
+    body {
+      line-height: 1.65;
+    }
+  }
+}
+
+@layer components {
+  .caps-label {
+    text-transform: uppercase;
+    letter-spacing: var(--caps-letter-spacing);
+    font-feature-settings: 'case' 1, 'cpsp' 1;
+  }
+
+  .caps-label-tight {
+    text-transform: uppercase;
+    letter-spacing: var(--caps-letter-spacing-tight);
+    font-feature-settings: 'case' 1, 'cpsp' 1;
   }
 }

@@ -22,7 +22,7 @@ const itemizedChangeTypeStyles = {
 }
 
 const summaryActionBadgeClass =
-  'inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.35em] text-purple-700'
+  'caps-label-tight inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[0.6rem] font-semibold text-purple-700'
 
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
