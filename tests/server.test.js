@@ -1607,6 +1607,96 @@ describe('/api/generate-enhanced-docs', () => {
     generateContentMock.mockReset();
     primeDefaultGeminiResponses();
   });
+
+  test('persists template vs population errors in stage metadata', async () => {
+    mockS3Send.mockClear();
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+
+    const templateError = new Error('Renderer unavailable');
+    const pdfMock = jest.fn((text, templateId) => {
+      if (templateId === 'modern') {
+        return Promise.reject(templateError);
+      }
+      return Promise.resolve(Buffer.from(`pdf-${templateId}`));
+    });
+    setGeneratePdf(pdfMock);
+
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary paragraph'],
+              experience: ['Delivered scalable APIs.'],
+              education: [],
+              certifications: [],
+              skills: ['Node.js'],
+              projects: [],
+              projectSnippet: 'Improved deployment speed.',
+              latestRoleTitle: 'Senior Engineer',
+              latestRoleDescription: 'Led engineering initiatives.',
+              mandatorySkills: ['Node.js'],
+              addedSkills: [],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Designed observability tooling.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () => JSON.stringify({ cover_letter1: '', cover_letter2: '' }),
+        },
+      });
+
+    const res = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(res.status).toBe(200);
+
+    const templateFallbackMessage =
+      'Could not generate PDF for Modern template, retrying with Professional';
+    const populationFallbackMessage =
+      'Cover letters were generated using fallback copy because the AI response was incomplete.';
+
+    expect(res.body.templateCreationMessages).toEqual(
+      expect.arrayContaining([templateFallbackMessage])
+    );
+    expect(res.body.documentPopulationMessages).toEqual(
+      expect.arrayContaining([populationFallbackMessage])
+    );
+
+    const metadataWrites = mockS3Send.mock.calls.filter(
+      ([command]) =>
+        command.__type === 'PutObjectCommand' &&
+        typeof command.input?.Key === 'string' &&
+        command.input.Key.endsWith('logs/log.json')
+    );
+    expect(metadataWrites.length).toBeGreaterThan(0);
+    const latestMetadataCall = metadataWrites[metadataWrites.length - 1];
+    const metadataBody = latestMetadataCall[0].input.Body;
+    const metadataString = Buffer.isBuffer(metadataBody)
+      ? metadataBody.toString()
+      : metadataBody;
+    const metadataPayload = JSON.parse(metadataString);
+    const downloadStage = metadataPayload?.stages?.download;
+    expect(downloadStage?.templateCreationErrors).toEqual(
+      expect.arrayContaining([templateFallbackMessage])
+    );
+    expect(downloadStage?.documentPopulationErrors).toEqual(
+      expect.arrayContaining([populationFallbackMessage])
+    );
+
+    process.env.NODE_ENV = originalEnv;
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
+    setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+  });
 });
 
 describe('generatePdfWithFallback', () => {
