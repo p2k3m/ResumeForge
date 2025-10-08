@@ -209,12 +209,21 @@ function TemplateSelector({
                 isSelected ? 'border-purple-500 ring-2 ring-purple-200' : 'border-purple-200 hover:border-purple-400 hover:shadow-md'
               } ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-start justify-between gap-2">
                 <span className="text-sm font-semibold text-purple-900">{option.name}</span>
-                {isSelected && !disabled && (
-                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
-                    Selected
-                  </span>
+                {(option.badge || (isSelected && !disabled)) && (
+                  <div className="flex flex-col items-end gap-1 text-right">
+                    {option.badge && (
+                      <span className="rounded-full bg-purple-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-purple-700">
+                        {option.badge}
+                      </span>
+                    )}
+                    {isSelected && !disabled && (
+                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
+                        Selected
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
               <TemplatePreviewThumbnail variant={variant} testId={`${idPrefix}-preview-${option.id}`} />
