@@ -7057,6 +7057,24 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
     options && typeof options.templateParams === 'object'
       ? { ...options.templateParams }
       : {};
+
+  const templateMode =
+    typeof templateParams.mode === 'string'
+      ? templateParams.mode.trim().toLowerCase()
+      : '';
+  const explicitAtsFlag = templateParams.atsMode;
+  const isAtsTemplate = !isCoverCandidate && templateId === 'ats';
+  const isAtsMode =
+    isAtsTemplate ||
+    templateMode === 'ats' ||
+    explicitAtsFlag === true ||
+    (typeof explicitAtsFlag === 'string' && explicitAtsFlag.toLowerCase() === 'true');
+  if (isAtsMode) {
+    if (!templateMode) {
+      templateParams.mode = 'ats';
+    }
+    templateParams.atsMode = true;
+  }
   const enhancementTokenMap =
     options && typeof options.enhancementTokenMap === 'object'
       ? options.enhancementTokenMap
@@ -14789,7 +14807,19 @@ async function generateEnhancedDocumentsResponse({
       baseTemplateOptions.skipRequiredSections = true;
     }
 
-    const candidateTemplates = (() => {
+    const canonicalPrimaryTemplate = isCvDocument
+      ? canonicalizeCvTemplateId(primaryTemplate || '')
+      : primaryTemplate;
+
+    if (isCvDocument && canonicalPrimaryTemplate === 'ats') {
+      baseTemplateOptions.templateParams = {
+        ...(baseTemplateOptions.templateParams || {}),
+        mode: 'ats',
+        atsMode: true,
+      };
+    }
+
+    let candidateTemplates = (() => {
       const fallbackTemplates = isCoverLetter ? CL_TEMPLATES : CV_TEMPLATES;
       const requestedTemplates = isCvDocument
         ? [template1, template2, ...(availableCvTemplates || [])]
@@ -14799,6 +14829,13 @@ async function generateEnhancedDocumentsResponse({
       const merged = [primaryTemplate, ...requestedTemplates, ...fallbackTemplates].filter(Boolean);
       return uniqueTemplates(merged);
     })();
+
+    if (isCvDocument && baseTemplateOptions.templateParams?.mode === 'ats') {
+      const filtered = candidateTemplates.filter(
+        (tpl) => canonicalizeCvTemplateId(tpl) === 'ats'
+      );
+      candidateTemplates = filtered.length ? filtered : ['ats'];
+    }
 
     const {
       buffer: pdfBuffer,
