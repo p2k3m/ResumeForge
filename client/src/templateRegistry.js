@@ -24,12 +24,14 @@ export const BASE_TEMPLATE_OPTIONS = [
   {
     id: 'modern',
     name: 'Modern Minimal',
-    description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.'
+    description: 'Sleek two-column layout with clean dividers and ATS-safe spacing.',
+    badge: 'Best for Tech Roles'
   },
   {
     id: 'professional',
     name: 'Professional Edge',
-    description: 'Refined corporate styling with confident headings and balanced whitespace.'
+    description: 'Refined corporate styling with confident headings and balanced whitespace.',
+    badge: 'Best for Sr Managers'
   },
   {
     id: 'classic',
@@ -39,7 +41,8 @@ export const BASE_TEMPLATE_OPTIONS = [
   {
     id: 'ats',
     name: 'ATS Optimized',
-    description: 'Single-column structure engineered for parsing accuracy.'
+    description: 'Single-column structure engineered for parsing accuracy.',
+    badge: 'High Impact/ATS'
   },
   {
     id: '2025',

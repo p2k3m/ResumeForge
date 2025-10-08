@@ -6,8 +6,18 @@ import TemplateSelector from '../TemplateSelector.jsx'
 
 describe('TemplateSelector', () => {
   const options = [
-    { id: 'modern', name: 'Modern Minimal', description: 'Two-column balance.' },
-    { id: 'professional', name: 'Professional Blue', description: 'Classic layout.' }
+    {
+      id: 'modern',
+      name: 'Modern Minimal',
+      description: 'Two-column balance.',
+      badge: 'Best for Tech Roles'
+    },
+    {
+      id: 'professional',
+      name: 'Professional Blue',
+      description: 'Classic layout.',
+      badge: 'Best for Sr Managers'
+    }
   ]
 
   it('renders options with previews and reflects the selected template', () => {
@@ -19,6 +29,7 @@ describe('TemplateSelector', () => {
     const modernOption = within(group).getByRole('radio', { name: /Modern Minimal/i })
     expect(modernOption).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('template-selector-preview-modern')).toBeInTheDocument()
+    expect(within(modernOption).getByText(/Best for Tech Roles/i)).toBeInTheDocument()
     expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
       /Two-column balance\./i
     )
@@ -42,6 +53,7 @@ describe('TemplateSelector', () => {
     fireEvent.click(professionalOption)
 
     expect(handleSelect).toHaveBeenCalledWith('professional')
+    expect(within(professionalOption).getByText(/Best for Sr Managers/i)).toBeInTheDocument()
   })
 
   it('respects the disabled state', () => {

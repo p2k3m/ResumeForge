@@ -6,11 +6,17 @@ import TemplateSelector from '../components/TemplateSelector.jsx'
 
 describe('TemplateSelector', () => {
   const options = [
-    { id: 'modern', name: 'Modern Minimal', description: 'Minimal layout with ATS-safe spacing.' },
+    {
+      id: 'modern',
+      name: 'Modern Minimal',
+      description: 'Minimal layout with ATS-safe spacing.',
+      badge: 'Best for Tech Roles'
+    },
     {
       id: 'professional',
       name: 'Professional Blue',
-      description: 'Conservative layout with blue dividers.'
+      description: 'Conservative layout with blue dividers.',
+      badge: 'Best for Sr Managers'
     }
   ]
 
