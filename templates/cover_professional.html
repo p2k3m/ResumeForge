@@ -6,17 +6,140 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700&display=swap');
 
-    body { font-family: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 48px; color: #0f172a; line-height: 1.6; }
-    h1 { color: #1d4ed8; margin-bottom: 18px; font-size: 30px; font-weight: 700; letter-spacing: 0.04em; }
-    p { margin: 0 0 14px; }
+    :root {
+      --bg: #eef2f7;
+      --sheet: #ffffff;
+      --accent: #1d3557;
+      --accent-soft: rgba(29, 53, 87, 0.08);
+      --border: #d7dee8;
+      --text: #1f2a37;
+      --muted: #556072;
+      --highlight: #f3f5fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: clamp(32px, 6vw, 72px);
+      font-family: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .letter-wrapper {
+      width: 100%;
+      max-width: 760px;
+      background: var(--sheet);
+      border-radius: 28px;
+      padding: clamp(48px, 6vw, 64px);
+      box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
+      border: 1px solid rgba(209, 213, 219, 0.6);
+      display: grid;
+      gap: clamp(28px, 4vw, 36px);
+    }
+
+    .letter-header {
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 28px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .letter-header h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 4vw, 3rem);
+      color: var(--accent);
+      letter-spacing: -0.01em;
+    }
+
+    .letter-tagline {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 48ch;
+    }
+
+    .letter-contact {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+    }
+
+    .letter-contact li {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .letter-body {
+      display: grid;
+      gap: 18px;
+      font-size: 1.05rem;
+      line-height: 1.75;
+      color: var(--text);
+    }
+
+    .letter-body p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .letter-body p strong {
+      color: var(--accent);
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff;
+      }
+
+      .letter-wrapper {
+        box-shadow: none;
+        border-radius: 0;
+        border: none;
+        padding: 48px 56px;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>{{name}}</h1>
-  {{#each sections}}
-    {{#each items}}
-      <p>{{{this}}}</p>
-    {{/each}}
-  {{/each}}
+  <div class="letter-wrapper">
+    <header class="letter-header">
+      <h1>{{name}}</h1>
+      {{#if headline}}
+      <p class="letter-tagline">{{headline}}</p>
+      {{/if}}
+      {{#if title}}
+      <p class="letter-tagline">{{title}}</p>
+      {{/if}}
+      {{#if contactLines.length}}
+      <ul class="letter-contact">
+        {{#each contactLines}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+      {{/if}}
+    </header>
+    <main class="letter-body">
+      {{#each sections}}
+        {{#each items}}
+          <p>{{{this}}}</p>
+        {{/each}}
+      {{/each}}
+    </main>
+  </div>
 </body>
 </html>
