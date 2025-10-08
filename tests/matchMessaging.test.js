@@ -14,7 +14,7 @@ describe('match messaging and skills', () => {
     expect(addedSkills).toEqual(['a']);
     expect(best.newSkills).toEqual([]);
     expect(formatMatchMessage(original.score, best.score)).toBe(
-      'Your score improved from 50% to 100%, indicating a High selection likelihood.'
+      'JD skill coverage improved from 50% to 100%, indicating a High selection likelihood.'
     );
   });
 
@@ -30,7 +30,7 @@ describe('match messaging and skills', () => {
     expect(addedSkills).toEqual([]);
     expect(best.newSkills).toEqual(['a']);
     expect(formatMatchMessage(original.score, best.score)).toBe(
-      'Your score remains at 50%, indicating a Medium selection likelihood.'
+      'JD skill coverage remains at 50%, indicating a Medium selection likelihood.'
     );
   });
 });

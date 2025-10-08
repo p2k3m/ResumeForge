@@ -65,6 +65,12 @@ describe('upload to download flow (e2e)', () => {
     expect(typeof uploadResponse.body.enhancedScore).toBe('number');
     expect(typeof uploadResponse.body.atsScoreBefore).toBe('number');
     expect(typeof uploadResponse.body.atsScoreAfter).toBe('number');
+    expect(uploadResponse.body.atsScoreBefore).toBeGreaterThanOrEqual(0);
+    expect(uploadResponse.body.atsScoreBefore).toBeLessThanOrEqual(100);
+    expect(uploadResponse.body.atsScoreAfter).toBeGreaterThanOrEqual(0);
+    expect(uploadResponse.body.atsScoreAfter).toBeLessThanOrEqual(100);
+    expect(typeof uploadResponse.body.atsScoreBeforeExplanation).toBe('string');
+    expect(typeof uploadResponse.body.atsScoreAfterExplanation).toBe('string');
 
     const uploadTypes = extractTypes(uploadResponse.body.urls);
     expect(uploadTypes).toEqual(
@@ -125,9 +131,9 @@ describe('upload to download flow (e2e)', () => {
       resumeSkills,
       baseline: {
         originalScore:
-          typeof uploadResponse.body.atsScoreBefore === 'number'
-            ? uploadResponse.body.atsScoreBefore
-            : uploadResponse.body.originalScore,
+          typeof uploadResponse.body.originalScore === 'number'
+            ? uploadResponse.body.originalScore
+            : null,
         missingSkills: uploadResponse.body.missingSkills || missingSkills,
         table: uploadResponse.body.table || [],
       },
@@ -138,6 +144,8 @@ describe('upload to download flow (e2e)', () => {
 
     expect(generationResponse.status).toBe(200);
     expect(generationResponse.body.success).toBe(true);
+    expect(typeof generationResponse.body.atsScoreBeforeExplanation).toBe('string');
+    expect(typeof generationResponse.body.atsScoreAfterExplanation).toBe('string');
 
     const generationTypes = extractTypes(generationResponse.body.urls);
     expect(generationTypes).toEqual(

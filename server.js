@@ -9554,6 +9554,14 @@ const ATS_METRIC_DEFINITIONS = [
   { key: 'otherQuality', category: 'Other Quality Metrics' },
 ];
 
+const ATS_METRIC_WEIGHTS = {
+  layoutSearchability: 0.2,
+  atsReadability: 0.25,
+  impact: 0.25,
+  crispness: 0.15,
+  otherQuality: 0.15,
+};
+
 function sanitizeMetric(metric, category) {
   if (!metric || typeof metric !== 'object') {
     return createMetric(category, 0);
@@ -9594,6 +9602,51 @@ function ensureScoreBreakdownCompleteness(source = {}) {
 function scoreBreakdownToArray(scoreBreakdown = {}) {
   const normalized = ensureScoreBreakdownCompleteness(scoreBreakdown);
   return ATS_METRIC_DEFINITIONS.map(({ key }) => normalized[key]);
+}
+
+function computeCompositeAtsScore(scoreBreakdown = {}) {
+  const normalized = ensureScoreBreakdownCompleteness(scoreBreakdown);
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  ATS_METRIC_DEFINITIONS.forEach(({ key }) => {
+    const weight = ATS_METRIC_WEIGHTS[key] ?? 1;
+    const metricScore =
+      typeof normalized[key]?.score === 'number' && Number.isFinite(normalized[key].score)
+        ? clamp(normalized[key].score, 0, 100)
+        : 0;
+    weightedSum += metricScore * weight;
+    totalWeight += weight;
+  });
+
+  if (!totalWeight) {
+    return 0;
+  }
+
+  return Math.round(weightedSum / totalWeight);
+}
+
+function buildAtsScoreExplanation(scoreBreakdown = {}, { phase = 'uploaded' } = {}) {
+  const normalized = ensureScoreBreakdownCompleteness(scoreBreakdown);
+  const totalWeight = ATS_METRIC_DEFINITIONS.reduce(
+    (sum, { key }) => sum + (ATS_METRIC_WEIGHTS[key] ?? 1),
+    0
+  );
+
+  const parts = ATS_METRIC_DEFINITIONS.map(({ key, category }) => {
+    const metricScore =
+      typeof normalized[key]?.score === 'number' && Number.isFinite(normalized[key].score)
+        ? Math.round(clamp(normalized[key].score, 0, 100))
+        : 0;
+    const weight = ATS_METRIC_WEIGHTS[key] ?? 1;
+    const weightShare = totalWeight ? Math.round((weight / totalWeight) * 100) : 0;
+    return `${category} ${metricScore}% (${weightShare}% weight)`;
+  });
+
+  const phaseLabel = phase === 'enhanced' ? 'enhanced' : 'uploaded';
+  return `Weighted ATS composite for the ${phaseLabel} resume using ${parts.join(
+    ', '
+  )}. Metrics are derived from JD keywords, structure, and formatting cues.`;
 }
 
 function buildScoreBreakdown(
@@ -15320,6 +15373,22 @@ async function generateEnhancedDocumentsResponse({
   });
   const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
   const baselineAtsScores = scoreBreakdownToArray(baselineScoreBreakdown);
+  const baselineCompositeScore = computeCompositeAtsScore(baselineScoreBreakdown);
+  const finalCompositeScore = computeCompositeAtsScore(finalScoreBreakdown);
+
+  const originalSkillCoverage = Number.isFinite(originalMatchResult.score)
+    ? Math.round(clamp(originalMatchResult.score, 0, 100))
+    : Math.round(clamp(bestMatch.score, 0, 100));
+  const enhancedSkillCoverage = Math.round(clamp(bestMatch.score, 0, 100));
+
+  const atsScoreBefore = baselineCompositeScore;
+  const atsScoreAfter = finalCompositeScore;
+  const atsScoreBeforeExplanation = buildAtsScoreExplanation(baselineScoreBreakdown, {
+    phase: 'uploaded',
+  });
+  const atsScoreAfterExplanation = buildAtsScoreExplanation(finalScoreBreakdown, {
+    phase: 'enhanced',
+  });
 
   const selectionInsights = buildSelectionInsights({
     jobTitle: versionsContext.jobTitle,
@@ -15338,11 +15407,6 @@ async function generateEnhancedDocumentsResponse({
     certificateSuggestions,
     manualCertificatesRequired,
   });
-
-  const atsScoreBefore = Number.isFinite(originalMatchResult.score)
-    ? originalMatchResult.score
-    : bestMatch.score;
-  const atsScoreAfter = bestMatch.score;
 
   logStructured('info', 'generation_completed', {
     ...logContext,
@@ -15579,8 +15643,8 @@ async function generateEnhancedDocumentsResponse({
     urlExpiresInSeconds: normalizedUrls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
     urls: normalizedUrls,
     applicantName,
-    originalScore: atsScoreBefore,
-    enhancedScore: atsScoreAfter,
+    originalScore: originalSkillCoverage,
+    enhancedScore: enhancedSkillCoverage,
     atsScoreBefore,
     atsScoreAfter,
     table: bestMatch.table,
@@ -15592,6 +15656,10 @@ async function generateEnhancedDocumentsResponse({
     atsSubScores: finalAtsScores,
     atsSubScoresBefore: baselineAtsScores,
     atsSubScoresAfter: finalAtsScores,
+    atsScoreBeforeExplanation,
+    atsScoreAfterExplanation,
+    originalScoreExplanation: atsScoreBeforeExplanation,
+    enhancedScoreExplanation: atsScoreAfterExplanation,
     resumeText: combinedProfile,
     originalResumeText: originalResumeTextInput || resumeText,
     jobDescriptionText: jobDescription,

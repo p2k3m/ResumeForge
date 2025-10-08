@@ -4260,35 +4260,37 @@ function App() {
           ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
           : null)
 
-      const atsScoreAfterResponse =
-        typeof data.atsScoreAfter === 'number'
-          ? data.atsScoreAfter
-          : typeof data.enhancedScore === 'number'
-            ? data.enhancedScore
-            : typeof data.originalScore === 'number'
-              ? data.originalScore
-              : null
-      const atsScoreBeforeResponse =
-        typeof data.atsScoreBefore === 'number'
-          ? data.atsScoreBefore
-          : typeof data.originalScore === 'number'
-            ? data.originalScore
-            : atsScoreAfterResponse ?? null
+      const normalizePercent = (value) =>
+        typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
+
+      const keywordScoreBefore = normalizePercent(data.originalScore)
+      const keywordScoreAfter = normalizePercent(
+        typeof data.enhancedScore === 'number' ? data.enhancedScore : data.originalScore
+      )
+      const atsScoreBeforeResponse = normalizePercent(data.atsScoreBefore)
+      const atsScoreAfterResponse = normalizePercent(data.atsScoreAfter)
+
+      const atsScoreBeforeExplanation =
+        typeof data.atsScoreBeforeExplanation === 'string'
+          ? data.atsScoreBeforeExplanation
+          : typeof data.originalScoreExplanation === 'string'
+            ? data.originalScoreExplanation
+            : ''
+      const atsScoreAfterExplanation =
+        typeof data.atsScoreAfterExplanation === 'string'
+          ? data.atsScoreAfterExplanation
+          : typeof data.enhancedScoreExplanation === 'string'
+            ? data.enhancedScoreExplanation
+            : ''
 
       const matchPayload = {
         table: Array.isArray(data.table) ? data.table : [],
         addedSkills: Array.isArray(data.addedSkills) ? data.addedSkills : [],
         missingSkills: Array.isArray(data.missingSkills) ? data.missingSkills : [],
-        atsScoreBefore: atsScoreBeforeResponse ?? 0,
-        atsScoreAfter: atsScoreAfterResponse ?? 0,
-        originalScore:
-          typeof atsScoreBeforeResponse === 'number'
-            ? atsScoreBeforeResponse
-            : 0,
-        enhancedScore:
-          typeof atsScoreAfterResponse === 'number'
-            ? atsScoreAfterResponse
-            : 0,
+        atsScoreBefore: atsScoreBeforeResponse,
+        atsScoreAfter: atsScoreAfterResponse,
+        originalScore: keywordScoreBefore,
+        enhancedScore: keywordScoreAfter,
         originalTitle: data.originalTitle || '',
         modifiedTitle: data.modifiedTitle || '',
         selectionProbability: probabilityValue,
@@ -4299,7 +4301,17 @@ function App() {
         selectionProbabilityBeforeRationale: probabilityBeforeRationale,
         selectionProbabilityAfter: probabilityValue,
         selectionProbabilityAfterMeaning: probabilityMeaning,
-        selectionProbabilityAfterRationale: probabilityRationale
+        selectionProbabilityAfterRationale: probabilityRationale,
+        atsScoreBeforeExplanation,
+        atsScoreAfterExplanation,
+        originalScoreExplanation:
+          typeof data.originalScoreExplanation === 'string'
+            ? data.originalScoreExplanation
+            : atsScoreBeforeExplanation,
+        enhancedScoreExplanation:
+          typeof data.enhancedScoreExplanation === 'string'
+            ? data.enhancedScoreExplanation
+            : atsScoreAfterExplanation
       }
       setMatch(matchPayload)
       const toMetricArray = (input) => {
@@ -5736,12 +5748,16 @@ function App() {
           ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
           : null)
 
+      const originalScoreValue = normalizePercent(data.originalScore)
+      const enhancedScoreValue =
+        normalizePercent(data.enhancedScore) ?? originalScoreValue
+
       const updatedMatch = {
         table: data.table || [],
         addedSkills: data.addedSkills || [],
         missingSkills: data.missingSkills || [],
-        originalScore: data.originalScore || 0,
-        enhancedScore: data.enhancedScore || 0,
+        originalScore: originalScoreValue,
+        enhancedScore: enhancedScoreValue,
         originalTitle: data.originalTitle || '',
         modifiedTitle: data.modifiedTitle || '',
         selectionProbability: probabilityValue,
@@ -6869,8 +6885,14 @@ function App() {
               </table>
               <p className="text-purple-800 font-medium">
                 {formatMatchMessage(
-                  typeof match.atsScoreBefore === 'number' ? match.atsScoreBefore : match.originalScore,
-                  typeof match.atsScoreAfter === 'number' ? match.atsScoreAfter : match.enhancedScore
+                  typeof match.originalScore === 'number' && Number.isFinite(match.originalScore)
+                    ? match.originalScore
+                    : 0,
+                  typeof match.enhancedScore === 'number' && Number.isFinite(match.enhancedScore)
+                    ? match.enhancedScore
+                    : typeof match.originalScore === 'number' && Number.isFinite(match.originalScore)
+                      ? match.originalScore
+                      : 0
                 )}
               </p>
               <div className="text-sm text-purple-700 space-y-1">

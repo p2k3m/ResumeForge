@@ -200,4 +200,23 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByText('Selection % Before')).toBeInTheDocument()
     expect(screen.getByText('Selection % After')).toBeInTheDocument()
   })
+
+  it('does not display ATS comparisons when composite scores are unavailable', () => {
+    const match = {
+      ...baseMatch,
+      atsScoreBefore: undefined,
+      atsScoreAfter: undefined,
+      originalScore: 44,
+      enhancedScore: 66,
+      missingSkills: ['Strategic planning'],
+      addedSkills: ['Market analysis']
+    }
+
+    render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
+
+    expect(screen.queryByTestId('ats-score-summary')).not.toBeInTheDocument()
+    expect(screen.getByTestId('original-score')).toHaveTextContent('—')
+    expect(screen.getByTestId('enhanced-score')).toHaveTextContent('—')
+    expect(screen.queryByTestId('match-delta')).not.toBeInTheDocument()
+  })
 })
