@@ -172,22 +172,15 @@ function ATSScoreDashboard({
   })
 
   const originalScoreValue = clampScore(
-    typeof match?.atsScoreBefore === 'number'
-      ? match.atsScoreBefore
-      : match?.originalScore
+    typeof match?.atsScoreBefore === 'number' ? match.atsScoreBefore : null
   )
   const enhancedScoreValue = clampScore(
-    typeof match?.atsScoreAfter === 'number'
-      ? match.atsScoreAfter
-      : match?.enhancedScore
+    typeof match?.atsScoreAfter === 'number' ? match.atsScoreAfter : null
   )
   const matchDelta =
-    originalScoreValue !== null && enhancedScoreValue !== null
+    typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number'
       ? formatDelta(originalScoreValue, enhancedScoreValue)
-      : formatDelta(
-          typeof match?.atsScoreBefore === 'number' ? match.atsScoreBefore : match?.originalScore,
-          typeof match?.atsScoreAfter === 'number' ? match.atsScoreAfter : match?.enhancedScore
-        )
+      : null
   const atsScoreSummary = (() => {
     if (originalScoreValue !== null && enhancedScoreValue !== null) {
       return `ATS score moved from ${originalScoreValue}% to ${enhancedScoreValue}%${matchDelta ? ` (${matchDelta})` : ''}.`
@@ -277,15 +270,17 @@ function ATSScoreDashboard({
     : []
 
   const originalScoreDescription =
+    match?.atsScoreBeforeExplanation ||
     match?.originalScoreExplanation ||
-    'Baseline ATS alignment from your uploaded resume before any ResumeForge refinements.'
+    'Weighted ATS composite for your uploaded resume across layout, readability, impact, crispness, and other JD-aligned metrics.'
   const enhancedScoreDescription =
+    match?.atsScoreAfterExplanation ||
     match?.enhancedScoreExplanation ||
-    'Recalculated ATS alignment after applying the recommended ResumeForge improvements.'
+    'Updated weighted ATS composite after applying ResumeForge improvements tied to the job description.'
   const scoreComparisonDescription =
-    'Illustrates how the enhanced resume closes gaps versus ATS benchmarks by comparing both scores side-by-side.'
+    'Shows the weighted ATS composite before and after improvements so you can see how structural and keyword fixes closed gaps.'
   const selectionProbabilityDescription =
-    'Compares shortlist odds before and after enhancements using ATS scores, keyword coverage, and credential alignment.'
+    'Estimates shortlist odds before and after using designation match, JD keyword coverage, experience alignment, task impact, and highlight strength.'
 
   const snapshotSegments = (() => {
     const segments = []

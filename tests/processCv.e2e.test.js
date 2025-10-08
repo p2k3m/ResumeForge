@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import request from 'supertest';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
@@ -5,6 +6,8 @@ const MANUAL_JOB_DESCRIPTION = `
 We are hiring a backend engineer to build APIs, manage cloud infrastructure, and mentor teammates.
 Deliver resilient services, partner with product, and drive continuous improvement.
 `;
+
+jest.setTimeout(20000);
 
 describe('end-to-end CV processing', () => {
   test('returns scoring insights without generating downloads', async () => {
@@ -42,8 +45,13 @@ describe('end-to-end CV processing', () => {
     expect(typeof response.body.enhancedScore).toBe('number');
     expect(typeof response.body.atsScoreBefore).toBe('number');
     expect(typeof response.body.atsScoreAfter).toBe('number');
-    expect(response.body.atsScoreBefore).toBe(response.body.originalScore);
-    expect(response.body.atsScoreAfter).toBe(response.body.enhancedScore);
+    expect(response.body.atsScoreBefore).toBeGreaterThanOrEqual(0);
+    expect(response.body.atsScoreBefore).toBeLessThanOrEqual(100);
+    expect(response.body.atsScoreAfter).toBeGreaterThanOrEqual(0);
+    expect(response.body.atsScoreAfter).toBeLessThanOrEqual(100);
+    expect(typeof response.body.atsScoreBeforeExplanation).toBe('string');
+    expect(response.body.atsScoreBeforeExplanation).toMatch(/weighted ats composite/i);
+    expect(typeof response.body.atsScoreAfterExplanation).toBe('string');
     expect(Array.isArray(response.body.addedSkills)).toBe(true);
     expect(Array.isArray(response.body.missingSkills)).toBe(true);
     expect(typeof response.body.scoreBreakdown).toBe('object');

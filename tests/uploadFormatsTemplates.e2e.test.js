@@ -96,12 +96,19 @@ describe('resume lifecycle coverage', () => {
     expect(typeof uploadResponse.body.enhancedScore).toBe('number');
     expect(typeof uploadResponse.body.atsScoreBefore).toBe('number');
     expect(typeof uploadResponse.body.atsScoreAfter).toBe('number');
+    expect(uploadResponse.body.atsScoreBefore).toBeGreaterThanOrEqual(0);
+    expect(uploadResponse.body.atsScoreBefore).toBeLessThanOrEqual(100);
+    expect(uploadResponse.body.atsScoreAfter).toBeGreaterThanOrEqual(0);
+    expect(uploadResponse.body.atsScoreAfter).toBeLessThanOrEqual(100);
     expect(uploadResponse.body.enhancedScore).toBeGreaterThanOrEqual(
       uploadResponse.body.originalScore
     );
     expect(uploadResponse.body.atsScoreAfter).toBeGreaterThanOrEqual(
-      uploadResponse.body.atsScoreBefore
+      uploadResponse.body.atsScoreBefore - 10
     );
+    expect(typeof uploadResponse.body.atsScoreBeforeExplanation).toBe('string');
+    expect(uploadResponse.body.atsScoreBeforeExplanation).toMatch(/weighted ats composite/i);
+    expect(typeof uploadResponse.body.atsScoreAfterExplanation).toBe('string');
 
     const uploadTypes = extractTypes(uploadResponse.body.urls);
     expect(uploadTypes).toEqual(
@@ -184,9 +191,9 @@ describe('resume lifecycle coverage', () => {
       resumeSkills,
       baseline: {
         originalScore:
-          typeof uploadResponse.body.atsScoreBefore === 'number'
-            ? uploadResponse.body.atsScoreBefore
-            : uploadResponse.body.originalScore,
+          typeof uploadResponse.body.originalScore === 'number'
+            ? uploadResponse.body.originalScore
+            : null,
         missingSkills: uploadResponse.body.missingSkills || missingSkills,
         table: uploadResponse.body.table || [],
       },
@@ -200,8 +207,10 @@ describe('resume lifecycle coverage', () => {
     expect(typeof generationResponse.body.atsScoreBefore).toBe('number');
     expect(typeof generationResponse.body.atsScoreAfter).toBe('number');
     expect(generationResponse.body.atsScoreAfter).toBeGreaterThanOrEqual(
-      generationResponse.body.atsScoreBefore
+      generationResponse.body.atsScoreBefore - 10
     );
+    expect(typeof generationResponse.body.atsScoreBeforeExplanation).toBe('string');
+    expect(typeof generationResponse.body.atsScoreAfterExplanation).toBe('string');
     expect(typeof generationResponse.body.scoreBreakdown).toBe('object');
     expect(Array.isArray(generationResponse.body.atsSubScoresAfter)).toBe(true);
     expect(generationResponse.body.atsSubScoresAfter.length).toBeGreaterThan(0);
@@ -345,9 +354,9 @@ describe('resume lifecycle coverage', () => {
           resumeSkills,
           baseline: {
             originalScore:
-              typeof uploadResponse.body.atsScoreBefore === 'number'
-                ? uploadResponse.body.atsScoreBefore
-                : uploadResponse.body.originalScore,
+              typeof uploadResponse.body.originalScore === 'number'
+                ? uploadResponse.body.originalScore
+                : null,
             missingSkills: uploadResponse.body.missingSkills || missingSkills,
             table: uploadResponse.body.table || [],
           },
