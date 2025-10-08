@@ -14470,6 +14470,40 @@ async function generateEnhancedDocumentsResponse({
   const usedPdfKeys = new Set();
   const generatedTemplates = {};
   const generationMessages = [];
+  const templateCreationMessages = [];
+  const documentPopulationMessages = [];
+
+  const pushUniqueMessage = (collection, value) => {
+    if (!Array.isArray(collection)) {
+      return;
+    }
+    if (!collection.includes(value)) {
+      collection.push(value);
+    }
+  };
+
+  const normalizeMessage = (value) => {
+    if (typeof value !== 'string') return '';
+    const trimmed = value.trim();
+    return trimmed;
+  };
+
+  const pushCategorizedMessage = (value, categoryCollection) => {
+    const normalized = normalizeMessage(value);
+    if (!normalized) return;
+    pushUniqueMessage(generationMessages, normalized);
+    if (categoryCollection) {
+      pushUniqueMessage(categoryCollection, normalized);
+    }
+  };
+
+  const pushTemplateCreationMessage = (value) => {
+    pushCategorizedMessage(value, templateCreationMessages);
+  };
+
+  const pushDocumentPopulationMessage = (value) => {
+    pushCategorizedMessage(value, documentPopulationMessages);
+  };
   const templateFallbackApplied = {
     resumePrimary: false,
     resumeSecondary: false,
@@ -14517,21 +14551,13 @@ async function generateEnhancedDocumentsResponse({
       ? originalResumeTextInput
       : resumeText;
   let originalHandledViaArtifacts = false;
-  const pushGenerationMessage = (value) => {
-    if (typeof value !== 'string') return;
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    if (!generationMessages.includes(trimmed)) {
-      generationMessages.push(trimmed);
-    }
-  };
 
   if (coverLetterStatus.fallbackApplied.length) {
     const fallbackMessage =
       coverLetterStatus.fallbackApplied.length === COVER_LETTER_VARIANT_KEYS.length
         ? 'Cover letters were generated using fallback copy because the AI response was incomplete.'
         : 'At least one cover letter was generated using fallback copy because the AI response was incomplete.';
-    pushGenerationMessage(fallbackMessage);
+    pushDocumentPopulationMessage(fallbackMessage);
   }
 
   if (coverLetterStatus.unavailable.length) {
@@ -14539,7 +14565,7 @@ async function generateEnhancedDocumentsResponse({
       coverLetterStatus.unavailable.length === COVER_LETTER_VARIANT_KEYS.length
         ? 'CV generated, cover letter unavailable.'
         : 'CV generated successfully, but at least one cover letter variant was unavailable.';
-    pushGenerationMessage(unavailableMessage);
+    pushDocumentPopulationMessage(unavailableMessage);
   }
   if (downloadsRestricted) {
     logStructured('info', 'generation_downloads_restricted', {
@@ -14815,7 +14841,7 @@ async function generateEnhancedDocumentsResponse({
 
     if (Array.isArray(attemptMessages)) {
       for (const message of attemptMessages) {
-        pushGenerationMessage(message);
+        pushTemplateCreationMessage(message);
       }
     }
 
@@ -15416,16 +15442,26 @@ async function generateEnhancedDocumentsResponse({
     });
   }
 
+  const downloadStageMetadata = {
+    completedAt: generationCompletedAt || new Date().toISOString(),
+    artifactCount: uploadedArtifacts.length,
+  };
+
+  if (templateCreationMessages.length) {
+    downloadStageMetadata.templateCreationErrors = templateCreationMessages;
+  }
+
+  if (documentPopulationMessages.length) {
+    downloadStageMetadata.documentPopulationErrors = documentPopulationMessages;
+  }
+
   await updateStageMetadata({
     s3,
     bucket,
     metadataKey: stageMetadataKey,
     jobId,
     stage: 'download',
-    data: {
-      completedAt: generationCompletedAt || new Date().toISOString(),
-      artifactCount: uploadedArtifacts.length,
-    },
+    data: downloadStageMetadata,
     logContext,
   });
 
@@ -15495,6 +15531,8 @@ async function generateEnhancedDocumentsResponse({
     },
     coverLetterStatus,
     messages: generationMessages,
+    templateCreationMessages,
+    documentPopulationMessages,
   };
   } catch (err) {
     if (cleanupReason === 'aborted') {
