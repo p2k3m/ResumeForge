@@ -172,7 +172,11 @@ function ATSScoreDashboard({
   })
 
   const originalScoreValue = clampScore(
-    typeof match?.atsScoreBefore === 'number' ? match.atsScoreBefore : null
+    typeof match?.atsScoreBefore === 'number'
+      ? match.atsScoreBefore
+      : typeof match?.originalScore === 'number'
+        ? match.originalScore
+        : null
   )
   const enhancedScoreValue = clampScore(
     typeof match?.atsScoreAfter === 'number' ? match.atsScoreAfter : null
