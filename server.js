@@ -10284,7 +10284,7 @@ function evaluateOtherMetric(analysis) {
       );
     }
   }
-  if (summaryPresent && !summaryKeywordHits.length && normalizedJobSkills.size) {
+  if (summaryPresent && normalizedJobSkills.size && summarySkillHits.length === 0) {
     otherTips.push(
       `Infuse your summary or headline with domain language from the posting—for example ${summarizeList(
         Array.from(normalizedJobSkills).slice(0, 3)
