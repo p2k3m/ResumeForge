@@ -123,16 +123,16 @@ function ATSScoreCard({ metric, improvement }) {
   })()
   const beforeAccentTone =
     typeof beforeScore === 'number'
-      ? 'border-indigo-200 bg-indigo-50'
-      : 'border-slate-200 bg-slate-50'
+      ? 'border border-indigo-200 bg-indigo-50'
+      : 'border border-slate-200 bg-slate-50'
   const beforeLabelTone =
     typeof beforeScore === 'number' ? 'text-indigo-600' : 'text-slate-500'
   const beforeValueTone =
     typeof beforeScore === 'number' ? 'text-indigo-700' : 'text-slate-500'
   const afterAccentTone =
     typeof afterScore === 'number'
-      ? 'border-emerald-200 bg-emerald-50'
-      : 'border-slate-200 bg-slate-50'
+      ? 'border border-emerald-200 bg-emerald-50'
+      : 'border border-slate-200 bg-slate-50'
   const afterLabelTone =
     typeof afterScore === 'number' ? 'text-emerald-600' : 'text-slate-500'
   const afterValueTone =
@@ -177,6 +177,16 @@ function ATSScoreCard({ metric, improvement }) {
           </span>
         )}
       </header>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <span className="flex items-center gap-1 text-indigo-600">
+          <span className="h-2 w-2 rounded-full bg-indigo-500" aria-hidden="true" />
+          Before
+        </span>
+        <span className="flex items-center gap-1 text-emerald-600">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden="true" />
+          After
+        </span>
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className={`rounded-lg p-3 ${beforeAccentTone}`}>
           <p className={`text-xs font-semibold uppercase tracking-wide ${beforeLabelTone}`}>

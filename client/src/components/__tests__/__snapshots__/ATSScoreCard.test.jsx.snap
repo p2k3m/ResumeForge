@@ -59,10 +59,32 @@ exports[`ATSScoreCard matches the card snapshot for consistency 1`] = `
       </span>
     </header>
     <div
+      class="flex flex-wrap items-center gap-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+    >
+      <span
+        class="flex items-center gap-1 text-indigo-600"
+      >
+        <span
+          aria-hidden="true"
+          class="h-2 w-2 rounded-full bg-indigo-500"
+        />
+        Before
+      </span>
+      <span
+        class="flex items-center gap-1 text-emerald-600"
+      >
+        <span
+          aria-hidden="true"
+          class="h-2 w-2 rounded-full bg-emerald-500"
+        />
+        After
+      </span>
+    </div>
+    <div
       class="grid grid-cols-1 gap-3 sm:grid-cols-2"
     >
       <div
-        class="rounded-lg p-3 border-indigo-200 bg-indigo-50"
+        class="rounded-lg p-3 border border-indigo-200 bg-indigo-50"
       >
         <p
           class="text-xs font-semibold uppercase tracking-wide text-indigo-600"
@@ -86,7 +108,7 @@ exports[`ATSScoreCard matches the card snapshot for consistency 1`] = `
         </div>
       </div>
       <div
-        class="relative rounded-lg p-3 border-emerald-200 bg-emerald-50"
+        class="relative rounded-lg p-3 border border-emerald-200 bg-emerald-50"
       >
         <p
           class="text-xs font-semibold uppercase tracking-wide text-emerald-600"
