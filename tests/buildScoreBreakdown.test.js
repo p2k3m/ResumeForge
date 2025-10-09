@@ -84,6 +84,33 @@ describe('buildScoreBreakdown', () => {
     });
   });
 
+  test('exposes granular metric details for layout, readability, impact, crispness, and other metrics', () => {
+    const breakdown = buildScoreBreakdown(strongResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    Object.values(breakdown).forEach((metric) => {
+      expect(metric.details).toBeDefined();
+      expect(typeof metric.details).toBe('object');
+      expect(Object.keys(metric.details).length).toBeGreaterThan(0);
+    });
+
+    expect(breakdown.layoutSearchability.details.headingCount).toBeGreaterThan(0);
+    expect(breakdown.atsReadability.details).toEqual(
+      expect.objectContaining({
+        baseScore: expect.any(Number),
+        penaltyBreakdown: expect.any(Object),
+      })
+    );
+    expect(breakdown.impact.details.achievementBullets).toBeGreaterThan(0);
+    expect(breakdown.crispness.details.averageBulletWords).toBeGreaterThan(0);
+    expect(breakdown.otherQuality.details.weights).toEqual(
+      expect.objectContaining({ skillWeight: expect.any(Number) })
+    );
+  });
+
   test('scores improve when resume addresses layout, impact, and keywords', () => {
     const good = buildScoreBreakdown(strongResume, {
       jobText: jobDescription,
