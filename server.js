@@ -9424,6 +9424,97 @@ function buildSelectionInsights(context = {}) {
     ? `${baseSummary} Added focus areas: ${summarizeList(added, { limit: 4 })}.`
     : baseSummary;
 
+  const selectionFactors = [];
+
+  const normalizedOriginalTitle = normalizeTitle(originalTitle || '');
+  const normalizedFinalTitle = normalizeTitle(modifiedTitle || originalTitle || '');
+  const originalVisibleTitle = baselineDesignation.visibleTitle || '';
+  const finalVisibleTitle = finalDesignation.visibleTitle || originalVisibleTitle;
+
+  if (normalizedOriginalTitle && normalizedFinalTitle && normalizedOriginalTitle !== normalizedFinalTitle) {
+    const detailParts = [];
+    if (originalVisibleTitle && finalVisibleTitle && originalVisibleTitle !== finalVisibleTitle) {
+      detailParts.push(`Updated from “${originalVisibleTitle}” to “${finalVisibleTitle}”.`);
+    }
+    detailParts.push('Adjusted headline to mirror the job designation.');
+    selectionFactors.push({
+      key: 'designation-changed',
+      label: 'Designation changed',
+      detail: detailParts.filter(Boolean).join(' '),
+      impact: designationStatus === 'match' ? 'positive' : 'neutral',
+    });
+  } else if (
+    baselineDesignation.designationStatus !== designationStatus &&
+    designationStatus === 'match'
+  ) {
+    selectionFactors.push({
+      key: 'designation-aligned',
+      label: 'Designation aligned',
+      detail: designationMessage,
+      impact: 'positive',
+    });
+  }
+
+  const coverageDelta = Math.round(skillCoverage - originalCoverage);
+  if (coverageDelta > 0 || added.length) {
+    const detailParts = [];
+    if (coverageDelta > 0) {
+      detailParts.push(`Coverage +${coverageDelta} pts`);
+    }
+    if (added.length) {
+      detailParts.push(`Added ${summarizeList(added, { limit: 3 })}`);
+    }
+    selectionFactors.push({
+      key: 'skills-added',
+      label: 'Missing skills added',
+      detail: detailParts.length ? `${detailParts.join('. ')}.` : null,
+      impact: 'positive',
+    });
+  }
+
+  if (missing.length) {
+    selectionFactors.push({
+      key: 'skills-remaining',
+      label: 'Skills still missing',
+      detail: `Still missing ${summarizeList(missing, { limit: 3 })}.`,
+      impact: 'negative',
+    });
+  }
+
+  const taskDelta = Math.round(impactScore - baselineImpactScore);
+  if (taskDelta > 4) {
+    selectionFactors.push({
+      key: 'tasks-improved',
+      label: 'Task alignment strengthened',
+      detail: `Task impact score improved by ${taskDelta} pts.`,
+      impact: 'positive',
+    });
+  } else if (taskDelta < -4) {
+    selectionFactors.push({
+      key: 'tasks-declined',
+      label: 'Task alignment declined',
+      detail: `Task impact score dropped by ${Math.abs(taskDelta)} pts.`,
+      impact: 'negative',
+    });
+  }
+
+  const highlightDelta = Math.round(highlightScore - baselineHighlightScore);
+  if (highlightDelta > 4) {
+    selectionFactors.push({
+      key: 'highlights-improved',
+      label: 'Highlights sharpened',
+      detail: `Highlights clarity score improved by ${highlightDelta} pts.`,
+      impact: 'positive',
+    });
+  } else if (highlightDelta < -4) {
+    selectionFactors.push({
+      key: 'highlights-declined',
+      label: 'Highlights weakened',
+      detail: `Highlights clarity score dropped by ${Math.abs(highlightDelta)} pts.`,
+      impact: 'negative',
+    });
+  }
+
   const flags = [];
   const pushFlag = (key, type, title, detail) => {
     flags.push({ key, type, title, detail });
@@ -9495,6 +9586,7 @@ function buildSelectionInsights(context = {}) {
       rationale: probabilityMessage,
     },
     summary,
+    factors: selectionFactors,
     jobFitAverage,
     jobFitScores,
     designation: {
@@ -13494,6 +13586,7 @@ async function handleImprovementRequest(type, req, res) {
         delta: normalizedSelectionProbabilityDelta,
         beforeLevel: selectionInsights?.before?.level || null,
         afterLevel: selectionInsights?.after?.level || selectionInsights?.level || null,
+        factors: Array.isArray(selectionInsights?.factors) ? selectionInsights.factors : [],
       },
     };
 
@@ -13504,6 +13597,7 @@ async function handleImprovementRequest(type, req, res) {
         message: selectionInsights.message,
         before: selectionInsights.before,
         after: selectionInsights.after,
+        factors: Array.isArray(selectionInsights.factors) ? selectionInsights.factors : [],
       };
     }
 

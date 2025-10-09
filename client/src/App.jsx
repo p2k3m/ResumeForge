@@ -4303,6 +4303,11 @@ function App() {
         selectionProbabilityAfter: probabilityValue,
         selectionProbabilityAfterMeaning: probabilityMeaning,
         selectionProbabilityAfterRationale: probabilityRationale,
+        selectionProbabilityFactors: Array.isArray(data.selectionProbabilityFactors)
+          ? cloneData(data.selectionProbabilityFactors)
+          : Array.isArray(data.selectionInsights?.factors)
+            ? cloneData(data.selectionInsights.factors)
+            : [],
         atsScoreBeforeExplanation,
         atsScoreAfterExplanation,
         originalScoreExplanation:
@@ -4998,6 +5003,12 @@ function App() {
           ? selectionSummary.delta
           : null
 
+      const selectionFactorList = Array.isArray(selectionInsightsSummary?.factors)
+        ? selectionInsightsSummary.factors
+        : Array.isArray(selectionSummary?.factors)
+          ? selectionSummary.factors
+          : null
+
       setMatch((prev) => {
         const base = prev || {}
         const nextMissing = Array.isArray(data.missingSkills) ? data.missingSkills : []
@@ -5089,6 +5100,9 @@ function App() {
           if (selectionDelta !== null) {
             updatedMatch.selectionProbabilityDelta = selectionDelta
           }
+          if (selectionFactorList) {
+            updatedMatch.selectionProbabilityFactors = cloneData(selectionFactorList)
+          }
         }
 
         return updatedMatch
@@ -5129,6 +5143,9 @@ function App() {
           }
           if (selectionDelta !== null) {
             next.delta = selectionDelta
+          }
+          if (selectionFactorList) {
+            next.factors = cloneData(selectionFactorList)
           }
 
           return next
