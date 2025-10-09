@@ -22,6 +22,13 @@ function formatMetric(metric) {
       lines.push(`    • ${tip}`);
     });
   }
+  if (metric.details && Object.keys(metric.details).length) {
+    const serialized = JSON.stringify(metric.details, null, 2)
+      .split('\n')
+      .map((line) => `    ${line}`);
+    lines.push('  Details:');
+    lines.push(...serialized);
+  }
   return lines.join('\n');
 }
 

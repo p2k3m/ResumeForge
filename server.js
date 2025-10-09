@@ -8921,7 +8921,7 @@ function scoreRatingLabel(score) {
   return 'NEEDS_IMPROVEMENT';
 }
 
-function createMetric(category, score, tips = []) {
+function createMetric(category, score, tips = [], options = {}) {
   const boundedScore = clamp(score, 0, 100);
   const roundedScore = Math.round(boundedScore);
   const rating = scoreRatingLabel(roundedScore);
@@ -8932,6 +8932,8 @@ function createMetric(category, score, tips = []) {
         .filter(Boolean)
     )
   );
+
+  const details = options && typeof options === 'object' ? options.details : undefined;
 
   if (!sanitizedTips.length) {
     if (rating === 'EXCELLENT') {
@@ -8951,6 +8953,7 @@ function createMetric(category, score, tips = []) {
     rating,
     ratingLabel: rating,
     tips: sanitizedTips,
+    ...(details ? { details } : {}),
   };
 }
 
@@ -9954,49 +9957,90 @@ function evaluateLayoutMetric(analysis) {
     );
   }
 
-  return createMetric('Layout & Searchability', layoutScore, layoutTips);
+  const layoutDetails = {
+    headingCount: headingLines.length,
+    headingDensity: Number((headingScore * 100).toFixed(1)),
+    sectionCoverage: Number((sectionScore * 100).toFixed(1)),
+    bulletCount: bulletLines.length,
+    bulletUsageScore: Number((bulletScore * 100).toFixed(1)),
+    contactInfoPresent: Boolean(hasContactInfo),
+    contactInfoScore: contactScore ? 100 : 0,
+    paragraphPenalty: Math.round(paragraphPenalty * 100),
+    pagePenalty: Math.round(pagePenalty * 100),
+    lengthPenalty: Math.round(lengthPenalty * 100),
+    estimatedPageCount,
+    rawLineCount,
+  };
+
+  return createMetric('Layout & Searchability', layoutScore, layoutTips, {
+    details: layoutDetails,
+  });
 }
 
 function evaluateAtsMetric(analysis) {
   const { normalizedResume, text, multiColumnIndicators, nonAsciiCharacters } = analysis;
   const atsIssues = [];
 
-  let penalty = 0;
   const hasTableLikeFormatting = /\btable\b/.test(normalizedResume) && /\|/.test(text);
-  if (hasTableLikeFormatting) {
-    penalty += 22;
-    atsIssues.push('table-like formatting');
-  }
-  if (normalizedResume.includes('table of contents')) {
-    penalty += 18;
-    atsIssues.push('a table of contents');
-  }
-  if (/\bpage \d+ of \d+/i.test(text)) {
-    penalty += 12;
-    atsIssues.push('page number footers');
-  }
-  if (/https?:\/\/\S+\.(png|jpg|jpeg|gif|svg)/i.test(text)) {
-    penalty += 16;
-    atsIssues.push('embedded images');
-  }
-  if (multiColumnIndicators.length > 0) {
-    penalty += Math.min(5 + multiColumnIndicators.length * 3, 20);
-    atsIssues.push('multi-column spacing that ATS bots misread');
-  }
-  if (/[{}<>]/.test(text)) {
-    penalty += 8;
-    atsIssues.push('decorative characters or HTML brackets');
-  }
+  const hasTableOfContents = normalizedResume.includes('table of contents');
+  const hasPageNumberFooters = /\bpage \d+ of \d+/i.test(text);
+  const hasEmbeddedImages = /https?:\/\/\S+\.(png|jpg|jpeg|gif|svg)/i.test(text);
+  const hasDecorativeCharacters = /[{}<>]/.test(text);
 
-  penalty += Math.min(nonAsciiCharacters * 1.5, 18);
+  const penaltyBreakdown = {
+    tableLikeFormatting: hasTableLikeFormatting ? 22 : 0,
+    tableOfContents: hasTableOfContents ? 18 : 0,
+    pageNumberFooters: hasPageNumberFooters ? 12 : 0,
+    embeddedImages: hasEmbeddedImages ? 16 : 0,
+    multiColumnSpacing:
+      multiColumnIndicators.length > 0 ? Math.min(5 + multiColumnIndicators.length * 3, 20) : 0,
+    decorativeCharacters: hasDecorativeCharacters ? 8 : 0,
+    nonAsciiCharacters: Math.min(nonAsciiCharacters * 1.5, 18),
+  };
+
+  let penalty = 0;
+  Object.entries(penaltyBreakdown).forEach(([key, value]) => {
+    if (value > 0) {
+      penalty += value;
+      if (key === 'tableLikeFormatting') atsIssues.push('table-like formatting');
+      if (key === 'tableOfContents') atsIssues.push('a table of contents');
+      if (key === 'pageNumberFooters') atsIssues.push('page number footers');
+      if (key === 'embeddedImages') atsIssues.push('embedded images');
+      if (key === 'multiColumnSpacing') atsIssues.push('multi-column spacing that ATS bots misread');
+      if (key === 'decorativeCharacters') atsIssues.push('decorative characters or HTML brackets');
+      if (key === 'nonAsciiCharacters' && nonAsciiCharacters > 0) {
+        atsIssues.push('non-standard symbols that confuse parsers');
+      }
+    }
+  });
 
   const atsScore = clamp(100 - penalty, 0, 100);
 
-  const atsTips = atsIssues.length
-    ? [`Remove ${summarizeList(atsIssues)}—they frequently break ATS parsing engines.`]
-    : ['Great job avoiding tables or decorative elements that confuse ATS parsers.'];
+  const atsTips = [];
+  if (!atsIssues.length) {
+    atsTips.push('Formatting is ATS-safe—keep the clean structure as you update content.');
+  } else {
+    atsTips.push(`Remove ${summarizeList(atsIssues)}—they frequently break ATS parsing engines.`);
+  }
 
-  return createMetric('ATS Readability', atsScore, atsTips);
+  if (multiColumnIndicators.length >= 6) {
+    atsTips.push('Switch to a single-column layout so ATS parsers read left-to-right cleanly.');
+  }
+  if (nonAsciiCharacters > 10) {
+    atsTips.push('Replace decorative symbols with plain text—ATS parsers misread special characters.');
+  }
+
+  const atsDetails = {
+    baseScore: 100,
+    penaltyTotal: Math.round(Math.min(penalty, 100)),
+    penaltyBreakdown: Object.fromEntries(
+      Object.entries(penaltyBreakdown).map(([key, value]) => [key, Number(value.toFixed(2))])
+    ),
+    multiColumnIndicators: multiColumnIndicators.length,
+    nonAsciiCharacters,
+  };
+
+  return createMetric('ATS Readability', atsScore, atsTips, { details: atsDetails });
 }
 
 function evaluateImpactMetric(analysis) {
@@ -10005,28 +10049,34 @@ function evaluateImpactMetric(analysis) {
     bulletLines,
     bulletKeywordHits,
     jobKeywordSet,
+    summaryText,
     summaryKeywordHits,
-    summaryPresent,
     summarySkillHits,
     normalizedJobSkills,
+    normalizedResumeSkills,
   } = analysis;
 
   const bulletCount = bulletLines.length;
   const achievementRatio = bulletCount ? achievementLines.length / bulletCount : 0;
-  const keywordHitRatio = bulletCount ? bulletKeywordHits.length / bulletCount : 0;
   const achievementVolumeScore = clamp01(achievementLines.length / Math.max(3, bulletCount * 0.6));
+  const keywordHitRatio = bulletLines.length ? bulletKeywordHits.length / bulletLines.length : 0;
 
-  const summarySkillScore = normalizedJobSkills.size
+  const summaryPresent = Boolean(summaryText);
+  const summarySkillScore = summaryPresent
     ? clamp01(summarySkillHits.length / Math.max(1, Math.min(normalizedJobSkills.size, 6)))
     : 0;
-  const summaryKeywordScore = jobKeywordSet.size
+  const summaryKeywordScore = summaryPresent
     ? clamp01(
         (summaryKeywordHits.length + summarySkillScore * Math.min(jobKeywordSet.size, 6)) /
-          Math.max(2, Math.min(jobKeywordSet.size, 12))
+          Math.max(2, Math.min(jobKeywordSet.size, 10))
       )
-    : summaryKeywordHits.length
-    ? 0.6
     : 0;
+
+  const keywordMatchCount = jobKeywordSet.size
+    ? jobKeywordSet.size - (jobKeywordSet.size - new Set(bulletKeywordHits).size)
+    : 0;
+
+  const normalizedKeywordMatchCount = clamp01(keywordMatchCount / Math.max(4, jobKeywordSet.size));
 
   const impactScore =
     100 *
@@ -10072,7 +10122,38 @@ function evaluateImpactMetric(analysis) {
     );
   }
 
-  return createMetric('Impact', impactScore, impactTips);
+  if (normalizedResumeSkills.size && normalizedJobSkills.size) {
+    const missingSkills = Array.from(normalizedJobSkills).filter(
+      (skill) => !normalizedResumeSkills.has(skill)
+    );
+    if (missingSkills.length) {
+      impactTips.push(
+        `Explicitly list ${summarizeList(
+          missingSkills.map((skill) => skill.charAt(0).toUpperCase() + skill.slice(1)),
+          { limit: 5 }
+        )} to mirror the job posting.`
+      );
+    }
+  }
+
+  if (!impactTips.length) {
+    impactTips.push('Impact storytelling is strong—keep quantifying wins as you add new roles.');
+  }
+
+  const impactDetails = {
+    bulletCount,
+    achievementBullets: achievementLines.length,
+    achievementRatio: Number((achievementRatio * 100).toFixed(1)),
+    achievementVolumeScore: Number((achievementVolumeScore * 100).toFixed(1)),
+    keywordHitRatio: Number((keywordHitRatio * 100).toFixed(1)),
+    summaryPresent,
+    summaryKeywordScore: Number((summaryKeywordScore * 100).toFixed(1)),
+    summarySkillScore: Number((summarySkillScore * 100).toFixed(1)),
+    jobKeywordCount: jobKeywordSet.size,
+    bulletKeywordHits: bulletKeywordHits.length,
+  };
+
+  return createMetric('Impact', impactScore, impactTips, { details: impactDetails });
 }
 
 function evaluateCrispnessMetric(analysis) {
@@ -10141,102 +10222,99 @@ function evaluateCrispnessMetric(analysis) {
     );
   }
 
-  return createMetric('Crispness', crispnessScore, crispnessTips);
+  const crispnessDetails = {
+    bulletCount: bulletLines.length,
+    averageBulletWords: Number(avgBulletWords.toFixed(2)),
+    lengthScore: Number((lengthScore * 100).toFixed(1)),
+    fillerBulletRatio: Number((fillerRatio * 100).toFixed(1)),
+    fillerScore: Number((fillerScore * 100).toFixed(1)),
+    verbStartRatio: Number((verbStartRatio * 100).toFixed(1)),
+    balanceScore: Number((balanceScore * 100).toFixed(1)),
+    longBullets: longBulletLines.length,
+    shortBullets: shortBulletLines.length,
+  };
+
+  return createMetric('Crispness', crispnessScore, crispnessTips, { details: crispnessDetails });
 }
 
 function evaluateOtherMetric(analysis) {
   const {
     normalizedJobSkills,
     normalizedResumeSkills,
-    jobKeywordSet,
     jobKeywordMatches,
-    headingSet,
-    achievementLines,
-    bulletLines,
-    text,
-    summaryKeywordHits,
-    summaryText,
     summaryPresent,
+    summaryKeywordHits,
     summarySkillHits,
   } = analysis;
 
-  let matchedSkills = 0;
-  normalizedJobSkills.forEach((skill) => {
-    if (normalizedResumeSkills.has(skill)) matchedSkills += 1;
-  });
-
-  const skillMatchRatio = normalizedJobSkills.size
-    ? matchedSkills / normalizedJobSkills.size
+  const skillCoverage = normalizedJobSkills.size
+    ? normalizedResumeSkills.size / Math.max(normalizedJobSkills.size, 1)
+    : normalizedResumeSkills.size > 0
+    ? 1
     : 0;
 
-  const keywordCoverage = jobKeywordSet.size
-    ? jobKeywordMatches.length / jobKeywordSet.size
+  const keywordDensity = jobKeywordMatches.length
+    ? jobKeywordMatches.length / Math.max(normalizedJobSkills.size || jobKeywordMatches.length, 6)
+    : normalizedResumeSkills.size
+    ? Math.min(1, normalizedResumeSkills.size / 12)
     : 0;
 
-  const impactDensity = bulletLines.length
-    ? achievementLines.length / bulletLines.length
-    : 0;
+  const summaryWeight = summaryPresent ? 0.2 : 0;
+  const skillWeight = normalizedJobSkills.size ? 0.45 : 0.25;
+  const keywordWeight = normalizedJobSkills.size ? 0.35 : 0.5;
 
-  const summarySkillScore = normalizedJobSkills.size
-    ? clamp01(summarySkillHits.length / Math.max(1, Math.min(normalizedJobSkills.size, 6)))
-    : 0;
-  const summaryRelevanceScore = summaryPresent
-    ? jobKeywordSet.size
-      ? clamp01((summaryKeywordHits.length + summarySkillScore * Math.min(jobKeywordSet.size, 6)) / Math.max(2, Math.min(jobKeywordSet.size, 10)))
-      : summaryText
-      ? Math.max(0.4, summarySkillScore)
-      : 0.4
+  const summaryContribution = summaryPresent
+    ? clamp01((summaryKeywordHits.length + summarySkillHits.length) / Math.max(2, normalizedJobSkills.size))
     : 0;
 
   const otherScore =
-    100 *
-    clamp01(
-      skillMatchRatio * 0.35 +
-        keywordCoverage * 0.25 +
-        impactDensity * 0.2 +
-        summaryRelevanceScore * 0.2
-    );
-
-  const jobSkillsArray = Array.from(normalizedJobSkills);
-  const missingSkillSet = jobSkillsArray
-    .filter((skill) => !normalizedResumeSkills.has(skill))
-    .slice(0, 6)
-    .map((skill) => skill.charAt(0).toUpperCase() + skill.slice(1));
-
-  const keywordDeficit = Array.from(jobKeywordSet)
-    .filter((keyword) => !new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(text))
-    .slice(0, 5)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1));
+    100 * clamp01(skillCoverage * skillWeight + keywordDensity * keywordWeight + summaryContribution * summaryWeight);
 
   const otherTips = [];
-  if (missingSkillSet.length) {
-    otherTips.push(
-      `Incorporate keywords such as ${summarizeList(missingSkillSet)} to mirror the job description.`
-    );
+  if (!normalizedResumeSkills.size) {
+    otherTips.push('Add a dedicated skills section so ATS parsers can map your proficiencies.');
   }
-  if (keywordDeficit.length && !missingSkillSet.length) {
-    otherTips.push(
-      `Reference domain language from the posting—for example ${summarizeList(keywordDeficit)}—to reinforce alignment.`
+  if (normalizedJobSkills.size && normalizedResumeSkills.size) {
+    const missingSkillSet = Array.from(normalizedJobSkills).filter(
+      (skill) => !normalizedResumeSkills.has(skill)
     );
+    if (missingSkillSet.length) {
+      otherTips.push(
+        `Incorporate keywords such as ${summarizeList(missingSkillSet)} to mirror the job description.`
+      );
+    }
   }
-  if (!summaryPresent) {
+  if (summaryPresent && !summaryKeywordHits.length && normalizedJobSkills.size) {
     otherTips.push(
-      'Add a professional summary or profile section to front-load your strongest qualifications.'
-    );
-  }
-  if (summaryPresent && summarySkillHits.length === 0 && normalizedJobSkills.size > 0) {
-    otherTips.push(
-      'Tweak your summary/headline to feature the same hard skills and themes the job description emphasizes.'
+      `Reference domain language from the posting—for example ${summarizeList(
+        Array.from(normalizedJobSkills).slice(0, 3)
+      )}—to reinforce alignment.`
     );
   }
   if (!otherTips.length) {
-    otherTips.push(
-      'Good alignment with the job description—keep updating certifications and tools as you gain them.'
-    );
+    otherTips.push('Keyword coverage is solid—keep tailoring skills to each job description.');
   }
 
-  return createMetric('Other Quality Metrics', otherScore, otherTips);
+  const otherDetails = {
+    normalizedJobSkillCount: normalizedJobSkills.size,
+    normalizedResumeSkillCount: normalizedResumeSkills.size,
+    jobKeywordMatches: jobKeywordMatches.length,
+    skillCoverage: Number((skillCoverage * 100).toFixed(1)),
+    keywordDensity: Number((keywordDensity * 100).toFixed(1)),
+    summaryContribution: Number((summaryContribution * 100).toFixed(1)),
+    weights: {
+      skillWeight: Number((skillWeight * 100).toFixed(1)),
+      keywordWeight: Number((keywordWeight * 100).toFixed(1)),
+      summaryWeight: Number((summaryWeight * 100).toFixed(1)),
+    },
+    summaryPresent,
+  };
+
+  return createMetric('Other Quality Metrics', otherScore, otherTips, {
+    details: otherDetails,
+  });
 }
+
 
 function extractName(text) {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
