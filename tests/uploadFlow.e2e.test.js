@@ -119,7 +119,7 @@ describe('upload to download flow (e2e)', () => {
     expect(improvementResponse.body.type).toBe('enhance-all');
     expect(typeof improvementResponse.body.updatedResume).toBe('string');
     expect(improvementResponse.body.updatedResume).toContain('Forward-looking Lead Software Engineer');
-    expect(improvementResponse.body.updatedResume).toContain('Highlighted wins');
+    expect(improvementResponse.body.updatedResume).toContain('Spotlighted quantified wins');
 
     mocks.mockS3Send.mockClear();
 
