@@ -4174,10 +4174,67 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
   const summary = [sectionMap.summary || '', linkedinData.headline || '']
     .filter(Boolean)
     .join('\n');
-  const experience = [
-    extractExperience(resumeText).map(fmtExp).join('\n'),
-    extractExperience(linkedinData.experience || []).map(fmtExp).join('\n'),
-  ]
+  const resumeExperienceEntries = extractExperience(resumeText);
+  const linkedinExperienceEntries = extractExperience(linkedinData.experience || []);
+
+  const normalizeResponsibilityList = (responsibilities = []) => {
+    if (!Array.isArray(responsibilities)) {
+      return [];
+    }
+    return responsibilities
+      .map((line) => (typeof line === 'string' ? line.replace(/\s+/g, ' ').trim() : ''))
+      .filter(Boolean);
+  };
+
+  const experienceLookup = new Map();
+  const combinedExperienceEntries = [];
+  const registerExperienceEntry = (exp = {}) => {
+    const normalized = {
+      title: typeof exp.title === 'string' ? exp.title.trim() : '',
+      company: typeof exp.company === 'string' ? exp.company.trim() : '',
+      startDate: typeof exp.startDate === 'string' ? exp.startDate.trim() : '',
+      endDate: typeof exp.endDate === 'string' ? exp.endDate.trim() : '',
+      responsibilities: normalizeResponsibilityList(exp.responsibilities),
+    };
+    const rawKey = [normalized.title, normalized.company, normalized.startDate, normalized.endDate]
+      .map((value) => value.toLowerCase())
+      .join('|');
+    const fallbackKey = normalized.responsibilities.join('|').toLowerCase();
+    const key = rawKey || fallbackKey || `entry-${combinedExperienceEntries.length}`;
+
+    if (experienceLookup.has(key)) {
+      const existing = experienceLookup.get(key);
+      if (!existing.title && normalized.title) existing.title = normalized.title;
+      if (!existing.company && normalized.company) existing.company = normalized.company;
+      if (!existing.startDate && normalized.startDate) existing.startDate = normalized.startDate;
+      if (!existing.endDate && normalized.endDate) existing.endDate = normalized.endDate;
+      const merged = new Set([...(existing.responsibilities || []), ...normalized.responsibilities]);
+      existing.responsibilities = Array.from(merged);
+      return;
+    }
+
+    const stored = { ...normalized };
+    experienceLookup.set(key, stored);
+    combinedExperienceEntries.push(stored);
+  };
+
+  resumeExperienceEntries.forEach(registerExperienceEntry);
+  linkedinExperienceEntries.forEach(registerExperienceEntry);
+
+  const formatResponsibilities = (responsibilities = []) => {
+    const normalized = normalizeResponsibilityList(responsibilities);
+    if (!normalized.length) {
+      return '';
+    }
+    return normalized.join('; ');
+  };
+
+  const experience = combinedExperienceEntries
+    .map((exp) => {
+      const base = fmtExp(exp);
+      const responsibilityText = formatResponsibilities(exp.responsibilities);
+      return responsibilityText ? `${base}: ${responsibilityText}` : base;
+    })
     .filter(Boolean)
     .join('\n');
   const education = [
@@ -10814,6 +10871,23 @@ function sanitizeManualJobDescription(input = '') {
 
 function extractExperience(source) {
   if (!source) return [];
+
+  const normalizeResponsibilities = (responsibilities = []) => {
+    if (!Array.isArray(responsibilities)) {
+      return [];
+    }
+    return responsibilities
+      .map((line) =>
+        typeof line === 'string'
+          ? line
+              .replace(/^\s*[-*•]\s*/, '')
+              .replace(/\s+/g, ' ')
+              .trim()
+          : ''
+      )
+      .filter(Boolean);
+  };
+
   const parseEntry = (text) => {
     let company = '';
     let title = '';
@@ -10833,16 +10907,50 @@ function extractExperience(source) {
     } else {
       title = text.trim();
     }
-    return { company, title, startDate, endDate };
+    return { company, title, startDate, endDate, responsibilities: [] };
   };
+
   if (Array.isArray(source)) {
     return source
-      .map((s) => (typeof s === 'string' ? parseEntry(s) : s))
-      .filter((e) => e.company || e.startDate || e.endDate);
+      .map((item) => {
+        if (!item) return null;
+        if (typeof item === 'string') {
+          return parseEntry(item);
+        }
+        if (typeof item === 'object') {
+          const base = parseEntry(
+            [item.title, item.company].filter(Boolean).join(' at ') || ''
+          );
+          return {
+            ...base,
+            company: item.company || base.company || '',
+            title: item.title || base.title || '',
+            startDate: item.startDate || base.startDate || '',
+            endDate: item.endDate || base.endDate || '',
+            responsibilities: normalizeResponsibilities(item.responsibilities),
+          };
+        }
+        return null;
+      })
+      .filter(
+        (entry) => entry && (entry.company || entry.startDate || entry.endDate)
+      );
   }
+
   const lines = String(source).split(/\r?\n/);
   const entries = [];
   let inSection = false;
+  let currentEntry = null;
+
+  const pushCurrent = () => {
+    if (!currentEntry) return;
+    currentEntry.responsibilities = normalizeResponsibilities(
+      currentEntry.responsibilities
+    );
+    entries.push(currentEntry);
+    currentEntry = null;
+  };
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (/^(work|professional)?\s*experience/i.test(trimmed)) {
@@ -10850,25 +10958,59 @@ function extractExperience(source) {
       continue;
     }
     if (!inSection) continue;
-    if (/^(education|skills|projects|certifications|summary|objective|awards|interests|languages)/i.test(trimmed)) {
+    if (
+      /^(education|skills|projects|certifications|summary|objective|awards|interests|languages)/i.test(
+        trimmed
+      )
+    ) {
+      pushCurrent();
       break;
     }
-    if (trimmed === '') {
+    if (!trimmed) {
       continue;
     }
-    const jobMatch =
-      line.match(/^\s*[-*]\s+(.*)/) || (!line.match(/^\s/) ? [null, trimmed] : null);
+
+    const bulletMatch = line.match(/^\s*[-*•]\s+(.*)/);
+    const jobMatch = bulletMatch || (!line.match(/^\s/) ? [null, trimmed] : null);
+
     if (jobMatch) {
       const text = jobMatch[1].trim();
       const entry = parseEntry(text);
       const hasCompanyTitleOrDate =
         /\bat\b/i.test(text) ||
-        /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b\s+\d{4}\s*[\u2013-]\s*/i.test(text);
-      if (hasCompanyTitleOrDate && !(entry.company === '' && entry.startDate === '')) {
-        entries.push(entry);
+        /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b\s+\d{4}\s*[\u2013-]\s*/i.test(
+          text
+        );
+
+      if (
+        hasCompanyTitleOrDate &&
+        !(entry.company === '' && entry.startDate === '' && entry.endDate === '')
+      ) {
+        pushCurrent();
+        currentEntry = { ...entry, responsibilities: [] };
+        continue;
+      }
+    }
+
+    if (currentEntry) {
+      if (bulletMatch) {
+        const responsibility = bulletMatch[1].trim();
+        if (responsibility) {
+          currentEntry.responsibilities.push(responsibility);
+        }
+        continue;
+      }
+      if (/^\s{2,}\S/.test(line)) {
+        const responsibility = line.replace(/^\s+/, '').trim();
+        if (responsibility) {
+          currentEntry.responsibilities.push(responsibility);
+        }
+        continue;
       }
     }
   }
+
+  pushCurrent();
   return entries;
 }
 
