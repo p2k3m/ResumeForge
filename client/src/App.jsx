@@ -1697,6 +1697,19 @@ function formatScoreDelta(delta) {
   return `${prefix}${rounded} pts`
 }
 
+function resolveDeltaTone(delta) {
+  if (typeof delta !== 'number' || Number.isNaN(delta)) {
+    return 'text-slate-600'
+  }
+  if (delta > 0) {
+    return 'text-emerald-600'
+  }
+  if (delta < 0) {
+    return 'text-rose-600'
+  }
+  return 'text-slate-600'
+}
+
 function normalizeRescoreSummary(summary) {
   if (!summary || typeof summary !== 'object') {
     return null
@@ -1805,14 +1818,7 @@ function getApiBaseCandidate() {
 
 function ImprovementCard({ suggestion, onReject, onPreview }) {
   const deltaText = formatScoreDelta(suggestion.scoreDelta)
-  const deltaTone =
-    typeof suggestion.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
-      ? suggestion.scoreDelta > 0
-        ? 'text-emerald-600'
-        : suggestion.scoreDelta < 0
-          ? 'text-rose-600'
-          : 'text-slate-600'
-      : 'text-slate-600'
+  const deltaTone = resolveDeltaTone(suggestion.scoreDelta)
   const rawConfidence =
     typeof suggestion.confidence === 'number' && Number.isFinite(suggestion.confidence)
       ? suggestion.confidence
@@ -1827,9 +1833,76 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
     if (!Array.isArray(suggestion.improvementSummary)) return []
     return suggestion.improvementSummary.map((segment) => buildActionableHint(segment)).filter(Boolean)
   }, [suggestion.improvementSummary])
+  const areaImpactRows = useMemo(() => {
+    const overallSummary = suggestion?.rescoreSummary?.overall
+    if (!overallSummary || typeof overallSummary !== 'object') {
+      return []
+    }
+
+    const toMetricList = (section) => {
+      if (!section || typeof section !== 'object') {
+        return []
+      }
+      if (Array.isArray(section.atsSubScores)) {
+        return orderAtsMetrics(section.atsSubScores)
+      }
+      if (Array.isArray(section.scoreBreakdown)) {
+        return orderAtsMetrics(section.scoreBreakdown)
+      }
+      if (section.scoreBreakdown && typeof section.scoreBreakdown === 'object') {
+        return orderAtsMetrics(Object.values(section.scoreBreakdown))
+      }
+      return []
+    }
+
+    const beforeList = toMetricList(overallSummary.before)
+    const afterList = toMetricList(overallSummary.after)
+    if (!beforeList.length && !afterList.length) {
+      return []
+    }
+
+    const combined = orderAtsMetrics([...beforeList, ...afterList])
+    const seen = new Set()
+
+    return combined
+      .map((metric) => {
+        const category = metric?.category
+        if (!category || seen.has(category)) {
+          return null
+        }
+        seen.add(category)
+
+        const beforeMetric = beforeList.find((item) => item?.category === category)
+        const afterMetric = afterList.find((item) => item?.category === category)
+        const beforeScore =
+          typeof beforeMetric?.score === 'number' && Number.isFinite(beforeMetric.score)
+            ? beforeMetric.score
+            : null
+        const afterScore =
+          typeof afterMetric?.score === 'number' && Number.isFinite(afterMetric.score)
+            ? afterMetric.score
+            : null
+        const delta =
+          beforeScore !== null && afterScore !== null ? afterScore - beforeScore : null
+
+        if (beforeScore === null && afterScore === null) {
+          return null
+        }
+
+        return {
+          category,
+          beforeScore,
+          afterScore,
+          delta
+        }
+      })
+      .filter(Boolean)
+  }, [suggestion?.rescoreSummary])
   const actionableHints = improvementHints.length
     ? improvementHints
     : ['Review this update and prepare to speak to the new talking points.']
+  const formatMetricScore = (value) =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : '—'
 
   return (
     <div className="rounded-xl bg-white/80 backdrop-blur border border-purple-200/60 shadow p-5 flex flex-col gap-3">
@@ -1902,6 +1975,37 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
           <p className="text-xs font-medium text-rose-600">{suggestion.rescoreError}</p>
         )}
       </div>
+      {areaImpactRows.length > 0 && (
+        <div className="rounded-lg border border-purple-200/60 bg-purple-50/50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+            ATS area impact
+          </p>
+          <div className="mt-2 space-y-2">
+            {areaImpactRows.map((row) => {
+              const areaDeltaText = formatScoreDelta(row.delta)
+              const areaTone = resolveDeltaTone(row.delta)
+              return (
+                <div
+                  key={row.category}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white/70 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+                      {row.category}
+                    </p>
+                    <p className="text-sm text-purple-900/80">
+                      {formatMetricScore(row.beforeScore)} → {formatMetricScore(row.afterScore)}
+                    </p>
+                  </div>
+                  {areaDeltaText && (
+                    <p className={`text-sm font-semibold ${areaTone}`}>{areaDeltaText}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap gap-3 justify-end pt-2">
         <button
           type="button"
