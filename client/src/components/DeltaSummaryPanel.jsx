@@ -3,13 +3,8 @@ import { buildCategoryAdvice } from '../utils/actionableAdvice.js'
 const categories = [
   {
     key: 'skills',
-    label: 'Skills',
-    description: 'Core abilities recognised in your resume versus the job description.'
-  },
-  {
-    key: 'experience',
-    label: 'Experience',
-    description: 'Achievements and stories added to or still missing from work history.'
+    label: 'JD Skills',
+    description: 'Core JD keywords covered or still missing from your resume.'
   },
   {
     key: 'designation',
@@ -17,13 +12,23 @@ const categories = [
     description: 'Visible job titles aligned to the target role.'
   },
   {
-    key: 'keywords',
-    label: 'Keywords',
-    description: 'JD keywords surfaced in your documents.'
+    key: 'experience',
+    label: 'Experience',
+    description: 'Tenure signals and quantified achievements surfaced from work history.'
+  },
+  {
+    key: 'tasks',
+    label: 'Tasks',
+    description: 'Responsibilities and project outcomes aligned to the JD expectations.'
+  },
+  {
+    key: 'highlights',
+    label: 'Highlights',
+    description: 'Summary hooks and spotlight wins emphasised for this role.'
   },
   {
     key: 'certificates',
-    label: 'Certificates',
+    label: 'Certifications',
     description: 'Credential coverage detected across LinkedIn, resume, and manual inputs.'
   }
 ]

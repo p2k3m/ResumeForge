@@ -7,9 +7,10 @@ import DeltaSummaryPanel from '../DeltaSummaryPanel.jsx'
 describe('DeltaSummaryPanel', () => {
   const summary = {
     skills: { added: ['AWS', 'React'], missing: ['GraphQL'] },
-    experience: { added: ['Scaled API throughput'], missing: [] },
     designation: { added: ['Senior Engineer'], missing: ['Engineer'] },
-    keywords: { added: ['Leadership'], missing: ['Serverless'] },
+    experience: { added: ['Scaled API throughput'], missing: [] },
+    tasks: { added: ['Own product experimentation'], missing: ['Mentor cross-functional pods'] },
+    highlights: { added: ['Quantified retention win'], missing: ['Generic leadership statement'] },
     certificates: { added: ['AWS SA — Amazon'], missing: ['PMP'] }
   }
 
@@ -17,7 +18,7 @@ describe('DeltaSummaryPanel', () => {
     render(<DeltaSummaryPanel summary={summary} />)
 
     expect(screen.getByText('Immediate Match Deltas')).toBeInTheDocument()
-    expect(screen.getByText('Skills')).toBeInTheDocument()
+    expect(screen.getByText('JD Skills')).toBeInTheDocument()
     expect(screen.getByText('AWS')).toBeInTheDocument()
     expect(screen.getByText('GraphQL')).toBeInTheDocument()
     expect(screen.getByText('Senior Engineer')).toBeInTheDocument()
@@ -27,6 +28,12 @@ describe('DeltaSummaryPanel', () => {
       screen.getByText(/Change your last designation from Engineer to Senior Engineer/i)
     ).toBeInTheDocument()
     expect(screen.getByText(/Expand these highlights: Scaled API throughput/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Refresh the stories covering Mentor cross-functional pods/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/Surface these summary hooks: Quantified retention win/i)
+    ).toBeInTheDocument()
   })
 
   it('shows placeholders when a category has no entries', () => {
@@ -34,9 +41,10 @@ describe('DeltaSummaryPanel', () => {
       <DeltaSummaryPanel
         summary={{
           skills: { added: [], missing: [] },
-          experience: { added: [], missing: [] },
           designation: { added: [], missing: [] },
-          keywords: { added: [], missing: [] },
+          experience: { added: [], missing: [] },
+          tasks: { added: [], missing: [] },
+          highlights: { added: [], missing: [] },
           certificates: { added: [], missing: [] }
         }}
       />

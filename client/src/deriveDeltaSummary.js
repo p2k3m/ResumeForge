@@ -1,4 +1,12 @@
-const CATEGORY_KEYS = ['skills', 'experience', 'designation', 'keywords', 'certificates']
+const CATEGORY_KEYS = [
+  'skills',
+  'experience',
+  'tasks',
+  'designation',
+  'highlights',
+  'keywords',
+  'certificates'
+]
 
 function createAccumulator() {
   return CATEGORY_KEYS.reduce((acc, key) => {
@@ -152,9 +160,15 @@ export function deriveDeltaSummary({
       markMissingInCategory('skills', entryRemoved)
       markMissingInCategory('keywords', entryRemoved)
     }
-    if (entryType === 'align-experience') {
+    if (entryType === 'align-experience' || entryType === 'improve-projects') {
       addToCategory('experience', entryAdded)
       markMissingInCategory('experience', entryRemoved)
+      addToCategory('tasks', entryAdded)
+      markMissingInCategory('tasks', entryRemoved)
+    }
+    if (entryType === 'improve-summary' || entryType === 'improve-highlights') {
+      addToCategory('highlights', entryAdded)
+      markMissingInCategory('highlights', entryRemoved)
     }
     if (entryType === 'change-designation') {
       addToCategory('designation', entryAdded)
@@ -180,9 +194,19 @@ export function deriveDeltaSummary({
         markMissingInCategory('experience', segmentRemoved)
       }
 
+      if (sectionLower && /responsibilit|task|project|experience/.test(sectionLower)) {
+        addToCategory('tasks', segmentAdded)
+        markMissingInCategory('tasks', segmentRemoved)
+      }
+
       if (sectionLower && /certificate|certification|badge/.test(sectionLower)) {
         addToCategory('certificates', segmentAdded)
         markCertificatesMissing(segmentRemoved)
+      }
+
+      if (sectionLower && /highlight|summary|profile|overview/.test(sectionLower)) {
+        addToCategory('highlights', segmentAdded)
+        markMissingInCategory('highlights', segmentRemoved)
       }
 
       if (sectionLower && /designation|title|headline|position/.test(sectionLower)) {

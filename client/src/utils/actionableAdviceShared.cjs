@@ -50,7 +50,9 @@ function inferActionType(source, fallback = 'general') {
     keywords: 'skills',
     designation: 'designation',
     certificates: 'certificates',
-    experience: 'experience'
+    experience: 'experience',
+    tasks: 'experience',
+    highlights: 'summary'
   }
   if (directMap[lower]) {
     return directMap[lower]
