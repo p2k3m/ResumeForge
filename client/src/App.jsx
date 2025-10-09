@@ -4559,39 +4559,116 @@ function App() {
     () => !improvementsRequireAcceptance || hasAcceptedImprovement,
     [improvementsRequireAcceptance, hasAcceptedImprovement]
   )
+  const deltaSummary = useMemo(
+    () =>
+      deriveDeltaSummary({
+        match,
+        changeLog,
+        certificateInsights,
+        manualCertificates: manualCertificatesData,
+        jobSkills,
+        resumeSkills
+      }),
+    [match, changeLog, certificateInsights, manualCertificatesData, jobSkills, resumeSkills]
+  )
+
   const analysisHighlights = useMemo(() => {
     const items = []
-    if (Array.isArray(match?.missingSkills) && match.missingSkills.length > 0) {
-      items.push({
+    const seenKeys = new Set()
+    const pushHighlight = (item) => {
+      if (!item || !item.key || seenKeys.has(item.key)) {
+        return
+      }
+      items.push(item)
+      seenKeys.add(item.key)
+    }
+
+    const getMissingFromSummary = (key) => {
+      const bucket = deltaSummary?.[key]
+      if (!bucket) return []
+      return toUniqueList(bucket.missing || [])
+    }
+
+    const missingSkills = getMissingFromSummary('skills')
+    if (missingSkills.length > 0) {
+      pushHighlight({
         key: 'missing-skills',
         tone: 'warning',
-        title: 'Missing skills',
-        message: `Add ${summariseItems(match.missingSkills, { limit: 6 })} to mirror the JD keywords.`
+        title: 'Missing JD skills',
+        message: `Add ${summariseItems(missingSkills, { limit: 6 })} to mirror the JD keywords.`
       })
     }
-    if (
-      match?.originalTitle &&
-      match?.modifiedTitle &&
-      match.modifiedTitle !== match.originalTitle
-    ) {
-      items.push({
+
+    const designationMissing = getMissingFromSummary('designation')
+    if (designationMissing.length > 0) {
+      const designationAdded = toUniqueList(deltaSummary?.designation?.added || [])
+      const fromText = formatReadableList(designationMissing)
+      const toText = summariseItems(designationAdded, { limit: 3 }) || match?.modifiedTitle || ''
+      const message = toText
+        ? `Update your headline from ${fromText} to ${toText} so it mirrors the JD title.`
+        : `Update your headline to replace ${fromText} with the JD designation.`
+      pushHighlight({
         key: 'designation-mismatch',
         tone: 'info',
         title: 'Designation mismatch',
-        message: `Resume lists ${match.originalTitle}; align it with the target designation ${match.modifiedTitle}.`
+        message
       })
     }
+
+    const experienceMissing = getMissingFromSummary('experience')
+    if (experienceMissing.length > 0) {
+      pushHighlight({
+        key: 'missing-experience',
+        tone: 'warning',
+        title: 'Experience gaps',
+        message: `Cover stories about ${summariseItems(experienceMissing, { limit: 4 })} to prove the required experience.`
+      })
+    }
+
+    const tasksMissing = getMissingFromSummary('tasks')
+    if (tasksMissing.length > 0) {
+      pushHighlight({
+        key: 'missing-tasks',
+        tone: 'warning',
+        title: 'Task coverage gaps',
+        message: `Add responsibilities such as ${summariseItems(tasksMissing, { limit: 4 })} to mirror JD expectations.`
+      })
+    }
+
+    const highlightsMissing = getMissingFromSummary('highlights')
+    if (highlightsMissing.length > 0) {
+      pushHighlight({
+        key: 'missing-highlights',
+        tone: 'info',
+        title: 'Missing highlights',
+        message: `Refresh your summary to phase out ${summariseItems(highlightsMissing, { limit: 4 })} and spotlight JD-aligned wins.`
+      })
+    }
+
+    const certificateMissing = getMissingFromSummary('certificates').filter(
+      (item) => item.toLowerCase() !== 'manual entry required'
+    )
+    if (certificateMissing.length > 0) {
+      pushHighlight({
+        key: 'missing-certificates',
+        tone: 'warning',
+        title: 'Certification gaps',
+        message: `List certifications such as ${summariseItems(certificateMissing, { limit: 4 })} to satisfy JD requirements.`
+      })
+    }
+
     const addedSkills = Array.isArray(match?.addedSkills) ? match.addedSkills : []
     if (addedSkills.length > 0) {
-      items.push({
+      pushHighlight({
         key: 'added-skills',
         tone: 'success',
         title: 'Highlights added',
         message: `Enhanced drafts now surface ${summariseItems(addedSkills, { limit: 5 })}. Review them before the interview.`
       })
     }
+
     if (certificateInsights?.manualEntryRequired) {
-      items.push({
+      pushHighlight({
         key: 'cert-manual',
         tone: 'warning',
         title: 'Missing certifications',
@@ -4599,19 +4676,21 @@ function App() {
           'Credly requires authentication. Paste critical certifications manually so we can include them.'
       })
     }
+
     const recommendedCertificates = Array.isArray(certificateInsights?.suggestions)
       ? certificateInsights.suggestions.filter(Boolean)
       : []
     if (recommendedCertificates.length > 0) {
-      items.push({
+      pushHighlight({
         key: 'cert-suggestions',
         tone: 'info',
         title: 'Recommended certifications',
         message: `Consider adding ${summariseItems(recommendedCertificates, { limit: 4 })} to strengthen the match.`
       })
     }
+
     return items
-  }, [match, certificateInsights])
+  }, [deltaSummary, match, certificateInsights])
 
   const jobFitScores = useMemo(() => {
     if (!Array.isArray(selectionInsights?.jobFitScores)) {
@@ -4633,19 +4712,6 @@ function App() {
     typeof selectionInsights?.jobFitAverage === 'number' && Number.isFinite(selectionInsights.jobFitAverage)
       ? Math.min(Math.max(Math.round(selectionInsights.jobFitAverage), 0), 100)
       : null
-
-  const deltaSummary = useMemo(
-    () =>
-      deriveDeltaSummary({
-        match,
-        changeLog,
-        certificateInsights,
-        manualCertificates: manualCertificatesData,
-        jobSkills,
-        resumeSkills
-      }),
-    [match, changeLog, certificateInsights, manualCertificatesData, jobSkills, resumeSkills]
-  )
 
   const resumeComparisonData = useMemo(() => {
     const baselineRaw = typeof baselineResumeText === 'string' ? baselineResumeText : ''
