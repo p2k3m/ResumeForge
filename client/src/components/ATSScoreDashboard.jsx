@@ -86,6 +86,14 @@ function formatDelta(originalScore, enhancedScore) {
   return `${prefix}${delta.toFixed(0)} pts`
 }
 
+const selectionFactorToneStyles = {
+  positive: { bullet: 'bg-emerald-500', label: 'text-emerald-700' },
+  negative: { bullet: 'bg-amber-500', label: 'text-amber-700' },
+  info: { bullet: 'bg-sky-500', label: 'text-sky-700' },
+  neutral: { bullet: 'bg-slate-400', label: 'text-slate-700' },
+  default: { bullet: 'bg-slate-400', label: 'text-slate-700' }
+}
+
 function ATSScoreDashboard({
   metrics = [],
   baselineMetrics = [],
@@ -242,6 +250,39 @@ function ATSScoreDashboard({
     typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
       ? formatDelta(selectionProbabilityBeforeValue, selectionProbabilityAfterValue)
       : null
+  const selectionProbabilityFactors = Array.isArray(match?.selectionProbabilityFactors)
+    ? match.selectionProbabilityFactors
+        .map((factor, index) => {
+          if (!factor) return null
+          if (typeof factor === 'string') {
+            return {
+              key: `selection-factor-${index}`,
+              label: normalizeText(factor),
+              detail: null,
+              impact: 'neutral'
+            }
+          }
+          if (typeof factor === 'object') {
+            const label = normalizeText(factor.label || factor.title)
+            if (!label) return null
+            const detail = normalizeText(factor.detail || factor.message || factor.description)
+            const impact =
+              factor.impact === 'positive' ||
+              factor.impact === 'negative' ||
+              factor.impact === 'info'
+                ? factor.impact
+                : 'neutral'
+            return {
+              key: normalizeText(factor.key) || `selection-factor-${index}`,
+              label,
+              detail: detail || null,
+              impact
+            }
+          }
+          return null
+        })
+        .filter((factor) => factor && factor.label)
+    : []
   const selectionProbabilitySummary = (() => {
     if (typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number') {
       return `Selection chance moved from ${selectionProbabilityBeforeValue}% to ${selectionProbabilityAfterValue}%${selectionProbabilityDelta ? ` (${selectionProbabilityDelta})` : ''}.`
@@ -785,6 +826,33 @@ function ATSScoreDashboard({
                       : 'Enhanced estimate will populate after you apply at least one improvement.'}
                   </p>
                 </div>
+                {selectionProbabilityFactors.length > 0 && (
+                  <div
+                    className="rounded-lg border border-dashed border-slate-300 bg-slate-50/70 p-4"
+                    data-testid="selection-factors"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Key Factors
+                    </p>
+                    <ul className="mt-3 space-y-3" data-testid="selection-factors-list">
+                      {selectionProbabilityFactors.map((factor) => {
+                        const tone = selectionFactorToneStyles[factor.impact] || selectionFactorToneStyles.default
+                        return (
+                          <li key={factor.key} className="flex gap-3" data-testid="selection-factor-item">
+                            <span
+                              className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${tone.bullet}`}
+                              aria-hidden="true"
+                            />
+                            <div className="space-y-1">
+                              <p className={`text-sm font-medium ${tone.label}`}>{factor.label}</p>
+                              {factor.detail && <p className="text-xs text-slate-600">{factor.detail}</p>}
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           )}

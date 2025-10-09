@@ -184,7 +184,21 @@ describe('ATSScoreDashboard', () => {
     const match = {
       ...baseMatch,
       selectionProbabilityBefore: 42,
-      selectionProbabilityAfter: 71
+      selectionProbabilityAfter: 71,
+      selectionProbabilityFactors: [
+        {
+          key: 'designation-changed',
+          label: 'Designation changed',
+          detail: 'Updated from “Product Manager” to “Senior Product Manager”.',
+          impact: 'positive'
+        },
+        {
+          key: 'skills-added',
+          label: 'Missing skills added',
+          detail: 'Added stakeholder communication.',
+          impact: 'positive'
+        }
+      ]
     }
 
     render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
@@ -199,6 +213,11 @@ describe('ATSScoreDashboard', () => {
     expect(within(selectionSnapshot).getByTestId('selection-summary-delta')).toHaveTextContent('+29 pts')
     expect(screen.getByText('Selection % Before')).toBeInTheDocument()
     expect(screen.getByText('Selection % After')).toBeInTheDocument()
+    const factorList = screen.getByTestId('selection-factors-list')
+    const factorItems = within(factorList).getAllByTestId('selection-factor-item')
+    expect(factorItems).toHaveLength(2)
+    expect(factorItems[0]).toHaveTextContent('Designation changed')
+    expect(factorItems[1]).toHaveTextContent('Missing skills added')
   })
 
   it('highlights the baseline score when enhanced metrics are unavailable', () => {

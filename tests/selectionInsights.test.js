@@ -52,6 +52,13 @@ describe('buildSelectionInsights', () => {
         message: expect.any(String),
       })
     )
+    expect(Array.isArray(insights.factors)).toBe(true)
+    expect(insights.factors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'skills-added', impact: 'positive' }),
+        expect.objectContaining({ key: 'skills-remaining', impact: 'negative' }),
+      ])
+    )
   })
 
   test('rewards aligned designation and strong metrics', () => {
@@ -87,6 +94,11 @@ describe('buildSelectionInsights', () => {
     expect(jobFitSkills?.score).toBeGreaterThanOrEqual(80)
     expect(insights.before.level).toBeDefined()
     expect(insights.after.level).toBe('High')
+    expect(insights.factors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'skills-added', impact: 'positive' }),
+      ])
+    )
   })
 
   test('averages key alignment metrics to calculate selection probability', () => {
@@ -123,5 +135,10 @@ describe('buildSelectionInsights', () => {
     expect(insights.probability).toBe(expectedAverage)
     expect(insights.level).toBe('High')
     expect(insights.before.probability).toBeLessThanOrEqual(insights.probability)
+    expect(insights.factors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'skills-added', impact: 'positive' }),
+      ])
+    )
   })
 })
