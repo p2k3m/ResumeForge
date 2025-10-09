@@ -4331,7 +4331,12 @@ function App() {
         ...metric,
         tip: metric?.tip ?? metric?.tips?.[0] ?? ''
       }))
-      const normalizedBreakdown = orderAtsMetrics(breakdownCandidates).map((metric) => ({
+      const breakdownSource = breakdownCandidates.length
+        ? breakdownCandidates
+        : baselineCandidates.length
+          ? baselineCandidates
+          : []
+      const normalizedBreakdown = orderAtsMetrics(breakdownSource).map((metric) => ({
         ...metric,
         tip: metric?.tip ?? metric?.tips?.[0] ?? ''
       }))
@@ -5784,7 +5789,12 @@ function App() {
         }))
         setBaselineScoreBreakdown(normalizedBaseline)
       }
-      const normalizedBreakdown = orderAtsMetrics(breakdownCandidates).map((metric) => ({
+      const breakdownSource = breakdownCandidates.length
+        ? breakdownCandidates
+        : baselineCandidates.length
+          ? baselineCandidates
+          : []
+      const normalizedBreakdown = orderAtsMetrics(breakdownSource).map((metric) => ({
         ...metric,
         tip: metric?.tip ?? metric?.tips?.[0] ?? ''
       }))

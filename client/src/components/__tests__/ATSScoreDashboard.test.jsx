@@ -201,7 +201,7 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByText('Selection % After')).toBeInTheDocument()
   })
 
-  it('does not display ATS comparisons when composite scores are unavailable', () => {
+  it('highlights the baseline score when enhanced metrics are unavailable', () => {
     const match = {
       ...baseMatch,
       atsScoreBefore: undefined,
@@ -214,8 +214,10 @@ describe('ATSScoreDashboard', () => {
 
     render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
 
-    expect(screen.queryByTestId('ats-score-summary')).not.toBeInTheDocument()
-    expect(screen.getByTestId('original-score')).toHaveTextContent('—')
+    expect(screen.getByTestId('ats-score-summary')).toHaveTextContent(
+      'Current ATS score before enhancements: 44%.'
+    )
+    expect(screen.getByTestId('original-score')).toHaveTextContent('44%')
     expect(screen.getByTestId('enhanced-score')).toHaveTextContent('—')
     expect(screen.queryByTestId('match-delta')).not.toBeInTheDocument()
   })
