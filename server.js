@@ -2890,8 +2890,8 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
         ? `Projects spotlight initiatives that mirror ${targetJobTitle} responsibilities.`
         : 'Projects spotlight initiatives that mirror the job description priorities.',
       highlights: targetJobTitle
-        ? `Highlights now emphasise wins tied to ${targetJobTitle} success metrics.`
-        : 'Highlights now emphasise wins tied to the job description success metrics.',
+        ? `Highlights now emphasise quantified wins tied to ${targetJobTitle} success metrics from the JD.`
+        : 'Highlights now emphasise quantified wins tied to the job description success metrics.',
     };
 
     const trackChange = (key, label, sectionResult = {}, reasons, options = {}) => {
@@ -3235,8 +3235,8 @@ const IMPROVEMENT_CONFIG = {
   'improve-highlights': {
     title: 'Improve Highlights',
     focus: [
-      'Elevate the top-line wins so they mirror the target role’s success metrics.',
-      'Tie each highlight back to measurable impact already evidenced in the resume.',
+      'Elevate the top-line wins so they mirror the target role’s success metrics and KPIs from the JD.',
+      'Quantify each highlight using resume-backed metrics while naming the JD responsibility or KPI it satisfies.',
       'Retain the existing highlight count and ordering while tightening phrasing.',
     ],
   },
@@ -3296,9 +3296,23 @@ function formatPromptLine(label, value, { fallback = 'Not provided', maxLength =
 }
 
 function buildImprovementPrompt(type, context, instructions) {
-  const requests = Array.isArray(instructions)
+  let requests = Array.isArray(instructions)
     ? instructions.filter(Boolean)
     : [instructions].filter(Boolean);
+
+  if (type === 'improve-highlights') {
+    const highlightDirectives = [
+      'Expand the highlight bullets with quantified achievements tied directly to JD success metrics using only resume-backed facts.',
+      'Explicitly call out the JD metric, KPI, or responsibility each highlight reinforces.',
+    ];
+    const lowerRequests = new Set(requests.map((entry) => entry.toLowerCase()));
+    highlightDirectives.forEach((directive) => {
+      if (!lowerRequests.has(directive.toLowerCase())) {
+        requests = [...requests, directive];
+        lowerRequests.add(directive.toLowerCase());
+      }
+    });
+  }
 
   const resumeText = context.resumeText || '';
   const jobDescription = context.jobDescription || '';
@@ -3315,6 +3329,10 @@ function buildImprovementPrompt(type, context, instructions) {
     formatPromptLine('Summary snapshot', sections.summary, {
       fallback: 'Summary not detected',
       maxLength: 400,
+    }),
+    formatPromptLine('Highlights snapshot', sections.highlights, {
+      fallback: 'Highlights not detected',
+      maxLength: 350,
     }),
     formatPromptLine('Experience snapshot', sections.experience, {
       fallback: 'Experience details limited',
@@ -3359,6 +3377,11 @@ function buildImprovementPrompt(type, context, instructions) {
     'Only include information that can be inferred from the resume and supplied context.',
     'Do not invent achievements, companies, or dates.',
   ];
+
+  if (type === 'improve-highlights') {
+    ruleLines.push('Tie each highlight to a JD metric, KPI, or responsibility using resume-backed evidence.');
+    ruleLines.push('Prefer quantified language (%, $, #, volume) already present in the resume when rewriting highlights.');
+  }
 
   if (requests.length) {
     ruleLines.push('In the explanation, reference the JD skill or responsibility you reinforced.');
@@ -3755,7 +3778,7 @@ function fallbackImprovement(type, context) {
     const headingLabel = deriveHeadingLabel(section.heading, 'Highlights');
     const before = section.content.join('\n').trim();
     const focusText = fallbackSkillText || jobTitle || 'target role';
-    const addition = `- Highlighted wins that reinforce ${focusText} outcomes.`;
+    const addition = `- Spotlighted quantified wins that reinforce ${focusText} outcomes from the JD.`;
     const alreadyPresent = section.content.some((line) =>
       line.trim().toLowerCase() === addition.toLowerCase()
     );
@@ -3774,7 +3797,7 @@ function fallbackImprovement(type, context) {
     );
     const explanation = alreadyPresent
       ? 'Highlights already underscore the job-aligned achievements.'
-      : 'Reinforced highlights so top wins echo the job metrics.';
+      : 'Reinforced highlights with quantified wins tied to the JD success metrics.';
     const beforeLines = extractDiffLines(before, {
       sectionTokens: [headingLabel || 'Highlights', 'highlights'],
     });
@@ -4171,6 +4194,13 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
   };
   const fmtCert = (c = {}) => (c.provider ? `${c.name} - ${c.provider}` : c.name);
 
+  const highlightSections = Object.entries(sectionMap)
+    .filter(([key]) => key.includes('highlight'))
+    .map(([, value]) => value)
+    .filter(Boolean);
+
+  const highlights = highlightSections.join('\n');
+
   const summary = [sectionMap.summary || '', linkedinData.headline || '']
     .filter(Boolean)
     .join('\n');
@@ -4258,7 +4288,7 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     .join(', ');
   const projects = sectionMap.projects || '';
 
-  return { summary, experience, education, certifications, skills, projects };
+  return { summary, experience, education, certifications, skills, projects, highlights };
 }
 
 function normalizeGeminiLines(value) {
