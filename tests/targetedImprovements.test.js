@@ -121,7 +121,7 @@ describe('enforceTargetedUpdate', () => {
   test('limits improve-highlights updates to the Highlights section', () => {
     const updatedResume = baseResume.replace(
       '# Highlights\n- Recognised for improving deployment reliability.',
-      '# Highlights\n- Recognised for improving deployment reliability.\n- Highlighted delivery wins for JD.\n# Experience\n- Altered experience line.'
+      '# Highlights\n- Recognised for improving deployment reliability.\n- Spotlighted quantified wins for JD success metrics.\n# Experience\n- Altered experience line.'
     );
 
     const result = enforceTargetedUpdate(
@@ -131,7 +131,7 @@ describe('enforceTargetedUpdate', () => {
       {}
     );
 
-    expect(result.updatedResume).toContain('Highlighted delivery wins for JD.');
+    expect(result.updatedResume).toContain('Spotlighted quantified wins for JD success metrics.');
     expect(result.updatedResume).toContain('- Built features for enterprise clients.');
     expect(result.updatedResume).not.toContain('Altered experience line.');
   });

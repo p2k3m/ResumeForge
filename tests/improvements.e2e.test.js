@@ -179,20 +179,20 @@ describe('targeted improvement endpoints (integration)', () => {
         type: 'improve-highlights',
         section: 'Highlights',
         beforeExcerpt: '- Recognised for 20% adoption growth.',
-        afterExcerpt: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
-        explanation: 'Reinforced highlights around JD success metrics.',
+        afterExcerpt: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
+        explanation: 'Reinforced highlights with quantified wins tied to the JD success metrics.',
         mutations: [
           {
             target: '- Recognised for 20% adoption growth.',
-            value: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+            value: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
           },
         ],
         changeDetails: [
           {
             section: 'Highlights',
             before: '- Recognised for 20% adoption growth.',
-            after: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
-            reasons: ['Reinforced highlights around JD success metrics.'],
+            after: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
+            reasons: ['Reinforced highlights with quantified wins tied to the JD success metrics.'],
           },
         ],
       },
@@ -218,7 +218,7 @@ describe('targeted improvement endpoints (integration)', () => {
           },
           {
             target: '- Recognised for 20% adoption growth.',
-            value: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+            value: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
           },
           {
             target: '- Built scalable services.',
@@ -251,7 +251,7 @@ describe('targeted improvement endpoints (integration)', () => {
           {
             section: 'Highlights',
             before: '- Recognised for 20% adoption growth.',
-            after: '- Recognised for 20% adoption growth.\n- Highlighted delivery wins for JD.',
+            after: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
             reasons: ['Applied holistic improvements across resume sections.'],
           },
           {
