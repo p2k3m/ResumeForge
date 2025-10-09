@@ -31,6 +31,9 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
       'Jane Doe',
       '# Summary',
       'Experienced engineer',
+      '# Experience',
+      '- Developer at Example (Jan 2020 - Dec 2022)',
+      '  - Built resilient APIs',
       '# Skills',
       'JavaScript, AWS',
       '# Projects',
@@ -44,6 +47,7 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
       certifications: []
     };
     const sections = collectSectionText(resume, linkedin, []);
+    expect(sections.experience).toContain('Built resilient APIs');
 
     await rewriteSectionsWithGemini(
       'Jane Doe',
