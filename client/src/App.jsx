@@ -2061,6 +2061,7 @@ function App() {
   const [changeLog, setChangeLog] = useState([])
   const [activeDashboardStage, setActiveDashboardStage] = useState('score')
   const [activeImprovement, setActiveImprovement] = useState('')
+  const [isBulkAccepting, setIsBulkAccepting] = useState(false)
   const [error, setErrorState] = useState('')
   const [errorRecovery, setErrorRecovery] = useState(null)
   const [errorContext, setErrorContext] = useState({ source: '', code: '' })
@@ -2165,6 +2166,7 @@ function App() {
   }, [])
   const resetAnalysisState = useCallback(() => {
     analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
+    pendingImprovementRescoreRef.current = []
     updateOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
@@ -2217,6 +2219,7 @@ function App() {
   )
   const improvementLockRef = useRef(false)
   const scoreUpdateLockRef = useRef(false)
+  const pendingImprovementRescoreRef = useRef([])
   const autoPreviewSignatureRef = useRef('')
   const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
@@ -2305,7 +2308,8 @@ function App() {
     }),
     [activeImprovement, improvementUnlockMessage, improvementsUnlocked]
   )
-  const improvementButtonsDisabled = isProcessing || improvementBusy || !improvementsUnlocked
+  const improvementButtonsDisabled =
+    isProcessing || improvementBusy || isBulkAccepting || !improvementsUnlocked
   const improveSkillsAction = improvementActionMap.get('add-missing-skills') || {
     label: 'Improve Skills',
     helper: 'Blend missing keywords into the right sections to lift your ATS alignment.'
@@ -4166,6 +4170,21 @@ function App() {
   }, [currentCvSignature, currentJobSignature, resetAnalysisState])
 
   const handleScoreSubmit = useCallback(async () => {
+    const hasQueuedRescore =
+      Array.isArray(pendingImprovementRescoreRef.current) &&
+      pendingImprovementRescoreRef.current.length > 0
+
+    if (hasQueuedRescore) {
+      setIsProcessing(true)
+      setError('')
+      try {
+        await runQueuedImprovementRescore()
+      } finally {
+        setIsProcessing(false)
+      }
+      return
+    }
+
     const manualText = manualJobDescription.trim()
     const fileSignature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
     const jobSignature = manualText ? `manual:${manualText}` : ''
@@ -4518,6 +4537,7 @@ function App() {
       setIsProcessing(false)
     }
   }, [
+    runQueuedImprovementRescore,
     API_BASE_URL,
     cvFile,
     manualCertificatesInput,
@@ -4658,6 +4678,14 @@ function App() {
     improvementsUnlocked && Boolean(resumeText && resumeText.trim()) && Boolean(jobDescriptionText && jobDescriptionText.trim())
   const hasAcceptedImprovement = useMemo(
     () => improvementResults.some((item) => item.accepted === true),
+    [improvementResults]
+  )
+  const hasPendingImprovementRescore = useMemo(
+    () => improvementResults.some((item) => item.accepted === true && item.rescorePending),
+    [improvementResults]
+  )
+  const hasPendingImprovementDecisions = useMemo(
+    () => improvementResults.some((item) => item.accepted === null),
     [improvementResults]
   )
   const improvementsRequireAcceptance = useMemo(
@@ -5277,6 +5305,133 @@ function App() {
     [API_BASE_URL, jobDescriptionText, jobSkills, userIdentifier]
   )
 
+  const runQueuedImprovementRescore = useCallback(async () => {
+    const queue = pendingImprovementRescoreRef.current
+    if (!Array.isArray(queue) || queue.length === 0) {
+      return false
+    }
+
+    if (scoreUpdateLockRef.current) {
+      setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
+      return false
+    }
+
+    scoreUpdateLockRef.current = true
+
+    try {
+      while (queue.length > 0) {
+        const entry = queue[0]
+        if (!entry || !entry.updatedResume) {
+          queue.shift()
+          continue
+        }
+
+        const {
+          id,
+          updatedResume,
+          baselineScore,
+          previousMissingSkills,
+          rescoreSummary,
+          changeLogEntry,
+          persistedEntryPayload
+        } = entry
+
+        setImprovementResults((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, rescorePending: true, rescoreError: '' }
+              : item
+          )
+        )
+
+        try {
+          const result = await rescoreAfterImprovement({
+            updatedResume,
+            baselineScore,
+            previousMissingSkills,
+            rescoreSummary
+          })
+          const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
+
+          if (changeLogEntry && Number.isFinite(deltaValue)) {
+            setChangeLog((prev) =>
+              prev.map((entryItem) =>
+                entryItem.id === changeLogEntry.id
+                  ? { ...entryItem, scoreDelta: deltaValue }
+                  : entryItem
+              )
+            )
+            if (changeLogEntry.id) {
+              try {
+                const payloadWithDelta = persistedEntryPayload
+                  ? { ...persistedEntryPayload, scoreDelta: deltaValue }
+                  : { ...changeLogEntry, scoreDelta: deltaValue }
+                await persistChangeLogEntry(payloadWithDelta)
+              } catch (persistErr) {
+                console.error('Updating change log entry failed', persistErr)
+                const { source: serviceErrorSource, code: errorCode } =
+                  deriveServiceContextFromError(persistErr)
+                setError(
+                  persistErr.message || 'Unable to update the change log entry.',
+                  {
+                    serviceError: serviceErrorSource,
+                    errorCode
+                  }
+                )
+              }
+            }
+          }
+
+          setImprovementResults((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    rescorePending: false,
+                    scoreDelta: deltaValue,
+                    rescoreError: ''
+                  }
+                : item
+            )
+          )
+
+          queue.shift()
+        } catch (err) {
+          console.error('Improvement rescore failed', err)
+          const { source: serviceErrorSource, code: errorCode } =
+            deriveServiceContextFromError(err)
+          setError(err.message || 'Unable to update scores after applying improvement.', {
+            serviceError: serviceErrorSource,
+            errorCode
+          })
+          setImprovementResults((prev) =>
+            prev.map((item) =>
+              item.id === id
+                ? {
+                    ...item,
+                    rescorePending: false,
+                    rescoreError: err.message || 'Unable to refresh ATS scores.'
+                  }
+                : item
+            )
+          )
+          return false
+        }
+      }
+
+      return true
+    } finally {
+      scoreUpdateLockRef.current = false
+    }
+  }, [
+    deriveServiceContextFromError,
+    persistChangeLogEntry,
+    rescoreAfterImprovement,
+    setChangeLog,
+    setError,
+    setImprovementResults
+  ])
+
   const persistChangeLogEntry = useCallback(
     async (entry) => {
       if (!entry || !jobId) {
@@ -5341,6 +5496,15 @@ function App() {
         const baselineScore = getBaselineScoreFromMatch(match)
         const previousMissingSkills = Array.isArray(match?.missingSkills) ? match.missingSkills : []
         const changeLogEntry = buildChangeLogEntry(suggestion)
+        const queueEntry = {
+          id,
+          updatedResume: updatedResumeDraft,
+          baselineScore,
+          previousMissingSkills,
+          rescoreSummary: suggestion.rescoreSummary,
+          changeLogEntry: null,
+          persistedEntryPayload: null
+        }
         const historySnapshot = {
           id: changeLogEntry?.id || id,
           suggestionId: id,
@@ -5408,6 +5572,7 @@ function App() {
 
         let persistedEntryPayload = null
         if (changeLogEntry) {
+          queueEntry.changeLogEntry = cloneData(changeLogEntry)
           const entryPayload = { ...changeLogEntry }
           if (typeof historySnapshot.resumeBefore === 'string') {
             entryPayload.resumeBeforeText = historySnapshot.resumeBefore
@@ -5433,6 +5598,7 @@ function App() {
             entryPayload.historyContext = historyContextPayload
           }
           persistedEntryPayload = entryPayload
+          queueEntry.persistedEntryPayload = cloneData(entryPayload)
           setChangeLog((prev) => {
             previousChangeLog = prev
             if (prev.some((entry) => entry.id === entryPayload.id)) {
@@ -5455,69 +5621,18 @@ function App() {
           }
         }
 
-        try {
-          const result = await rescoreAfterImprovement({
-            updatedResume: updatedResumeDraft,
-            baselineScore,
-            previousMissingSkills,
-            rescoreSummary: suggestion.rescoreSummary
-          })
-          const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
-
-          if (changeLogEntry && Number.isFinite(deltaValue)) {
-            setChangeLog((prev) =>
-              prev.map((entry) =>
-                entry.id === changeLogEntry.id ? { ...entry, scoreDelta: deltaValue } : entry
-              )
-            )
-          try {
-            const payloadWithDelta = persistedEntryPayload
-              ? { ...persistedEntryPayload, scoreDelta: deltaValue }
-              : { ...changeLogEntry, scoreDelta: deltaValue }
-            await persistChangeLogEntry(payloadWithDelta)
-          } catch (err) {
-            console.error('Updating change log entry failed', err)
-            const { source: serviceErrorSource, code: errorCode } =
-              deriveServiceContextFromError(err)
-            setError(err.message || 'Unable to update the change log entry.', {
-              serviceError: serviceErrorSource,
-              errorCode
-            })
+        pendingImprovementRescoreRef.current = [
+          ...pendingImprovementRescoreRef.current.filter((entry) => entry?.id !== id),
+          {
+            ...queueEntry,
+            changeLogEntry: queueEntry.changeLogEntry
+              ? cloneData(queueEntry.changeLogEntry)
+              : null,
+            persistedEntryPayload: queueEntry.persistedEntryPayload
+              ? cloneData(queueEntry.persistedEntryPayload)
+              : null
           }
-          }
-
-          setImprovementResults((prev) =>
-            prev.map((item) =>
-              item.id === id
-                ? {
-                    ...item,
-                    rescorePending: false,
-                    scoreDelta: deltaValue,
-                    rescoreError: ''
-                  }
-                : item
-            )
-          )
-        } catch (err) {
-          console.error('Improvement rescore failed', err)
-          const { source: serviceErrorSource, code: errorCode } =
-            deriveServiceContextFromError(err)
-          setError(err.message || 'Unable to update scores after applying improvement.', {
-            serviceError: serviceErrorSource,
-            errorCode
-          })
-          setImprovementResults((prev) =>
-            prev.map((item) =>
-              item.id === id
-                ? {
-                    ...item,
-                    rescorePending: false,
-                    rescoreError: err.message || 'Unable to refresh ATS scores.'
-                  }
-                : item
-            )
-          )
-        }
+        ]
 
         return true
       } finally {
@@ -5701,6 +5816,9 @@ function App() {
               }
             : item
         )
+      )
+      pendingImprovementRescoreRef.current = pendingImprovementRescoreRef.current.filter(
+        (entry) => entry?.id !== historyEntry.suggestionId
       )
 
       if (existingEntry) {
@@ -6049,10 +6167,45 @@ function App() {
         return false
       }
 
-      return applyImprovementSuggestion(suggestion)
+      const applied = await applyImprovementSuggestion(suggestion)
+      if (applied && suggestion.type === 'enhance-all') {
+        const summaryTextCandidate = formatEnhanceAllSummary(suggestion?.improvementSummary)
+        const explanationText = typeof suggestion?.explanation === 'string' ? suggestion.explanation : ''
+        const summaryText = (summaryTextCandidate || explanationText || '').trim()
+        setEnhanceAllSummaryText(summaryText)
+      }
+
+      return applied
     },
     [applyImprovementSuggestion, improvementResults]
   )
+
+  const handleAcceptAllImprovements = useCallback(async () => {
+    const pendingSuggestions = improvementResults.filter((item) => item.accepted === null)
+    if (pendingSuggestions.length === 0) {
+      return
+    }
+
+    setIsBulkAccepting(true)
+    setError('')
+
+    try {
+      for (const suggestion of pendingSuggestions) {
+        const applied = await applyImprovementSuggestion(suggestion)
+        if (!applied) {
+          break
+        }
+        if (suggestion.type === 'enhance-all') {
+          const summaryTextCandidate = formatEnhanceAllSummary(suggestion?.improvementSummary)
+          const explanationText = typeof suggestion?.explanation === 'string' ? suggestion.explanation : ''
+          const summaryText = (summaryTextCandidate || explanationText || '').trim()
+          setEnhanceAllSummaryText(summaryText)
+        }
+      }
+    } finally {
+      setIsBulkAccepting(false)
+    }
+  }, [applyImprovementSuggestion, improvementResults, setError])
 
   const handleImprovementClick = async (type) => {
     if (type !== 'enhance-all') {
@@ -6217,13 +6370,6 @@ function App() {
       }
       setImprovementResults((prev) => [suggestion, ...prev])
 
-      if (type === 'enhance-all') {
-        const applied = await applyImprovementSuggestion(suggestion)
-        if (applied) {
-          const summaryText = (enhanceAllSummary || explanation).trim()
-          setEnhanceAllSummaryText(summaryText)
-        }
-      }
     } catch (err) {
       console.error('Improvement request failed', err)
       const errorMessage =
@@ -6372,48 +6518,22 @@ function App() {
         const revertMissingSkills = Array.isArray(revertMatch?.missingSkills)
           ? revertMatch.missingSkills
           : []
-        try {
-          await rescoreAfterImprovement({
+        pendingImprovementRescoreRef.current = [
+          ...pendingImprovementRescoreRef.current.filter((entry) => entry?.id !== id),
+          {
+            id,
             updatedResume: revertResumeText,
             baselineScore: revertBaselineScore,
-            previousMissingSkills: revertMissingSkills
-          })
-          setImprovementResults((prev) =>
-            prev.map((item) =>
-              item.id === id
-                ? {
-                    ...item,
-                    rescorePending: false,
-                    rescoreError: '',
-                    scoreDelta: null
-                  }
-                : item
-            )
-          )
-        } catch (err) {
-          console.error('Improvement rescore failed after rejection', err)
-          const { source: serviceErrorSource, code: errorCode } =
-            deriveServiceContextFromError(err)
-          setError(
-            err.message || 'Unable to refresh ATS scores after rejecting the improvement.',
-            {
-              serviceError: serviceErrorSource,
-              errorCode
-            }
-          )
-          setImprovementResults((prev) =>
-            prev.map((item) =>
-              item.id === id
-                ? {
-                    ...item,
-                    rescorePending: false,
-                    rescoreError: err.message || 'Unable to refresh ATS scores.',
-                    scoreDelta: null
-                  }
-                : item
-            )
-          )
-        }
+            previousMissingSkills: revertMissingSkills,
+            rescoreSummary: null,
+            changeLogEntry: null,
+            persistedEntryPayload: null
+          }
+        ]
+      } else {
+        pendingImprovementRescoreRef.current = pendingImprovementRescoreRef.current.filter(
+          (entry) => entry?.id !== id
+        )
       }
 
       try {
@@ -6547,7 +6667,29 @@ function App() {
   const handlePreviewReject = useCallback(() => handlePreviewDecision('reject'), [handlePreviewDecision])
 
   const jobDescriptionReady = hasManualJobDescriptionInput
-  const rescoreDisabled = !cvFile || isProcessing || !jobDescriptionReady
+  const rescoreRequiresAcceptedChanges = improvementsRequireAcceptance && !hasAcceptedImprovement
+  const rescoreDisabled =
+    !cvFile ||
+    isProcessing ||
+    !jobDescriptionReady ||
+    rescoreRequiresAcceptedChanges ||
+    isBulkAccepting
+  const rescoreButtonLabel = isProcessing
+    ? 'Scoring…'
+    : hasPendingImprovementRescore
+      ? 'Rescore accepted updates'
+      : scoreDashboardReady
+        ? 'Rescore CV'
+        : 'Run ATS scoring'
+  const rescoreHelperMessage = (() => {
+    if (rescoreRequiresAcceptedChanges) {
+      return 'Accept improvements before re-running ATS scoring.'
+    }
+    if (hasPendingImprovementRescore) {
+      return 'Rescore to apply accepted improvements to your ATS dashboard.'
+    }
+    return ''
+  })()
   const metricsCount = Array.isArray(scoreBreakdown) ? scoreBreakdown.length : 0
   const suggestionsCount = improvementResults.length
   const changeLogCount = changeLog.length
@@ -6753,19 +6895,26 @@ function App() {
               description="Monitor baseline ATS alignment and rerun scoring after each accepted update."
               accent="indigo"
               actions={
-                <button
-                  type="button"
-                  onClick={handleScoreSubmit}
-                  disabled={rescoreDisabled}
-                  className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
-                    rescoreDisabled
-                      ? 'bg-indigo-300 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
-                  }`}
-                  aria-busy={isProcessing ? 'true' : 'false'}
-                >
-                  {isProcessing ? 'Scoring…' : scoreDashboardReady ? 'Rescore CV' : 'Run ATS scoring'}
-                </button>
+                <div className="flex flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={handleScoreSubmit}
+                    disabled={rescoreDisabled}
+                    className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                      rescoreDisabled
+                        ? 'bg-indigo-300 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                    }`}
+                    aria-busy={isProcessing ? 'true' : 'false'}
+                  >
+                    {rescoreButtonLabel}
+                  </button>
+                  {rescoreHelperMessage && (
+                    <p className="text-xs font-semibold text-indigo-700/80 text-right">
+                      {rescoreHelperMessage}
+                    </p>
+                  )}
+                </div>
               }
             >
               {scoreDashboardReady ? (
@@ -6798,15 +6947,32 @@ function App() {
             >
               {improvementResults.length > 0 ? (
                 <>
-                  <div className="rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
-                    These skills and highlights were added to match the JD. Use the cards below to accept, reject, or preview each
-                    update.
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex-1 rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
+                      These skills and highlights were added to match the JD. Use the cards below to accept, reject, or preview each
+                      update.
+                    </div>
+                    {hasPendingImprovementDecisions && (
+                      <button
+                        type="button"
+                        onClick={handleAcceptAllImprovements}
+                        disabled={improvementButtonsDisabled}
+                        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
+                          improvementButtonsDisabled
+                            ? 'bg-purple-300 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
+                        }`}
+                        aria-busy={isBulkAccepting ? 'true' : 'false'}
+                      >
+                        {isBulkAccepting ? 'Accepting…' : 'Accept all pending'}
+                      </button>
+                    )}
                   </div>
                   {enhanceAllSummaryText && (
                     <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-sm text-emerald-900">
-                      <p className="text-sm font-semibold text-emerald-700">Enhance All applied automatically</p>
+                      <p className="text-sm font-semibold text-emerald-700">Enhance All summary</p>
                       <p className="mt-1 leading-relaxed">
-                        We rolled out every recommended fix in one pass. Combined updates — {enhanceAllSummaryText}
+                        Combined updates — {enhanceAllSummaryText}
                       </p>
                     </div>
                   )}
