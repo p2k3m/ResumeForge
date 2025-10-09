@@ -2092,7 +2092,8 @@ function App() {
     setPreviewFile(null)
     setEnhanceAllSummaryText('')
     setIsCoverLetterDownloading(false)
-  }, [updateOutputFiles])
+    setActiveDashboardStage('score')
+  }, [setActiveDashboardStage, updateOutputFiles])
   const resetUiAfterDownload = useCallback(
     (message = POST_DOWNLOAD_INVITE_MESSAGE) => {
       resetAnalysisState()
