@@ -100,6 +100,47 @@ function ATSScoreCard({ metric, improvement }) {
     ? normalizeLabel(metric.beforeRatingLabel)
     : null
   const deltaText = metric?.deltaText || formatScoreDelta(beforeScore, afterScore)
+  const deltaTrend =
+    typeof beforeScore === 'number' && typeof afterScore === 'number' &&
+    Number.isFinite(beforeScore) &&
+    Number.isFinite(afterScore)
+      ? afterScore - beforeScore
+      : null
+  const deltaBadgeTone = (() => {
+    if (!deltaText) {
+      return 'bg-slate-200 text-slate-700'
+    }
+    if (deltaTrend === null) {
+      return 'bg-slate-200 text-slate-700'
+    }
+    if (deltaTrend > 0) {
+      return 'bg-emerald-100 text-emerald-700'
+    }
+    if (deltaTrend < 0) {
+      return 'bg-rose-100 text-rose-700'
+    }
+    return 'bg-slate-200 text-slate-700'
+  })()
+  const beforeAccentTone =
+    typeof beforeScore === 'number'
+      ? 'border-indigo-200 bg-indigo-50'
+      : 'border-slate-200 bg-slate-50'
+  const beforeLabelTone =
+    typeof beforeScore === 'number' ? 'text-indigo-600' : 'text-slate-500'
+  const beforeValueTone =
+    typeof beforeScore === 'number' ? 'text-indigo-700' : 'text-slate-500'
+  const afterAccentTone =
+    typeof afterScore === 'number'
+      ? 'border-emerald-200 bg-emerald-50'
+      : 'border-slate-200 bg-slate-50'
+  const afterLabelTone =
+    typeof afterScore === 'number' ? 'text-emerald-600' : 'text-slate-500'
+  const afterValueTone =
+    typeof afterScore === 'number' ? 'text-emerald-700' : 'text-slate-500'
+  const beforeRatingBadgeTone =
+    typeof beforeScore === 'number'
+      ? 'border border-indigo-200 bg-white text-indigo-600'
+      : 'border border-slate-200 bg-white text-slate-500'
   const explicitTip = typeof metric?.tip === 'string' ? metric.tip.trim() : ''
   const listTips = Array.isArray(metric?.tips)
     ? metric.tips.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean)
@@ -137,30 +178,34 @@ function ATSScoreCard({ metric, improvement }) {
         )}
       </header>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="text-xs font-medium text-slate-500">ATS Score Before</p>
+        <div className={`rounded-lg p-3 ${beforeAccentTone}`}>
+          <p className={`text-xs font-semibold uppercase tracking-wide ${beforeLabelTone}`}>
+            ATS Score Before
+          </p>
           <div className="mt-2 flex items-baseline gap-2" data-testid="metric-score-before">
-            <span className="text-3xl font-semibold text-slate-900 md:text-4xl">{beforeDisplay}</span>
-            {beforeSuffix && <span className="text-sm font-medium text-slate-500">{beforeSuffix}</span>}
+            <span className={`text-3xl font-semibold md:text-4xl ${beforeValueTone}`}>{beforeDisplay}</span>
+            {beforeSuffix && <span className={`text-sm font-medium ${beforeLabelTone}`}>{beforeSuffix}</span>}
           </div>
           {beforeRatingLabel && (
-            <span className="mt-3 inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+            <span className={`mt-3 inline-flex w-fit rounded-full px-3 py-1 text-xs font-medium ${beforeRatingBadgeTone}`}>
               {beforeRatingLabel}
             </span>
           )}
         </div>
-        <div className="relative rounded-lg border border-slate-200 bg-white p-3">
-          <p className="text-xs font-medium text-slate-500">ATS Score After</p>
+        <div className={`relative rounded-lg p-3 ${afterAccentTone}`}>
+          <p className={`text-xs font-semibold uppercase tracking-wide ${afterLabelTone}`}>
+            ATS Score After
+          </p>
           <div className="mt-2 flex items-baseline gap-2" data-testid="metric-score">
-            <span className="text-4xl font-semibold text-slate-900 md:text-5xl">{afterDisplay}</span>
-            {afterSuffix && <span className="text-sm font-medium text-slate-500">{afterSuffix}</span>}
+            <span className={`text-4xl font-semibold md:text-5xl ${afterValueTone}`}>{afterDisplay}</span>
+            {afterSuffix && <span className={`text-sm font-medium ${afterLabelTone}`}>{afterSuffix}</span>}
           </div>
-          <span className={`mt-3 inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium ${labelClass}`}>
+          <span className={`mt-3 inline-flex w-fit rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium ${labelClass}`}>
             {ratingLabel}
           </span>
           {deltaText && (
             <span
-              className="absolute top-3 right-3 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
+              className={`absolute top-3 right-3 rounded-full px-3 py-1 text-xs font-semibold ${deltaBadgeTone}`}
               data-testid="metric-delta"
             >
               {deltaText}

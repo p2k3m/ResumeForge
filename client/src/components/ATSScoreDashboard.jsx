@@ -335,6 +335,38 @@ function ATSScoreDashboard({
   const missingSkills = normalizeSkills(match?.missingSkills)
   const addedSkills = normalizeSkills(match?.addedSkills)
 
+  const selectionBeforeAvailable = typeof selectionProbabilityBeforeValue === 'number'
+  const selectionAfterAvailable = typeof selectionProbabilityAfterValue === 'number'
+  const selectionBeforeAccent = selectionBeforeAvailable
+    ? 'border-indigo-200 bg-indigo-50'
+    : 'border-slate-200 bg-slate-50'
+  const selectionBeforeLabelTone = selectionBeforeAvailable ? 'text-indigo-600' : 'text-slate-500'
+  const selectionBeforeValueTone = selectionBeforeAvailable ? 'text-indigo-700' : 'text-slate-500'
+  const selectionAfterAccent = selectionAfterAvailable
+    ? 'border-emerald-200 bg-emerald-50'
+    : 'border-slate-200 bg-slate-50'
+  const selectionAfterLabelTone = selectionAfterAvailable ? 'text-emerald-600' : 'text-slate-500'
+  const selectionAfterValueTone = selectionAfterAvailable ? 'text-emerald-700' : 'text-slate-500'
+  const selectionDeltaTone = (() => {
+    if (!selectionProbabilityDelta) {
+      return 'bg-slate-200 text-slate-700'
+    }
+    if (!selectionBeforeAvailable || !selectionAfterAvailable) {
+      return 'bg-slate-200 text-slate-700'
+    }
+    const deltaRaw = selectionProbabilityAfterValue - selectionProbabilityBeforeValue
+    if (!Number.isFinite(deltaRaw)) {
+      return 'bg-slate-200 text-slate-700'
+    }
+    if (deltaRaw > 0) {
+      return 'bg-emerald-100 text-emerald-700'
+    }
+    if (deltaRaw < 0) {
+      return 'bg-rose-100 text-rose-700'
+    }
+    return 'bg-slate-200 text-slate-700'
+  })()
+
   const matchStatusStyles = {
     match: {
       label: 'Match',
@@ -656,49 +688,57 @@ function ATSScoreDashboard({
                 />
               </div>
               <div className="mt-4 space-y-4">
-                {typeof selectionProbabilityBeforeValue === 'number' && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection % Before</p>
-                        <div className="mt-2 flex items-baseline gap-3">
-                          <p className="text-3xl font-semibold text-slate-900">{selectionProbabilityBeforeValue}%</p>
-                          {selectionProbabilityBeforeMeaning && (
-                            <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
-                              {selectionProbabilityBeforeMeaning} Outlook
-                            </span>
-                          )}
-                        </div>
+                <div className={`rounded-lg border p-4 ${selectionBeforeAccent}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className={`text-xs font-semibold uppercase tracking-wide ${selectionBeforeLabelTone}`}>
+                        Selection % Before
+                      </p>
+                      <div className="mt-2 flex items-baseline gap-3">
+                        <p className={`text-3xl font-semibold ${selectionBeforeValueTone}`}>
+                          {selectionBeforeAvailable ? `${selectionProbabilityBeforeValue}%` : '—'}
+                        </p>
+                        {selectionBeforeAvailable && selectionProbabilityBeforeMeaning && (
+                          <span className="rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-600">
+                            {selectionProbabilityBeforeMeaning} Outlook
+                          </span>
+                        )}
                       </div>
-                      {selectionProbabilityDelta && (
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                          {selectionProbabilityDelta}
-                        </span>
-                      )}
                     </div>
-                    <p className="mt-2 text-sm text-slate-600">
-                      {selectionProbabilityBeforeRationale ||
-                        'Baseline estimate derived from your uploaded resume before enhancements.'}
-                    </p>
+                    {selectionProbabilityDelta && (
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${selectionDeltaTone}`}>
+                        {selectionProbabilityDelta}
+                      </span>
+                    )}
                   </div>
-                )}
-                {typeof selectionProbabilityAfterValue === 'number' && (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection % After</p>
-                    <div className="mt-2 flex items-baseline gap-3">
-                      <p className="text-3xl font-semibold text-slate-900">{selectionProbabilityAfterValue}%</p>
-                      {selectionProbabilityAfterMeaning && (
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
-                          {selectionProbabilityAfterMeaning} Outlook
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-sm text-slate-600">
-                      {selectionProbabilityAfterRationale ||
-                        'Enhanced estimate reflecting ATS, keyword, and credential gains from the accepted changes.'}
+                  <p className="mt-2 text-sm text-slate-600">
+                    {selectionBeforeAvailable
+                      ? selectionProbabilityBeforeRationale ||
+                        'Baseline estimate derived from your uploaded resume before enhancements.'
+                      : 'Baseline estimate will appear once we parse your original resume.'}
+                  </p>
+                </div>
+                <div className={`rounded-lg border p-4 ${selectionAfterAccent}`}>
+                  <p className={`text-xs font-semibold uppercase tracking-wide ${selectionAfterLabelTone}`}>
+                    Selection % After
+                  </p>
+                  <div className="mt-2 flex items-baseline gap-3">
+                    <p className={`text-3xl font-semibold ${selectionAfterValueTone}`}>
+                      {selectionAfterAvailable ? `${selectionProbabilityAfterValue}%` : '—'}
                     </p>
+                    {selectionAfterAvailable && selectionProbabilityAfterMeaning && (
+                      <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-medium text-emerald-600">
+                        {selectionProbabilityAfterMeaning} Outlook
+                      </span>
+                    )}
                   </div>
-                )}
+                  <p className="mt-2 text-sm text-slate-600">
+                    {selectionAfterAvailable
+                      ? selectionProbabilityAfterRationale ||
+                        'Enhanced estimate reflecting ATS, keyword, and credential gains from the accepted changes.'
+                      : 'Enhanced estimate will populate after you apply at least one improvement.'}
+                  </p>
+                </div>
               </div>
             </div>
           )}
