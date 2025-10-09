@@ -10945,20 +10945,30 @@ function extractExperience(source) {
       .map((item) => {
         if (!item) return null;
         if (typeof item === 'string') {
-          return parseEntry(item);
+          const entry = parseEntry(item);
+          if (!entry.responsibilities.length) {
+            delete entry.responsibilities;
+          }
+          return entry;
         }
         if (typeof item === 'object') {
           const base = parseEntry(
             [item.title, item.company].filter(Boolean).join(' at ') || ''
           );
-          return {
+          const responsibilities = normalizeResponsibilities(
+            item.responsibilities
+          );
+          const entry = {
             ...base,
             company: item.company || base.company || '',
             title: item.title || base.title || '',
             startDate: item.startDate || base.startDate || '',
             endDate: item.endDate || base.endDate || '',
-            responsibilities: normalizeResponsibilities(item.responsibilities),
           };
+          if (responsibilities.length) {
+            entry.responsibilities = responsibilities;
+          }
+          return entry;
         }
         return null;
       })
