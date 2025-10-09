@@ -34,6 +34,18 @@ describe('deriveDeltaSummary', () => {
               removed: []
             }
           ]
+        },
+        {
+          type: 'improve-highlights',
+          addedItems: ['Quantified retention win'],
+          removedItems: ['Generic leadership statement'],
+          summarySegments: [
+            {
+              section: 'Highlights',
+              added: ['Quantified retention win'],
+              removed: ['Generic leadership statement']
+            }
+          ]
         }
       ],
       certificateInsights: {
@@ -50,9 +62,13 @@ describe('deriveDeltaSummary', () => {
     expect(summary.skills.missing).toEqual(expect.arrayContaining(['GraphQL']))
     expect(summary.experience.added).toEqual(expect.arrayContaining(['Scaled API throughput 3x']))
     expect(summary.experience.missing).toEqual(expect.arrayContaining(['Maintained legacy module']))
+    expect(summary.tasks.added).toEqual(expect.arrayContaining(['Scaled API throughput 3x']))
+    expect(summary.tasks.missing).toEqual(expect.arrayContaining(['Maintained legacy module']))
     expect(summary.designation.added).toContain('Senior Software Engineer')
     expect(summary.designation.missing).toContain('Software Engineer')
     expect(summary.keywords.missing).toEqual(expect.arrayContaining(['GraphQL']))
+    expect(summary.highlights.added).toEqual(expect.arrayContaining(['Quantified retention win']))
+    expect(summary.highlights.missing).toEqual(expect.arrayContaining(['Generic leadership statement']))
     expect(summary.certificates.added).toEqual(
       expect.arrayContaining(['AWS Certified Solutions Architect — Amazon', 'Scrum Master — Scrum.org'])
     )
@@ -64,6 +80,10 @@ describe('deriveDeltaSummary', () => {
 
     expect(summary.skills.added).toEqual([])
     expect(summary.skills.missing).toEqual([])
+    expect(summary.tasks.added).toEqual([])
+    expect(summary.tasks.missing).toEqual([])
+    expect(summary.highlights.added).toEqual([])
+    expect(summary.highlights.missing).toEqual([])
     expect(summary.certificates.added).toEqual([])
     expect(summary.certificates.missing).toEqual([])
   })
