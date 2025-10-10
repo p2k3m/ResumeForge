@@ -11938,6 +11938,32 @@ const COVER_LETTER_SECTION_HEADING_PATTERNS = Object.freeze([
   /\bbackground\b/i,
 ]);
 
+const COVER_LETTER_MAX_WORDS = 500;
+const COVER_LETTER_STRONG_CLOSING_PATTERNS = Object.freeze([
+  /\blook forward to\b/i,
+  /\bwelcome the opportunity\b/i,
+  /\beager to\b/i,
+  /\bexcited to\b/i,
+  /\bready to\b/i,
+  /\bkeen to\b/i,
+  /\bconfident\b/i,
+  /\bcan (?:contribute|support|help|add value|deliver)\b/i,
+  /\bdeliver\b[^.?!]*\bvalue\b/i,
+  /\bplease (?:contact|let me know)\b/i,
+  /\bwould love to\b/i,
+  /\bavailable to\b[^.?!]*\bdiscuss\b/i,
+]);
+const COVER_LETTER_WEAK_CLOSING_ONLY_PATTERNS = Object.freeze([
+  /\bthank you(?: so much)?(?: for (?:your )?(?:time|consideration|review))?\b/i,
+  /\bthanks(?: so much)?(?: for (?:your )?(?:time|consideration|review))?\b/i,
+  /\bi appreciate your (?:time|consideration)\b/i,
+  /\bi appreciate you taking the time\b/i,
+  /\bi hope to hear from you(?: soon)?\b/i,
+  /\bi hope you will consider\b/i,
+]);
+const COVER_LETTER_SALUTATION_ONLY_PATTERN =
+  /^(?:sincerely|best regards|regards|kind regards|warm regards|respectfully|with appreciation|with gratitude|yours truly|yours faithfully|yours sincerely|best|cheers)[,\s]/i;
+
 function summarizeJobDescriptionForCover(jobDescription = '', maxLength = 360) {
   if (typeof jobDescription !== 'string') {
     return '';
@@ -12275,6 +12301,11 @@ function auditCoverLetterStructure(
     return { valid: false, issues: ['empty'] };
   }
 
+  const wordCount = normalizedText ? normalizedText.split(/\s+/).filter(Boolean).length : 0;
+  if (wordCount > COVER_LETTER_MAX_WORDS) {
+    issues.push('exceeds_word_limit');
+  }
+
   if (COVER_LETTER_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(normalizedText))) {
     issues.push('placeholder_detected');
   }
@@ -12297,6 +12328,42 @@ function auditCoverLetterStructure(
     typeof fields?.closing?.paragraph === 'string'
       ? fields.closing.paragraph.trim()
       : '';
+  const normalizedBodyParagraphs = bodyParagraphs.map((paragraph) =>
+    typeof paragraph === 'string' ? paragraph.replace(/\s+/g, ' ').trim() : ''
+  );
+
+  let closingEvaluationText = closingParagraph.replace(/\s+/g, ' ').trim();
+  if (
+    !closingEvaluationText ||
+    COVER_LETTER_SALUTATION_ONLY_PATTERN.test(closingEvaluationText)
+  ) {
+    const lastBodyParagraph = normalizedBodyParagraphs[normalizedBodyParagraphs.length - 1] || '';
+    closingEvaluationText = lastBodyParagraph;
+  }
+
+  const normalizedClosingEvaluation = closingEvaluationText
+    ? closingEvaluationText.replace(/\s+/g, ' ').trim()
+    : '';
+  const closingEvaluationWordCount = normalizedClosingEvaluation
+    ? normalizedClosingEvaluation.split(/\s+/).filter(Boolean).length
+    : 0;
+  const hasStrongClosing = normalizedClosingEvaluation
+    ? COVER_LETTER_STRONG_CLOSING_PATTERNS.some((pattern) =>
+        pattern.test(normalizedClosingEvaluation)
+      )
+    : false;
+  const hasWeakClosingCue = normalizedClosingEvaluation
+    ? COVER_LETTER_WEAK_CLOSING_ONLY_PATTERNS.some((pattern) =>
+        pattern.test(normalizedClosingEvaluation)
+      )
+    : false;
+  if (
+    normalizedClosingEvaluation &&
+    ((!hasStrongClosing && hasWeakClosingCue) ||
+      (!hasStrongClosing && closingEvaluationWordCount && closingEvaluationWordCount <= 5))
+  ) {
+    issues.push('weak_closing');
+  }
 
   if (!hasBodyContent && closingParagraph) {
     // Allow concise letters where the closing paragraph doubles as the main message.
@@ -12494,6 +12561,8 @@ function buildFallbackCoverLetters({
     : 'your team';
   const closingParagraph = `Thank you for considering my application. I welcome the opportunity to discuss how I can support ${closingTarget}.`;
 
+  const closingParagraphVariantTwo = `I look forward to discussing how my background can accelerate results for ${closingTarget}.`;
+
   const coverLetter1 = [
     contactHeader,
     'Dear Hiring Manager,',
@@ -12527,6 +12596,7 @@ function buildFallbackCoverLetters({
     alignmentParagraph,
     primaryExperience ||
       'I thrive when collaborating with diverse partners, simplifying complex requirements, and guiding initiatives from concept through successful delivery.',
+    closingParagraphVariantTwo,
     `Best regards,\n${safeName}`,
   ]
     .filter((paragraph) => typeof paragraph === 'string' && paragraph.trim())
@@ -20138,6 +20208,7 @@ export {
   CHANGE_LOG_FIELD_LIMITS,
   CHANGE_LOG_DYNAMO_LIMITS,
   mapCoverLetterFields,
+  auditCoverLetterStructure,
   ensureOutputFileUrls,
   determineUploadContentType,
   setCoverLetterFallbackBuilder,
