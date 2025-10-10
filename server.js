@@ -11917,6 +11917,7 @@ const COVER_LETTER_PLACEHOLDER_PATTERNS = Object.freeze([
   /\b(?:your (?:name|title|company|contact) here)\b/i,
   /\bInformation not provided\b/i,
 ]);
+const COVER_LETTER_RECOVERABLE_ISSUES = Object.freeze(new Set(['weak_closing']));
 const COVER_LETTER_SECTION_HEADING_PATTERNS = Object.freeze([
   /\bintroduction\b/i,
   /\bintro\b/i,
@@ -16056,7 +16057,14 @@ async function generateEnhancedDocumentsResponse({
     });
     if (!auditResult.valid) {
       structurallyInvalidLetters.push({ key, issues: auditResult.issues });
-      coverData[key] = '';
+      const onlyRecoverableIssues = Array.isArray(auditResult.issues)
+        ? auditResult.issues.every((issue) =>
+            COVER_LETTER_RECOVERABLE_ISSUES.has(issue)
+          )
+        : false;
+      if (!onlyRecoverableIssues) {
+        coverData[key] = '';
+      }
     }
   });
 
