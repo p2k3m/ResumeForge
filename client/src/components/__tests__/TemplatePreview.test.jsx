@@ -8,13 +8,15 @@ describe('TemplatePreview comparison support', () => {
   const resumeTemplates = [
     { id: 'modern', name: 'Modern', description: 'Modern resume style.' },
     { id: 'classic', name: 'Classic', description: 'Classic resume style.' },
-    { id: 'professional', name: 'Professional', description: 'Professional resume style.' }
+    { id: 'professional', name: 'Professional', description: 'Professional resume style.' },
+    { id: '2025', name: 'Future Vision 2025', description: 'Future Vision resume style.' }
   ]
 
   const coverTemplates = [
     { id: 'cover_modern', name: 'Modern Cover', description: 'Modern cover style.' },
     { id: 'cover_classic', name: 'Classic Cover', description: 'Classic cover style.' },
-    { id: 'cover_professional', name: 'Professional Cover', description: 'Professional cover style.' }
+    { id: 'cover_professional', name: 'Professional Cover', description: 'Professional cover style.' },
+    { id: 'cover_2025', name: 'Future Vision Cover', description: 'Future vision cover style.' }
   ]
 
   const renderComponent = (overrideProps = {}) =>
@@ -103,5 +105,33 @@ describe('TemplatePreview comparison support', () => {
       .getByText(/Thank you for your consideration/i)
       .parentElement
     expect(updatedFooter).toHaveClass('bg-amber-100')
+  })
+
+  it('maps seasonal 2025 resumes to the Future Vision cover styling', async () => {
+    render(
+      <TemplatePreview
+        resumeTemplateId="2025-q4-emerald"
+        resumeTemplateName="Future Vision 2025 – Emerald"
+        resumeTemplateDescription="Future vision resume variant."
+        coverTemplateId="cover_2025"
+        coverTemplateName="Future Vision Cover"
+        coverTemplateDescription="Future vision cover style."
+        availableResumeTemplates={resumeTemplates}
+        availableCoverTemplates={coverTemplates}
+        onResumeTemplateApply={jest.fn()}
+        onCoverTemplateApply={jest.fn()}
+        isCoverLinkedToResume
+      />
+    )
+
+    await screen.findByRole('heading', { name: 'Future Vision Cover' })
+
+    const coverPreviewCard = screen.getByText('Cover Letter Preview').closest('article')
+    expect(coverPreviewCard).toBeTruthy()
+
+    const footer = within(coverPreviewCard)
+      .getByText(/Thank you for your consideration/i)
+      .parentElement
+    expect(footer).toHaveClass('bg-slate-900')
   })
 })

@@ -16,8 +16,26 @@ export const canonicalizeTemplateId = (value) => {
   if (typeof value !== 'string') return ''
   const trimmed = value.trim().toLowerCase()
   if (!trimmed) return ''
-  const canonical = TEMPLATE_ALIASES[trimmed] || trimmed
-  return SUPPORTED_RESUME_TEMPLATE_IDS.has(canonical) ? canonical : ''
+
+  const normalized = trimmed.replace(/[\s_]+/g, '-')
+  const alias = TEMPLATE_ALIASES[normalized] || TEMPLATE_ALIASES[trimmed]
+  if (alias) {
+    return alias
+  }
+
+  if (SUPPORTED_RESUME_TEMPLATE_IDS.has(trimmed)) {
+    return trimmed
+  }
+
+  if (SUPPORTED_RESUME_TEMPLATE_IDS.has(normalized)) {
+    return normalized
+  }
+
+  if (normalized.startsWith('2025-')) {
+    return '2025'
+  }
+
+  return ''
 }
 
 export const BASE_TEMPLATE_OPTIONS = [
