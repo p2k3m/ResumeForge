@@ -9,6 +9,7 @@ import ProcessFlow from './components/ProcessFlow.jsx'
 import ChangeComparisonView from './components/ChangeComparisonView.jsx'
 import DashboardStage from './components/DashboardStage.jsx'
 import JobDescriptionPreview from './components/JobDescriptionPreview.jsx'
+import ChangeLogSummaryPanel from './components/ChangeLogSummaryPanel.jsx'
 import summaryIcon from './assets/icon-summary.svg'
 import skillsIcon from './assets/icon-skills.svg'
 import experienceIcon from './assets/icon-experience.svg'
@@ -25,6 +26,7 @@ import { normalizePdfBlob } from './utils/assetValidation.js'
 import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
 import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
+import { buildAggregatedChangeLogSummary } from './utils/changeLogSummaryShared.js'
 import { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
 
 export { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
@@ -2080,6 +2082,10 @@ function App() {
   const [selectionInsights, setSelectionInsights] = useState(null)
   const [improvementResults, setImprovementResults] = useState([])
   const [changeLog, setChangeLog] = useState([])
+  const changeLogSummaryData = useMemo(
+    () => buildAggregatedChangeLogSummary(changeLog),
+    [changeLog]
+  )
   const [activeDashboardStage, setActiveDashboardStage] = useState('score')
   const [activeImprovement, setActiveImprovement] = useState('')
   const [isBulkAccepting, setIsBulkAccepting] = useState(false)
@@ -7082,9 +7088,15 @@ function App() {
                 </span>
               }
             >
-              {changeLog.length > 0 ? (
-                <ul className="space-y-3">
-                  {changeLog.map((entry) => {
+              <div className="space-y-4">
+                {(Array.isArray(changeLogSummaryData?.highlights) && changeLogSummaryData.highlights.length > 0) ||
+                (Array.isArray(changeLogSummaryData?.categories) && changeLogSummaryData.categories.length > 0) ? (
+                  <ChangeLogSummaryPanel summary={changeLogSummaryData} />
+                ) : null}
+
+                {changeLog.length > 0 ? (
+                  <ul className="space-y-3">
+                    {changeLog.map((entry) => {
                     const historyEntry = resumeHistoryMap.get(entry.id)
                     const reverted = Boolean(entry.reverted)
                     const revertedAtLabel = (() => {
@@ -7161,6 +7173,7 @@ function App() {
                   Accept improvements to build your change history and compare every revision.
                 </div>
               )}
+              </div>
             </DashboardStage>
           )}
         </section>

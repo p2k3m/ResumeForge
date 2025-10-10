@@ -2043,6 +2043,7 @@ describe('change log persistence safeguards', () => {
   });
 
   test('persists category changelog details for ATS, skills, and related sections', async () => {
+    mockS3Send.mockClear();
     const updateCommands = [];
     mockDynamoSend.mockImplementation((cmd) => {
       switch (cmd.__type) {
@@ -2124,6 +2125,47 @@ describe('change log persistence safeguards', () => {
         reasons: ['Score impact: +4 pts versus the baseline upload.'],
       },
     ]);
+
+    expect(response.body.changeLogSummary).toEqual(
+      expect.objectContaining({
+        categories: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'skills',
+            added: expect.arrayContaining(['Kubernetes']),
+          }),
+        ]),
+        highlights: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'skills:added',
+            items: expect.arrayContaining(['Kubernetes']),
+          }),
+        ]),
+      })
+    );
+
+    const putCommands = mockS3Send.mock.calls.filter(
+      ([command]) => command.__type === 'PutObjectCommand'
+    );
+    const changeLogWrite = putCommands.find(([command]) => {
+      try {
+        const body = JSON.parse(command.input.Body);
+        return Array.isArray(body.entries);
+      } catch (err) {
+        return false;
+      }
+    });
+    expect(changeLogWrite).toBeDefined();
+    const storedPayload = JSON.parse(changeLogWrite[0].input.Body);
+    expect(storedPayload.summary).toEqual(
+      expect.objectContaining({
+        highlights: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'skills:added',
+            items: expect.arrayContaining(['Kubernetes']),
+          }),
+        ]),
+      })
+    );
 
     setupDefaultDynamoMock();
   });

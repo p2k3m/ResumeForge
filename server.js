@@ -35,6 +35,7 @@ import mammoth from 'mammoth';
 import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
 import mime from 'mime-types';
+import { buildAggregatedChangeLogSummary } from './client/src/utils/changeLogSummaryShared.js';
 import { MIMEType } from 'node:util';
 import { renderTemplatePdf } from './lib/pdf/index.js';
 import { backstopPdfTemplates as runPdfTemplateBackstop } from './lib/pdf/backstop.js';
@@ -10811,31 +10812,67 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
   return entries;
 }
 
+function resolveSessionChangeLogLocation({ bucket, key, jobId } = {}) {
+  const preferredBuckets = [
+    typeof bucket === 'string' ? bucket.trim() : '',
+    typeof process.env.SESSION_CHANGE_LOG_BUCKET === 'string'
+      ? process.env.SESSION_CHANGE_LOG_BUCKET.trim()
+      : '',
+    typeof process.env.S3_BUCKET === 'string' ? process.env.S3_BUCKET.trim() : '',
+    typeof process.env.S3_BUCKET_NAME === 'string' ? process.env.S3_BUCKET_NAME.trim() : '',
+  ];
+
+  let resolvedBucket = preferredBuckets.find((value) => value) || '';
+
+  let resolvedKey = typeof key === 'string' ? key.trim() : '';
+  if (!resolvedKey && jobId) {
+    const jobSegment = sanitizeJobSegment(jobId);
+    if (jobSegment) {
+      resolvedKey = `cv/${jobSegment}/logs/change-log.json`;
+    }
+  }
+
+  return { bucket: resolvedBucket, key: resolvedKey };
+}
+
 async function writeSessionChangeLog({
   s3,
   bucket,
   key,
   jobId,
   entries,
+  summary,
 }) {
-  if (!s3 || !bucket || !key) {
+  if (!s3) {
     return null;
   }
+
+  const { bucket: resolvedBucket, key: resolvedKey } = resolveSessionChangeLogLocation({
+    bucket,
+    key,
+    jobId,
+  });
+
+  if (!resolvedBucket || !resolvedKey) {
+    return null;
+  }
+  const normalizedSummary = normalizeChangeLogSummaryPayload(summary);
   const payload = {
     version: 1,
     jobId,
     updatedAt: new Date().toISOString(),
     entries: Array.isArray(entries) ? entries : [],
+    summary: normalizedSummary,
   };
   await s3.send(
     new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
+      Bucket: resolvedBucket,
+      Key: resolvedKey,
       Body: JSON.stringify(payload, null, 2),
       ContentType: 'application/json',
     })
   );
-  return payload;
+  return { payload, bucket: resolvedBucket, key: resolvedKey };
 }
 
 function buildDocumentFileBaseName({ type, templateId, variant }) {
@@ -13367,6 +13404,115 @@ function serializeChangeLogEntries(entries = []) {
     .filter(Boolean);
 }
 
+function normalizeChangeLogSummaryPayload(summary) {
+  const defaultTotals = {
+    entries: 0,
+    categories: 0,
+    highlights: 0,
+    addedItems: 0,
+    removedItems: 0,
+  };
+
+  if (!summary || typeof summary !== 'object') {
+    return {
+      categories: [],
+      highlights: [],
+      totals: { ...defaultTotals },
+    };
+  }
+
+  const categories = Array.isArray(summary.categories)
+    ? summary.categories
+        .map((category) => {
+          if (!category || typeof category !== 'object') {
+            return null;
+          }
+          const key = normalizeChangeLogString(category.key);
+          const label = normalizeChangeLogString(category.label);
+          const description = normalizeChangeLogString(category.description);
+          const added = normalizeChangeLogList(category.added);
+          const removed = normalizeChangeLogList(category.removed);
+          const reasons = normalizeChangeLogList(category.reasons);
+          if (!key && !label && !description && !added.length && !removed.length && !reasons.length) {
+            return null;
+          }
+          const totalAdded = Number.isFinite(category.totalAdded)
+            ? Number(category.totalAdded)
+            : added.length;
+          const totalRemoved = Number.isFinite(category.totalRemoved)
+            ? Number(category.totalRemoved)
+            : removed.length;
+          const totalReasons = Number.isFinite(category.totalReasons)
+            ? Number(category.totalReasons)
+            : reasons.length;
+          const totalChanges = Number.isFinite(category.totalChanges)
+            ? Number(category.totalChanges)
+            : added.length + removed.length;
+          return {
+            key,
+            label,
+            description,
+            added,
+            removed,
+            reasons,
+            totalAdded,
+            totalRemoved,
+            totalReasons,
+            totalChanges,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  const highlights = Array.isArray(summary.highlights)
+    ? summary.highlights
+        .map((highlight) => {
+          if (!highlight || typeof highlight !== 'object') {
+            return null;
+          }
+          const key = normalizeChangeLogString(highlight.key);
+          const label = normalizeChangeLogString(highlight.label);
+          const type = normalizeChangeLogString(highlight.type);
+          const category = normalizeChangeLogString(highlight.category);
+          const items = normalizeChangeLogList(highlight.items);
+          const count = Number.isFinite(highlight.count) ? Number(highlight.count) : items.length;
+          if (!key && !label && !type && !category && !items.length) {
+            return null;
+          }
+          return {
+            key,
+            label,
+            type,
+            category,
+            items,
+            count,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  const totalsSource = summary.totals && typeof summary.totals === 'object' ? summary.totals : {};
+  const totals = {
+    entries: Number.isFinite(totalsSource.entries)
+      ? Number(totalsSource.entries)
+      : categories.length,
+    categories: Number.isFinite(totalsSource.categories)
+      ? Number(totalsSource.categories)
+      : categories.length,
+    highlights: Number.isFinite(totalsSource.highlights)
+      ? Number(totalsSource.highlights)
+      : highlights.length,
+    addedItems: Number.isFinite(totalsSource.addedItems)
+      ? Number(totalsSource.addedItems)
+      : categories.reduce((sum, category) => sum + category.added.length, 0),
+    removedItems: Number.isFinite(totalsSource.removedItems)
+      ? Number(totalsSource.removedItems)
+      : categories.reduce((sum, category) => sum + category.removed.length, 0),
+  };
+
+  return { categories, highlights, totals };
+}
+
 function cloneSerializedChangeLogEntries(serializedEntries = []) {
   if (!Array.isArray(serializedEntries)) {
     return [];
@@ -14395,7 +14541,7 @@ async function generateEnhancedDocumentsResponse({
   });
 
   try {
-  const sessionChangeLogKey = deriveSessionChangeLogKey({
+  let sessionChangeLogKey = deriveSessionChangeLogKey({
     changeLogKey: existingRecord?.sessionChangeLogKey?.S,
     originalUploadKey,
   });
@@ -14425,6 +14571,10 @@ async function generateEnhancedDocumentsResponse({
   const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
     ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
     : [];
+  const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
+    normalizedChangeLogEntries
+  );
+  const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
 
   const generationRunSegment =
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
@@ -15578,6 +15728,7 @@ async function generateEnhancedDocumentsResponse({
         jobId,
         generatedAt: artifactTimestamp,
         entries: normalizedChangeLogEntries,
+        summary: changeLogSummary,
       },
     },
   ];
@@ -15615,31 +15766,36 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  if (sessionChangeLogKey) {
-    try {
-      await writeSessionChangeLog({
-        s3,
-        bucket,
-        key: sessionChangeLogKey,
-        jobId,
-        entries: normalizedChangeLogEntries,
-      });
+  try {
+    const persistedChangeLog = await writeSessionChangeLog({
+      s3,
+      bucket,
+      key: sessionChangeLogKey,
+      jobId,
+      entries: normalizedChangeLogEntries,
+      summary: changeLogSummary,
+    });
+    if (persistedChangeLog?.key) {
+      sessionChangeLogKey = persistedChangeLog.key;
+    }
+    const changeLogBucket = persistedChangeLog?.bucket || bucket;
+    if (persistedChangeLog && logKey) {
       await logEvent({
         s3,
-        bucket,
+        bucket: changeLogBucket,
         key: logKey,
         jobId,
         event: 'session_change_log_synced',
         metadata: { entries: normalizedChangeLogEntries.length },
       });
-    } catch (err) {
-      logStructured('warn', 'session_change_log_write_failed', {
-        ...logContext,
-        bucket,
-        key: sessionChangeLogKey,
-        error: serializeError(err),
-      });
     }
+  } catch (err) {
+    logStructured('warn', 'session_change_log_write_failed', {
+      ...logContext,
+      bucket,
+      key: sessionChangeLogKey,
+      error: serializeError(err),
+    });
   }
 
   const textArtifactTypes = Object.keys(textArtifactKeys);
@@ -16116,6 +16272,7 @@ async function generateEnhancedDocumentsResponse({
     selectionProbabilityAfter: selectionInsights?.after?.probability ?? selectionInsights?.probability ?? null,
     selectionInsights,
     changeLog: normalizedChangeLogEntries,
+    changeLogSummary,
     templateContext: {
       template1,
       template2,
@@ -16923,6 +17080,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   const normalizedChangeLogEntries = updatedChangeLog
     .map((entry) => normalizeChangeLogEntryInput(entry))
     .filter(Boolean);
+  const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
+    normalizedChangeLogEntries
+  );
+  const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
 
   const serializedChangeLogEntries = serializeChangeLogEntries(
     normalizedChangeLogEntries
@@ -16939,14 +17100,29 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     sessionChangeLogKey = deriveSessionChangeLogKey({ originalUploadKey });
   }
 
+  const resolvedSessionLocation = resolveSessionChangeLogLocation({
+    bucket: storedBucket,
+    key: sessionChangeLogKey,
+    jobId,
+  });
+  storedBucket = resolvedSessionLocation.bucket;
+  sessionChangeLogKey = resolvedSessionLocation.key;
+
   try {
-    await writeSessionChangeLog({
+    const persistedChangeLog = await writeSessionChangeLog({
       s3,
       bucket: storedBucket,
       key: sessionChangeLogKey,
       jobId,
       entries: normalizedChangeLogEntries,
+      summary: changeLogSummary,
     });
+    if (persistedChangeLog?.bucket) {
+      storedBucket = persistedChangeLog.bucket;
+    }
+    if (persistedChangeLog?.key) {
+      sessionChangeLogKey = persistedChangeLog.key;
+    }
     if (logKey) {
       await logEvent({
         s3,
@@ -17018,7 +17194,11 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     );
   }
 
-  return res.json({ success: true, changeLog: normalizedChangeLogEntries });
+  return res.json({
+    success: true,
+    changeLog: normalizedChangeLogEntries,
+    changeLogSummary,
+  });
 });
 
 app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {

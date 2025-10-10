@@ -1,4 +1,4 @@
-const CATEGORY_METADATA = {
+export const CATEGORY_METADATA = {
   ats: {
     key: 'ats',
     label: 'ATS',
@@ -31,7 +31,7 @@ const CATEGORY_METADATA = {
   }
 }
 
-const CATEGORY_ORDER = ['ats', 'skills', 'designation', 'tasks', 'highlights', 'certs']
+export const CATEGORY_ORDER = ['ats', 'skills', 'designation', 'tasks', 'highlights', 'certs']
 
 const SECTION_CATEGORY_MATCHERS = [
   { keys: ['skills'], pattern: /skill|keyword/i },
