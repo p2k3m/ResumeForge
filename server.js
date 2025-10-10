@@ -17465,9 +17465,233 @@ app.post(
         message,
         hasDetails ? details : undefined
       );
-    }
+  }
   }
 );
+
+app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
+  captureUserContext(req, res);
+  const jobId = res.locals.jobId;
+  const requestId = res.locals.requestId;
+  const logContext = { requestId, jobId, route: 'render-cover-letter' };
+
+  const rawText = typeof req.body.text === 'string' ? req.body.text : '';
+  const text = rawText.replace(/\r\n/g, '\n');
+  if (!text.trim()) {
+    return sendError(
+      res,
+      400,
+      'COVER_LETTER_TEXT_REQUIRED',
+      'text is required to render a cover letter PDF.',
+      { field: 'text' }
+    );
+  }
+
+  const requestedTemplateCandidates = [
+    req.body.templateId,
+    req.body.template,
+    req.body.coverTemplate,
+    req.body.coverTemplateId,
+    req.body.template1,
+    req.body.template2,
+    ...(Array.isArray(req.body.coverTemplates) ? req.body.coverTemplates : []),
+    ...(Array.isArray(req.body.templates) ? req.body.templates : [])
+  ].filter((value) => typeof value === 'string' && value.trim());
+
+  const canonicalRequestedTemplate = canonicalizeCoverTemplateId(
+    requestedTemplateCandidates[0] || '',
+    CL_TEMPLATES[0]
+  );
+
+  const templateCandidates = uniqueValidCoverTemplates([
+    canonicalRequestedTemplate,
+    ...requestedTemplateCandidates,
+    ...CL_TEMPLATES
+  ]);
+  if (!templateCandidates.length) {
+    templateCandidates.push(CL_TEMPLATES[0]);
+  }
+
+  const variantRaw =
+    typeof req.body.variant === 'string' ? req.body.variant.trim() : '';
+  const parsedLetterIndex = Number.parseInt(req.body.letterIndex, 10);
+  const letterIndex = Number.isFinite(parsedLetterIndex) && parsedLetterIndex > 0
+    ? parsedLetterIndex
+    : variantRaw === 'cover_letter2'
+      ? 2
+      : 1;
+
+  const applicantNameInput =
+    typeof req.body.applicantName === 'string' ? req.body.applicantName : '';
+  const jobTitleInput =
+    typeof req.body.jobTitle === 'string' ? req.body.jobTitle : '';
+  const jobDescriptionInput =
+    typeof req.body.jobDescription === 'string' ? req.body.jobDescription : '';
+  const jobSkillsInput = Array.isArray(req.body.jobSkills)
+    ? req.body.jobSkills.filter((skill) => typeof skill === 'string')
+    : [];
+
+  const coverLetterFieldsInput =
+    req.body.coverLetterFields && typeof req.body.coverLetterFields === 'object'
+      ? req.body.coverLetterFields
+      : null;
+  const contactDetailsInput =
+    req.body.contactDetails && typeof req.body.contactDetails === 'object'
+      ? req.body.contactDetails
+      : {};
+
+  let coverLetterFields = coverLetterFieldsInput;
+  if (!coverLetterFields) {
+    coverLetterFields = mapCoverLetterFields({
+      text,
+      contactDetails: contactDetailsInput,
+      jobTitle: jobTitleInput,
+      jobDescription: jobDescriptionInput,
+      jobSkills: jobSkillsInput,
+      applicantName: applicantNameInput,
+      letterIndex
+    });
+  }
+
+  const contactLines = Array.isArray(coverLetterFields?.contact?.lines)
+    ? coverLetterFields.contact.lines.filter((line) => typeof line === 'string')
+    : [];
+  const contactDetails = {
+    contactLines,
+    email:
+      typeof coverLetterFields?.contact?.email === 'string'
+        ? coverLetterFields.contact.email
+        : '',
+    phone:
+      typeof coverLetterFields?.contact?.phone === 'string'
+        ? coverLetterFields.contact.phone
+        : '',
+    linkedin:
+      typeof coverLetterFields?.contact?.linkedin === 'string'
+        ? coverLetterFields.contact.linkedin
+        : '',
+    cityState:
+      typeof coverLetterFields?.contact?.location === 'string'
+        ? coverLetterFields.contact.location
+        : ''
+  };
+
+  const applicantName =
+    (typeof applicantNameInput === 'string' && applicantNameInput.trim()) ||
+    (typeof coverLetterFields?.closing?.signature === 'string'
+      ? coverLetterFields.closing.signature.trim()
+      : '') ||
+    extractName(text) ||
+    'Candidate';
+  const jobTitle =
+    (typeof jobTitleInput === 'string' && jobTitleInput.trim()) ||
+    (typeof coverLetterFields?.job?.title === 'string'
+      ? coverLetterFields.job.title.trim()
+      : '');
+  const jobSkills = jobSkillsInput.length
+    ? jobSkillsInput
+    : Array.isArray(coverLetterFields?.job?.skills)
+      ? coverLetterFields.job.skills.filter((skill) => typeof skill === 'string')
+      : [];
+
+  const enhancementTokenMap =
+    req.body.enhancementTokenMap && typeof req.body.enhancementTokenMap === 'object'
+      ? req.body.enhancementTokenMap
+      : {};
+
+  const baseTemplateOptions = {
+    jobSkills,
+    linkedinExperience: [],
+    resumeEducation: [],
+    linkedinEducation: [],
+    resumeCertifications: [],
+    linkedinCertifications: [],
+    credlyCertifications: [],
+    credlyProfileUrl: '',
+    jobTitle,
+    contactLines,
+    contactDetails,
+    email: contactDetails.email,
+    phone: contactDetails.phone,
+    cityState: contactDetails.cityState,
+    linkedinProfileUrl: contactDetails.linkedin,
+    templateParams: {},
+    skipRequiredSections: true,
+    enhancementTokenMap
+  };
+
+  try {
+    const { buffer, template: resolvedTemplate } = await generatePdfWithFallback({
+      documentType: 'cover_letter',
+      templates: templateCandidates,
+      inputText: text,
+      generativeModel,
+      allowPlainFallback: true,
+      logContext: {
+        ...logContext,
+        documentType: 'cover_letter',
+        requestedTemplate: canonicalRequestedTemplate,
+        outputName: variantRaw || `cover_letter${letterIndex}`
+      },
+      buildOptionsForTemplate: () => ({
+        ...baseTemplateOptions,
+        templateParams: {
+          ...(baseTemplateOptions.templateParams || {}),
+          contact: {
+            email: contactDetails.email,
+            phone: contactDetails.phone,
+            linkedin: contactDetails.linkedin,
+            location: contactDetails.cityState,
+            lines: contactLines
+          },
+          name: applicantName,
+          jobTitle
+        }
+      })
+    });
+
+    const templateDisplayName = formatCoverTemplateDisplayName(resolvedTemplate);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileBaseName = buildDocumentFileBaseName({
+      type: 'cover_letter',
+      templateId: resolvedTemplate,
+      variant: variantRaw || `cover-letter${letterIndex}`
+    });
+    const downloadName = `${fileBaseName || 'cover_letter'}-${timestamp}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${downloadName}"`
+    );
+    res.setHeader('X-Template-Id', resolvedTemplate);
+    res.setHeader('X-Template-Name', templateDisplayName);
+
+    logStructured('info', 'cover_letter_pdf_rendered', {
+      ...logContext,
+      template: resolvedTemplate,
+      requestedTemplate: canonicalRequestedTemplate,
+      templateCandidates
+    });
+
+    return res.status(200).send(buffer);
+  } catch (err) {
+    logStructured('error', 'cover_letter_pdf_render_failed', {
+      ...logContext,
+      templateCandidates,
+      error: serializeError(err)
+    });
+    return sendError(
+      res,
+      500,
+      'DOCUMENT_GENERATION_FAILED',
+      'Unable to generate the cover letter PDF.',
+      { source: 'lambda' }
+    );
+  }
+});
 
 app.post('/api/rescore-improvement', assignJobContext, async (req, res) => {
   const jobId = req.jobId || createIdentifier();
