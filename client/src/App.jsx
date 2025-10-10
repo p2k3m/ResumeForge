@@ -4178,6 +4178,14 @@ function App() {
         ? 'text-rose-500 cursor-not-allowed'
         : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
     }`
+    const downloadLinkAriaLabel = [
+      downloadLinkLabel,
+      sessionLabel ? `Session ${sessionLabel}` : '',
+      generatedAtLabel ? `Generated ${generatedAtLabel}` : '',
+      expiryLabel ? `Expires ${expiryLabel}` : ''
+    ]
+      .filter(Boolean)
+      .join('. ')
     const downloadButtonClass = `${buttonClass} ${
       isCoverLetter
         ? isCoverLetterDownloadDisabled
@@ -4297,6 +4305,7 @@ function App() {
               }}
               className={downloadLinkClass}
               aria-disabled={directDownloadDisabled ? 'true' : undefined}
+              aria-label={downloadLinkAriaLabel || undefined}
               target={directDownloadDisabled ? undefined : '_blank'}
               rel={directDownloadDisabled ? undefined : 'noopener noreferrer'}
               download={directDownloadDisabled ? undefined : directDownloadFileName || undefined}
@@ -4314,6 +4323,23 @@ function App() {
             >
               {downloadLinkLabel}
             </a>
+            {(sessionLabel || generatedAtLabel) && (
+              <div className="flex flex-col items-start gap-0 sm:items-end">
+                {sessionLabel && (
+                  <p className="text-[11px] font-mono uppercase tracking-tight text-purple-600/90">
+                    Session {sessionLabel}
+                  </p>
+                )}
+                {generatedAtLabel && (
+                  <time
+                    dateTime={generatedAtIso || undefined}
+                    className="text-[11px] font-medium text-purple-500"
+                  >
+                    Generated {generatedAtLabel}
+                  </time>
+                )}
+              </div>
+            )}
             {expiryLabel && !isExpired && (
               <p className="text-xs text-purple-600">Available until {expiryLabel}</p>
             )}
