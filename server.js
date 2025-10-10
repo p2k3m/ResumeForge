@@ -10883,10 +10883,8 @@ async function writeSessionChangeLog({
     updatedAt: new Date().toISOString(),
     entries: normalizedEntries,
     summary: normalizedSummary,
+    dismissedEntries: normalizedDismissedEntries,
   };
-  if (normalizedDismissedEntries.length) {
-    payload.dismissedEntries = normalizedDismissedEntries;
-  }
   await s3.send(
     new PutObjectCommand({
       Bucket: resolvedBucket,
@@ -17159,7 +17157,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     }
     updatedChangeLog = existingChangeLogEntries.filter((entry) => entry.id !== entryId);
     const removedEntry = existingChangeLogEntries.find((entry) => entry.id === entryId);
-    const normalizedRemovedEntry = normalizeChangeLogEntryInput(removedEntry);
+    let normalizedRemovedEntry = normalizeChangeLogEntryInput(removedEntry);
+    if (!normalizedRemovedEntry && entryId) {
+      normalizedRemovedEntry = normalizeChangeLogEntryInput({ id: entryId });
+    }
     if (normalizedRemovedEntry) {
       const rejectionTimestamp = nowIso;
       dismissedChangeLogEntries = [
