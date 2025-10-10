@@ -266,7 +266,17 @@ const METRIC_IMPROVEMENT_PRESETS = [
   }
 ]
 
-function summariseItems(items, { limit = 5 } = {}) {
+function buildActionDecorator(actionBuilder) {
+  return (value) => {
+    const text = typeof value === 'string' ? value.trim() : String(value || '').trim()
+    if (!text) return ''
+    const action = typeof actionBuilder === 'function' ? actionBuilder(text) : ''
+    const actionText = typeof action === 'string' ? action.trim() : ''
+    return actionText ? `${text} (${actionText})` : text
+  }
+}
+
+function summariseItems(items, { limit = 5, decorate } = {}) {
   const list = Array.isArray(items)
     ? items
         .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
@@ -274,11 +284,19 @@ function summariseItems(items, { limit = 5 } = {}) {
     : []
   if (!list.length) return ''
   const unique = Array.from(new Set(list))
-  if (unique.length <= limit) {
-    return unique.join(', ')
+  const decorated =
+    typeof decorate === 'function'
+      ? unique
+          .map((value) => decorate(value))
+          .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
+          .filter(Boolean)
+      : unique
+  if (!decorated.length) return ''
+  if (decorated.length <= limit) {
+    return decorated.join(', ')
   }
-  const shown = unique.slice(0, limit).join(', ')
-  const remaining = unique.length - limit
+  const shown = decorated.slice(0, limit).join(', ')
+  const remaining = decorated.length - limit
   return `${shown}, and ${remaining} more`
 }
 
@@ -4805,7 +4823,10 @@ function App() {
         key: 'missing-skills',
         tone: 'warning',
         title: 'Missing JD skills',
-        message: `Add ${summariseItems(missingSkills, { limit: 6 })} to mirror the JD keywords.`
+        message: `Add ${summariseItems(missingSkills, {
+          limit: 6,
+          decorate: buildActionDecorator((skill) => `Practice ${skill}`)
+        })} to mirror the JD keywords.`
       })
     }
 
@@ -4831,7 +4852,10 @@ function App() {
         key: 'missing-experience',
         tone: 'warning',
         title: 'Experience gaps',
-        message: `Cover stories about ${summariseItems(experienceMissing, { limit: 4 })} to prove the required experience.`
+        message: `Cover stories about ${summariseItems(experienceMissing, {
+          limit: 4,
+          decorate: buildActionDecorator((item) => `Rehearse story about ${item}`)
+        })} to prove the required experience.`
       })
     }
 
@@ -4841,7 +4865,10 @@ function App() {
         key: 'missing-tasks',
         tone: 'warning',
         title: 'Task coverage gaps',
-        message: `Add responsibilities such as ${summariseItems(tasksMissing, { limit: 4 })} to mirror JD expectations.`
+        message: `Add responsibilities such as ${summariseItems(tasksMissing, {
+          limit: 4,
+          decorate: buildActionDecorator((item) => `Prepare example covering ${item}`)
+        })} to mirror JD expectations.`
       })
     }
 
@@ -4851,7 +4878,10 @@ function App() {
         key: 'missing-highlights',
         tone: 'info',
         title: 'Missing highlights',
-        message: `Refresh your summary to phase out ${summariseItems(highlightsMissing, { limit: 4 })} and spotlight JD-aligned wins.`
+        message: `Refresh your summary to phase out ${summariseItems(highlightsMissing, {
+          limit: 4,
+          decorate: buildActionDecorator((item) => `Trim ${item}`)
+        })} and spotlight JD-aligned wins.`
       })
     }
 
@@ -4860,7 +4890,10 @@ function App() {
         key: 'missing-certificates',
         tone: 'warning',
         title: 'Certification gaps',
-        message: `List certifications such as ${summariseItems(missingCertificateNames, { limit: 4 })} to satisfy JD requirements.`
+        message: `List certifications such as ${summariseItems(missingCertificateNames, {
+          limit: 4,
+          decorate: buildActionDecorator((cert) => `Add credential ${cert}`)
+        })} to satisfy JD requirements.`
       })
     }
 
@@ -4870,7 +4903,10 @@ function App() {
         key: 'added-skills',
         tone: 'success',
         title: 'Highlights added',
-        message: `Enhanced drafts now surface ${summariseItems(addedSkills, { limit: 5 })}. Review them before the interview.`
+        message: `Enhanced drafts now surface ${summariseItems(addedSkills, {
+          limit: 5,
+          decorate: buildActionDecorator((skill) => `Practice ${skill}`)
+        })}. Review them before the interview.`
       })
     }
 
@@ -4889,7 +4925,10 @@ function App() {
         key: 'cert-suggestions',
         tone: 'info',
         title: 'Recommended certifications',
-        message: `Consider adding ${summariseItems(recommendedCertificateNames, { limit: 4 })} to strengthen the match.`
+        message: `Consider adding ${summariseItems(recommendedCertificateNames, {
+          limit: 4,
+          decorate: buildActionDecorator((cert) => `Add credential ${cert}`)
+        })} to strengthen the match.`
       })
     }
 
