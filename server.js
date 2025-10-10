@@ -11905,6 +11905,18 @@ const COVER_LETTER_MOTIVATION_KEYWORDS = Object.freeze([
 
 const COVER_LETTER_CLOSING_PATTERN =
   /^(?:thank you(?: for (?:your )?(?:time|consideration))?|thanks(?: so much)?|sincerely|best(?: regards| wishes)?|regards|kind regards|warm regards|with appreciation|with gratitude|respectfully|yours truly|yours faithfully|yours sincerely)/i;
+const COVER_LETTER_PLACEHOLDER_PATTERNS = Object.freeze([
+  /\b(?:lorem ipsum|dummy text|sample text|placeholder)\b/i,
+  /\b(?:to be determined|tbd|fill in|fill out|type here)\b/i,
+  /\b(?:insert|replace)\b[^.\n]*\b(?:here|placeholder|text|details|information)\b/i,
+  /\badd\b[^.\n]*\b(?:details here|information here)\b/i,
+  /\[(?:insert|add|replace|type|fill)[^\]]*\]/i,
+  /<(?:insert|add|replace|type|fill)[^>]*>/i,
+  /{{(?!RF_ENH)[^}]+}}/i,
+  /<<[^>]+>>/i,
+  /\b(?:your (?:name|title|company|contact) here)\b/i,
+  /\bInformation not provided\b/i,
+]);
 
 function summarizeJobDescriptionForCover(jobDescription = '', maxLength = 360) {
   if (typeof jobDescription !== 'string') {
@@ -12223,6 +12235,65 @@ function mapCoverLetterFields({
       letterIndex,
     },
   };
+}
+
+function auditCoverLetterStructure(
+  text = '',
+  {
+    contactDetails = {},
+    jobTitle = '',
+    jobDescription = '',
+    jobSkills = [],
+    applicantName = '',
+    letterIndex = 1,
+  } = {}
+) {
+  const normalizedText = typeof text === 'string' ? text.replace(/\r\n/g, '\n').trim() : '';
+  const issues = [];
+
+  if (!normalizedText) {
+    return { valid: false, issues: ['empty'] };
+  }
+
+  if (COVER_LETTER_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(normalizedText))) {
+    issues.push('placeholder_detected');
+  }
+
+  const fields = mapCoverLetterFields({
+    text: normalizedText,
+    contactDetails,
+    jobTitle,
+    jobDescription,
+    jobSkills,
+    applicantName,
+    letterIndex,
+  });
+
+  const metadata = fields?.metadata || {};
+  if (!metadata.hasGreeting) {
+    issues.push('missing_greeting');
+  }
+  if (!metadata.hasClosing) {
+    issues.push('missing_closing');
+  }
+  if (!metadata.bodyParagraphCount) {
+    issues.push('missing_body');
+  }
+
+  const bodyParagraphs = Array.isArray(fields?.body) ? fields.body : [];
+  const bodyHasPlaceholder = bodyParagraphs.some((paragraph) =>
+    COVER_LETTER_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(paragraph))
+  );
+  if (bodyHasPlaceholder && !issues.includes('placeholder_detected')) {
+    issues.push('placeholder_detected');
+  }
+
+  const contactLines = Array.isArray(fields?.contact?.lines) ? fields.contact.lines : [];
+  if (contactLines.length && !contactLines.some((line) => typeof line === 'string' && line.trim())) {
+    issues.push('empty_contact_block');
+  }
+
+  return { valid: issues.length === 0, issues, fields };
 }
 
 function cleanEmployerName(value = '') {
@@ -15837,6 +15908,33 @@ async function generateEnhancedDocumentsResponse({
   }
 
   coverData = normalizedCoverData;
+
+  const structurallyInvalidLetters = [];
+  COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
+    const value = typeof coverData[key] === 'string' ? coverData[key] : '';
+    if (!value.trim()) {
+      return;
+    }
+    const auditResult = auditCoverLetterStructure(value, {
+      contactDetails: coverContext.contactDetails,
+      jobTitle: coverContext.jobTitle,
+      jobDescription,
+      jobSkills,
+      applicantName,
+      letterIndex: index + 1,
+    });
+    if (!auditResult.valid) {
+      structurallyInvalidLetters.push({ key, issues: auditResult.issues });
+      coverData[key] = '';
+    }
+  });
+
+  if (structurallyInvalidLetters.length) {
+    logStructured('warn', 'generation_cover_letters_structural_issues', {
+      ...logContext,
+      invalidLetters: structurallyInvalidLetters,
+    });
+  }
 
   const fallbackLetters = activeCoverLetterFallbackBuilder({
     applicantName,

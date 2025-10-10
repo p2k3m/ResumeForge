@@ -1569,6 +1569,102 @@ describe('/api/generate-enhanced-docs', () => {
     primeDefaultGeminiResponses();
   });
 
+  test('audits cover letters for placeholders and applies fallback', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary paragraph'],
+              experience: ['Delivered scalable APIs.'],
+              education: [],
+              certifications: [],
+              skills: ['Node.js'],
+              projects: [],
+              projectSnippet: 'Improved deployment speed.',
+              latestRoleTitle: 'Senior Engineer',
+              latestRoleDescription: 'Led engineering initiatives.',
+              mandatorySkills: ['Node.js'],
+              addedSkills: [],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Designed observability tooling.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              cover_letter1: [
+                'Jordan Smith',
+                'Email: jordan@example.com',
+                'Dear Hiring Manager,',
+                '[Insert your achievements here]',
+                'Sincerely,',
+                '[Your Name]',
+              ].join('\n\n'),
+              cover_letter2: [
+                'Jordan Smith',
+                'Email: jordan@example.com',
+                'Dear Hiring Manager,',
+                'I am ready to contribute to the team immediately.',
+                'Sincerely,',
+                'Jordan Smith',
+              ].join('\n\n'),
+            }),
+        },
+      });
+
+    const res = await request(app)
+      .post('/api/generate-enhanced-docs')
+      .send({
+        jobId: 'job-790',
+        resumeText: [
+          'Jordan Smith',
+          'Email: jordan@example.com',
+          'Phone: 555-123-4567',
+          'LinkedIn: https://linkedin.com/in/jordansmith',
+          'Experience',
+          'Senior Engineer at Stellar Tech (2021-2023)',
+          '- Delivered solutions',
+        ].join('\n'),
+        originalResumeText: [
+          'Jordan Smith',
+          'Email: jordan@example.com',
+          'Phone: 555-123-4567',
+          'LinkedIn: https://linkedin.com/in/jordansmith',
+          'Experience',
+          'Senior Engineer at Stellar Tech (2021-2023)',
+          '- Delivered solutions',
+        ].join('\n'),
+        jobDescriptionText: MANUAL_JOB_DESCRIPTION,
+        jobSkills: ['Node.js'],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.coverLetterStatus).toEqual({
+      fallbackApplied: ['cover_letter1'],
+      unavailable: [],
+    });
+
+    const cover1 = res.body.urls.find((entry) => entry.type === 'cover_letter1');
+    expect(cover1).toBeTruthy();
+    expect(cover1.rawText).not.toContain('[Insert your achievements here]');
+    expect(cover1.rawText).toMatch(/Thank you for considering my application/i);
+
+    const cover2 = res.body.urls.find((entry) => entry.type === 'cover_letter2');
+    expect(cover2).toBeTruthy();
+    expect(cover2.rawText).toContain('I am ready to contribute to the team immediately.');
+
+    process.env.NODE_ENV = originalEnv;
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
+  });
+
   test('surfaces message when cover letters remain unavailable', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
