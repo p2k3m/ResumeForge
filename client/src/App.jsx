@@ -4962,6 +4962,42 @@ function App() {
       ? Math.min(Math.max(Math.round(selectionInsights.jobFitAverage), 0), 100)
       : null
 
+  const learningResources = useMemo(() => {
+    if (!Array.isArray(selectionInsights?.learningResources)) {
+      return []
+    }
+    return selectionInsights.learningResources
+      .map((entry) => {
+        const skill = typeof entry?.skill === 'string' ? entry.skill.trim() : ''
+        if (!skill) {
+          return null
+        }
+        const resources = Array.isArray(entry?.resources)
+          ? entry.resources
+              .map((item) => {
+                if (!item || typeof item !== 'object') {
+                  return null
+                }
+                const url = typeof item.url === 'string' ? item.url.trim() : ''
+                if (!url) {
+                  return null
+                }
+                const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url
+                const description = typeof item.description === 'string' ? item.description.trim() : ''
+                return { title, url, description }
+              })
+              .filter(Boolean)
+          : []
+        if (resources.length === 0) {
+          return null
+        }
+        return { skill, resources }
+      })
+      .filter(Boolean)
+  }, [selectionInsights])
+
+  const hasLearningResources = learningResources.length > 0
+
   const resumeComparisonData = useMemo(() => {
     const baselineRaw = typeof baselineResumeText === 'string' ? baselineResumeText : ''
     const improvedRaw = typeof resumeText === 'string' ? resumeText : ''
@@ -7251,6 +7287,43 @@ function App() {
               {selectionInsights.summary ||
                 'Your chances of selection have increased. Prepare for the interview and learn these skills!'}
             </p>
+            {hasLearningResources && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-emerald-800">Learning sprint</h3>
+                  <p className="mt-1 text-xs text-emerald-700">
+                    Follow these quick resources to close the remaining skill gaps before interviews.
+                  </p>
+                </div>
+                <ul className="mt-3 space-y-3">
+                  {learningResources.map((entry) => (
+                    <li
+                      key={entry.skill}
+                      className="rounded-xl border border-emerald-200 bg-white/90 p-3 shadow-sm"
+                    >
+                      <p className="text-sm font-semibold text-emerald-800">{entry.skill}</p>
+                      <ul className="mt-2 space-y-2">
+                        {entry.resources.map((resource, index) => (
+                          <li key={`${entry.skill}-${index}`} className="text-sm text-emerald-700">
+                            <a
+                              href={resource.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                            >
+                              {resource.title}
+                            </a>
+                            {resource.description && (
+                              <p className="text-xs text-emerald-600">{resource.description}</p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {jobFitScores.length > 0 && (
               <div className="space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

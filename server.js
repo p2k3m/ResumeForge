@@ -203,6 +203,148 @@ let customChromiumLauncher;
 let sharedGenerativeModelPromise;
 let sharedWordExtractor;
 
+const LEARNING_RESOURCE_LIMITS = Object.freeze({
+  skills: 3,
+  linksPerSkill: 3,
+});
+
+function normalizeLearningSkillList(skills = [], limit = LEARNING_RESOURCE_LIMITS.skills) {
+  if (!Array.isArray(skills)) {
+    return [];
+  }
+  const unique = [];
+  const seen = new Set();
+  skills.forEach((skill) => {
+    if (typeof skill !== 'string') {
+      return;
+    }
+    const trimmed = skill.trim();
+    if (!trimmed) {
+      return;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    unique.push(trimmed);
+  });
+  return unique.slice(0, Math.max(1, limit));
+}
+
+function sanitizeLearningResourceEntries(entries, { missingSkills = [] } = {}) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  const allowedSkills = normalizeLearningSkillList(missingSkills);
+  const allowedSet = new Set(allowedSkills.map((skill) => skill.toLowerCase()));
+  const result = [];
+  const seenSkills = new Set();
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rawSkill = typeof entry.skill === 'string' ? entry.skill.trim() : '';
+    if (!rawSkill) continue;
+    const skillKey = rawSkill.toLowerCase();
+    if (allowedSet.size > 0 && !allowedSet.has(skillKey)) continue;
+    if (seenSkills.has(skillKey)) continue;
+
+    const links = Array.isArray(entry.resources || entry.links) ? entry.resources || entry.links : [];
+    const sanitizedLinks = [];
+    for (const link of links) {
+      if (!link || typeof link !== 'object') continue;
+      const url = typeof link.url === 'string' ? link.url.trim() : '';
+      if (!/^https?:\/\//i.test(url)) continue;
+      const title = typeof link.title === 'string' && link.title.trim() ? link.title.trim() : url;
+      const description = typeof link.description === 'string' ? link.description.trim() : '';
+      sanitizedLinks.push({ title, url, description });
+      if (sanitizedLinks.length >= LEARNING_RESOURCE_LIMITS.linksPerSkill) {
+        break;
+      }
+    }
+
+    if (sanitizedLinks.length === 0) continue;
+    result.push({ skill: rawSkill, resources: sanitizedLinks });
+    seenSkills.add(skillKey);
+    if (result.length >= LEARNING_RESOURCE_LIMITS.skills) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+function buildFallbackLearningResources(skills, { jobTitle = '' } = {}) {
+  const normalizedSkills = normalizeLearningSkillList(skills);
+  if (!normalizedSkills.length) {
+    return [];
+  }
+  return normalizedSkills.map((skill) => {
+    const focus = jobTitle ? `${skill} for ${jobTitle}` : `${skill} interview prep`;
+    return {
+      skill,
+      resources: [
+        {
+          title: `${skill} crash course (YouTube)`,
+          url: `https://www.youtube.com/results?search_query=${encodeURIComponent(focus)}`,
+          description: 'Video playlist to refresh the fundamentals quickly.',
+        },
+        {
+          title: `${skill} practical projects`,
+          url: `https://www.github.com/search?q=${encodeURIComponent(`${skill} sample project`)}`,
+          description: 'Hands-on repositories to apply the skill before interviews.',
+        },
+        {
+          title: `${skill} interview questions`,
+          url: `https://www.google.com/search?q=${encodeURIComponent(`${skill} interview questions`)}`,
+          description: 'Common interview prompts to self-assess readiness.',
+        },
+      ].slice(0, LEARNING_RESOURCE_LIMITS.linksPerSkill),
+    };
+  });
+}
+
+async function generateLearningResources(skills, context = {}) {
+  const normalizedSkills = normalizeLearningSkillList(skills);
+  if (!normalizedSkills.length) {
+    return [];
+  }
+
+  const focusSummary = summarizeJobFocus(context.jobDescription || context.jobDescriptionText || '');
+  const prompt = [
+    'You are an interview coach helping a candidate close skill gaps before interviews.',
+    `Skills to target: ${normalizedSkills.join(', ')}`,
+    context.jobTitle ? `Target job title: ${context.jobTitle}` : '',
+    focusSummary ? `Job focus: ${focusSummary}` : '',
+    'Recommend 2-3 public learning resources per skill (YouTube playlists, documentation, hands-on labs, credible tutorials).',
+    'Respond with JSON in the format {"resources":[{"skill":"<skill>","resources":[{"title":"","url":"https://","description":""}]}]}.',
+    'Keep descriptions under 160 characters, reference only reputable sites, and ensure each URL is absolute.',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  try {
+    const model = await getSharedGenerativeModel();
+    if (model?.generateContent) {
+      const response = await model.generateContent(prompt);
+      const parsed = parseAiJson(response?.response?.text?.());
+      const sanitized = sanitizeLearningResourceEntries(parsed?.resources, {
+        missingSkills: normalizedSkills,
+      });
+      if (sanitized.length) {
+        return sanitized;
+      }
+    }
+  } catch (err) {
+    logStructured('warn', 'learning_resource_generation_failed', {
+      error: serializeError(err),
+      skills: normalizedSkills,
+    });
+  }
+
+  return buildFallbackLearningResources(normalizedSkills, context);
+}
+
 function isModuleNotFoundError(err, moduleName) {
   if (!err) return false;
   const code = err.code || err?.cause?.code;
@@ -9382,6 +9524,12 @@ function buildSelectionInsights(context = {}) {
     ? missingSkills.filter(Boolean)
     : [];
   const added = Array.isArray(addedSkills) ? addedSkills.filter(Boolean) : [];
+  const normalizedLearningResources = sanitizeLearningResourceEntries(
+    context.learningResources,
+    {
+      missingSkills: missing,
+    }
+  );
   let skillsStatus = 'match';
   let skillsMessage = `Resume now covers ${skillCoverage}% of the JD skills.`;
   if (missing.length) {
@@ -9390,6 +9538,9 @@ function buildSelectionInsights(context = {}) {
       limit: 4,
       decorate: buildActionLabeler((skill) => `Practice ${skill}`)
     })} from the JD.`;
+    if (normalizedLearningResources.length) {
+      skillsMessage += ' Review the learning sprint below to build confidence.';
+    }
   } else if (skillCoverage < 70) {
     skillsStatus = 'partial';
     skillsMessage = `Resume covers ${skillCoverage}% of JD skills. Reinforce keywords in experience and summary.`;
@@ -9621,10 +9772,21 @@ function buildSelectionInsights(context = {}) {
     experienceStatus,
     certificationStatus,
   });
-  const baseSummary = 'These skills and highlights were added to match the JD. Please prepare for the interview accordingly.';
-  const summary = added.length
-    ? `${baseSummary} Added focus areas: ${summarizeList(added, { limit: 4 })}.`
-    : baseSummary;
+  const baseSummary =
+    'These skills and highlights were added to match the JD. Please prepare for the interview accordingly.';
+  let summary = baseSummary;
+  if (missing.length) {
+    const missingSummary = summarizeList(missing, { limit: 4 });
+    const resourceNote = normalizedLearningResources.length
+      ? 'Use the learning sprint below to close the gap before interviews.'
+      : 'Plan targeted practice so you can discuss them confidently in interviews.';
+    const addedNote = added.length
+      ? ` Strengthened coverage for ${summarizeList(added, { limit: 3 })}.`
+      : '';
+    summary = `Skill gaps detected: ${missingSummary}. ${resourceNote}${addedNote}`;
+  } else if (added.length) {
+    summary = `${baseSummary} Added focus areas: ${summarizeList(added, { limit: 4 })}.`;
+  }
 
   const selectionFactors = [];
 
@@ -9788,6 +9950,7 @@ function buildSelectionInsights(context = {}) {
       rationale: probabilityMessage,
     },
     summary,
+    learningResources: normalizedLearningResources,
     factors: selectionFactors,
     jobFitAverage,
     jobFitScores,
@@ -14001,6 +14164,21 @@ async function handleImprovementRequest(type, req, res) {
           ? sectionContext.afterText
           : baselineDesignationTitle;
 
+    let learningResources = [];
+    if (afterMissingOverall.length) {
+      try {
+        learningResources = await generateLearningResources(afterMissingOverall, {
+          jobTitle: payload.jobTitle || payload.targetTitle || '',
+          jobDescription: jobDescription,
+        });
+      } catch (err) {
+        logStructured('warn', 'targeted_improvement_learning_resources_failed', {
+          error: serializeError(err),
+          missingSkillCount: afterMissingOverall.length,
+        });
+      }
+    }
+
     let selectionInsights;
     try {
       selectionInsights = buildSelectionInsights({
@@ -14019,6 +14197,7 @@ async function handleImprovementRequest(type, req, res) {
         knownCertificates,
         certificateSuggestions: manualCertificates.map((cert) => cert?.name).filter(Boolean),
         manualCertificatesRequired: Boolean(payload.manualCertificatesRequired),
+        learningResources,
       });
     } catch (err) {
       logStructured('warn', 'targeted_improvement_rescore_failed', {
@@ -14102,6 +14281,8 @@ async function handleImprovementRequest(type, req, res) {
         probability: selectionInsights.probability,
         level: selectionInsights.level,
         message: selectionInsights.message,
+        summary: selectionInsights.summary,
+        learningResources: selectionInsights.learningResources,
         before: selectionInsights.before,
         after: selectionInsights.after,
         factors: Array.isArray(selectionInsights.factors) ? selectionInsights.factors : [],
@@ -16082,6 +16263,21 @@ async function generateEnhancedDocumentsResponse({
     phase: 'enhanced',
   });
 
+  let learningResources = [];
+  if (Array.isArray(bestMatch?.newSkills) && bestMatch.newSkills.length) {
+    try {
+      learningResources = await generateLearningResources(bestMatch.newSkills, {
+        jobTitle: versionsContext.jobTitle,
+        jobDescription,
+      });
+    } catch (err) {
+      logStructured('warn', 'generation_learning_resources_failed', {
+        error: serializeError(err),
+        missingSkillCount: bestMatch.newSkills.length,
+      });
+    }
+  }
+
   const selectionInsights = buildSelectionInsights({
     jobTitle: versionsContext.jobTitle,
     originalTitle: applicantTitle,
@@ -16098,6 +16294,7 @@ async function generateEnhancedDocumentsResponse({
     knownCertificates,
     certificateSuggestions,
     manualCertificatesRequired,
+    learningResources,
   });
 
   logStructured('info', 'generation_completed', {
@@ -18364,6 +18561,21 @@ app.post(
       : [];
     const finalScoreBreakdown = scoreBreakdown;
 
+    let learningResources = [];
+    if (missingSkills.length) {
+      try {
+        learningResources = await generateLearningResources(missingSkills, {
+          jobTitle,
+          jobDescription,
+        });
+      } catch (err) {
+        logStructured('warn', 'initial_analysis_learning_resources_failed', {
+          error: serializeError(err),
+          missingSkillCount: missingSkills.length,
+        });
+      }
+    }
+
     const selectionInsights = buildSelectionInsights({
       jobTitle,
       originalTitle,
@@ -18379,6 +18591,7 @@ app.post(
       knownCertificates,
       certificateSuggestions,
       manualCertificatesRequired,
+      learningResources,
     });
 
     logStructured('info', 'process_cv_scoring_completed', {
