@@ -65,17 +65,17 @@ const SERVICE_ERROR_SOURCE_BY_CODE = {
 const SERVICE_ERROR_STEP_BY_CODE = {
   INITIAL_UPLOAD_FAILED: 'upload',
   STORAGE_UNAVAILABLE: 'download',
-  CHANGE_LOG_PERSISTENCE_FAILED: 'improvements',
-  DOCUMENT_GENERATION_FAILED: 'score',
-  PROCESSING_FAILED: 'score',
-  GENERATION_FAILED: 'score',
-  AI_RESPONSE_INVALID: 'improvements'
+  CHANGE_LOG_PERSISTENCE_FAILED: 'enhance',
+  DOCUMENT_GENERATION_FAILED: 'evaluate',
+  PROCESSING_FAILED: 'evaluate',
+  GENERATION_FAILED: 'evaluate',
+  AI_RESPONSE_INVALID: 'enhance'
 }
 
 const SERVICE_ERROR_STEP_BY_SOURCE = {
   s3: 'download',
-  lambda: 'score',
-  gemini: 'improvements'
+  lambda: 'evaluate',
+  gemini: 'enhance'
 }
 
 function normalizeServiceSource(value) {
@@ -2293,23 +2293,6 @@ function App() {
   const [coverLetterReviewState, setCoverLetterReviewState] = useState({})
   const [resumeHistory, setResumeHistory] = useState([])
 
-  useEffect(() => {
-    setActiveDashboardStage((currentStage) => {
-      if (currentStage === 'suggestions' && improvementResults.length === 0) {
-        if (changeLog.length > 0) {
-          return 'changelog'
-        }
-        return 'score'
-      }
-      if (currentStage === 'changelog' && changeLog.length === 0) {
-        if (improvementResults.length > 0) {
-          return 'suggestions'
-        }
-        return 'score'
-      }
-      return currentStage
-    })
-  }, [improvementResults.length, changeLog.length])
   const updateOutputFiles = useCallback((files, options = {}) => {
     setOutputFiles(files)
     let nextTimestamp = ''
@@ -2434,6 +2417,30 @@ function App() {
         ? 'Job description validation is still in progress. Please wait until it completes.'
         : ''
   const improvementBusy = Boolean(activeImprovement)
+  const improvementAvailable =
+    improvementsUnlocked &&
+    Boolean(resumeText && resumeText.trim()) &&
+    Boolean(jobDescriptionText && jobDescriptionText.trim())
+  const hasAcceptedImprovement = useMemo(
+    () => improvementResults.some((item) => item.accepted === true),
+    [improvementResults]
+  )
+  const hasPendingImprovementRescore = useMemo(
+    () => improvementResults.some((item) => item.accepted === true && item.rescorePending),
+    [improvementResults]
+  )
+  const hasPendingImprovementDecisions = useMemo(
+    () => improvementResults.some((item) => item.accepted === null),
+    [improvementResults]
+  )
+  const improvementsRequireAcceptance = useMemo(
+    () => improvementResults.length > 0,
+    [improvementResults]
+  )
+  const canGenerateEnhancedDocs = useMemo(
+    () => !improvementsRequireAcceptance || hasAcceptedImprovement,
+    [improvementsRequireAcceptance, hasAcceptedImprovement]
+  )
 
   useEffect(() => {
     cvSignatureRef.current = currentCvSignature
@@ -3094,7 +3101,6 @@ function App() {
   )
 
   const flowSteps = useMemo(() => {
-    const improvementsComplete = improvementCount > 0 || changeCount > 0
     const downloadComplete = downloadCount > 0
     const normalizedErrorMessage = typeof error === 'string' ? error.trim() : ''
     const normalizedErrorCode =
@@ -3121,13 +3127,13 @@ function App() {
         description: 'Attach your CV and target JD so we can start analysing.'
       },
       {
-        key: 'score',
-        label: 'Score',
+        key: 'evaluate',
+        label: 'Evaluate',
         description: 'Review the ATS breakdown and baseline selection chances.'
       },
       {
-        key: 'improvements',
-        label: 'Improve',
+        key: 'enhance',
+        label: 'Enhance',
         description: 'Apply targeted rewrites once you understand the current scores.'
       },
       {
@@ -3140,21 +3146,32 @@ function App() {
     let currentAssigned = false
 
     return baseSteps.map((step) => {
+      const availability =
+        step.key === 'upload'
+          ? true
+          : step.key === 'evaluate'
+            ? uploadComplete
+            : step.key === 'enhance'
+              ? improvementsUnlocked
+              : step.key === 'download'
+                ? improvementsUnlocked && canGenerateEnhancedDocs
+                : false
+
       const isComplete =
         step.key === 'upload'
           ? uploadComplete
-          : step.key === 'score'
+          : step.key === 'evaluate'
             ? scoreComplete
-            : step.key === 'improvements'
-              ? improvementsComplete
-                : step.key === 'download'
-                  ? downloadComplete
-                  : false
+            : step.key === 'enhance'
+              ? canGenerateEnhancedDocs
+              : step.key === 'download'
+                ? downloadComplete
+                : false
 
       let status = 'upcoming'
       if (isComplete) {
         status = 'complete'
-      } else if (!currentAssigned) {
+      } else if (!currentAssigned && availability) {
         status = 'current'
         currentAssigned = true
       }
@@ -3182,10 +3199,10 @@ function App() {
             noteTone = 'info'
           } else if (hasAnalysisData) {
             note = 'Upload complete.'
-            noteTone = 'success'
+              noteTone = 'success'
           }
           break
-        case 'score':
+        case 'evaluate':
           if (isProcessing && !scoreComplete) {
             note = 'Scanning resume against the JD…'
             noteTone = 'info'
@@ -3201,8 +3218,11 @@ function App() {
             noteTone = 'info'
           }
           break
-        case 'improvements':
-          if (improvementBusy) {
+        case 'enhance':
+          if (!improvementsUnlocked) {
+            note = 'Waiting for ATS validation before unlocking enhancements.'
+            noteTone = 'info'
+          } else if (improvementBusy) {
             note = 'Generating AI rewrite…'
             noteTone = 'info'
           } else if (resumeExperienceMissing) {
@@ -3215,6 +3235,9 @@ function App() {
           } else if (improvementCount > 0) {
             note = `${improvementCount} suggestion${improvementCount === 1 ? '' : 's'} ready.`
             noteTone = 'info'
+          } else if (improvementsUnlocked) {
+            note = 'Enhancement options ready when you need them.'
+            noteTone = 'info'
           }
           break
         case 'download':
@@ -3226,6 +3249,12 @@ function App() {
                 'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
               noteTone = 'warning'
             }
+          } else if (improvementsRequireAcceptance && improvementsUnlocked && !hasAcceptedImprovement) {
+            note = 'Accept improvements before generating downloads.'
+            noteTone = 'warning'
+          } else if (!canGenerateEnhancedDocs && improvementsUnlocked) {
+            note = 'Generate enhancements to unlock downloads.'
+            noteTone = 'info'
           } else if (coverLetterContentMissing) {
             note =
               'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
@@ -3249,6 +3278,7 @@ function App() {
     })
   }, [
     changeCount,
+    canGenerateEnhancedDocs,
     coverLetterContentMissing,
     downloadCount,
     error,
@@ -3256,14 +3286,29 @@ function App() {
     hasAnalysisData,
     hasCvFile,
     hasManualJobDescriptionInput,
+    hasAcceptedImprovement,
     improvementBusy,
     improvementCount,
+    improvementsRequireAcceptance,
+    improvementsUnlocked,
     isProcessing,
     queuedText,
     resumeExperienceMissing,
     scoreComplete,
     uploadComplete
   ])
+
+  const currentPhase = useMemo(() => {
+    const currentStep = flowSteps.find((step) => step.status === 'current')
+    if (currentStep) {
+      return currentStep.key
+    }
+    const completedSteps = flowSteps.filter((step) => step.status === 'complete')
+    if (completedSteps.length > 0) {
+      return completedSteps[completedSteps.length - 1].key
+    }
+    return 'upload'
+  }, [flowSteps])
 
   const downloadGroups = useMemo(() => {
     if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
@@ -4980,28 +5025,6 @@ function App() {
     setPreviewSuggestion(null)
   }, [initialAnalysisSnapshot, updateOutputFiles])
 
-  const improvementAvailable =
-    improvementsUnlocked && Boolean(resumeText && resumeText.trim()) && Boolean(jobDescriptionText && jobDescriptionText.trim())
-  const hasAcceptedImprovement = useMemo(
-    () => improvementResults.some((item) => item.accepted === true),
-    [improvementResults]
-  )
-  const hasPendingImprovementRescore = useMemo(
-    () => improvementResults.some((item) => item.accepted === true && item.rescorePending),
-    [improvementResults]
-  )
-  const hasPendingImprovementDecisions = useMemo(
-    () => improvementResults.some((item) => item.accepted === null),
-    [improvementResults]
-  )
-  const improvementsRequireAcceptance = useMemo(
-    () => improvementResults.length > 0,
-    [improvementResults]
-  )
-  const canGenerateEnhancedDocs = useMemo(
-    () => !improvementsRequireAcceptance || hasAcceptedImprovement,
-    [improvementsRequireAcceptance, hasAcceptedImprovement]
-  )
   const deltaSummary = useMemo(
     () =>
       deriveDeltaSummary({
@@ -7205,6 +7228,54 @@ function App() {
     { key: 'changelog', label: 'Change Log', count: changeLogCount, ready: changeLogCount > 0 }
   ]
 
+  const allowedDashboardStageKeys = useMemo(() => {
+    if (currentPhase === 'evaluate') {
+      return ['score']
+    }
+    if (currentPhase === 'enhance') {
+      return ['suggestions', 'changelog']
+    }
+    return []
+  }, [currentPhase])
+
+  const filteredDashboardStageOptions = useMemo(
+    () => dashboardStageOptions.filter((stage) => allowedDashboardStageKeys.includes(stage.key)),
+    [allowedDashboardStageKeys, dashboardStageOptions]
+  )
+
+  useEffect(() => {
+    if (filteredDashboardStageOptions.length === 0) {
+      return
+    }
+    setActiveDashboardStage((currentStage) => {
+      if (allowedDashboardStageKeys.includes(currentStage)) {
+        if (
+          currentStage === 'suggestions' &&
+          improvementResults.length === 0 &&
+          allowedDashboardStageKeys.includes('changelog') &&
+          changeLog.length > 0
+        ) {
+          return 'changelog'
+        }
+        if (
+          currentStage === 'changelog' &&
+          changeLog.length === 0 &&
+          allowedDashboardStageKeys.includes('suggestions') &&
+          improvementResults.length > 0
+        ) {
+          return 'suggestions'
+        }
+        return currentStage
+      }
+      return filteredDashboardStageOptions[0]?.key || currentStage
+    })
+  }, [
+    allowedDashboardStageKeys,
+    changeLog.length,
+    filteredDashboardStageOptions,
+    improvementResults.length
+  ])
+
   const coverLetterEditorType = coverLetterEditor?.type || ''
   const coverLetterEditorFile = (coverLetterEditor && coverLetterEditor.file) || {}
   const coverLetterEditorTemplate = useMemo(() => {
@@ -7310,7 +7381,30 @@ function App() {
 
         <ProcessFlow steps={flowSteps} />
 
-        <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
+        {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
+        {isProcessing && (
+          <div className="flex justify-center">
+            <div className="mt-4 h-10 w-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
+        {error && (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <p className="text-red-600 text-sm font-semibold">{error}</p>
+            {errorRecovery === 'generation' && (
+              <button
+                type="button"
+                onClick={handleGenerateEnhancedDocs}
+                disabled={isGeneratingDocs}
+                className="inline-flex items-center justify-center rounded-full border border-purple-600 px-4 py-2 text-sm font-semibold text-purple-600 transition hover:bg-purple-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:cursor-not-allowed disabled:border-purple-300 disabled:text-purple-300"
+              >
+                Retry generation
+              </button>
+            )}
+          </div>
+        )}
+
+        {currentPhase === 'upload' && (
+          <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
           <header className="space-y-2">
             <p className="caps-label text-xs font-semibold text-purple-500">Step 1 · Upload</p>
             <h2 className="text-2xl font-bold text-purple-900">Upload your resume &amp; target JD</h2>
@@ -7398,32 +7492,13 @@ function App() {
             </div>
           </div>
 
-          {queuedMessage && <p className="text-blue-700 text-center">{queuedMessage}</p>}
-          {isProcessing && (
-            <div className="flex justify-center">
-              <div className="mt-4 h-10 w-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          {error && (
-            <div className="flex flex-col items-center gap-3 text-center">
-              <p className="text-red-600 text-sm font-semibold">{error}</p>
-              {errorRecovery === 'generation' && (
-                <button
-                  type="button"
-                  onClick={handleGenerateEnhancedDocs}
-                  disabled={isGeneratingDocs}
-                  className="inline-flex items-center justify-center rounded-full border border-purple-600 px-4 py-2 text-sm font-semibold text-purple-600 transition hover:bg-purple-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:cursor-not-allowed disabled:border-purple-300 disabled:text-purple-300"
-                >
-                  Retry generation
-                </button>
-              )}
-            </div>
-          )}
-        </section>
+          </section>
+        )}
 
-        <section className="space-y-5" aria-label="Improvement dashboard">
+        {filteredDashboardStageOptions.length > 0 && (
+          <section className="space-y-5" aria-label="Improvement dashboard">
           <div className="flex flex-wrap gap-2 sm:gap-3">
-            {dashboardStageOptions.map((stage) => {
+            {filteredDashboardStageOptions.map((stage) => {
               const isActive = activeDashboardStage === stage.key
               const badgeLabel =
                 stage.key === 'score'
@@ -7459,7 +7534,7 @@ function App() {
             })}
           </div>
 
-          {activeDashboardStage === 'score' && (
+          {currentPhase === 'evaluate' && activeDashboardStage === 'score' && (
             <DashboardStage
               stageLabel="Score Stage"
               title="Score Overview"
@@ -7510,7 +7585,7 @@ function App() {
             </DashboardStage>
           )}
 
-          {activeDashboardStage === 'suggestions' && (
+          {currentPhase === 'enhance' && activeDashboardStage === 'suggestions' && (
             <DashboardStage
               stageLabel="Suggestions Stage"
               title="Review AI Suggestions"
@@ -7568,7 +7643,7 @@ function App() {
             </DashboardStage>
           )}
 
-          {activeDashboardStage === 'changelog' && (
+          {currentPhase === 'enhance' && activeDashboardStage === 'changelog' && (
             <DashboardStage
               stageLabel="Change Log Stage"
               title="Track accepted changes"
@@ -7681,9 +7756,10 @@ function App() {
               </div>
             </DashboardStage>
           )}
-        </section>
+          </section>
+        )}
 
-        {selectionInsights && (
+        {currentPhase === 'evaluate' && selectionInsights && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -7819,7 +7895,7 @@ function App() {
           </section>
         )}
 
-        {analysisHighlights.length > 0 && (
+        {currentPhase === 'evaluate' && analysisHighlights.length > 0 && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
             <div>
               <h2 className="text-xl font-semibold text-purple-900">Match Checklist</h2>
@@ -7843,7 +7919,7 @@ function App() {
           </section>
         )}
 
-        {match && (
+        {currentPhase === 'evaluate' && match && (
           <section className="space-y-4">
             <div className="rounded-3xl bg-white/80 backdrop-blur border border-purple-200/70 shadow-xl p-6 space-y-4">
               <h3 className="text-xl font-semibold text-purple-900">Skill Coverage Snapshot</h3>
@@ -7916,7 +7992,7 @@ function App() {
           </section>
         )}
 
-        {certificateInsights && (
+        {currentPhase === 'enhance' && certificateInsights && (
           <section className="space-y-3 rounded-3xl bg-white/80 border border-blue-200/70 shadow-xl p-6">
             <h2 className="text-xl font-semibold text-blue-900">Certificate Insights</h2>
             <p className="text-sm text-blue-800/90">
@@ -7993,7 +8069,7 @@ function App() {
           </section>
         )}
 
-        {improvementActions.length > 0 && (
+        {currentPhase === 'enhance' && improvementActions.length > 0 && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
             <header className="space-y-2">
               <p className="caps-label text-xs font-semibold text-purple-500">Step 3 · Improve</p>
@@ -8060,7 +8136,7 @@ function App() {
             )}
           </section>
         )}
-        {resumeComparisonData && (
+        {currentPhase === 'enhance' && resumeComparisonData && (
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-2xl font-bold text-purple-900">Original vs Enhanced CV</h2>
@@ -8082,7 +8158,7 @@ function App() {
           </section>
         )}
 
-        {resumeText && (
+        {currentPhase === 'enhance' && resumeText && (
           <section className="space-y-3">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
@@ -8118,7 +8194,8 @@ function App() {
           </section>
         )}
 
-        {outputFiles.length === 0 &&
+        {currentPhase === 'download' &&
+          outputFiles.length === 0 &&
           improvementsUnlocked &&
           improvementsRequireAcceptance &&
           !hasAcceptedImprovement && (
@@ -8135,7 +8212,7 @@ function App() {
           </section>
         )}
 
-          {outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
+          {currentPhase === 'download' && outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
             <section className="space-y-4">
               <header className="space-y-1">
                 <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Download</p>
@@ -8169,7 +8246,7 @@ function App() {
           </section>
         )}
 
-          {outputFiles.length > 0 && (
+          {currentPhase === 'download' && outputFiles.length > 0 && (
             <section className="space-y-5">
               <header className="space-y-1">
                 <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Download</p>
