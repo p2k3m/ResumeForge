@@ -11904,7 +11904,7 @@ const COVER_LETTER_MOTIVATION_KEYWORDS = Object.freeze([
 ]);
 
 const COVER_LETTER_CLOSING_PATTERN =
-  /^(?:thank you(?: for (?:your )?(?:time|consideration))?|thanks(?: so much)?|sincerely|best(?: regards| wishes)?|regards|kind regards|warm regards|with appreciation|with gratitude|respectfully|yours truly|yours faithfully|yours sincerely)/i;
+  /^(?:thank you(?:(?: for (?:your )?(?:time|consideration))|(?: for considering (?:my|the) (?:application|candidacy)))?|thanks(?: so much)?|sincerely|best(?: regards| wishes)?|regards|kind regards|warm regards|with appreciation|with gratitude|respectfully|yours truly|yours faithfully|yours sincerely)/i;
 const COVER_LETTER_PLACEHOLDER_PATTERNS = Object.freeze([
   /\b(?:lorem ipsum|dummy text|sample text|placeholder)\b/i,
   /\b(?:to be determined|tbd|fill in|fill out|type here)\b/i,
@@ -11960,7 +11960,7 @@ function findCoverLetterGreeting(paragraphs = []) {
   for (let index = 0; index < paragraphs.length; index += 1) {
     const paragraph = paragraphs[index];
     const firstLine = paragraph.split('\n')[0]?.trim() || '';
-    if (/^(dear|hello|hi)\b/i.test(firstLine)) {
+    if (/^(dear|hello|hi|greetings)\b/i.test(firstLine)) {
       return { index, paragraph };
     }
   }
@@ -12269,18 +12269,32 @@ function auditCoverLetterStructure(
     letterIndex,
   });
 
+  const bodyParagraphs = Array.isArray(fields?.body) ? [...fields.body] : [];
+  const hasBodyContent = bodyParagraphs.some(
+    (paragraph) => typeof paragraph === 'string' && paragraph.trim()
+  );
+  const closingParagraph =
+    typeof fields?.closing?.paragraph === 'string'
+      ? fields.closing.paragraph.trim()
+      : '';
+
+  if (!hasBodyContent && closingParagraph) {
+    // Allow concise letters where the closing paragraph doubles as the main message.
+    bodyParagraphs.push(closingParagraph);
+  }
+
+  if (!hasBodyContent && !closingParagraph) {
+    issues.push('missing_body');
+  }
+
   const metadata = fields?.metadata || {};
   if (!metadata.hasGreeting) {
     issues.push('missing_greeting');
   }
-  if (!metadata.hasClosing) {
+  if (!metadata.hasClosing && !closingParagraph && !hasBodyContent) {
     issues.push('missing_closing');
   }
-  if (!metadata.bodyParagraphCount) {
-    issues.push('missing_body');
-  }
 
-  const bodyParagraphs = Array.isArray(fields?.body) ? fields.body : [];
   const bodyHasPlaceholder = bodyParagraphs.some((paragraph) =>
     COVER_LETTER_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(paragraph))
   );
