@@ -323,23 +323,28 @@ async function generateLearningResources(skills, context = {}) {
     .filter(Boolean)
     .join('\n');
 
-  try {
-    const model = await getSharedGenerativeModel();
-    if (model?.generateContent) {
-      const response = await model.generateContent(prompt);
-      const parsed = parseAiJson(response?.response?.text?.());
-      const sanitized = sanitizeLearningResourceEntries(parsed?.resources, {
-        missingSkills: normalizedSkills,
-      });
-      if (sanitized.length) {
-        return sanitized;
+  const skipGenerativeInTests =
+    process.env.NODE_ENV === 'test' && process.env.ENABLE_TEST_GENERATIVE !== 'true';
+
+  if (!skipGenerativeInTests) {
+    try {
+      const model = await getSharedGenerativeModel();
+      if (model?.generateContent) {
+        const response = await model.generateContent(prompt);
+        const parsed = parseAiJson(response?.response?.text?.());
+        const sanitized = sanitizeLearningResourceEntries(parsed?.resources, {
+          missingSkills: normalizedSkills,
+        });
+        if (sanitized.length) {
+          return sanitized;
+        }
       }
+    } catch (err) {
+      logStructured('warn', 'learning_resource_generation_failed', {
+        error: serializeError(err),
+        skills: normalizedSkills,
+      });
     }
-  } catch (err) {
-    logStructured('warn', 'learning_resource_generation_failed', {
-      error: serializeError(err),
-      skills: normalizedSkills,
-    });
   }
 
   return buildFallbackLearningResources(normalizedSkills, context);
