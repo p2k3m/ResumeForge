@@ -2104,6 +2104,55 @@ function App() {
     () => buildAggregatedChangeLogSummary(changeLog),
     [changeLog]
   )
+  const changeLogSummaryContext = useMemo(() => {
+    const jobDescriptionValue = typeof jobDescriptionText === 'string' ? jobDescriptionText.trim() : ''
+    const jobTitleCandidates = [
+      parsedJobTitle,
+      typeof parsedJobDescription?.title === 'string' ? parsedJobDescription.title : '',
+      selectionInsights?.designation?.targetTitle || ''
+    ]
+    const jobTitle = jobTitleCandidates
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find((value) => value && !/^job description$/i.test(value)) || ''
+
+    const targetTitleCandidates = [
+      match?.modifiedTitle,
+      selectionInsights?.designation?.currentTitle,
+      match?.originalTitle,
+      selectionInsights?.designation?.targetTitle
+    ]
+    const targetTitle = targetTitleCandidates
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find(Boolean) || ''
+
+    const originalTitle =
+      typeof match?.originalTitle === 'string' ? match.originalTitle.trim() : ''
+
+    const targetSummaryCandidates = [
+      enhanceAllSummaryText,
+      selectionInsights?.summary,
+      selectionInsights?.message,
+      selectionInsights?.designation?.message
+    ]
+    const targetSummary = targetSummaryCandidates
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .find(Boolean) || ''
+
+    return {
+      jobTitle,
+      jobDescription: jobDescriptionValue,
+      targetTitle,
+      originalTitle,
+      targetSummary
+    }
+  }, [
+    jobDescriptionText,
+    parsedJobDescription,
+    parsedJobTitle,
+    selectionInsights,
+    match,
+    enhanceAllSummaryText
+  ])
   const [activeDashboardStage, setActiveDashboardStage] = useState('score')
   const [activeImprovement, setActiveImprovement] = useState('')
   const [isBulkAccepting, setIsBulkAccepting] = useState(false)
@@ -7174,8 +7223,15 @@ function App() {
             >
               <div className="space-y-4">
                 {(Array.isArray(changeLogSummaryData?.highlights) && changeLogSummaryData.highlights.length > 0) ||
-                (Array.isArray(changeLogSummaryData?.categories) && changeLogSummaryData.categories.length > 0) ? (
-                  <ChangeLogSummaryPanel summary={changeLogSummaryData} />
+                (Array.isArray(changeLogSummaryData?.categories) && changeLogSummaryData.categories.length > 0) ||
+                (changeLogSummaryContext &&
+                  Object.values(changeLogSummaryContext).some(
+                    (value) => typeof value === 'string' && value.trim()
+                  )) ? (
+                  <ChangeLogSummaryPanel
+                    summary={changeLogSummaryData}
+                    context={changeLogSummaryContext}
+                  />
                 ) : null}
 
                 {changeLog.length > 0 ? (
