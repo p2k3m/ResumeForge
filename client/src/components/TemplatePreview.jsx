@@ -907,3 +907,11 @@ function TemplatePreview({
 }
 
 export default TemplatePreview
+
+// Ensure CommonJS consumers (like Jest when transforming ESM) receive the
+// component function as the default export instead of a module namespace
+// object when using dynamic import semantics.
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = TemplatePreview
+  module.exports.default = TemplatePreview
+}
