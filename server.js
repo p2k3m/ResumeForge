@@ -15657,6 +15657,14 @@ async function generateEnhancedDocumentsResponse({
     logEventName: 'generation_stale_artifacts_cleaned_up',
   });
 
+  const previousSessionChangeLogKey = normalizeArtifactKey(
+    existingRecord?.sessionChangeLogKey?.S
+  );
+  const previousSessionChangeLogBucket = normalizeArtifactKey(
+    existingRecord?.s3Bucket?.S
+  );
+  let persistedSessionChangeLogResult = null;
+
   try {
   let sessionChangeLogKey = deriveSessionChangeLogKey({
     changeLogKey: existingRecord?.sessionChangeLogKey?.S,
@@ -17151,6 +17159,8 @@ async function generateEnhancedDocumentsResponse({
       coverLetterEntries: normalizedCoverLetterEntries,
       dismissedCoverLetterEntries: normalizedDismissedCoverLetterEntries,
     });
+    persistedSessionChangeLogResult = persistedChangeLog;
+
     if (persistedChangeLog?.key) {
       sessionChangeLogKey = persistedChangeLog.key;
     }
@@ -17172,6 +17182,45 @@ async function generateEnhancedDocumentsResponse({
       key: sessionChangeLogKey,
       error: serializeError(err),
     });
+  }
+
+  if (persistedSessionChangeLogResult) {
+    const nextSessionChangeLogKey = normalizeArtifactKey(
+      persistedSessionChangeLogResult.key || sessionChangeLogKey
+    );
+    const cleanupBucket =
+      normalizeArtifactKey(persistedSessionChangeLogResult.bucket) ||
+      previousSessionChangeLogBucket ||
+      bucket;
+
+    if (
+      cleanupBucket &&
+      previousSessionChangeLogKey &&
+      nextSessionChangeLogKey &&
+      previousSessionChangeLogKey !== nextSessionChangeLogKey
+    ) {
+      try {
+        await s3.send(
+          new DeleteObjectCommand({
+            Bucket: cleanupBucket,
+            Key: previousSessionChangeLogKey,
+          })
+        );
+        logStructured('info', 'session_change_log_removed', {
+          ...logContext,
+          bucket: cleanupBucket,
+          key: previousSessionChangeLogKey,
+          reason: 'replaced',
+        });
+      } catch (cleanupErr) {
+        logStructured('warn', 'session_change_log_cleanup_failed', {
+          ...logContext,
+          bucket: cleanupBucket,
+          key: previousSessionChangeLogKey,
+          error: serializeError(cleanupErr),
+        });
+      }
+    }
   }
 
   const textArtifactTypes = Object.keys(textArtifactKeys);
@@ -18641,6 +18690,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let storedBucket = '';
   let originalUploadKey = '';
   let sessionChangeLogKey = '';
+  let previousSessionChangeLogKey = '';
+  let previousSessionChangeLogBucket = '';
   let logKey = '';
   let existingChangeLogEntries = [];
   let existingDismissedChangeLogEntries = [];
@@ -18670,6 +18721,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       changeLogKey: item.sessionChangeLogKey?.S,
       originalUploadKey,
     });
+    previousSessionChangeLogKey = sessionChangeLogKey;
+    previousSessionChangeLogBucket = storedBucket;
     if (originalUploadKey) {
       const prefix = originalUploadKey.replace(/[^/]+$/, '');
       if (prefix) {
@@ -18989,6 +19042,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   storedBucket = resolvedSessionLocation.bucket;
   sessionChangeLogKey = resolvedSessionLocation.key;
 
+  let persistedSessionChangeLog = null;
+
   try {
     const persistedChangeLog = await writeSessionChangeLog({
       s3,
@@ -19001,6 +19056,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       coverLetterEntries: normalizedCoverLetterEntriesForResponse,
       dismissedCoverLetterEntries: normalizedDismissedCoverLettersForResponse,
     });
+    persistedSessionChangeLog = persistedChangeLog;
+
     if (persistedChangeLog?.bucket) {
       storedBucket = persistedChangeLog.bucket;
     }
@@ -19034,6 +19091,40 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         reason: err?.message || 'Unable to persist the change log to S3.',
       }
     );
+  }
+
+  if (
+    persistedSessionChangeLog &&
+    previousSessionChangeLogKey &&
+    previousSessionChangeLogKey !== sessionChangeLogKey
+  ) {
+    const cleanupBucket =
+      previousSessionChangeLogBucket || persistedSessionChangeLog.bucket || storedBucket;
+    const normalizedCleanupBucket =
+      typeof cleanupBucket === 'string' ? cleanupBucket.trim() : '';
+    if (normalizedCleanupBucket) {
+      try {
+        await s3.send(
+          new DeleteObjectCommand({
+            Bucket: normalizedCleanupBucket,
+            Key: previousSessionChangeLogKey,
+          })
+        );
+        logStructured('info', 'session_change_log_removed', {
+          ...logContext,
+          bucket: normalizedCleanupBucket,
+          key: previousSessionChangeLogKey,
+          reason: 'relocated',
+        });
+      } catch (cleanupErr) {
+        logStructured('warn', 'session_change_log_cleanup_failed', {
+          ...logContext,
+          bucket: normalizedCleanupBucket,
+          key: previousSessionChangeLogKey,
+          error: serializeError(cleanupErr),
+        });
+      }
+    }
   }
 
   const expressionAttributeValues = {
@@ -19824,6 +19915,36 @@ app.post(
       : String(requestId || '');
   try {
     await ensureTableExists();
+
+    let previousSessionChangeLogKey = '';
+    let previousChangeLogTextKey = '';
+    let previousSessionChangeLogBucket = '';
+
+    try {
+      const previousRecord = await dynamo.send(
+        new GetItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+          ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey',
+        })
+      );
+      const previousItem = previousRecord.Item || {};
+      if (previousItem.sessionChangeLogKey?.S) {
+        previousSessionChangeLogKey = previousItem.sessionChangeLogKey.S.trim();
+      }
+      if (previousItem.changeLogKey?.S) {
+        previousChangeLogTextKey = previousItem.changeLogKey.S.trim();
+      }
+      if (previousItem.s3Bucket?.S) {
+        previousSessionChangeLogBucket = previousItem.s3Bucket.S.trim();
+      }
+    } catch (lookupErr) {
+      logStructured('warn', 'previous_session_lookup_failed', {
+        ...logContext,
+        error: serializeError(lookupErr),
+      });
+    }
+
     const timestamp = new Date().toISOString();
     const putItemPayload = {
       TableName: tableName,
@@ -19902,6 +20023,72 @@ app.post(
         bucket,
         key: metadataKey,
       });
+    }
+
+    const cleanupBucket = previousSessionChangeLogBucket || bucket;
+    const sessionPrefix = prefix;
+    const staleSessionArtifacts = [];
+
+    if (
+      cleanupBucket &&
+      previousSessionChangeLogKey &&
+      previousSessionChangeLogKey !== sessionChangeLogKey &&
+      !previousSessionChangeLogKey.startsWith(sessionPrefix)
+    ) {
+      staleSessionArtifacts.push({
+        key: previousSessionChangeLogKey,
+        type: 'session_change_log',
+      });
+    }
+
+    if (
+      cleanupBucket &&
+      previousChangeLogTextKey &&
+      !previousChangeLogTextKey.startsWith(`${sessionPrefix}artifacts/`)
+    ) {
+      staleSessionArtifacts.push({
+        key: previousChangeLogTextKey,
+        type: 'change_log_artifact',
+      });
+    }
+
+    if (cleanupBucket && staleSessionArtifacts.length) {
+      const cleanupResults = await Promise.allSettled(
+        staleSessionArtifacts.map(({ key }) =>
+          s3.send(new DeleteObjectCommand({ Bucket: cleanupBucket, Key: key }))
+        )
+      );
+
+      const removed = [];
+      const failures = [];
+
+      cleanupResults.forEach((result, index) => {
+        const target = staleSessionArtifacts[index];
+        if (result.status === 'fulfilled') {
+          removed.push(target);
+        } else {
+          failures.push({
+            ...target,
+            error: serializeError(result.reason),
+          });
+        }
+      });
+
+      if (removed.length) {
+        logStructured('info', 'session_transition_change_log_removed', {
+          ...logContext,
+          bucket: cleanupBucket,
+          removedKeys: removed.map((entry) => entry.key),
+        });
+      }
+
+      if (failures.length) {
+        logStructured('warn', 'session_transition_change_log_cleanup_failed', {
+          ...logContext,
+          bucket: cleanupBucket,
+          failures,
+        });
+      }
     }
   } catch (err) {
     logStructured('error', 'dynamo_initial_record_failed', {

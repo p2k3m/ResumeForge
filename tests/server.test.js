@@ -205,6 +205,7 @@ describe('/api/process-cv', () => {
       'DescribeTableCommand',
       'CreateTableCommand',
       'DescribeTableCommand',
+      'GetItemCommand',
       'PutItemCommand',
       'UpdateItemCommand',
       'UpdateItemCommand'
@@ -359,10 +360,72 @@ describe('/api/process-cv', () => {
     types = mockDynamoSend.mock.calls.map(([c]) => c.__type);
     expect(types).toEqual([
       'DescribeTableCommand',
+      'GetItemCommand',
       'PutItemCommand',
       'UpdateItemCommand',
       'UpdateItemCommand'
     ]);
+  });
+
+  test('removes stale session change logs when starting a new upload session', async () => {
+    const previousSessionKey = 'cv/candidate/session-old/logs/change-log.json';
+    const previousTextKey = 'cv/candidate/session-old/artifacts/changelog.json';
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          if (cmd.input.ProjectionExpression === 's3Bucket, sessionChangeLogKey, changeLogKey') {
+            return Promise.resolve({
+              Item: {
+                s3Bucket: { S: 'test-bucket' },
+                sessionChangeLogKey: { S: previousSessionKey },
+                changeLogKey: { S: previousTextKey },
+              },
+            });
+          }
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-stale' },
+              status: { S: 'scored' },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session-old/original.pdf' },
+              sessionChangeLogKey: { S: previousSessionKey },
+              changeLog: { L: [] },
+            },
+          });
+        case 'PutItemCommand':
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .field('jobId', 'job-stale')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(200);
+
+    const deletedKeys = mockS3Send.mock.calls
+      .filter(([command]) => command.__type === 'DeleteObjectCommand')
+      .map(([command]) => ({
+        bucket: command.input.Bucket,
+        key: command.input.Key,
+      }));
+
+    expect(deletedKeys).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ bucket: 'test-bucket', key: previousSessionKey }),
+        expect.objectContaining({ bucket: 'test-bucket', key: previousTextKey }),
+      ])
+    );
+
+    setupDefaultDynamoMock();
   });
 
   test('requires manual job description input', async () => {
