@@ -1521,8 +1521,24 @@ describe('/api/generate-enhanced-docs', () => {
       .post('/api/generate-enhanced-docs')
       .send({
         jobId: 'job-789',
-        resumeText: 'Jordan Smith\nExperience\n- Delivered solutions',
-        originalResumeText: 'Jordan Smith\nExperience\n- Delivered solutions',
+        resumeText: [
+          'Jordan Smith',
+          'Email: jordan@example.com',
+          'Phone: 555-123-4567',
+          'LinkedIn: https://linkedin.com/in/jordansmith',
+          'Experience',
+          'Senior Engineer at Stellar Tech (2021-2023)',
+          '- Delivered solutions'
+        ].join('\n'),
+        originalResumeText: [
+          'Jordan Smith',
+          'Email: jordan@example.com',
+          'Phone: 555-123-4567',
+          'LinkedIn: https://linkedin.com/in/jordansmith',
+          'Experience',
+          'Senior Engineer at Stellar Tech (2021-2023)',
+          '- Delivered solutions'
+        ].join('\n'),
         jobDescriptionText: MANUAL_JOB_DESCRIPTION,
         jobSkills: ['Node.js'],
       });
@@ -1543,6 +1559,9 @@ describe('/api/generate-enhanced-docs', () => {
     expect(coverUrls).toHaveLength(2);
     coverUrls.forEach((entry) => {
       expect(entry.rawText).toMatch(/Dear Hiring Manager/i);
+      expect(entry.rawText).toMatch(/Email: jordan@example.com/i);
+      expect(entry.rawText).toMatch(/Node\.js/);
+      expect(entry.rawText).toMatch(/As a Senior Engineer/i);
     });
 
     process.env.NODE_ENV = originalEnv;
