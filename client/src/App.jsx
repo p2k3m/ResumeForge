@@ -7106,8 +7106,8 @@ function App() {
                 <>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex-1 rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
-                      These skills and highlights were added to match the JD. Use the cards below to accept, reject, or preview each
-                      update.
+                      We added JD-aligned skills and highlights so you can prep for interview questions. Use the cards below to
+                      accept, reject, or preview each update.
                     </div>
                     {hasPendingImprovementDecisions && (
                       <button
