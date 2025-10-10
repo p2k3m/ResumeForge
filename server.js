@@ -15417,15 +15417,31 @@ async function generateEnhancedDocumentsResponse({
   };
   const coverContext = {
     jobTitle: versionsContext.jobTitle,
+    designation: versionsContext.jobTitle || applicantTitle || '',
     jobSkills,
+    targetedSkills: Array.isArray(jobSkills) ? [...jobSkills] : [],
+    resumeSkills: Array.isArray(resumeSkillsList) ? [...resumeSkillsList] : [],
     resume: combinedProfile,
     jobDescription,
+    contactDetails: {
+      email: contactDetails.email || '',
+      phone: contactDetails.phone || '',
+      linkedin: contactDetails.linkedin || '',
+      cityState: contactDetails.cityState || '',
+      contactLines: Array.isArray(contactDetails.contactLines)
+        ? [...contactDetails.contactLines]
+        : [],
+    },
   };
   const coverPrompt = [
     'You are an elite career copywriter supporting Gemini/OpenAI workflows.',
     'Instructions:',
     '- Produce exactly two distinct, ATS-aware cover letters.',
     '- Mirror critical language from the job description and respect accomplishments from the resume.',
+    '- Open with job-specific motivation that references the target role and employer from the job description.',
+    '- Surface the candidate designation provided in the context when positioning achievements.',
+    '- Highlight the most relevant targeted skills from the provided lists, weaving them naturally into the narrative.',
+    '- Present the candidate contact information from contactDetails at the top, omitting only fields that are blank.',
     '- Preserve every URL appearing in the resume text.',
     '- Maintain professional tone and structure without degrading the CV context referenced.',
     '- Respond ONLY with JSON conforming to the schema below.',
