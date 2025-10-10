@@ -8285,6 +8285,7 @@ function App() {
           isOpen={Boolean(coverLetterEditor)}
           label={coverLetterEditor?.label}
           draftText={coverLetterEditorDraftText}
+          originalText={coverLetterEditorOriginalText}
           hasChanges={coverLetterEditorHasChanges}
           wordCount={coverLetterEditorWordCount}
           onClose={closeCoverLetterEditor}
