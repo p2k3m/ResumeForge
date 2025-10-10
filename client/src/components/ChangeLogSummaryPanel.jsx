@@ -66,9 +66,16 @@ function ChangeLogSummaryPanel({ summary }) {
     return null
   }
 
-  const { highlights = [], categories = [] } = summary
+  const {
+    highlights = [],
+    categories = [],
+    interviewPrepAdvice = ''
+  } = summary
   const hasHighlights = Array.isArray(highlights) && highlights.length > 0
   const hasCategories = Array.isArray(categories) && categories.length > 0
+  const adviceText = typeof interviewPrepAdvice === 'string'
+    ? interviewPrepAdvice.trim()
+    : ''
 
   if (!hasHighlights && !hasCategories) {
     return null
@@ -88,6 +95,13 @@ function ChangeLogSummaryPanel({ summary }) {
           Quickly review the standout updates applied to your resume after accepting improvements.
         </p>
       </header>
+
+      {adviceText && (
+        <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/80 p-4 text-sm text-emerald-900">
+          <p className="text-sm font-semibold text-emerald-700">Interview prep spotlight</p>
+          <p className="mt-1 leading-relaxed">{adviceText}</p>
+        </div>
+      )}
 
       {hasHighlights && (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">

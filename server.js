@@ -13757,6 +13757,7 @@ function normalizeChangeLogSummaryPayload(summary) {
       categories: [],
       highlights: [],
       totals: { ...defaultTotals },
+      interviewPrepAdvice: '',
     };
   }
 
@@ -13849,7 +13850,11 @@ function normalizeChangeLogSummaryPayload(summary) {
       : categories.reduce((sum, category) => sum + category.removed.length, 0),
   };
 
-  return { categories, highlights, totals };
+  const interviewPrepAdvice = normalizeChangeLogString(
+    summary.interviewPrepAdvice || summary.postEnhancementAdvice
+  );
+
+  return { categories, highlights, totals, interviewPrepAdvice };
 }
 
 function cloneSerializedChangeLogEntries(serializedEntries = []) {
