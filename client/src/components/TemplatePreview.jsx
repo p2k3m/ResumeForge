@@ -2,6 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 
 const cx = (...classes) => classes.filter(Boolean).join(' ')
 
+const RESUME_TO_COVER_TEMPLATE = {
+  modern: 'cover_modern',
+  professional: 'cover_professional',
+  classic: 'cover_classic',
+  ats: 'cover_ats',
+  2025: 'cover_2025'
+}
+
+const DEFAULT_COVER_TEMPLATE_ID = 'cover_modern'
+
 const RESUME_TEMPLATE_PREVIEWS = {
   modern: {
     accent: 'from-indigo-500 via-purple-500 to-pink-500',
@@ -103,6 +113,11 @@ const DEFAULT_COVER_PREVIEW = {
   border: 'border-slate-200 bg-white',
   line: 'bg-slate-200/80',
   highlight: 'bg-slate-500/10'
+}
+
+const deriveCoverTemplateFromResume = (resumeId) => {
+  if (!resumeId) return ''
+  return RESUME_TO_COVER_TEMPLATE[resumeId] || ''
 }
 
 const ResumeMockup = ({ style = {} }) => (
@@ -304,9 +319,15 @@ function TemplatePreview({
   const [previewResumeTemplateId, setPreviewResumeTemplateId] = useState(
     resumeTemplateId || normalizedResumeTemplates[0]?.id || ''
   )
-  const [previewCoverTemplateId, setPreviewCoverTemplateId] = useState(
-    coverTemplateId || normalizedCoverTemplates[0]?.id || ''
-  )
+  const [previewCoverTemplateId, setPreviewCoverTemplateId] = useState(() => {
+    if (coverTemplateId) return coverTemplateId
+    if (isCoverLinkedToResume) {
+      const derived =
+        deriveCoverTemplateFromResume(resumeTemplateId || normalizedResumeTemplates[0]?.id) || ''
+      if (derived) return derived
+    }
+    return normalizedCoverTemplates[0]?.id || DEFAULT_COVER_TEMPLATE_ID
+  })
   const [resumeComparisonSelections, setResumeComparisonSelections] = useState(() => {
     const initialId = resumeTemplateId || normalizedResumeTemplates[0]?.id
     return initialId ? [initialId] : []
@@ -359,6 +380,29 @@ function TemplatePreview({
     resumeTemplateDescription,
     resumeTemplateId,
     resumeTemplateName
+  ])
+
+  const previewResumeOptionId = previewResumeOption?.id || ''
+
+  useEffect(() => {
+    if (!isCoverLinkedToResume) return
+    const derivedFromPreview =
+      deriveCoverTemplateFromResume(previewResumeOptionId || previewResumeTemplateId) ||
+      deriveCoverTemplateFromResume(resumeTemplateId)
+    const fallbackCoverId =
+      coverTemplateId || normalizedCoverTemplates[0]?.id || DEFAULT_COVER_TEMPLATE_ID
+    const nextCoverId = derivedFromPreview || fallbackCoverId
+    if (nextCoverId && nextCoverId !== previewCoverTemplateId) {
+      setPreviewCoverTemplateId(nextCoverId)
+    }
+  }, [
+    coverTemplateId,
+    isCoverLinkedToResume,
+    normalizedCoverTemplates,
+    previewCoverTemplateId,
+    previewResumeOptionId,
+    previewResumeTemplateId,
+    resumeTemplateId
   ])
 
   const previewCoverOption = useMemo(() => {
