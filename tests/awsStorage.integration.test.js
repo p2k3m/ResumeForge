@@ -210,6 +210,7 @@ describe('AWS integrations for /api/process-cv', () => {
       'DescribeTableCommand',
       'CreateTableCommand',
       'DescribeTableCommand',
+      'GetItemCommand',
       'PutItemCommand',
       'UpdateItemCommand',
       'UpdateItemCommand',
