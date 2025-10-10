@@ -12390,30 +12390,66 @@ function auditCoverLetterStructure(
     issues.push('placeholder_detected');
   }
 
-  const bodySectionHeadings = bodyParagraphs
-    .map((paragraph) => (typeof paragraph === 'string' ? paragraph.trim() : ''))
-    .filter(Boolean)
-    .filter((paragraph) => {
-      const withoutBullets = paragraph.replace(/^[-*•\s]+/, '').trim();
-      if (!withoutBullets) {
-        return true;
-      }
-      const normalized = withoutBullets.replace(/[:\-–—]+$/, '').trim();
-      if (!normalized) {
-        return true;
-      }
-      if (normalized.length > 80) {
-        return false;
-      }
-      if (/[.!?]/.test(normalized)) {
-        return false;
-      }
-      return COVER_LETTER_SECTION_HEADING_PATTERNS.some((pattern) =>
-        pattern.test(normalized)
-      );
-    });
+  const analyzedBodyParagraphs = bodyParagraphs.map((paragraph) => {
+    const raw = typeof paragraph === 'string' ? paragraph : '';
+    const trimmed = raw.trim();
+    const withoutBullets = trimmed.replace(/^[-*•\s]+/, '').trim();
+    const normalizedHeading = withoutBullets.replace(/[:\-–—]+$/, '').trim();
+    const looksLikeHeading = Boolean(
+      withoutBullets &&
+        normalizedHeading &&
+        normalizedHeading.length <= 80 &&
+        !/[.!?]/.test(normalizedHeading) &&
+        COVER_LETTER_SECTION_HEADING_PATTERNS.some((pattern) =>
+          pattern.test(normalizedHeading)
+        )
+    );
 
-  if (bodySectionHeadings.length) {
+    return {
+      raw,
+      trimmed,
+      withoutBullets,
+      normalizedHeading,
+      looksLikeHeading,
+    };
+  });
+
+  const headingIndices = analyzedBodyParagraphs
+    .map((entry, index) => (entry.looksLikeHeading ? index : -1))
+    .filter((index) => index !== -1);
+
+  const headingWithoutContent = headingIndices.some((headingIndex) => {
+    const nextContentEntry = analyzedBodyParagraphs
+      .slice(headingIndex + 1)
+      .find((entry) => Boolean(entry.trimmed));
+
+    if (!nextContentEntry) {
+      return true;
+    }
+
+    if (nextContentEntry.looksLikeHeading) {
+      return true;
+    }
+
+    if (
+      COVER_LETTER_PLACEHOLDER_PATTERNS.some((pattern) =>
+        pattern.test(nextContentEntry.raw)
+      )
+    ) {
+      return true;
+    }
+
+    const contentWords = nextContentEntry.withoutBullets
+      ? nextContentEntry.withoutBullets.split(/\s+/).filter(Boolean)
+      : [];
+    const hasMeaningfulLength = contentWords.length >= 3;
+    const hasSentencePunctuation = /[.!?]/.test(nextContentEntry.withoutBullets);
+    const hasDataCue = /[0-9$%]/.test(nextContentEntry.withoutBullets);
+
+    return !(hasMeaningfulLength || hasSentencePunctuation || hasDataCue);
+  });
+
+  if (headingWithoutContent) {
     issues.push('section_heading_without_content');
   }
 
