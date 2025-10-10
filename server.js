@@ -16215,6 +16215,7 @@ async function generateEnhancedDocumentsResponse({
   const fallbackAdjustedCoverLetters = [];
   const bestPracticeAdjustedCoverLetters = [];
   const missingCoverLetters = [];
+  const disqualifiedCoverLetters = new Set();
   recoverableCoverLetters.forEach((details, key) => {
     if (!details || !Array.isArray(details.issues)) {
       return;
@@ -16305,6 +16306,7 @@ async function generateEnhancedDocumentsResponse({
       if (!fallbackAudit.valid && fallbackStillBlocks) {
         coverData[key] = '';
         pushUnique(missingCoverLetters, key);
+        disqualifiedCoverLetters.add(key);
       }
 
       return;
@@ -16312,6 +16314,7 @@ async function generateEnhancedDocumentsResponse({
 
     coverData[key] = '';
     pushUnique(missingCoverLetters, key);
+    disqualifiedCoverLetters.add(key);
   };
 
   COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
@@ -16319,6 +16322,9 @@ async function generateEnhancedDocumentsResponse({
   });
 
   const ensureCoverLetterValue = (key) => {
+    if (disqualifiedCoverLetters.has(key)) {
+      return;
+    }
     const currentValue = coverData[key];
     const hasUsableValue =
       typeof currentValue === 'string' && currentValue.trim().length > 0;
@@ -16336,6 +16342,40 @@ async function generateEnhancedDocumentsResponse({
 
   ensureCoverLetterValue('cover_letter1');
   ensureCoverLetterValue('cover_letter2');
+
+  const removeIfBestPracticesFail = (key, index) => {
+    const value = typeof coverData[key] === 'string' ? coverData[key].trim() : '';
+    if (!value) {
+      return;
+    }
+
+    const auditResult = auditCoverLetterStructure(value, {
+      contactDetails: coverContext.contactDetails,
+      jobTitle: coverContext.jobTitle,
+      jobDescription,
+      jobSkills,
+      applicantName,
+      letterIndex: index + 1,
+    });
+
+    const blockingIssues = Array.isArray(auditResult.issues)
+      ? auditResult.issues.filter(
+          (issue) => issue === 'exceeds_word_limit' || issue === 'weak_closing'
+        )
+      : [];
+
+    if (!blockingIssues.length) {
+      return;
+    }
+
+    coverData[key] = '';
+    disqualifiedCoverLetters.add(key);
+    pushUnique(missingCoverLetters, key);
+  };
+
+  COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
+    removeIfBestPracticesFail(key, index);
+  });
   if (missingCoverLetters.length) {
     logStructured('warn', 'generation_cover_letters_fallback', {
       ...logContext,
