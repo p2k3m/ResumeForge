@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
+import crypto from 'crypto';
 
 process.env.S3_BUCKET = 'test-bucket';
 process.env.GEMINI_API_KEY = 'test-key';
@@ -371,6 +372,7 @@ describe('/api/process-cv', () => {
     const previousSessionKey = 'cv/candidate/session-old/logs/change-log.json';
     const previousTextKey = 'cv/candidate/session-old/artifacts/changelog.json';
 
+    mockS3Send.mockClear();
     mockDynamoSend.mockImplementation((cmd) => {
       switch (cmd.__type) {
         case 'DescribeTableCommand':
@@ -424,6 +426,84 @@ describe('/api/process-cv', () => {
         expect.objectContaining({ bucket: 'test-bucket', key: previousTextKey }),
       ])
     );
+
+    setupDefaultDynamoMock();
+  });
+
+  test('removes session change log data when the session prefix is reused', async () => {
+    const previousSessionKey = 'cv/candidate/repeat/logs/change-log.json';
+    const previousTextKey = 'cv/candidate/repeat/artifacts/changelog.json';
+
+    const originalRandomUUID = crypto.randomUUID;
+    const randomUuidMock = jest.fn().mockReturnValue('repeat');
+    if (typeof crypto.randomUUID === 'function') {
+      crypto.randomUUID = randomUuidMock;
+    } else {
+      crypto.randomUUID = randomUuidMock;
+    }
+
+    mockS3Send.mockClear();
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          if (cmd.input.ProjectionExpression === 's3Bucket, sessionChangeLogKey, changeLogKey') {
+            return Promise.resolve({
+              Item: {
+                s3Bucket: { S: 'test-bucket' },
+                sessionChangeLogKey: { S: previousSessionKey },
+                changeLogKey: { S: previousTextKey },
+              },
+            });
+          }
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-repeat' },
+              status: { S: 'scored' },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/repeat/original.pdf' },
+              sessionChangeLogKey: { S: previousSessionKey },
+              changeLog: { L: [] },
+            },
+          });
+        case 'PutItemCommand':
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    try {
+      const response = await request(app)
+        .post('/api/process-cv')
+        .field('jobId', 'job-repeat')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+      expect(response.status).toBe(200);
+
+      const deletedKeys = mockS3Send.mock.calls
+        .filter(([command]) => command.__type === 'DeleteObjectCommand')
+        .map(([command]) => ({
+          bucket: command.input.Bucket,
+          key: command.input.Key,
+        }));
+
+      expect(deletedKeys).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ bucket: 'test-bucket', key: previousSessionKey }),
+          expect.objectContaining({ bucket: 'test-bucket', key: previousTextKey }),
+        ])
+      );
+    } finally {
+      if (typeof originalRandomUUID === 'function') {
+        crypto.randomUUID = originalRandomUUID;
+      } else {
+        delete crypto.randomUUID;
+      }
+    }
 
     setupDefaultDynamoMock();
   });

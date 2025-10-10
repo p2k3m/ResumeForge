@@ -20026,28 +20026,54 @@ app.post(
     }
 
     const cleanupBucket = previousSessionChangeLogBucket || bucket;
-    const sessionPrefix = prefix;
+    const sessionPrefix = typeof prefix === 'string' ? prefix : '';
+    const normalizedPreviousSessionLogKey =
+      typeof previousSessionChangeLogKey === 'string'
+        ? previousSessionChangeLogKey.trim()
+        : '';
+    const normalizedSessionLogKey =
+      typeof sessionChangeLogKey === 'string' ? sessionChangeLogKey.trim() : '';
+    const normalizedPreviousTextKey =
+      typeof previousChangeLogTextKey === 'string'
+        ? previousChangeLogTextKey.trim()
+        : '';
+    const sessionArtifactsPrefix = sessionPrefix ? `${sessionPrefix}artifacts/` : '';
+    const hasReusedSessionPrefix = Boolean(
+      sessionPrefix &&
+        ((normalizedPreviousSessionLogKey &&
+          normalizedPreviousSessionLogKey.startsWith(sessionPrefix)) ||
+          (normalizedPreviousTextKey &&
+            normalizedPreviousTextKey.startsWith(sessionArtifactsPrefix)))
+    );
     const staleSessionArtifacts = [];
 
     if (
       cleanupBucket &&
-      previousSessionChangeLogKey &&
-      previousSessionChangeLogKey !== sessionChangeLogKey &&
-      !previousSessionChangeLogKey.startsWith(sessionPrefix)
+      normalizedPreviousSessionLogKey &&
+      (
+        normalizedPreviousSessionLogKey !== normalizedSessionLogKey ||
+        hasReusedSessionPrefix
+      )
     ) {
       staleSessionArtifacts.push({
-        key: previousSessionChangeLogKey,
+        key: normalizedPreviousSessionLogKey,
         type: 'session_change_log',
       });
     }
 
+    const previousTextKeyInCurrentPrefix = Boolean(
+      sessionArtifactsPrefix &&
+        normalizedPreviousTextKey &&
+        normalizedPreviousTextKey.startsWith(sessionArtifactsPrefix)
+    );
+
     if (
       cleanupBucket &&
-      previousChangeLogTextKey &&
-      !previousChangeLogTextKey.startsWith(`${sessionPrefix}artifacts/`)
+      normalizedPreviousTextKey &&
+      (!previousTextKeyInCurrentPrefix || hasReusedSessionPrefix)
     ) {
       staleSessionArtifacts.push({
-        key: previousChangeLogTextKey,
+        key: normalizedPreviousTextKey,
         type: 'change_log_artifact',
       });
     }
