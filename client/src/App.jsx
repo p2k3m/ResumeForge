@@ -3269,9 +3269,20 @@ function App() {
         noteTone = 'info'
       }
 
-      if (errorStep && normalizedErrorMessage && errorStep === step.key) {
+      const isErrorForStage = Boolean(
+        errorStep && normalizedErrorMessage && errorStep === step.key
+      )
+
+      if (isErrorForStage) {
         note = normalizedErrorMessage
         noteTone = 'warning'
+      }
+
+      const isActiveStage = status === 'current'
+
+      if (!isActiveStage && !isErrorForStage) {
+        note = ''
+        noteTone = ''
       }
 
       return { ...step, status, note, noteTone }
