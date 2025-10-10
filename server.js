@@ -16204,7 +16204,17 @@ async function generateEnhancedDocumentsResponse({
     contactDetails: coverContext.contactDetails,
     resumeText: combinedProfile,
   });
+  const pushUnique = (list = [], value) => {
+    if (!Array.isArray(list)) {
+      return;
+    }
+    if (!list.includes(value)) {
+      list.push(value);
+    }
+  };
   const fallbackAdjustedCoverLetters = [];
+  const bestPracticeAdjustedCoverLetters = [];
+  const missingCoverLetters = [];
   recoverableCoverLetters.forEach((details, key) => {
     if (!details || !Array.isArray(details.issues)) {
       return;
@@ -16233,7 +16243,7 @@ async function generateEnhancedDocumentsResponse({
       return;
     }
     coverData[key] = trimmedUpgraded;
-    fallbackAdjustedCoverLetters.push(key);
+    pushUnique(fallbackAdjustedCoverLetters, key);
   });
 
   if (fallbackAdjustedCoverLetters.length) {
@@ -16243,7 +16253,71 @@ async function generateEnhancedDocumentsResponse({
     });
   }
 
-  const missingCoverLetters = [];
+  const enforceCoverLetterBestPractices = (key, index) => {
+    const value = typeof coverData[key] === 'string' ? coverData[key] : '';
+    const trimmedValue = value.trim();
+    if (!trimmedValue) {
+      return;
+    }
+
+    const auditResult = auditCoverLetterStructure(trimmedValue, {
+      contactDetails: coverContext.contactDetails,
+      jobTitle: coverContext.jobTitle,
+      jobDescription,
+      jobSkills,
+      applicantName,
+      letterIndex: index + 1,
+    });
+
+    const issues = Array.isArray(auditResult.issues) ? auditResult.issues : [];
+    const blockingIssues = issues.filter((issue) =>
+      issue === 'exceeds_word_limit' || issue === 'weak_closing'
+    );
+
+    if (!blockingIssues.length) {
+      return;
+    }
+
+    const fallbackValue = fallbackLetters?.[key];
+    const normalizedFallback =
+      typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
+
+    if (normalizedFallback) {
+      coverData[key] = normalizedFallback;
+      pushUnique(bestPracticeAdjustedCoverLetters, key);
+
+      const fallbackAudit = auditCoverLetterStructure(normalizedFallback, {
+        contactDetails: coverContext.contactDetails,
+        jobTitle: coverContext.jobTitle,
+        jobDescription,
+        jobSkills,
+        applicantName,
+        letterIndex: index + 1,
+      });
+
+      const fallbackIssues = Array.isArray(fallbackAudit.issues)
+        ? fallbackAudit.issues
+        : [];
+      const fallbackStillBlocks = fallbackIssues.some((issue) =>
+        issue === 'exceeds_word_limit' || issue === 'weak_closing'
+      );
+
+      if (!fallbackAudit.valid && fallbackStillBlocks) {
+        coverData[key] = '';
+        pushUnique(missingCoverLetters, key);
+      }
+
+      return;
+    }
+
+    coverData[key] = '';
+    pushUnique(missingCoverLetters, key);
+  };
+
+  COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
+    enforceCoverLetterBestPractices(key, index);
+  });
+
   const ensureCoverLetterValue = (key) => {
     const currentValue = coverData[key];
     const hasUsableValue =
@@ -16256,7 +16330,7 @@ async function generateEnhancedDocumentsResponse({
       typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
     if (normalizedFallback) {
       coverData[key] = normalizedFallback;
-      missingCoverLetters.push(key);
+      pushUnique(missingCoverLetters, key);
     }
   };
 
@@ -16269,7 +16343,11 @@ async function generateEnhancedDocumentsResponse({
     });
   }
   const fallbackAppliedCoverLetters = Array.from(
-    new Set([...missingCoverLetters, ...fallbackAdjustedCoverLetters])
+    new Set([
+      ...missingCoverLetters,
+      ...fallbackAdjustedCoverLetters,
+      ...bestPracticeAdjustedCoverLetters,
+    ])
   );
   const unavailableCoverLetters = COVER_LETTER_VARIANT_KEYS.filter(
     (key) => typeof coverData[key] !== 'string' || !coverData[key].trim()
