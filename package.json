@@ -86,6 +86,7 @@
       "^qrcode$": "<rootDir>/tests/mocks/qrcode.js",
       "^react$": "<rootDir>/node_modules/react/index.js",
       "^react-dom$": "<rootDir>/node_modules/react-dom/index.js",
+      "coverTemplateStyles\\.js$": "<rootDir>/client/src/utils/coverTemplateStyles.cjs",
       "actionableAdvice\\.js$": "<rootDir>/client/src/utils/actionableAdviceShared.cjs",
       "templateRegistry\\.js$": "<rootDir>/client/src/templateRegistry.cjs",
       "^.+\\.(css|scss)$": "identity-obj-proxy"
