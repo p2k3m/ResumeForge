@@ -20,7 +20,6 @@ import highlightsIcon from './assets/icon-highlights.svg'
 import enhanceIcon from './assets/icon-enhance.svg'
 import qrOptimisedResume from './assets/qr-optimised-resume.svg'
 import { deriveDeltaSummary } from './deriveDeltaSummary.js'
-import { createCoverLetterPdf } from './utils/createCoverLetterPdf.js'
 import { normalizeOutputFiles } from './utils/normalizeOutputFiles.js'
 import { normalizePdfBlob } from './utils/assetValidation.js'
 import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
@@ -3342,22 +3341,158 @@ function App() {
       setCoverLetterDownloadError('Add your personalised message before downloading.')
       return
     }
+
+    const file = coverLetterEditor.file || {}
+    const presentation = coverLetterEditor.presentation || getDownloadPresentation(file)
+    const templateMeta =
+      (file.templateMeta && typeof file.templateMeta === 'object' ? file.templateMeta : null) ||
+      downloadTemplateMetadata[type] ||
+      {}
+    const resolvedTemplateId = canonicalizeCoverTemplateId(
+      templateMeta.templateId ||
+        file.templateId ||
+        file.coverTemplateId ||
+        downloadTemplateMetadata[type]?.id ||
+        templateContext?.coverTemplate1 ||
+        DEFAULT_COVER_TEMPLATE,
+      DEFAULT_COVER_TEMPLATE
+    )
+    const resolvedTemplateName =
+      (typeof templateMeta.templateName === 'string' && templateMeta.templateName.trim()) ||
+      (typeof file.coverTemplateName === 'string' && file.coverTemplateName.trim()) ||
+      downloadTemplateMetadata[type]?.name ||
+      formatCoverTemplateName(resolvedTemplateId)
+    const coverTemplateCandidates = normalizeCoverTemplateList([
+      resolvedTemplateId,
+      templateMeta.templateId,
+      file.coverTemplateId,
+      downloadTemplateMetadata[type]?.id,
+      templateContext?.coverTemplate1,
+      templateContext?.coverTemplate2,
+      ...(Array.isArray(templateContext?.coverTemplates) ? templateContext.coverTemplates : [])
+    ])
+    const coverLetterFields =
+      file.coverLetterFields && typeof file.coverLetterFields === 'object'
+        ? file.coverLetterFields
+        : null
+    const contactDetails =
+      coverLetterFields && typeof coverLetterFields.contact === 'object'
+        ? {
+            contactLines: Array.isArray(coverLetterFields.contact.lines)
+              ? coverLetterFields.contact.lines.filter((line) => typeof line === 'string')
+              : [],
+            email:
+              typeof coverLetterFields.contact.email === 'string'
+                ? coverLetterFields.contact.email
+                : '',
+            phone:
+              typeof coverLetterFields.contact.phone === 'string'
+                ? coverLetterFields.contact.phone
+                : '',
+            linkedin:
+              typeof coverLetterFields.contact.linkedin === 'string'
+                ? coverLetterFields.contact.linkedin
+                : '',
+            cityState:
+              typeof coverLetterFields.contact.location === 'string'
+                ? coverLetterFields.contact.location
+                : ''
+          }
+        : undefined
+    const applicantName =
+      (typeof coverLetterFields?.closing?.signature === 'string' &&
+        coverLetterFields.closing.signature.trim()) ||
+      ''
+    const jobTitle =
+      (typeof coverLetterFields?.job?.title === 'string' && coverLetterFields.job.title.trim()) ||
+      (typeof changeLogSummaryContext?.jobTitle === 'string'
+        ? changeLogSummaryContext.jobTitle
+        : '')
+
+    const payload = {
+      jobId,
+      text,
+      templateId: resolvedTemplateId,
+      template: resolvedTemplateId,
+      coverTemplate: resolvedTemplateId,
+      coverTemplateId: resolvedTemplateId,
+      coverTemplates: coverTemplateCandidates,
+      templates: coverTemplateCandidates,
+      variant: type,
+      letterIndex: type === 'cover_letter2' ? 2 : 1,
+      jobTitle,
+      jobDescription: jobDescriptionText,
+      jobSkills,
+      applicantName,
+      ...(contactDetails ? { contactDetails } : {}),
+      ...(coverLetterFields ? { coverLetterFields } : {}),
+      ...(userIdentifier ? { userId: userIdentifier } : {})
+    }
+
     setIsCoverLetterDownloading(true)
     setCoverLetterDownloadError('')
     try {
-      const blob = await createCoverLetterPdf({
-        text,
-        title: coverLetterEditor.label || 'Cover Letter'
+      const response = await fetch(buildApiUrl(API_BASE_URL, '/api/render-cover-letter'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/pdf'
+        },
+        body: JSON.stringify(payload)
       })
-      const safeLabel = (coverLetterEditor.label || type || 'cover-letter')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-      const fileName = `${safeLabel || 'cover-letter'}-updated.pdf`
+      if (!response.ok) {
+        let errPayload = null
+        try {
+          errPayload = await response.json()
+        } catch (parseErr) {
+          errPayload = null
+        }
+        const { message, code, source } = resolveApiError({
+          data: errPayload,
+          fallback: 'Could not generate PDF, please try again.',
+          status: response.status
+        })
+        const error = new Error(message)
+        if (code) {
+          error.code = code
+        }
+        if (source) {
+          error.serviceError = source
+        }
+        throw error
+      }
+
+      const headerTemplateId = response.headers.get('x-template-id')
+      const headerTemplateName = response.headers.get('x-template-name')
+      const effectiveTemplateId = canonicalizeCoverTemplateId(
+        headerTemplateId || resolvedTemplateId,
+        resolvedTemplateId
+      )
+      const effectiveTemplateName =
+        (headerTemplateName && headerTemplateName.trim()) ||
+        resolvedTemplateName ||
+        formatCoverTemplateName(effectiveTemplateId)
+
+      const blob = await response.blob()
+      const fileForName = {
+        type,
+        fileName: coverLetterEditor.label || type || 'cover-letter',
+        templateId: effectiveTemplateId,
+        templateName: effectiveTemplateName,
+        coverTemplateId: effectiveTemplateId,
+        coverTemplateName: effectiveTemplateName
+      }
+      const downloadFileName = deriveDownloadFileName(fileForName, presentation, response, {
+        templateName: effectiveTemplateName,
+        templateId: effectiveTemplateId,
+        generatedAt: Date.now(),
+        contentTypeOverride: 'application/pdf',
+        forcePdfExtension: true
+      })
       const blobUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = blobUrl
-      link.download = fileName
+      link.download = downloadFileName || 'cover-letter.pdf'
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -3365,11 +3500,27 @@ function App() {
       resetUiAfterDownload()
     } catch (err) {
       console.error('Cover letter PDF generation failed', err)
-      setCoverLetterDownloadError('Could not generate PDF, please try again')
+      const message =
+        typeof err?.message === 'string' && err.message.trim()
+          ? err.message.trim()
+          : 'Could not generate PDF, please try again'
+      setCoverLetterDownloadError(message)
     } finally {
       setIsCoverLetterDownloading(false)
     }
-  }, [coverLetterEditor, coverLetterDrafts, resetUiAfterDownload])
+  }, [
+    API_BASE_URL,
+    changeLogSummaryContext,
+    coverLetterDrafts,
+    coverLetterEditor,
+    downloadTemplateMetadata,
+    jobDescriptionText,
+    jobId,
+    jobSkills,
+    resetUiAfterDownload,
+    templateContext,
+    userIdentifier
+  ])
 
   const openCoverLetterEditorModal = useCallback(
     (file) => {
