@@ -6445,46 +6445,134 @@ function App() {
       setTemplateContext(templateContextValue)
       setChangeLog((prev) => (Array.isArray(data.changeLog) ? data.changeLog : prev))
 
-      const probabilityValue =
+      const selectionInsightsValue = data.selectionInsights || {}
+      const selectionInsightsBefore = selectionInsightsValue.before || {}
+      const selectionInsightsAfter =
+        selectionInsightsValue.after || selectionInsightsValue
+
+      const probabilityBeforeValue =
+        typeof data.selectionProbabilityBefore === 'number'
+          ? data.selectionProbabilityBefore
+          : typeof selectionInsightsBefore?.probability === 'number'
+            ? selectionInsightsBefore.probability
+            : null
+      const probabilityAfterValue =
         typeof data.selectionProbabilityAfter === 'number'
           ? data.selectionProbabilityAfter
           : typeof data.selectionProbability === 'number'
             ? data.selectionProbability
-            : typeof data.selectionInsights?.probability === 'number'
-              ? data.selectionInsights.probability
+            : typeof selectionInsightsAfter?.probability === 'number'
+              ? selectionInsightsAfter.probability
               : null
-      const probabilityMeaning =
-        data.selectionInsights?.level ||
-        (typeof probabilityValue === 'number'
-          ? probabilityValue >= 75
-            ? 'High'
-            : probabilityValue >= 55
-              ? 'Medium'
-              : 'Low'
-          : null)
-      const probabilityRationale =
-        data.selectionInsights?.message ||
-        (typeof probabilityValue === 'number' && probabilityMeaning
-          ? `Projected ${probabilityMeaning.toLowerCase()} probability (${probabilityValue}%) that this resume will be shortlisted for the JD.`
-          : null)
+      const probabilityBeforeMeaning =
+        selectionInsightsBefore?.level ||
+        deriveSelectionMeaning(probabilityBeforeValue)
+      const probabilityAfterMeaning =
+        selectionInsightsAfter?.level ||
+        selectionInsightsValue?.level ||
+        deriveSelectionMeaning(probabilityAfterValue)
+      const probabilityBeforeMessage =
+        selectionInsightsBefore?.message || selectionInsightsBefore?.rationale || null
+      const probabilityAfterMessage =
+        selectionInsightsAfter?.message ||
+        selectionInsightsAfter?.rationale ||
+        selectionInsightsValue?.message ||
+        selectionInsightsValue?.rationale ||
+        null
+      const probabilityBeforeRationale = buildSelectionRationale(
+        probabilityBeforeValue,
+        probabilityBeforeMeaning,
+        probabilityBeforeMessage
+      )
+      const probabilityAfterRationale = buildSelectionRationale(
+        probabilityAfterValue,
+        probabilityAfterMeaning,
+        probabilityAfterMessage
+      )
+      const probabilityDeltaValue =
+        typeof data.selectionProbabilityDelta === 'number'
+          ? data.selectionProbabilityDelta
+          : typeof probabilityBeforeValue === 'number' &&
+              typeof probabilityAfterValue === 'number'
+            ? probabilityAfterValue - probabilityBeforeValue
+            : null
+      const probabilityFactors = Array.isArray(data.selectionProbabilityFactors)
+        ? data.selectionProbabilityFactors
+        : Array.isArray(selectionInsightsValue?.factors)
+          ? selectionInsightsValue.factors
+          : null
+
+      const probabilityValue = probabilityAfterValue
+      const probabilityMeaning = probabilityAfterMeaning
+      const probabilityRationale = probabilityAfterRationale
 
       const originalScoreValue = normalizePercent(data.originalScore)
       const enhancedScoreValue =
         normalizePercent(data.enhancedScore) ?? originalScoreValue
 
-      const updatedMatch = {
-        table: data.table || [],
-        addedSkills: data.addedSkills || [],
-        missingSkills: data.missingSkills || [],
-        originalScore: originalScoreValue,
-        enhancedScore: enhancedScoreValue,
-        originalTitle: data.originalTitle || '',
-        modifiedTitle: data.modifiedTitle || '',
-        selectionProbability: probabilityValue,
-        selectionProbabilityMeaning: probabilityMeaning,
-        selectionProbabilityRationale: probabilityRationale
-      }
-      setMatch(updatedMatch)
+      setMatch((prev) => {
+        const base = prev ? { ...prev } : {}
+
+        base.table = Array.isArray(data.table) ? data.table : base.table || []
+        base.addedSkills = Array.isArray(data.addedSkills)
+          ? data.addedSkills
+          : base.addedSkills || []
+        base.missingSkills = Array.isArray(data.missingSkills)
+          ? data.missingSkills
+          : base.missingSkills || []
+
+        if (originalScoreValue !== null) {
+          base.originalScore = originalScoreValue
+          base.atsScoreBefore = originalScoreValue
+        }
+        if (enhancedScoreValue !== null) {
+          base.enhancedScore = enhancedScoreValue
+          base.atsScoreAfter = enhancedScoreValue
+        }
+
+        if (typeof data.atsScoreBefore === 'number') {
+          base.atsScoreBefore = data.atsScoreBefore
+        }
+        if (typeof data.atsScoreAfter === 'number') {
+          base.atsScoreAfter = data.atsScoreAfter
+          base.enhancedScore = data.atsScoreAfter
+        }
+
+        base.originalTitle =
+          typeof data.originalTitle === 'string' ? data.originalTitle : base.originalTitle || ''
+        base.modifiedTitle =
+          typeof data.modifiedTitle === 'string' ? data.modifiedTitle : base.modifiedTitle || ''
+
+        if (probabilityBeforeValue !== null) {
+          base.selectionProbabilityBefore = probabilityBeforeValue
+        }
+        if (probabilityAfterValue !== null) {
+          base.selectionProbability = probabilityAfterValue
+          base.selectionProbabilityAfter = probabilityAfterValue
+        }
+        if (probabilityBeforeMeaning) {
+          base.selectionProbabilityBeforeMeaning = probabilityBeforeMeaning
+        }
+        if (probabilityAfterMeaning) {
+          base.selectionProbabilityMeaning = probabilityAfterMeaning
+          base.selectionProbabilityAfterMeaning = probabilityAfterMeaning
+        }
+        if (probabilityBeforeRationale) {
+          base.selectionProbabilityBeforeRationale = probabilityBeforeRationale
+        }
+        if (probabilityAfterRationale) {
+          base.selectionProbabilityRationale = probabilityAfterRationale
+          base.selectionProbabilityAfterRationale = probabilityAfterRationale
+        }
+        if (probabilityDeltaValue !== null) {
+          base.selectionProbabilityDelta = probabilityDeltaValue
+        }
+        if (probabilityFactors) {
+          base.selectionProbabilityFactors = cloneData(probabilityFactors)
+        }
+
+        return base
+      })
 
       const toMetricArray = (value) => {
         if (Array.isArray(value)) return value
@@ -6532,7 +6620,7 @@ function App() {
       const manualCertificatesValue = data.manualCertificates || manualCertificatesData
       setManualCertificatesData(manualCertificatesValue)
       setCertificateInsights(data.certificateInsights || certificateInsights)
-      setSelectionInsights(data.selectionInsights || selectionInsights)
+      setSelectionInsights(selectionInsightsValue || selectionInsights)
     } catch (err) {
       console.error('Enhanced document generation failed', err)
       const message =
