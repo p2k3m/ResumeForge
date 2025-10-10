@@ -9773,7 +9773,7 @@ function buildSelectionInsights(context = {}) {
     certificationStatus,
   });
   const baseSummary =
-    'These skills and highlights were added to match the JD. Please prepare for the interview accordingly.';
+    'These JD-aligned additions were applied so you can prep for interview conversations with confidence.';
   let summary = baseSummary;
   if (missing.length) {
     const missingSummary = summarizeList(missing, { limit: 4 });
@@ -9785,7 +9785,8 @@ function buildSelectionInsights(context = {}) {
       : '';
     summary = `Skill gaps detected: ${missingSummary}. ${resourceNote}${addedNote}`;
   } else if (added.length) {
-    summary = `${baseSummary} Added focus areas: ${summarizeList(added, { limit: 4 })}.`;
+    const addedSummary = summarizeList(added, { limit: 4 });
+    summary = `We added ${addedSummary}; prepare for questions.`;
   }
 
   const selectionFactors = [];
