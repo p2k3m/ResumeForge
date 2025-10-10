@@ -75,4 +75,30 @@ describe('TemplatePreview comparison support', () => {
       screen.getByText(/Cover letters stay in the Modern Cover even if you swap CV templates/i)
     ).toBeInTheDocument()
   })
+
+  it('syncs cover header and footer styling with a linked resume preview', async () => {
+    renderComponent({ isCoverLinkedToResume: true })
+
+    const resumePreviewGroup = screen.getByRole('group', { name: /Preview CV templates/i })
+
+    const initialHeader = screen.getByText('Alex Morgan').parentElement?.parentElement
+    expect(initialHeader).toHaveClass('from-indigo-500')
+
+    const initialFooter = screen
+      .getByText(/Thank you for your consideration/i)
+      .parentElement
+    expect(initialFooter).toHaveClass('bg-slate-900/90')
+
+    fireEvent.click(within(resumePreviewGroup).getByRole('button', { name: 'Classic' }))
+
+    await screen.findByRole('heading', { name: 'Classic Cover' })
+
+    const updatedHeader = screen.getByText('Alex Morgan').parentElement?.parentElement
+    expect(updatedHeader).toHaveClass('from-amber-700')
+
+    const updatedFooter = screen
+      .getByText(/Thank you for your consideration/i)
+      .parentElement
+    expect(updatedFooter).toHaveClass('bg-amber-100')
+  })
 })
