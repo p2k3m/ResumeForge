@@ -1665,6 +1665,106 @@ describe('/api/generate-enhanced-docs', () => {
     primeDefaultGeminiResponses();
   });
 
+  test('replaces weak closing cover letters with confident fallback copy', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    generateContentMock.mockReset();
+    generateContentMock
+      .mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              summary: ['Summary paragraph'],
+              experience: ['Delivered scalable APIs.'],
+              education: [],
+              certifications: [],
+              skills: ['Node.js'],
+              projects: [],
+              projectSnippet: 'Improved deployment speed.',
+              latestRoleTitle: 'Senior Engineer',
+              latestRoleDescription: 'Led engineering initiatives.',
+              mandatorySkills: ['Node.js'],
+              addedSkills: [],
+            }),
+        },
+      })
+      .mockResolvedValueOnce({
+        response: { text: () => 'Designed observability tooling.' },
+      })
+      .mockResolvedValue({
+        response: {
+          text: () =>
+            JSON.stringify({
+              cover_letter1: [
+                'Jordan Smith',
+                'Email: jordan@example.com',
+                'Dear Hiring Manager,',
+                'My experience spans product delivery and operations, and I am eager to contribute to your team.',
+                'Thank you for your time and consideration.',
+                'Sincerely,',
+                'Jordan Smith',
+              ].join('\n\n'),
+              cover_letter2: [
+                'Jordan Smith',
+                'Email: jordan@example.com',
+                'Dear Hiring Manager,',
+                'I am excited about the opportunity to lead large-scale initiatives at your organization.',
+                'Thank you for your consideration. I look forward to discussing how I can help your team deliver results.',
+                'Sincerely,',
+                'Jordan Smith',
+              ].join('\n\n'),
+            }),
+        },
+      });
+
+    const res = await request(app)
+      .post('/api/generate-enhanced-docs')
+      .send({
+        jobId: 'job-791',
+        resumeText: [
+          'Jordan Smith',
+          'Email: jordan@example.com',
+          'Phone: 555-123-4567',
+          'LinkedIn: https://linkedin.com/in/jordansmith',
+          'Experience',
+          'Senior Engineer at Stellar Tech (2021-2023)',
+          '- Delivered solutions',
+        ].join('\n'),
+        originalResumeText: [
+          'Jordan Smith',
+          'Email: jordan@example.com',
+          'Phone: 555-123-4567',
+          'LinkedIn: https://linkedin.com/in/jordansmith',
+          'Experience',
+          'Senior Engineer at Stellar Tech (2021-2023)',
+          '- Delivered solutions',
+        ].join('\n'),
+        jobDescriptionText: MANUAL_JOB_DESCRIPTION,
+        jobSkills: ['Node.js'],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.coverLetterStatus).toEqual({
+      fallbackApplied: ['cover_letter1'],
+      unavailable: [],
+    });
+
+    const cover1 = res.body.urls.find((entry) => entry.type === 'cover_letter1');
+    expect(cover1).toBeTruthy();
+    expect(cover1.rawText).not.toContain('Thank you for your time and consideration.');
+    expect(cover1.rawText).toMatch(/I welcome the opportunity to discuss how I can support/i);
+    const cover1WordCount = cover1.rawText.split(/\s+/).filter(Boolean).length;
+    expect(cover1WordCount).toBeLessThanOrEqual(500);
+
+    const cover2 = res.body.urls.find((entry) => entry.type === 'cover_letter2');
+    expect(cover2).toBeTruthy();
+    expect(cover2.rawText).toContain('I look forward to discussing how I can help your team deliver results.');
+
+    process.env.NODE_ENV = originalEnv;
+    generateContentMock.mockReset();
+    primeDefaultGeminiResponses();
+  });
+
   test('surfaces message when cover letters remain unavailable', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
