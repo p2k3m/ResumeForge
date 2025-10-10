@@ -9439,6 +9439,7 @@ function buildProbabilityNarrative({
   designationStatus,
   experienceStatus,
   certificationStatus,
+  normalization,
 }) {
   const reasons = [];
 
@@ -9483,6 +9484,14 @@ function buildProbabilityNarrative({
     reasons.push('certifications need a manual update to be reflected');
   } else if (certificationStatus === 'match') {
     reasons.push('credential coverage aligns with the posting');
+  }
+
+  if (normalization) {
+    reasons.push(normalization);
+  }
+
+  if (!reasons.length) {
+    reasons.push('core alignment signals are balanced without major strengths or gaps');
   }
 
   const because = combineReasonClauses(reasons);
@@ -9795,6 +9804,9 @@ function buildSelectionInsights(context = {}) {
       : 'match';
 
   const selectionMetricKeys = ['designation', 'skills', 'experience', 'tasks', 'highlights'];
+  const PROBABILITY_MIN = 8;
+  const PROBABILITY_MAX = 97;
+
   const computeProbability = (scores = {}) => {
     const values = selectionMetricKeys
       .map((key) => {
@@ -9810,9 +9822,25 @@ function buildSelectionInsights(context = {}) {
       ? Math.round(values.reduce((total, value) => total + value, 0) / values.length)
       : 0;
 
-    const probability = clamp(average, 0, 100);
+    const rawProbability = clamp(average, 0, 100);
+    let probability = rawProbability;
+    let normalization = null;
+
+    if (!values.length) {
+      probability = PROBABILITY_MIN;
+      normalization = `insufficient scoring signals were detected, so probability defaults to the ${PROBABILITY_MIN}% floor`;
+    } else {
+      if (rawProbability < PROBABILITY_MIN) {
+        probability = PROBABILITY_MIN;
+        normalization = `calculated probability was lifted to the ${PROBABILITY_MIN}% floor to reflect baseline interview chances`;
+      } else if (rawProbability > PROBABILITY_MAX) {
+        probability = PROBABILITY_MAX;
+        normalization = `calculated probability was capped at ${PROBABILITY_MAX}% to avoid overstating selection odds`;
+      }
+    }
+
     const level = probability >= 75 ? 'High' : probability >= 55 ? 'Medium' : 'Low';
-    return { probability, level };
+    return { probability, level, normalization };
   };
 
   const baselineProbabilityInput = {
@@ -9827,11 +9855,17 @@ function buildSelectionInsights(context = {}) {
     .filter((metric) => selectionMetricKeys.includes(metric.key))
     .reduce((acc, metric) => ({ ...acc, [metric.key]: metric.score }), {});
 
-  const { probability: baselineProbability, level: baselineLevel } = computeProbability(
-    baselineProbabilityInput
-  );
+  const {
+    probability: baselineProbability,
+    level: baselineLevel,
+    normalization: baselineProbabilityNormalization,
+  } = computeProbability(baselineProbabilityInput);
 
-  const { probability, level } = computeProbability(selectionProbabilityInput);
+  const {
+    probability,
+    level,
+    normalization: probabilityNormalization,
+  } = computeProbability(selectionProbabilityInput);
 
   const probabilityMessage = buildProbabilityNarrative({
     probability,
@@ -9843,6 +9877,7 @@ function buildSelectionInsights(context = {}) {
     designationStatus,
     experienceStatus,
     certificationStatus,
+    normalization: probabilityNormalization,
   });
   const baselineProbabilityMessage = buildProbabilityNarrative({
     probability: baselineProbability,
@@ -9854,6 +9889,7 @@ function buildSelectionInsights(context = {}) {
     designationStatus: baselineDesignation.designationStatus,
     experienceStatus,
     certificationStatus,
+    normalization: baselineProbabilityNormalization,
   });
   const baseSummary =
     'These JD-aligned additions were applied so you can prep for interview conversations with confidence.';
