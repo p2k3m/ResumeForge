@@ -12124,29 +12124,125 @@ function mapCoverLetterFields({
   };
 }
 
+function cleanEmployerName(value = '') {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.replace(/[\s,.;:]+$/, '').trim();
+  if (!trimmed) return '';
+  return trimmed;
+}
+
+function extractEmployerName(jobDescription = '') {
+  if (typeof jobDescription !== 'string') {
+    return '';
+  }
+
+  const normalized = jobDescription.replace(/\r/g, '\n');
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const inspectable = lines.slice(0, 8);
+
+  for (const line of inspectable) {
+    const companyMatch = line.match(
+      /^(?:company|employer|organization|organisation|about(?: us)?)\s*[:\-]\s*(.+)$/i
+    );
+    if (companyMatch) {
+      const name = cleanEmployerName(companyMatch[1]);
+      if (name) return name;
+    }
+  }
+
+  const searchWindow = inspectable.join(' ');
+  const patterns = [
+    /(?:role|position|opportunity)\s+at\s+([A-Z][A-Za-z0-9&.,' -]{2,})/i,
+    /join(?:ing)?\s+(?:the\s+)?([A-Z][A-Za-z0-9&.,' -]{2,})(?:\s+(?:team|organization|organisation|company|group))?/i,
+    /at\s+([A-Z][A-Za-z0-9&.,' -]{2,})(?=\s+(?:is|are|seeks|seeking|,|\.|offers|provides))/i,
+    /with\s+([A-Z][A-Za-z0-9&.,' -]{2,})(?=\s+(?:is|are|seeks|seeking|,|\.|offers|provides))/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = searchWindow.match(pattern);
+    if (match) {
+      const name = cleanEmployerName(match[1]);
+      if (name) {
+        return name;
+      }
+    }
+  }
+
+  return '';
+}
+
+function buildContactHeader(contactDetails = {}) {
+  const lineCandidates = [];
+  if (Array.isArray(contactDetails.contactLines)) {
+    lineCandidates.push(...contactDetails.contactLines);
+  }
+
+  const pushLine = (label, value) => {
+    if (typeof value !== 'string') return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    lineCandidates.push(`${label}: ${trimmed}`);
+  };
+
+  pushLine('Email', contactDetails.email);
+  pushLine('Phone', contactDetails.phone);
+  pushLine('LinkedIn', contactDetails.linkedin);
+  pushLine('Location', contactDetails.cityState);
+
+  const normalizedLines = dedupeContactLines(lineCandidates);
+  if (!normalizedLines.length) {
+    return '';
+  }
+  return normalizedLines.join('\n');
+}
+
 function buildFallbackCoverLetters({
   applicantName = '',
   jobTitle = '',
+  designation = '',
   jobDescription = '',
   jobSkills = [],
+  targetedSkills = [],
+  contactDetails = {},
   resumeText = '',
 } = {}) {
   const safeName = typeof applicantName === 'string' && applicantName.trim()
     ? applicantName.trim()
     : 'Candidate';
   const normalizedTitle = typeof jobTitle === 'string' ? jobTitle.trim() : '';
-  const titlePhrase = normalizedTitle ? `the ${normalizedTitle}` : 'the role';
+  const employerName = extractEmployerName(jobDescription) || 'your organization';
+  const titlePhrase = normalizedTitle
+    ? `the ${normalizedTitle} role`
+    : 'the role';
+  const designationLabel =
+    typeof designation === 'string' && designation.trim()
+      ? designation.trim()
+      : normalizedTitle;
+  const contactHeader = buildContactHeader(contactDetails);
   const focusSentence = summarizeJobFocus(jobDescription);
-  const skillPhrase = formatSkillList(jobSkills);
+  const prioritizedSkills = Array.isArray(targetedSkills) && targetedSkills.length
+    ? targetedSkills
+    : jobSkills;
+  const skillPhrase = formatSkillList(prioritizedSkills);
 
-  const introParts = [`I am excited to apply for ${titlePhrase}.`];
+  const introParts = [`I am excited to apply for ${titlePhrase} at ${employerName}.`];
   if (focusSentence) {
     introParts.push(`The opportunity to ${focusSentence.toLowerCase()}`);
   }
   if (skillPhrase) {
-    introParts.push(`My background with ${skillPhrase} enables me to contribute immediately.`);
+    introParts.push(
+      `My background with ${skillPhrase} equips me to tackle the priorities outlined in the description.`
+    );
   }
   const introParagraph = introParts.join(' ').replace(/\s+/g, ' ').trim();
+
+  const designationSentence = designationLabel
+    ? `As a ${designationLabel}, I have a track record of translating strategy into measurable outcomes by collaborating across teams and elevating delivery quality.`
+    : 'I have a track record of translating strategy into measurable outcomes by collaborating across teams and elevating delivery quality.';
 
   const experiences = extractExperience(resumeText);
   const describeExperience = (exp = {}, prefix = 'In my recent role') => {
@@ -12166,8 +12262,10 @@ function buildFallbackCoverLetters({
   const closingParagraph = `Thank you for considering my application. I welcome the opportunity to discuss how I can support ${closingTarget}.`;
 
   const coverLetter1 = [
+    contactHeader,
     'Dear Hiring Manager,',
     introParagraph,
+    designationSentence,
     [primaryExperience, secondaryExperience]
       .filter(Boolean)
       .join(' ')
@@ -12188,8 +12286,10 @@ function buildFallbackCoverLetters({
     : 'I am known for aligning technology investments with stakeholder goals, providing clear communication, and maintaining a customer-centric mindset.';
 
   const coverLetter2 = [
+    contactHeader,
     'Dear Hiring Manager,',
-    `I am ready to contribute to ${titlePhrase} and immediately add value to your organization.`,
+    `I am ready to contribute to ${titlePhrase} and immediately add value at ${employerName}.`,
+    designationSentence,
     reinforcementParagraph,
     alignmentParagraph,
     primaryExperience ||
@@ -15510,8 +15610,11 @@ async function generateEnhancedDocumentsResponse({
   const fallbackLetters = activeCoverLetterFallbackBuilder({
     applicantName,
     jobTitle: versionsContext.jobTitle || applicantTitle,
+    designation: coverContext.designation,
     jobDescription,
     jobSkills,
+    targetedSkills: coverContext.targetedSkills,
+    contactDetails: coverContext.contactDetails,
     resumeText: combinedProfile,
   });
   const missingCoverLetters = [];
