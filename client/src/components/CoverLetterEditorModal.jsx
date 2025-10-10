@@ -4,6 +4,7 @@ function CoverLetterEditorModal({
   isOpen = false,
   label = 'Cover letter',
   draftText = '',
+  originalText = '',
   hasChanges = false,
   wordCount = 0,
   onClose = () => {},
@@ -20,6 +21,12 @@ function CoverLetterEditorModal({
   }
 
   const title = label || 'Cover letter'
+  const originalWordCount = originalText.trim()
+    ? originalText
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length
+    : 0
   const changeBadgeClass = hasChanges
     ? 'inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700'
     : 'inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600'
@@ -51,21 +58,57 @@ function CoverLetterEditorModal({
             Close
           </button>
         </div>
-        <div className="px-6 py-6 space-y-4 text-indigo-900">
-          <textarea
-            value={draftText}
-            onChange={(event) => onChange(event.target.value)}
-            rows={14}
-            className="w-full rounded-2xl border border-indigo-200 bg-white/90 px-4 py-3 text-sm leading-relaxed shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400"
-            placeholder="Introduce yourself, highlight the top accomplishments that match the JD, and close with a confident call to action."
-          />
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-indigo-600/80">
-                {wordCount} word{wordCount === 1 ? '' : 's'}
-              </span>
-              <span className={changeBadgeClass}>{hasChanges ? 'Edited' : 'Original draft'}</span>
+        <div className="px-6 py-6 space-y-6 text-indigo-900">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-indigo-700">
+                  Original cover letter
+                </h4>
+                <span className="text-xs font-medium text-indigo-500">
+                  {originalWordCount} word{originalWordCount === 1 ? '' : 's'}
+                </span>
+              </div>
+              <textarea
+                id="cover-letter-original"
+                value={originalText}
+                readOnly
+                rows={14}
+                className="h-full min-h-[14rem] w-full rounded-2xl border border-indigo-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed shadow-inner text-indigo-700"
+                aria-describedby="cover-letter-original-help"
+              />
+              <p
+                id="cover-letter-original-help"
+                className="text-xs text-indigo-500"
+              >
+                {originalText
+                  ? 'Reference the original draft while you personalise the enhanced version.'
+                  : 'Original draft text is not available yet. Generate a cover letter to populate this view.'}
+              </p>
             </div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-indigo-700">
+                    Enhanced cover letter
+                  </h4>
+                  <span className={changeBadgeClass}>{hasChanges ? 'Edited' : 'Original draft'}</span>
+                </div>
+                <span className="text-xs font-medium text-indigo-500">
+                  {wordCount} word{wordCount === 1 ? '' : 's'}
+                </span>
+              </div>
+              <textarea
+                id="cover-letter-enhanced"
+                value={draftText}
+                onChange={(event) => onChange(event.target.value)}
+                rows={14}
+                className="h-full min-h-[14rem] w-full rounded-2xl border border-indigo-200 bg-white/90 px-4 py-3 text-sm leading-relaxed shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                placeholder="Introduce yourself, highlight the top accomplishments that match the JD, and close with a confident call to action."
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm">
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
