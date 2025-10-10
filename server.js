@@ -11917,6 +11917,26 @@ const COVER_LETTER_PLACEHOLDER_PATTERNS = Object.freeze([
   /\b(?:your (?:name|title|company|contact) here)\b/i,
   /\bInformation not provided\b/i,
 ]);
+const COVER_LETTER_SECTION_HEADING_PATTERNS = Object.freeze([
+  /\bintroduction\b/i,
+  /\bintro\b/i,
+  /\bopening\b/i,
+  /\bbody(?:\s+paragraph)?(?:\s+\d+)?\b/i,
+  /\bparagraph\s*\d+\b/i,
+  /\bsection\s*\d+\b/i,
+  /\bclosing\b/i,
+  /\bconclusion\b/i,
+  /\bsummary\b/i,
+  /\bcontact\s+(?:information|details)\b/i,
+  /\bsalutation\b/i,
+  /\bgreeting\b/i,
+  /\bsignature\b/i,
+  /\bqualifications\b/i,
+  /\bachievements\b/i,
+  /\bexperience\b/i,
+  /\bskills\b/i,
+  /\bbackground\b/i,
+]);
 
 function summarizeJobDescriptionForCover(jobDescription = '', maxLength = 360) {
   if (typeof jobDescription !== 'string') {
@@ -12300,6 +12320,33 @@ function auditCoverLetterStructure(
   );
   if (bodyHasPlaceholder && !issues.includes('placeholder_detected')) {
     issues.push('placeholder_detected');
+  }
+
+  const bodySectionHeadings = bodyParagraphs
+    .map((paragraph) => (typeof paragraph === 'string' ? paragraph.trim() : ''))
+    .filter(Boolean)
+    .filter((paragraph) => {
+      const withoutBullets = paragraph.replace(/^[-*•\s]+/, '').trim();
+      if (!withoutBullets) {
+        return true;
+      }
+      const normalized = withoutBullets.replace(/[:\-–—]+$/, '').trim();
+      if (!normalized) {
+        return true;
+      }
+      if (normalized.length > 80) {
+        return false;
+      }
+      if (/[.!?]/.test(normalized)) {
+        return false;
+      }
+      return COVER_LETTER_SECTION_HEADING_PATTERNS.some((pattern) =>
+        pattern.test(normalized)
+      );
+    });
+
+  if (bodySectionHeadings.length) {
+    issues.push('section_heading_without_content');
   }
 
   const contactLines = Array.isArray(fields?.contact?.lines) ? fields.contact.lines : [];
