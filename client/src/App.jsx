@@ -400,6 +400,23 @@ function getCoverLetterTextFromFile(file) {
   return extractCoverLetterRawText(file.text)
 }
 
+function resolveCoverLetterDraftText(drafts, originals, type, file) {
+  if (!isCoverLetterType(type)) return ''
+
+  if (drafts && Object.prototype.hasOwnProperty.call(drafts, type)) {
+    const draftValue = drafts[type]
+    return typeof draftValue === 'string' ? draftValue : ''
+  }
+
+  const originalValue =
+    originals && typeof originals[type] === 'string' ? originals[type] : ''
+  if (originalValue) {
+    return originalValue
+  }
+
+  return getCoverLetterTextFromFile(file)
+}
+
 function getBaselineScoreFromMatch(matchData) {
   if (!matchData || typeof matchData !== 'object') return null
   const { atsScoreAfter, enhancedScore, atsScoreBefore, originalScore } = matchData
@@ -3305,9 +3322,15 @@ function App() {
   )
 
   const handleCopyCoverLetter = useCallback(
-    async (type) => {
+    async (type, file = {}) => {
       if (!isCoverLetterType(type)) return
-      const text = (coverLetterDrafts[type] ?? '').trim()
+      const resolvedText = resolveCoverLetterDraftText(
+        coverLetterDrafts,
+        coverLetterOriginals,
+        type,
+        file
+      )
+      const text = typeof resolvedText === 'string' ? resolvedText.trim() : ''
       if (!text) {
         setCoverLetterClipboardStatus('Add personalised text before copying.')
         return
@@ -3324,7 +3347,7 @@ function App() {
         setCoverLetterClipboardStatus('Copy failed. Select the text and copy manually.')
       }
     },
-    [coverLetterDrafts]
+    [coverLetterDrafts, coverLetterOriginals]
   )
 
   const handleDownloadEditedCoverLetter = useCallback(async () => {
@@ -3336,13 +3359,19 @@ function App() {
       return
     }
     const type = coverLetterEditor.type
-    const text = (coverLetterDrafts[type] ?? '').trim()
+    const file = coverLetterEditor.file || {}
+    const resolvedDraftText = resolveCoverLetterDraftText(
+      coverLetterDrafts,
+      coverLetterOriginals,
+      type,
+      file
+    )
+    const text = typeof resolvedDraftText === 'string' ? resolvedDraftText.trim() : ''
     if (!text) {
       setCoverLetterDownloadError('Add your personalised message before downloading.')
       return
     }
 
-    const file = coverLetterEditor.file || {}
     const presentation = coverLetterEditor.presentation || getDownloadPresentation(file)
     const templateMeta =
       (file.templateMeta && typeof file.templateMeta === 'object' ? file.templateMeta : null) ||
@@ -3512,6 +3541,7 @@ function App() {
     API_BASE_URL,
     changeLogSummaryContext,
     coverLetterDrafts,
+    coverLetterOriginals,
     coverLetterEditor,
     downloadTemplateMetadata,
     jobDescriptionText,
@@ -8199,12 +8229,16 @@ function App() {
 
         {coverLetterEditor && (() => {
           const type = coverLetterEditor.type
-          const draftText =
-            coverLetterDrafts[type] ??
-            getCoverLetterTextFromFile(coverLetterEditor.file)
+          const file = coverLetterEditor.file || {}
+          const draftText = resolveCoverLetterDraftText(
+            coverLetterDrafts,
+            coverLetterOriginals,
+            type,
+            file
+          )
           const originalText =
             coverLetterOriginals[type] ??
-            getCoverLetterTextFromFile(coverLetterEditor.file)
+            getCoverLetterTextFromFile(file)
           const hasChanges = draftText !== originalText
           const wordCount = draftText.trim()
             ? draftText
@@ -8274,7 +8308,7 @@ function App() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleCopyCoverLetter(type)}
+                        onClick={() => handleCopyCoverLetter(type, file)}
                         className="px-4 py-2 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50"
                       >
                         Copy to clipboard
