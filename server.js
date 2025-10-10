@@ -17487,6 +17487,24 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
     );
   }
 
+  let generativeModel = null;
+  const shouldAttemptGenerative =
+    process.env.ENABLE_COVER_LETTER_GENERATIVE !== 'false' &&
+    (!isTestEnvironment || process.env.ENABLE_TEST_GENERATIVE === 'true');
+  if (shouldAttemptGenerative) {
+    try {
+      const model = await getSharedGenerativeModel();
+      if (model?.generateContent) {
+        generativeModel = model;
+      }
+    } catch (err) {
+      logStructured('warn', 'cover_letter_generative_model_unavailable', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
+
   const requestedTemplateCandidates = [
     req.body.templateId,
     req.body.template,
