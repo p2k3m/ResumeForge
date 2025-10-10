@@ -377,5 +377,34 @@ describe('targeted improvement endpoints (integration)', () => {
 
     expect(generateContentMock).toHaveBeenCalledTimes(aiResponses.length);
   });
+
+  test('improve-highlights fallback references JD-specified LLM vendors', async () => {
+    const { app } = await setupTestServer();
+    const { generateContentMock } = await import('./mocks/generateContentMock.js');
+
+    generateContentMock.mockReset();
+    generateContentMock.mockResolvedValueOnce({ response: { text: () => 'not-json' } });
+
+    const llmJobDescription = [
+      'Drive enterprise LLM adoption with measurable outcomes.',
+      'Experience orchestrating OpenAI and Gemini platforms is mandatory.',
+    ].join(' ');
+
+    const response = await request(app)
+      .post('/api/improve-highlights')
+      .send({
+        ...basePayload,
+        resumeText: baseResume,
+        jobDescription: llmJobDescription,
+        jobSkills: ['LLM integration', 'OpenAI', 'Gemini'],
+        missingSkills: ['LLM integration'],
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.afterExcerpt).toContain('Quantified OpenAI and Gemini LLMs impact hitting');
+    expect(response.body.explanation).toContain('OpenAI and Gemini LLMs');
+    expect(response.body.updatedResume).toContain('Quantified OpenAI and Gemini LLMs impact hitting');
+  });
 });
 
