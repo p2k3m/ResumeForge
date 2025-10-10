@@ -208,6 +208,37 @@ const LEARNING_RESOURCE_LIMITS = Object.freeze({
   linksPerSkill: 3,
 });
 
+const RESOURCE_PROVIDER_LABELS = Object.freeze({
+  'youtube.com': 'YouTube',
+  'www.youtube.com': 'YouTube',
+  'm.youtube.com': 'YouTube',
+  'youtu.be': 'YouTube',
+  'coursera.org': 'Coursera',
+  'www.coursera.org': 'Coursera',
+  'udemy.com': 'Udemy',
+  'www.udemy.com': 'Udemy',
+});
+
+function resolveResourceProvider(url = '') {
+  if (typeof url !== 'string' || !url) {
+    return '';
+  }
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname || '';
+    if (!hostname) {
+      return '';
+    }
+    const normalized = hostname.toLowerCase();
+    if (RESOURCE_PROVIDER_LABELS[normalized]) {
+      return RESOURCE_PROVIDER_LABELS[normalized];
+    }
+    return hostname.replace(/^www\./i, '');
+  } catch {
+    return '';
+  }
+}
+
 function normalizeLearningSkillList(skills = [], limit = LEARNING_RESOURCE_LIMITS.skills) {
   if (!Array.isArray(skills)) {
     return [];
@@ -274,6 +305,51 @@ function sanitizeLearningResourceEntries(entries, { missingSkills = [] } = {}) {
   return result;
 }
 
+function formatLearningResourceDescriptor(resource) {
+  if (!resource || typeof resource !== 'object') {
+    return '';
+  }
+  const url = typeof resource.url === 'string' ? resource.url.trim() : '';
+  if (!url) {
+    return '';
+  }
+  const title =
+    typeof resource.title === 'string' && resource.title.trim()
+      ? resource.title.trim()
+      : '';
+  const provider = resolveResourceProvider(url);
+  const providerLabel =
+    provider && title && title.toLowerCase().includes(provider.toLowerCase())
+      ? ''
+      : provider;
+  const descriptor = [title || '', providerLabel || ''].filter(Boolean).join(' ');
+  const anchor = descriptor || url;
+  return `${anchor} → ${url}`;
+}
+
+function buildResourceHighlightSummary(entries, { limit = 2 } = {}) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return '';
+  }
+  const highlights = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const skill = typeof entry.skill === 'string' ? entry.skill.trim() : '';
+    if (!skill) continue;
+    const resources = Array.isArray(entry.resources) ? entry.resources : [];
+    const primary = resources.find(
+      (item) => item && typeof item.url === 'string' && item.url.trim()
+    );
+    const descriptor = formatLearningResourceDescriptor(primary);
+    if (!descriptor) continue;
+    highlights.push(`${skill}: ${descriptor}`);
+    if (highlights.length >= Math.max(1, limit)) {
+      break;
+    }
+  }
+  return summarizeList(highlights, { limit: Math.max(1, limit), conjunction: 'and' });
+}
+
 function buildFallbackLearningResources(skills, { jobTitle = '' } = {}) {
   const normalizedSkills = normalizeLearningSkillList(skills);
   if (!normalizedSkills.length) {
@@ -290,14 +366,14 @@ function buildFallbackLearningResources(skills, { jobTitle = '' } = {}) {
           description: 'Video playlist to refresh the fundamentals quickly.',
         },
         {
-          title: `${skill} practical projects`,
-          url: `https://www.github.com/search?q=${encodeURIComponent(`${skill} sample project`)}`,
-          description: 'Hands-on repositories to apply the skill before interviews.',
+          title: `${skill} guided course (Coursera)`,
+          url: `https://www.coursera.org/search?query=${encodeURIComponent(skill)}`,
+          description: 'Structured Coursera path to cover the fundamentals fast.',
         },
         {
-          title: `${skill} interview questions`,
-          url: `https://www.google.com/search?q=${encodeURIComponent(`${skill} interview questions`)}`,
-          description: 'Common interview prompts to self-assess readiness.',
+          title: `${skill} bootcamp picks (Udemy)`,
+          url: `https://www.udemy.com/courses/search/?q=${encodeURIComponent(skill)}`,
+          description: 'Top-rated Udemy sprint courses for quick hands-on practice.',
         },
       ].slice(0, LEARNING_RESOURCE_LIMITS.linksPerSkill),
     };
@@ -317,6 +393,7 @@ async function generateLearningResources(skills, context = {}) {
     context.jobTitle ? `Target job title: ${context.jobTitle}` : '',
     focusSummary ? `Job focus: ${focusSummary}` : '',
     'Recommend 2-3 public learning resources per skill (YouTube playlists, documentation, hands-on labs, credible tutorials).',
+    'Prioritise reputable platforms such as YouTube, Coursera, or Udemy and provide the direct URL for each pick.',
     'Respond with JSON in the format {"resources":[{"skill":"<skill>","resources":[{"title":"","url":"https://","description":""}]}]}.',
     'Keep descriptions under 160 characters, reference only reputable sites, and ensure each URL is absolute.',
   ]
@@ -9786,10 +9863,15 @@ function buildSelectionInsights(context = {}) {
     const resourceNote = normalizedLearningResources.length
       ? 'Use the learning sprint below to close the gap before interviews.'
       : 'Plan targeted practice so you can discuss them confidently in interviews.';
-    const addedNote = added.length
-      ? ` Strengthened coverage for ${summarizeList(added, { limit: 3 })}.`
-      : '';
-    summary = `Skill gaps detected: ${missingSummary}. ${resourceNote}${addedNote}`;
+    const resourceHighlightsText = buildResourceHighlightSummary(normalizedLearningResources);
+    const summaryParts = [`Skill gaps detected: ${missingSummary}.`, resourceNote];
+    if (resourceHighlightsText) {
+      summaryParts.push(`Start with ${resourceHighlightsText}.`);
+    }
+    if (added.length) {
+      summaryParts.push(`Strengthened coverage for ${summarizeList(added, { limit: 3 })}.`);
+    }
+    summary = summaryParts.join(' ').replace(/\s+/g, ' ').trim();
   } else if (added.length) {
     const addedSummary = summarizeList(added, { limit: 4 });
     summary = `We added ${addedSummary}; prepare for questions.`;
