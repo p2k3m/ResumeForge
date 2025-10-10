@@ -167,12 +167,56 @@ function buildCategoryAdvice(categoryKey, bucket = {}) {
   return advice
 }
 
+function buildActionableAddenda(type, { added = [], removed = [] }) {
+  const actions = []
+  const addedList = normaliseActionList(added)
+  const removedList = normaliseActionList(removed)
+
+  switch (type) {
+    case 'skills':
+      addedList.forEach((item) => actions.push(`Practice ${item}`))
+      removedList.forEach((item) => actions.push(`Phase out ${item}`))
+      break
+    case 'experience':
+      addedList.forEach((item) => actions.push(`Rehearse story about ${item}`))
+      removedList.forEach((item) => actions.push(`Archive ${item}`))
+      break
+    case 'designation':
+      addedList.forEach((item) => actions.push(`Use title ${item}`))
+      removedList.forEach((item) => actions.push(`Retire title ${item}`))
+      break
+    case 'summary':
+      addedList.forEach((item) => actions.push(`Lead with ${item}`))
+      removedList.forEach((item) => actions.push(`Trim ${item}`))
+      break
+    case 'certificates':
+      addedList.forEach((item) => actions.push(`Add credential ${item}`))
+      removedList.forEach((item) => actions.push(`Archive credential ${item}`))
+      break
+    case 'format':
+      addedList.forEach((item) => actions.push(`Apply formatting update: ${item}`))
+      removedList.forEach((item) => actions.push(`Retire formatting element: ${item}`))
+      break
+    default:
+      addedList.forEach((item) => actions.push(`Follow up on ${item}`))
+      removedList.forEach((item) => actions.push(`Deprioritise ${item}`))
+      break
+  }
+
+  return actions
+}
+
 function buildSegmentAdvice(label, segment = {}) {
   const type = inferActionType(label)
   const added = normaliseActionList(segment.added || [])
   const removed = normaliseActionList(segment.removed || segment.missing || [])
   const advice = buildActionableMessage(type, { added, missing: [], removed })
-  return advice
+  const addenda = buildActionableAddenda(type, { added, removed })
+  if (addenda.length === 0) {
+    return advice
+  }
+  const actionSummary = addenda.join('; ')
+  return `${advice} Action items: ${actionSummary}.`
 }
 
 function collectSegmentsByType(segments, targetType) {
@@ -267,6 +311,7 @@ module.exports = {
   buildActionableMessage,
   buildCategoryAdvice,
   buildSegmentAdvice,
+  buildActionableAddenda,
   buildImprovementHintFromSegment,
   buildMetricTip
 }

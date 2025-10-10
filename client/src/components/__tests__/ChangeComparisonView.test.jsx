@@ -29,11 +29,16 @@ describe('ChangeComparisonView', () => {
       />
     )
 
-    expect(screen.getByText(/Keep spotlighting GraphQL and Rust/i)).toBeInTheDocument()
+    expect(screen.getByText(/Keep spotlighting these skills: GraphQL and Rust/i)).toBeInTheDocument()
+    expect(screen.getByText(/Practice GraphQL/i)).toBeInTheDocument()
+    expect(screen.getByText(/Practice Rust/i)).toBeInTheDocument()
     expect(
       screen.getByText(/Change your last designation from Engineer to Senior Engineer/i)
     ).toBeInTheDocument()
+    expect(screen.getByText(/Use title Senior Engineer/i)).toBeInTheDocument()
+    expect(screen.getByText(/Retire title Engineer/i)).toBeInTheDocument()
     expect(screen.getByText(/Expand these highlights: Doubled conversion rate/i)).toBeInTheDocument()
+    expect(screen.getByText(/Rehearse story about Doubled conversion rate/i)).toBeInTheDocument()
   })
 })
 
