@@ -323,10 +323,11 @@ async function generateLearningResources(skills, context = {}) {
     .filter(Boolean)
     .join('\n');
 
-  const skipGenerativeInTests =
-    process.env.NODE_ENV === 'test' && process.env.ENABLE_TEST_GENERATIVE !== 'true';
+  const disableGenerative =
+    context.disableGenerative ||
+    (process.env.NODE_ENV === 'test' && process.env.ENABLE_TEST_GENERATIVE !== 'true');
 
-  if (!skipGenerativeInTests) {
+  if (!disableGenerative) {
     try {
       const model = await getSharedGenerativeModel();
       if (model?.generateContent) {
@@ -16275,6 +16276,7 @@ async function generateEnhancedDocumentsResponse({
       learningResources = await generateLearningResources(bestMatch.newSkills, {
         jobTitle: versionsContext.jobTitle,
         jobDescription,
+        disableGenerative: sanitizedFallbackUsed || !canUseGenerativeModel,
       });
     } catch (err) {
       logStructured('warn', 'generation_learning_resources_failed', {
@@ -18573,6 +18575,7 @@ app.post(
         learningResources = await generateLearningResources(missingSkills, {
           jobTitle,
           jobDescription,
+          disableGenerative: true,
         });
       } catch (err) {
         logStructured('warn', 'initial_analysis_learning_resources_failed', {
