@@ -2,7 +2,12 @@
  * @jest-environment jsdom
  */
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import TemplatePreview from '../TemplatePreview.jsx'
+
+let TemplatePreview
+
+beforeAll(async () => {
+  ;({ default: TemplatePreview } = await import('../TemplatePreview.jsx'))
+})
 
 describe('TemplatePreview comparison support', () => {
   const resumeTemplates = [
