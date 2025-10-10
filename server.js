@@ -12653,6 +12653,65 @@ function buildFallbackCoverLetters({
   };
 }
 
+function upgradeCoverLetterClosingWithFallback({
+  originalText = '',
+  fallbackText = '',
+  applicantName = '',
+}) {
+  const normalizedOriginal =
+    typeof originalText === 'string' ? originalText.replace(/\r\n/g, '\n') : '';
+  const normalizedFallback =
+    typeof fallbackText === 'string' ? fallbackText.replace(/\r\n/g, '\n') : '';
+
+  if (!normalizedOriginal.trim() || !normalizedFallback.trim()) {
+    return normalizedOriginal || '';
+  }
+
+  const originalParagraphs = splitCoverLetterParagraphs(normalizedOriginal);
+  const fallbackParagraphs = splitCoverLetterParagraphs(normalizedFallback);
+
+  if (!originalParagraphs.length || !fallbackParagraphs.length) {
+    return normalizedOriginal;
+  }
+
+  const originalClosing = findCoverLetterClosing(originalParagraphs, applicantName);
+  const fallbackClosing = findCoverLetterClosing(fallbackParagraphs, applicantName);
+
+  const resolveClosingMessageIndex = (paragraphs, closingInfo) => {
+    if (!Array.isArray(paragraphs) || !paragraphs.length) {
+      return -1;
+    }
+    let candidateIndex =
+      typeof closingInfo?.index === 'number' && closingInfo.index >= 0
+        ? closingInfo.index
+        : paragraphs.length - 1;
+    const paragraph = paragraphs[candidateIndex] || '';
+    const firstLine = paragraph.split('\n')[0]?.trim() || '';
+    if (firstLine && COVER_LETTER_SALUTATION_ONLY_PATTERN.test(firstLine)) {
+      if (candidateIndex - 1 >= 0) {
+        return candidateIndex - 1;
+      }
+    }
+    return candidateIndex;
+  };
+
+  const originalMessageIndex = resolveClosingMessageIndex(originalParagraphs, originalClosing);
+  const fallbackMessageIndex = resolveClosingMessageIndex(fallbackParagraphs, fallbackClosing);
+
+  const fallbackMessage =
+    fallbackMessageIndex >= 0 ? fallbackParagraphs[fallbackMessageIndex] : '';
+
+  if (!fallbackMessage || originalMessageIndex < 0) {
+    return normalizedOriginal;
+  }
+
+  const updatedParagraphs = [...originalParagraphs];
+  updatedParagraphs[originalMessageIndex] = fallbackMessage;
+
+  const updatedText = updatedParagraphs.join('\n\n').trim();
+  return updatedText || normalizedOriginal;
+}
+
 let activeCoverLetterFallbackBuilder = buildFallbackCoverLetters;
 
 function setCoverLetterFallbackBuilder(overrides) {
@@ -16085,6 +16144,7 @@ async function generateEnhancedDocumentsResponse({
   coverData = normalizedCoverData;
 
   const structurallyInvalidLetters = [];
+  const recoverableCoverLetters = new Map();
   COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
     const value = typeof coverData[key] === 'string' ? coverData[key] : '';
     if (!value.trim()) {
@@ -16107,6 +16167,10 @@ async function generateEnhancedDocumentsResponse({
         : false;
       if (!onlyRecoverableIssues) {
         coverData[key] = '';
+      } else {
+        recoverableCoverLetters.set(key, {
+          issues: Array.isArray(auditResult.issues) ? [...auditResult.issues] : [],
+        });
       }
     }
   });
@@ -16128,6 +16192,45 @@ async function generateEnhancedDocumentsResponse({
     contactDetails: coverContext.contactDetails,
     resumeText: combinedProfile,
   });
+  const fallbackAdjustedCoverLetters = [];
+  recoverableCoverLetters.forEach((details, key) => {
+    if (!details || !Array.isArray(details.issues)) {
+      return;
+    }
+    if (!details.issues.includes('weak_closing')) {
+      return;
+    }
+    const fallbackValue = fallbackLetters?.[key];
+    if (typeof fallbackValue !== 'string' || !fallbackValue.trim()) {
+      return;
+    }
+    const upgradedText = upgradeCoverLetterClosingWithFallback({
+      originalText: coverData[key],
+      fallbackText: fallbackValue,
+      applicantName,
+    });
+    if (typeof upgradedText !== 'string') {
+      return;
+    }
+    const normalizedOriginal = typeof coverData[key] === 'string' ? coverData[key] : '';
+    if (!normalizedOriginal.trim()) {
+      return;
+    }
+    const trimmedUpgraded = upgradedText.trim();
+    if (!trimmedUpgraded || trimmedUpgraded === normalizedOriginal.trim()) {
+      return;
+    }
+    coverData[key] = trimmedUpgraded;
+    fallbackAdjustedCoverLetters.push(key);
+  });
+
+  if (fallbackAdjustedCoverLetters.length) {
+    logStructured('info', 'generation_cover_letters_confident_closing_applied', {
+      ...logContext,
+      variants: fallbackAdjustedCoverLetters,
+    });
+  }
+
   const missingCoverLetters = [];
   const ensureCoverLetterValue = (key) => {
     const currentValue = coverData[key];
@@ -16153,7 +16256,9 @@ async function generateEnhancedDocumentsResponse({
       missing: missingCoverLetters,
     });
   }
-  const fallbackAppliedCoverLetters = [...missingCoverLetters];
+  const fallbackAppliedCoverLetters = Array.from(
+    new Set([...missingCoverLetters, ...fallbackAdjustedCoverLetters])
+  );
   const unavailableCoverLetters = COVER_LETTER_VARIANT_KEYS.filter(
     (key) => typeof coverData[key] !== 'string' || !coverData[key].trim()
   );
@@ -16176,7 +16281,7 @@ async function generateEnhancedDocumentsResponse({
   logStructured('info', 'generation_cover_letters_completed', {
     ...logContext,
     variants: coverVariants,
-    fallbackApplied: missingCoverLetters.length > 0,
+    fallbackApplied: fallbackAppliedCoverLetters.length > 0,
   });
 
   await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
