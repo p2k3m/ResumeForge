@@ -5906,12 +5906,22 @@ function ensureRequiredSections(
   );
 
   const existingCerts = certSection
-    ? certSection.items.map((tokens) => {
+    ? certSection.items.map((tokens = []) => {
         const text = tokens
-          .map((t) => t.text || t.href || '')
+          .filter((t) => typeof t.text === 'string' && t.text.trim())
+          .map((t) => t.text)
           .join(' ')
           .trim();
-        return extractCertifications([text])[0] || {};
+        const parsed = extractCertifications([text])[0] || {};
+        if (!parsed.url) {
+          const linkToken = tokens.find(
+            (t) => t && t.type === 'link' && t.href && normalizeUrl(t.href)
+          );
+          if (linkToken) {
+            parsed.url = normalizeUrl(linkToken.href);
+          }
+        }
+        return parsed;
       })
     : [];
 
@@ -5943,17 +5953,19 @@ function ensureRequiredSections(
         0
     ).getTime();
 
-  const limitedCerts = deduped
-    .sort((a, b) => getCertDate(b) - getCertDate(a))
-    .slice(0, 5);
+  const orderedCerts = deduped.sort((a, b) => getCertDate(b) - getCertDate(a));
 
-  const certItems = limitedCerts.map((cert) => {
+  const certItems = orderedCerts.map((cert) => {
     const tokens = [{ type: 'bullet' }];
     const text = cert.provider
       ? `${cert.name} - ${cert.provider}`
       : cert.name;
     const href = normalizeUrl(cert.url);
-    tokens.push({ type: 'link', text, href });
+    if (href) {
+      tokens.push({ type: 'link', text, href });
+    } else {
+      tokens.push({ type: 'paragraph', text });
+    }
     return tokens;
   });
 
@@ -6065,7 +6077,7 @@ function splitSkills(sections = [], jobSkills = []) {
       return;
     }
     const collected = [];
-    sec.items.forEach((tokens) => {
+    sec.items.forEach((tokens = []) => {
       const text = tokens
         .filter((t) => t.text)
         .map((t) => t.text)
@@ -6073,24 +6085,56 @@ function splitSkills(sections = [], jobSkills = []) {
         .trim();
       if (!text) return;
       const parts = /[;,]/.test(text) ? text.split(/[;,]/) : [text];
+      const linkTokens = tokens
+        .filter((t) => t && t.type === 'link' && t.href && t.text)
+        .map((t) => ({ text: t.text.trim(), href: normalizeUrl(t.href) }))
+        .filter((entry) => entry.href);
+      const normalizeSkillKey = (value = '') =>
+        value
+          .toLowerCase()
+          .replace(/[^a-z0-9+]+/g, ' ')
+          .trim();
       parts
         .map((p) => p.trim())
         .filter(Boolean)
         .forEach((skill) => {
-          collected.push(skill);
+          const lower = skill.toLowerCase();
+          const normalized = normalizeSkillKey(skill);
+          const matchedLink =
+            linkTokens.find(
+              (link) => normalizeSkillKey(link.text) === normalized
+            ) ||
+            linkTokens.find((link) =>
+              normalizeSkillKey(link.text).includes(normalized)
+            ) ||
+            linkTokens.find((link) =>
+              normalized.includes(normalizeSkillKey(link.text))
+            );
+          collected.push({
+            display: skill,
+            lower,
+            href: matchedLink ? matchedLink.href : '',
+          });
         });
     });
     const uniqMap = new Map();
     collected.forEach((skill) => {
-      const lower = skill.toLowerCase();
-      if (!uniqMap.has(lower)) uniqMap.set(lower, skill);
+      if (!skill || !skill.lower) return;
+      const key = skill.lower;
+      if (!uniqMap.has(key)) {
+        uniqMap.set(key, { display: skill.display, href: skill.href });
+      } else if (skill.href && !uniqMap.get(key).href) {
+        uniqMap.get(key).href = skill.href;
+      }
     });
     let filtered = Array.from(uniqMap.entries());
     if (jobSet.size) {
       filtered = filtered.filter(([lower]) => jobSet.has(lower));
     }
     const groupMap = new Map();
-    filtered.forEach(([lower, display]) => {
+    filtered.forEach(([lower, value]) => {
+      const display = value.display;
+      const href = value.href;
       let label = null;
       for (const [cat, members] of Object.entries(SKILL_CATEGORY_MAP)) {
         const all = [cat, ...members];
@@ -6100,21 +6144,31 @@ function splitSkills(sections = [], jobSkills = []) {
         }
       }
       if (label) {
-        if (!groupMap.has(label)) groupMap.set(label, new Set([label]));
-        if (lower !== label) groupMap.get(label).add(display);
+        if (!groupMap.has(label)) {
+          groupMap.set(label, [{ display: label, href: '' }]);
+        }
+        if (lower !== label) {
+          groupMap.get(label).push({ display, href });
+        }
       } else {
-        groupMap.set(display.toLowerCase(), new Set([display]));
+        groupMap.set(display.toLowerCase(), [{ display, href }]);
       }
     });
-    const grouped = Array.from(groupMap.values()).map((set) =>
-      Array.from(set)
-        .slice(0, 4)
-        .join(', ')
+    const grouped = Array.from(groupMap.values()).map((entries) =>
+      entries.filter((entry) => entry && entry.display)
     );
-    const top = grouped.slice(0, 5);
-    sec.items = top.map((text) => {
-      const tokens = parseLine(text);
-      if (tokens[0]?.type !== 'bullet') tokens.unshift({ type: 'bullet' });
+    sec.items = grouped.map((entries) => {
+      const tokens = [{ type: 'bullet' }];
+      entries.forEach((entry, index) => {
+        if (index > 0) {
+          tokens.push({ type: 'paragraph', text: ', ' });
+        }
+        if (entry.href) {
+          tokens.push({ type: 'link', text: entry.display, href: entry.href });
+        } else {
+          tokens.push({ type: 'paragraph', text: entry.display });
+        }
+      });
       return tokens;
     });
   });

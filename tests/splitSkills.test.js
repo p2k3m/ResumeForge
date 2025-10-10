@@ -53,26 +53,40 @@ describe.each(headings)(
       expect(texts.join(' ')).not.toMatch(/Java/);
     });
 
-    test('limits to at most five bullets', () => {
+    test('retains every job-relevant skill bullet', () => {
       const skills =
         'Python, Java, AWS, Docker, Kubernetes, Terraform, React, Node, HTML, CSS';
       const sections = [{ heading, items: [parseLine(skills)] }];
-      splitSkills(
-        sections,
-        skills.split(',').map((s) => s.trim().toLowerCase())
+      const jobSkills = skills.split(',').map((s) => s.trim().toLowerCase());
+      splitSkills(sections, jobSkills);
+      const rendered = sections[0].items.filter((tokens) =>
+        Array.isArray(tokens) && tokens.length > 0
       );
-      expect(sections[0].items.length).toBeLessThanOrEqual(5);
+      expect(rendered).toHaveLength(jobSkills.length);
+      rendered.forEach((tokens) => {
+        expect(tokens[0].type).toBe('bullet');
+      });
+    });
+
+    test('preserves hyperlinks for relevant skills', () => {
+      const sections = [
+        { heading, items: [parseLine('AWS, [Kubernetes](https://k8s.io)')] }
+      ];
+      splitSkills(sections, ['aws', 'kubernetes']);
+      const [, kubernetesTokens] = sections[0].items;
+      const linkToken = kubernetesTokens.find((token) => token.type === 'link');
+      expect(linkToken).toMatchObject({
+        text: 'Kubernetes',
+        href: 'https://k8s.io',
+      });
     });
 
     test('groups database related skills', () => {
       const sections = [{ heading, items: [parseLine('MySQL, Oracle')] }];
       splitSkills(sections, ['mysql', 'oracle']);
       expect(sections[0].items).toHaveLength(1);
-      const text = sections[0].items[0]
-        .filter((t) => t.text)
-        .map((t) => t.text)
-        .join('')
-        .toLowerCase();
+      const tokens = sections[0].items[0].filter((t) => t.type !== 'bullet');
+      const text = tokens.map((t) => t.text).join('').toLowerCase();
       expect(text).toBe('database, mysql, oracle');
     });
   }
