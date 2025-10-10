@@ -2340,4 +2340,168 @@ describe('change log session visibility', () => {
     expect(dismissed.rejected).toBe(true);
     expect(typeof dismissed.rejectedAt).toBe('string');
   });
+
+  test('persists cover letter change log payloads to S3', async () => {
+    const putCommands = [];
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        const payload = { version: 1, entries: [] };
+        return Promise.resolve({ Body: Buffer.from(JSON.stringify(payload)) });
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command.input);
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-123' },
+              changeLog: { L: [] },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: 'cv/candidate/session/logs/change-log.json' },
+            },
+          });
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-123',
+        entry: {
+          id: 'entry-1',
+          title: 'Placeholder',
+          acceptedAt: '2024-05-01T00:00:00.000Z',
+        },
+        coverLetters: {
+          entries: [
+            {
+              id: 'cover_letter1',
+              originalText: 'Original letter',
+              editedText: 'Edited letter',
+              updatedAt: '2024-05-02T12:00:00.000Z',
+            },
+          ],
+          dismissedEntries: [
+            {
+              id: 'cover_letter2',
+              originalText: 'Second original',
+              editedText: 'Second draft',
+              rejectedAt: '2024-05-03T10:00:00.000Z',
+            },
+          ],
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.coverLetters).toBeTruthy();
+    expect(Array.isArray(response.body.coverLetters.entries)).toBe(true);
+    expect(response.body.coverLetters.entries).toHaveLength(1);
+    expect(response.body.coverLetters.entries[0].id).toBe('cover_letter1');
+    expect(Array.isArray(response.body.coverLetters.dismissedEntries)).toBe(true);
+    expect(response.body.coverLetters.dismissedEntries).toHaveLength(1);
+    expect(response.body.coverLetters.dismissedEntries[0].id).toBe('cover_letter2');
+
+    const changeLogWrites = putCommands.filter((cmd) =>
+      typeof cmd?.Key === 'string' && cmd.Key.endsWith('logs/change-log.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    const persistedPayload = JSON.parse(changeLogWrites[0].Body);
+    expect(persistedPayload.coverLetters).toBeTruthy();
+    expect(Array.isArray(persistedPayload.coverLetters.entries)).toBe(true);
+    expect(persistedPayload.coverLetters.entries).toHaveLength(1);
+    expect(persistedPayload.coverLetters.entries[0].id).toBe('cover_letter1');
+    expect(Array.isArray(persistedPayload.coverLetters.dismissedEntries)).toBe(true);
+    expect(persistedPayload.coverLetters.dismissedEntries).toHaveLength(1);
+    const dismissedCover = persistedPayload.coverLetters.dismissedEntries[0];
+    expect(dismissedCover.id).toBe('cover_letter2');
+    expect(dismissedCover.rejected).toBe(true);
+    expect(typeof dismissedCover.rejectedAt).toBe('string');
+  });
+
+  test('removing a cover letter entry records dismissal state in S3', async () => {
+    const putCommands = [];
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        const payload = {
+          version: 1,
+          entries: [],
+          coverLetters: {
+            entries: [
+              {
+                id: 'cover_letter1',
+                originalText: 'Original letter',
+                editedText: 'Edited letter',
+                updatedAt: '2024-05-02T12:00:00.000Z',
+              },
+            ],
+            dismissedEntries: [],
+          },
+        };
+        return Promise.resolve({ Body: Buffer.from(JSON.stringify(payload)) });
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command.input);
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-123' },
+              changeLog: { L: [] },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: 'cv/candidate/session/logs/change-log.json' },
+            },
+          });
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({ jobId: 'job-123', remove: true, entryId: 'cover_letter1' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.coverLetters).toBeTruthy();
+    expect(Array.isArray(response.body.coverLetters.entries)).toBe(true);
+    expect(response.body.coverLetters.entries).toHaveLength(0);
+    expect(Array.isArray(response.body.coverLetters.dismissedEntries)).toBe(true);
+    expect(response.body.coverLetters.dismissedEntries).toHaveLength(1);
+    expect(response.body.coverLetters.dismissedEntries[0].id).toBe('cover_letter1');
+
+    const changeLogWrites = putCommands.filter((cmd) =>
+      typeof cmd?.Key === 'string' && cmd.Key.endsWith('logs/change-log.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    const persistedPayload = JSON.parse(changeLogWrites[0].Body);
+    expect(Array.isArray(persistedPayload.coverLetters.entries)).toBe(true);
+    expect(persistedPayload.coverLetters.entries).toHaveLength(0);
+    expect(Array.isArray(persistedPayload.coverLetters.dismissedEntries)).toBe(true);
+    expect(persistedPayload.coverLetters.dismissedEntries).toHaveLength(1);
+    expect(persistedPayload.coverLetters.dismissedEntries[0].id).toBe('cover_letter1');
+    expect(persistedPayload.coverLetters.dismissedEntries[0].rejected).toBe(true);
+  });
 });

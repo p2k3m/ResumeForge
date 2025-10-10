@@ -11269,11 +11269,36 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
     return {
       entries: normalizeSessionChangeLogArray(fallbackEntries),
       dismissedEntries: [],
+      coverLetterEntries: [],
+      dismissedCoverLetterEntries: [],
     };
   }
   const entries = normalizeSessionChangeLogArray(data.entries);
   const dismissedEntries = normalizeSessionChangeLogArray(data.dismissedEntries);
-  return { entries, dismissedEntries };
+  const coverLettersPayload =
+    data.coverLetters && typeof data.coverLetters === 'object' ? data.coverLetters : {};
+  const legacyCoverLetterEntries = Array.isArray(data.coverLetterEntries)
+    ? data.coverLetterEntries
+    : [];
+  const legacyDismissedCoverLetters = Array.isArray(data.dismissedCoverLetterEntries)
+    ? data.dismissedCoverLetterEntries
+    : [];
+  const coverLetterEntries = normalizeCoverLetterChangeLogArray(
+    Array.isArray(coverLettersPayload.entries)
+      ? coverLettersPayload.entries
+      : legacyCoverLetterEntries
+  );
+  const dismissedCoverLetterEntries = normalizeCoverLetterChangeLogArray(
+    Array.isArray(coverLettersPayload.dismissedEntries)
+      ? coverLettersPayload.dismissedEntries
+      : legacyDismissedCoverLetters
+  ).map((entry) => ({
+    ...entry,
+    rejected: true,
+    rejectedAt: entry.rejectedAt || null,
+    rejectionReason: entry.rejectionReason || null,
+  }));
+  return { entries, dismissedEntries, coverLetterEntries, dismissedCoverLetterEntries };
 }
 
 function resolveSessionChangeLogLocation({ bucket, key, jobId } = {}) {
@@ -11307,6 +11332,8 @@ async function writeSessionChangeLog({
   entries,
   summary,
   dismissedEntries,
+  coverLetterEntries,
+  dismissedCoverLetterEntries,
 }) {
   if (!s3) {
     return null;
@@ -11328,6 +11355,22 @@ async function writeSessionChangeLog({
   const normalizedDismissedEntries = Array.isArray(dismissedEntries)
     ? dismissedEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
     : [];
+  const normalizedCoverLetterEntries = Array.isArray(coverLetterEntries)
+    ? coverLetterEntries
+        .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+        .filter(Boolean)
+    : [];
+  const normalizedDismissedCoverLetters = Array.isArray(dismissedCoverLetterEntries)
+    ? dismissedCoverLetterEntries
+        .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+        .filter(Boolean)
+        .map((entry) => ({
+          ...entry,
+          rejected: true,
+          rejectedAt: entry.rejectedAt || null,
+          rejectionReason: entry.rejectionReason || null,
+        }))
+    : [];
   const payload = {
     version: 1,
     jobId,
@@ -11335,6 +11378,10 @@ async function writeSessionChangeLog({
     entries: normalizedEntries,
     summary: normalizedSummary,
     dismissedEntries: normalizedDismissedEntries,
+    coverLetters: {
+      entries: normalizedCoverLetterEntries,
+      dismissedEntries: normalizedDismissedCoverLetters,
+    },
   };
   await s3.send(
     new PutObjectCommand({
@@ -13341,6 +13388,7 @@ const CHANGE_LOG_TRUNCATION_SUFFIX = '…';
 const MAX_CHANGE_LOG_DETAIL_LENGTH = 2000;
 const MAX_CHANGE_LOG_DIFF_LENGTH = 5000;
 const MAX_CHANGE_LOG_RESUME_TEXT_LENGTH = 10000;
+const MAX_COVER_LETTER_CHANGE_LOG_TEXT_LENGTH = 10000;
 const MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH = 20000;
 const MAX_DYNAMO_ITEM_BYTES = 400 * 1024;
 const CHANGE_LOG_DYNAMO_SIZE_BUDGET = 350 * 1024;
@@ -13556,6 +13604,101 @@ function stringifyChangeLogHistoryContext(context) {
   } catch (err) {
     return '';
   }
+}
+
+function isCoverLetterEntryIdentifier(value) {
+  const identifier = normalizeChangeLogString(value);
+  if (!identifier) {
+    return false;
+  }
+  return identifier.startsWith('cover_letter');
+}
+
+function normalizeCoverLetterChangeLogEntry(entry = {}) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const id = normalizeChangeLogString(entry.id || entry.variant || entry.type);
+  if (!id) {
+    return null;
+  }
+
+  const variantCandidate = normalizeChangeLogString(
+    entry.variant || entry.type || (isCoverLetterEntryIdentifier(id) ? id : '')
+  );
+  const originalText = normalizeChangeLogText(
+    entry.originalText ||
+      entry.before ||
+      entry.previousText ||
+      entry.baselineText ||
+      entry.initialText,
+    MAX_COVER_LETTER_CHANGE_LOG_TEXT_LENGTH
+  );
+  const editedText = normalizeChangeLogText(
+    entry.editedText ||
+      entry.updatedText ||
+      entry.draftText ||
+      entry.after ||
+      entry.text,
+    MAX_COVER_LETTER_CHANGE_LOG_TEXT_LENGTH
+  );
+  const notes = normalizeChangeLogString(entry.notes || entry.summary || entry.detail);
+  const updatedAt = normalizeChangeLogString(entry.updatedAt || entry.savedAt || entry.acceptedAt);
+  const acceptedAt = normalizeChangeLogString(entry.acceptedAt);
+  const rejected = Boolean(entry.rejected);
+  const rejectedAt = normalizeChangeLogString(entry.rejectedAt || entry.dismissedAt);
+  const rejectionReason = normalizeChangeLogString(
+    entry.rejectionReason || entry.dismissedReason || entry.reason
+  );
+  const updatedBy = normalizeChangeLogString(entry.updatedBy || entry.userId || entry.editor);
+  const historyContext = normalizeChangeLogHistoryContext(
+    entry.historyContext || entry.historySnapshot || entry.history
+  );
+  const source = normalizeChangeLogString(entry.source || entry.origin);
+  const summarySegments = Array.isArray(entry.summarySegments)
+    ? entry.summarySegments
+        .map((segment) => normalizeChangeLogSegment(segment))
+        .filter(Boolean)
+    : [];
+
+  const normalized = {
+    id,
+    variant: variantCandidate || null,
+    originalText: originalText || null,
+    editedText: editedText || null,
+    notes: notes || null,
+    updatedAt: updatedAt || null,
+    acceptedAt: acceptedAt || null,
+    rejected,
+    rejectedAt: rejectedAt || null,
+    rejectionReason: rejectionReason || null,
+    updatedBy: updatedBy || null,
+    historyContext,
+    source: source || null,
+    summarySegments: summarySegments.length ? summarySegments : undefined,
+  };
+
+  Object.keys(normalized).forEach((key) => {
+    if (normalized[key] === null || normalized[key] === undefined) {
+      delete normalized[key];
+    }
+  });
+
+  if (normalized.summarySegments === undefined) {
+    delete normalized.summarySegments;
+  }
+
+  return normalized;
+}
+
+function normalizeCoverLetterChangeLogArray(entries = []) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries
+    .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+    .filter(Boolean);
 }
 
 function normalizeChangeLogEntryInput(entry) {
@@ -14268,6 +14411,8 @@ async function handleImprovementRequest(type, req, res) {
   let logKey = '';
   let existingChangeLogEntries = [];
   let dismissedChangeLogEntries = [];
+  let existingCoverLetterChangeLogEntries = [];
+  let dismissedCoverLetterChangeLogEntries = [];
   let jobStatus = '';
   let sessionChangeLogKey = '';
   let targetBucket = '';
@@ -14335,6 +14480,16 @@ async function handleImprovementRequest(type, req, res) {
           : [];
         dismissedChangeLogEntries = Array.isArray(sessionChangeLogState?.dismissedEntries)
           ? sessionChangeLogState.dismissedEntries
+          : [];
+        existingCoverLetterChangeLogEntries = Array.isArray(
+          sessionChangeLogState?.coverLetterEntries
+        )
+          ? sessionChangeLogState.coverLetterEntries
+          : [];
+        dismissedCoverLetterChangeLogEntries = Array.isArray(
+          sessionChangeLogState?.dismissedCoverLetterEntries
+        )
+          ? sessionChangeLogState.dismissedCoverLetterEntries
           : [];
       } catch (loadErr) {
         logStructured('error', 'improvement_change_log_load_failed', {
@@ -14771,6 +14926,8 @@ async function handleImprovementRequest(type, req, res) {
         geminiApiKey,
         changeLogEntries: existingChangeLogEntries,
         dismissedChangeLogEntries,
+        coverLetterChangeLogEntries: existingCoverLetterChangeLogEntries,
+        dismissedCoverLetterChangeLogEntries: dismissedCoverLetterChangeLogEntries,
         existingRecord,
         userId: res.locals.userId,
       });
@@ -15041,6 +15198,8 @@ async function generateEnhancedDocumentsResponse({
   geminiApiKey,
   changeLogEntries = [],
   dismissedChangeLogEntries = [],
+  coverLetterChangeLogEntries = [],
+  dismissedCoverLetterChangeLogEntries = [],
   existingRecord = {},
   userId,
   plainPdfFallbackEnabled = false,
@@ -15216,6 +15375,24 @@ async function generateEnhancedDocumentsResponse({
     normalizedChangeLogEntries
   );
   const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
+  const normalizedCoverLetterEntries = Array.isArray(coverLetterChangeLogEntries)
+    ? coverLetterChangeLogEntries
+        .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+        .filter(Boolean)
+    : [];
+  const normalizedDismissedCoverLetterEntries = Array.isArray(
+    dismissedCoverLetterChangeLogEntries
+  )
+    ? dismissedCoverLetterChangeLogEntries
+        .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+        .filter(Boolean)
+        .map((entry) => ({
+          ...entry,
+          rejected: true,
+          rejectedAt: entry.rejectedAt || null,
+          rejectionReason: entry.rejectionReason || null,
+        }))
+    : [];
 
   const generationRunSegment =
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
@@ -16389,6 +16566,10 @@ async function generateEnhancedDocumentsResponse({
         generatedAt: artifactTimestamp,
         entries: normalizedChangeLogEntries,
         summary: changeLogSummary,
+        coverLetters: {
+          entries: normalizedCoverLetterEntries,
+          dismissedEntries: normalizedDismissedCoverLetterEntries,
+        },
       },
     },
   ];
@@ -16435,6 +16616,8 @@ async function generateEnhancedDocumentsResponse({
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
       dismissedEntries: dismissedChangeLogEntries,
+      coverLetterEntries: normalizedCoverLetterEntries,
+      dismissedCoverLetterEntries: normalizedDismissedCoverLetterEntries,
     });
     if (persistedChangeLog?.key) {
       sessionChangeLogKey = persistedChangeLog.key;
@@ -16951,6 +17134,10 @@ async function generateEnhancedDocumentsResponse({
     selectionInsights,
     changeLog: normalizedChangeLogEntries,
     changeLogSummary,
+    coverLetterChangeLog: {
+      entries: normalizedCoverLetterEntries,
+      dismissedEntries: normalizedDismissedCoverLetterEntries,
+    },
     templateContext: {
       template1,
       template2,
@@ -17169,6 +17356,8 @@ app.post(
       let sessionChangeLogKey = '';
       let existingChangeLogEntries = [];
       let dismissedChangeLogEntries = [];
+      let existingCoverLetterEntries = [];
+      let dismissedCoverLetterEntries = [];
       let existingRecordItem = {};
       try {
         const record = await dynamo.send(
@@ -17225,6 +17414,14 @@ app.post(
             dismissedChangeLogEntries = Array.isArray(sessionState?.dismissedEntries)
               ? sessionState.dismissedEntries
               : [];
+            existingCoverLetterEntries = Array.isArray(sessionState?.coverLetterEntries)
+              ? sessionState.coverLetterEntries
+              : [];
+            dismissedCoverLetterEntries = Array.isArray(
+              sessionState?.dismissedCoverLetterEntries
+            )
+              ? sessionState.dismissedCoverLetterEntries
+              : [];
           } catch (sessionErr) {
             logStructured('warn', 'generation_change_log_load_failed', {
               ...logContext,
@@ -17234,6 +17431,8 @@ app.post(
             });
             existingChangeLogEntries = parseDynamoChangeLog(item.changeLog);
             dismissedChangeLogEntries = [];
+            existingCoverLetterEntries = [];
+            dismissedCoverLetterEntries = [];
           }
         }
       } catch (err) {
@@ -17462,6 +17661,8 @@ app.post(
         geminiApiKey,
         changeLogEntries: existingChangeLogEntries,
         dismissedChangeLogEntries,
+        coverLetterChangeLogEntries: existingCoverLetterEntries,
+        dismissedCoverLetterChangeLogEntries: dismissedCoverLetterEntries,
         existingRecord: existingRecordItem,
         userId: res.locals.userId,
       });
@@ -17911,6 +18112,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let logKey = '';
   let existingChangeLogEntries = [];
   let existingDismissedChangeLogEntries = [];
+  let existingCoverLetterEntries = [];
+  let existingDismissedCoverLetterEntries = [];
   try {
     const record = await dynamo.send(
       new GetItemCommand({
@@ -17956,6 +18159,16 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       )
         ? sessionChangeLogState.dismissedEntries
         : [];
+      existingCoverLetterEntries = Array.isArray(
+        sessionChangeLogState?.coverLetterEntries
+      )
+        ? sessionChangeLogState.coverLetterEntries
+        : [];
+      existingDismissedCoverLetterEntries = Array.isArray(
+        sessionChangeLogState?.dismissedCoverLetterEntries
+      )
+        ? sessionChangeLogState.dismissedCoverLetterEntries
+        : [];
     } catch (loadErr) {
       logStructured('error', 'change_log_load_failed', {
         ...logContext,
@@ -17994,6 +18207,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   const nowIso = new Date().toISOString();
   let updatedChangeLog = [...existingChangeLogEntries];
   let dismissedChangeLogEntries = [...existingDismissedChangeLogEntries];
+  let coverLetterEntries = [...existingCoverLetterEntries];
+  let dismissedCoverLetterEntries = [...existingDismissedCoverLetterEntries];
 
   if (removeEntry) {
     const entryId = normalizeChangeLogString(
@@ -18026,6 +18241,30 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         ...dismissedChangeLogEntries.filter((entry) => entry.id !== normalizedRemovedEntry.id),
       ];
     }
+    if (isCoverLetterEntryIdentifier(entryId)) {
+      const existingCoverEntry = existingCoverLetterEntries.find(
+        (entry) => entry.id === entryId
+      );
+      const normalizedCoverRemoved = normalizeCoverLetterChangeLogEntry({
+        ...(existingCoverEntry || {}),
+        id: entryId,
+      });
+      coverLetterEntries = coverLetterEntries.filter((entry) => entry.id !== entryId);
+      if (normalizedCoverRemoved) {
+        dismissedCoverLetterEntries = [
+          {
+            ...normalizedCoverRemoved,
+            rejected: true,
+            rejectedAt: normalizedCoverRemoved.rejectedAt || nowIso,
+            rejectionReason:
+              normalizedCoverRemoved.rejectionReason || 'user_rejected_change',
+          },
+          ...dismissedCoverLetterEntries.filter(
+            (entry) => entry.id !== normalizedCoverRemoved.id
+          ),
+        ];
+      }
+    }
   } else {
     const normalizedEntry = normalizeChangeLogEntryInput(req.body.entry);
     if (!normalizedEntry) {
@@ -18057,6 +18296,113 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     dismissedChangeLogEntries = dismissedChangeLogEntries.filter(
       (entry) => entry.id !== mergedEntry.id
     );
+    if (
+      isCoverLetterEntryIdentifier(mergedEntry.id) ||
+      isCoverLetterEntryIdentifier(normalizedEntry.type)
+    ) {
+      const coverEntrySource = {
+        ...req.body.entry,
+        id: mergedEntry.id,
+        variant: normalizedEntry.type || req.body.entry?.variant,
+        originalText:
+          req.body.entry?.coverLetterOriginalText ||
+          req.body.entry?.before ||
+          normalizedEntry.before,
+        editedText:
+          req.body.entry?.coverLetterEditedText ||
+          req.body.entry?.coverLetterDraft ||
+          req.body.entry?.after ||
+          normalizedEntry.after,
+        acceptedAt: mergedEntry.acceptedAt,
+        updatedAt: req.body.entry?.updatedAt || mergedEntry.acceptedAt || nowIso,
+        rejected: mergedEntry.rejected,
+        rejectedAt: mergedEntry.rejectedAt,
+        rejectionReason: mergedEntry.rejectionReason,
+      };
+      const normalizedCoverEntry = normalizeCoverLetterChangeLogEntry(coverEntrySource);
+      if (normalizedCoverEntry) {
+        if (mergedEntry.rejected) {
+          coverLetterEntries = coverLetterEntries.filter(
+            (entry) => entry.id !== normalizedCoverEntry.id
+          );
+          dismissedCoverLetterEntries = [
+            {
+              ...normalizedCoverEntry,
+              rejected: true,
+              rejectedAt: normalizedCoverEntry.rejectedAt || nowIso,
+              rejectionReason:
+                normalizedCoverEntry.rejectionReason || 'user_rejected_change',
+            },
+            ...dismissedCoverLetterEntries.filter(
+              (entry) => entry.id !== normalizedCoverEntry.id
+            ),
+          ];
+        } else {
+          const coverIndex = coverLetterEntries.findIndex(
+            (entry) => entry.id === normalizedCoverEntry.id
+          );
+          if (coverIndex >= 0) {
+            coverLetterEntries[coverIndex] = {
+              ...coverLetterEntries[coverIndex],
+              ...normalizedCoverEntry,
+              rejected: false,
+              rejectedAt: undefined,
+              rejectionReason: undefined,
+            };
+          } else {
+            coverLetterEntries = [normalizedCoverEntry, ...coverLetterEntries];
+          }
+          dismissedCoverLetterEntries = dismissedCoverLetterEntries.filter(
+            (entry) => entry.id !== normalizedCoverEntry.id
+          );
+        }
+      }
+    }
+  }
+
+  const coverLettersPayload = (() => {
+    if (req.body && typeof req.body.coverLetters === 'object') {
+      return req.body.coverLetters;
+    }
+    if (req.body && typeof req.body.coverLetterChangeLog === 'object') {
+      return req.body.coverLetterChangeLog;
+    }
+    return null;
+  })();
+
+  const coverLetterEntriesInput = Array.isArray(coverLettersPayload?.entries)
+    ? coverLettersPayload.entries
+    : Array.isArray(req.body.coverLetterEntries)
+    ? req.body.coverLetterEntries
+    : null;
+  if (coverLetterEntriesInput) {
+    coverLetterEntries = coverLetterEntriesInput
+      .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+      .filter(Boolean);
+  }
+
+  const coverLetterDismissedInput = Array.isArray(
+    coverLettersPayload?.dismissedEntries
+  )
+    ? coverLettersPayload.dismissedEntries
+    : Array.isArray(req.body.dismissedCoverLetterEntries)
+    ? req.body.dismissedCoverLetterEntries
+    : Array.isArray(req.body.dismissedCoverLetters)
+    ? req.body.dismissedCoverLetters
+    : null;
+  if (coverLetterDismissedInput) {
+    dismissedCoverLetterEntries = coverLetterDismissedInput
+      .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+      .filter(Boolean)
+      .map((entry) => ({
+        ...entry,
+        rejected: true,
+        rejectedAt: entry.rejectedAt || nowIso,
+        rejectionReason: entry.rejectionReason || 'user_rejected_change',
+      }));
+    coverLetterEntries = coverLetterEntries.filter((entry) =>
+      dismissedCoverLetterEntries.every((removed) => removed.id !== entry.id)
+    );
   }
 
   const normalizedChangeLogEntries = updatedChangeLog
@@ -18064,6 +18410,18 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     .filter(Boolean);
   const normalizedDismissedEntries = dismissedChangeLogEntries
     .map((entry) => normalizeChangeLogEntryInput(entry))
+    .filter(Boolean)
+    .map((entry) => ({
+      ...entry,
+      rejected: true,
+      rejectedAt: entry.rejectedAt || nowIso,
+      rejectionReason: entry.rejectionReason || 'user_rejected_change',
+    }));
+  const normalizedCoverLetterEntriesForResponse = coverLetterEntries
+    .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+    .filter(Boolean);
+  const normalizedDismissedCoverLettersForResponse = dismissedCoverLetterEntries
+    .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
     .filter(Boolean)
     .map((entry) => ({
       ...entry,
@@ -18108,6 +18466,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
       dismissedEntries: normalizedDismissedEntries,
+      coverLetterEntries: normalizedCoverLetterEntriesForResponse,
+      dismissedCoverLetterEntries: normalizedDismissedCoverLettersForResponse,
     });
     if (persistedChangeLog?.bucket) {
       storedBucket = persistedChangeLog.bucket;
@@ -18190,6 +18550,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     success: true,
     changeLog: normalizedChangeLogEntries,
     changeLogSummary,
+    coverLetters: {
+      entries: normalizedCoverLetterEntriesForResponse,
+      dismissedEntries: normalizedDismissedCoverLettersForResponse,
+    },
   });
 });
 
@@ -19374,6 +19738,8 @@ app.post(
       geminiApiKey: secrets.GEMINI_API_KEY,
       changeLogEntries: [],
       dismissedChangeLogEntries: [],
+      coverLetterChangeLogEntries: [],
+      dismissedCoverLetterChangeLogEntries: [],
       existingRecord: {
         device: { S: device },
         os: { S: os },
