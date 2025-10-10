@@ -59,6 +59,8 @@ describe('buildSelectionInsights', () => {
         expect.objectContaining({ key: 'skills-remaining', impact: 'negative' }),
       ])
     )
+    expect(insights.summary).toMatch(/Skill gaps detected/i)
+    expect(Array.isArray(insights.learningResources)).toBe(true)
   })
 
   test('rewards aligned designation and strong metrics', () => {
@@ -99,6 +101,7 @@ describe('buildSelectionInsights', () => {
         expect.objectContaining({ key: 'skills-added', impact: 'positive' }),
       ])
     )
+    expect(insights.learningResources).toEqual([])
   })
 
   test('averages key alignment metrics to calculate selection probability', () => {
@@ -140,5 +143,6 @@ describe('buildSelectionInsights', () => {
         expect.objectContaining({ key: 'skills-added', impact: 'positive' }),
       ])
     )
+    expect(insights.learningResources).toEqual([])
   })
 })
