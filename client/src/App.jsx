@@ -1299,6 +1299,56 @@ const getCoverTemplateDescription = (id) => {
   return COVER_TEMPLATE_DETAILS[id]?.description || ''
 }
 
+const resolveCoverTemplateSelection = ({
+  file = {},
+  type = '',
+  downloadTemplateMetadata = {},
+  templateContext = {}
+} = {}) => {
+  const metadataForType =
+    (downloadTemplateMetadata && typeof downloadTemplateMetadata === 'object'
+      ? downloadTemplateMetadata[type]
+      : null) || {}
+  const fileTemplateMeta =
+    (file.templateMeta && typeof file.templateMeta === 'object' ? file.templateMeta : null) ||
+    metadataForType ||
+    {}
+  const context = templateContext && typeof templateContext === 'object' ? templateContext : {}
+
+  const resolvedTemplateId = canonicalizeCoverTemplateId(
+    fileTemplateMeta.templateId ||
+      file.templateId ||
+      file.coverTemplateId ||
+      metadataForType?.id ||
+      context.coverTemplate1 ||
+      DEFAULT_COVER_TEMPLATE,
+    DEFAULT_COVER_TEMPLATE
+  )
+
+  const resolvedTemplateName =
+    (typeof fileTemplateMeta.templateName === 'string' && fileTemplateMeta.templateName.trim()) ||
+    (typeof file.coverTemplateName === 'string' && file.coverTemplateName.trim()) ||
+    (typeof metadataForType?.name === 'string' && metadataForType.name.trim()) ||
+    formatCoverTemplateName(resolvedTemplateId)
+
+  const coverTemplateCandidates = normalizeCoverTemplateList([
+    resolvedTemplateId,
+    fileTemplateMeta.templateId,
+    file.coverTemplateId,
+    metadataForType?.id,
+    context.coverTemplate1,
+    context.coverTemplate2,
+    ...(Array.isArray(context.coverTemplates) ? context.coverTemplates : [])
+  ])
+
+  return {
+    templateId: resolvedTemplateId,
+    templateName: resolvedTemplateName,
+    templateMeta: fileTemplateMeta,
+    candidates: coverTemplateCandidates
+  }
+}
+
 const ATS_SUB_SCORE_ORDER = [
   'Layout & Searchability',
   'ATS Readability',
@@ -3374,33 +3424,13 @@ function App() {
     }
 
     const presentation = coverLetterEditor.presentation || getDownloadPresentation(file)
-    const templateMeta =
-      (file.templateMeta && typeof file.templateMeta === 'object' ? file.templateMeta : null) ||
-      downloadTemplateMetadata[type] ||
-      {}
-    const resolvedTemplateId = canonicalizeCoverTemplateId(
-      templateMeta.templateId ||
-        file.templateId ||
-        file.coverTemplateId ||
-        downloadTemplateMetadata[type]?.id ||
-        templateContext?.coverTemplate1 ||
-        DEFAULT_COVER_TEMPLATE,
-      DEFAULT_COVER_TEMPLATE
-    )
-    const resolvedTemplateName =
-      (typeof templateMeta.templateName === 'string' && templateMeta.templateName.trim()) ||
-      (typeof file.coverTemplateName === 'string' && file.coverTemplateName.trim()) ||
-      downloadTemplateMetadata[type]?.name ||
-      formatCoverTemplateName(resolvedTemplateId)
-    const coverTemplateCandidates = normalizeCoverTemplateList([
-      resolvedTemplateId,
-      templateMeta.templateId,
-      file.coverTemplateId,
-      downloadTemplateMetadata[type]?.id,
-      templateContext?.coverTemplate1,
-      templateContext?.coverTemplate2,
-      ...(Array.isArray(templateContext?.coverTemplates) ? templateContext.coverTemplates : [])
-    ])
+    const { templateId: resolvedTemplateId, templateName: resolvedTemplateName, candidates: coverTemplateCandidates } =
+      resolveCoverTemplateSelection({
+        file,
+        type,
+        downloadTemplateMetadata,
+        templateContext
+      })
     const coverLetterFields =
       file.coverLetterFields && typeof file.coverLetterFields === 'object'
         ? file.coverLetterFields
@@ -7089,6 +7119,18 @@ function App() {
 
   const coverLetterEditorType = coverLetterEditor?.type || ''
   const coverLetterEditorFile = (coverLetterEditor && coverLetterEditor.file) || {}
+  const coverLetterEditorTemplate = useMemo(() => {
+    if (!coverLetterEditor || !isCoverLetterType(coverLetterEditor.type)) {
+      return null
+    }
+    const selection = resolveCoverTemplateSelection({
+      file: coverLetterEditor.file || {},
+      type: coverLetterEditor.type,
+      downloadTemplateMetadata,
+      templateContext
+    })
+    return selection
+  }, [coverLetterEditor, downloadTemplateMetadata, templateContext])
   const coverLetterEditorDraftText = coverLetterEditor
     ? resolveCoverLetterDraftText(
         coverLetterDrafts,
@@ -8296,6 +8338,8 @@ function App() {
           isDownloading={isCoverLetterDownloading}
           downloadError={coverLetterDownloadError}
           clipboardStatus={coverLetterClipboardStatus}
+          coverTemplateId={coverLetterEditorTemplate?.templateId}
+          coverTemplateName={coverLetterEditorTemplate?.templateName}
         />
 
         {previewSuggestion && (

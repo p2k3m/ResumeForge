@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { canonicalizeTemplateId } from '../templateRegistry.js'
+import getCoverTemplateStyle, {
+  DEFAULT_COVER_TEMPLATE_STYLE
+} from '../utils/coverTemplateStyles.js'
 
 const cx = (...classes) => classes.filter(Boolean).join(' ')
 
@@ -56,49 +59,6 @@ const RESUME_TEMPLATE_PREVIEWS = {
   }
 }
 
-const COVER_TEMPLATE_PREVIEWS = {
-  cover_modern: {
-    header: 'bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white',
-    footer: 'border-t border-slate-800/40 bg-slate-900/90 text-slate-100',
-    border: 'border-purple-200 bg-white',
-    line: 'bg-slate-200/80',
-    highlight: 'bg-purple-500/10 text-purple-800',
-    badge: 'bg-purple-100 text-purple-700'
-  },
-  cover_classic: {
-    header: 'bg-gradient-to-r from-amber-700 via-amber-600 to-rose-600 text-amber-50',
-    footer: 'border-t border-amber-200 bg-amber-100 text-amber-700',
-    border: 'border-amber-200 bg-amber-50/70',
-    line: 'bg-amber-200/80',
-    highlight: 'bg-amber-500/15 text-amber-900',
-    badge: 'bg-amber-100 text-amber-700'
-  },
-  cover_professional: {
-    header: 'bg-gradient-to-r from-slate-900 via-blue-900 to-blue-700 text-slate-50',
-    footer: 'border-t border-slate-200 bg-slate-100 text-slate-700',
-    border: 'border-slate-300 bg-slate-50',
-    line: 'bg-slate-200/80',
-    highlight: 'bg-blue-500/10 text-blue-900',
-    badge: 'bg-blue-100 text-blue-700'
-  },
-  cover_ats: {
-    header: 'bg-gradient-to-r from-slate-700 via-slate-600 to-slate-500 text-white',
-    footer: 'border-t border-slate-200 bg-slate-100 text-slate-700',
-    border: 'border-slate-200 bg-white',
-    line: 'bg-slate-300/70',
-    highlight: 'bg-slate-400/10 text-slate-700',
-    badge: 'bg-slate-200 text-slate-700'
-  },
-  cover_2025: {
-    header: 'bg-gradient-to-r from-slate-900 via-slate-800 to-cyan-500 text-cyan-100',
-    footer: 'border-t border-slate-700 bg-slate-900 text-cyan-100',
-    border: 'border-slate-700 bg-slate-900 text-slate-100',
-    line: 'bg-slate-600/80',
-    highlight: 'bg-cyan-400/20 text-cyan-100',
-    badge: 'bg-cyan-500/30 text-cyan-100'
-  }
-}
-
 const DEFAULT_RESUME_PREVIEW = {
   accent: 'from-slate-700 via-slate-500 to-slate-400',
   container: 'border-slate-200 bg-white',
@@ -106,14 +66,6 @@ const DEFAULT_RESUME_PREVIEW = {
   line: 'bg-slate-300/70',
   highlight: 'bg-slate-500/20',
   chip: 'bg-slate-200 text-slate-600'
-}
-
-const DEFAULT_COVER_PREVIEW = {
-  header: 'bg-gradient-to-r from-slate-700 via-slate-600 to-slate-500 text-white',
-  footer: 'border-t border-slate-200 bg-slate-100 text-slate-600',
-  border: 'border-slate-200 bg-white',
-  line: 'bg-slate-200/80',
-  highlight: 'bg-slate-500/10'
 }
 
 const normalizeResumeTemplateId = (value) => {
@@ -498,11 +450,11 @@ function TemplatePreview({
 
   const resumeStyle = getResumePreviewStyle(previewResumeOption?.id)
   const coverStyle =
-    COVER_TEMPLATE_PREVIEWS[previewCoverOption?.id] || DEFAULT_COVER_PREVIEW
+    getCoverTemplateStyle(previewCoverOption?.id) || DEFAULT_COVER_TEMPLATE_STYLE
 
   const appliedResumeStyle = getResumePreviewStyle(appliedResumeOption?.id)
   const appliedCoverStyle =
-    COVER_TEMPLATE_PREVIEWS[appliedCoverOption?.id] || DEFAULT_COVER_PREVIEW
+    getCoverTemplateStyle(appliedCoverOption?.id) || DEFAULT_COVER_TEMPLATE_STYLE
 
   const appliedResumeName =
     appliedResumeOption?.name ||
@@ -613,7 +565,7 @@ function TemplatePreview({
 
   const coverCards = hasCustomCoverComparison
     ? normalizedCoverComparisonSelections.map((option, index) => {
-        const style = COVER_TEMPLATE_PREVIEWS[option?.id] || DEFAULT_COVER_PREVIEW
+        const style = getCoverTemplateStyle(option?.id) || DEFAULT_COVER_TEMPLATE_STYLE
         const isApplied = option?.id === coverTemplateId
         return {
           key: option?.id || `cover-comparison-${index}`,
