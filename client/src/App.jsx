@@ -10,6 +10,7 @@ import ChangeComparisonView from './components/ChangeComparisonView.jsx'
 import DashboardStage from './components/DashboardStage.jsx'
 import JobDescriptionPreview from './components/JobDescriptionPreview.jsx'
 import ChangeLogSummaryPanel from './components/ChangeLogSummaryPanel.jsx'
+import CoverLetterEditorModal from './components/CoverLetterEditorModal.jsx'
 import summaryIcon from './assets/icon-summary.svg'
 import skillsIcon from './assets/icon-skills.svg'
 import experienceIcon from './assets/icon-experience.svg'
@@ -7086,6 +7087,59 @@ function App() {
     { key: 'changelog', label: 'Change Log', count: changeLogCount, ready: changeLogCount > 0 }
   ]
 
+  const coverLetterEditorType = coverLetterEditor?.type || ''
+  const coverLetterEditorFile = (coverLetterEditor && coverLetterEditor.file) || {}
+  const coverLetterEditorDraftText = coverLetterEditor
+    ? resolveCoverLetterDraftText(
+        coverLetterDrafts,
+        coverLetterOriginals,
+        coverLetterEditorType,
+        coverLetterEditorFile
+      )
+    : ''
+  const coverLetterEditorOriginalText = coverLetterEditor
+    ? coverLetterOriginals[coverLetterEditorType] ??
+      getCoverLetterTextFromFile(coverLetterEditorFile)
+    : ''
+  const coverLetterEditorHasChanges = Boolean(
+    coverLetterEditor && coverLetterEditorDraftText !== coverLetterEditorOriginalText
+  )
+  const coverLetterEditorWordCount = coverLetterEditorDraftText.trim()
+    ? coverLetterEditorDraftText
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean).length
+    : 0
+
+  const handleCoverEditorChange = useCallback(
+    (value) => {
+      if (!coverLetterEditor || !coverLetterEditorType) {
+        return
+      }
+      handleCoverLetterTextChange(coverLetterEditorType, value)
+    },
+    [coverLetterEditor, coverLetterEditorType, handleCoverLetterTextChange]
+  )
+
+  const handleCoverEditorReset = useCallback(() => {
+    if (!coverLetterEditor || !coverLetterEditorType) {
+      return
+    }
+    resetCoverLetterDraft(coverLetterEditorType)
+  }, [coverLetterEditor, coverLetterEditorType, resetCoverLetterDraft])
+
+  const handleCoverEditorCopy = useCallback(() => {
+    if (!coverLetterEditor || !coverLetterEditorType) {
+      return
+    }
+    handleCopyCoverLetter(coverLetterEditorType, coverLetterEditorFile)
+  }, [
+    coverLetterEditor,
+    coverLetterEditorType,
+    coverLetterEditorFile,
+    handleCopyCoverLetter
+  ])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-200 via-purple-200 to-purple-300 flex flex-col items-center p-4 md:p-8">
       <div className="w-full max-w-5xl space-y-8">
@@ -8227,121 +8281,21 @@ function App() {
             )
           })()}
 
-        {coverLetterEditor && (() => {
-          const type = coverLetterEditor.type
-          const file = coverLetterEditor.file || {}
-          const draftText = resolveCoverLetterDraftText(
-            coverLetterDrafts,
-            coverLetterOriginals,
-            type,
-            file
-          )
-          const originalText =
-            coverLetterOriginals[type] ??
-            getCoverLetterTextFromFile(file)
-          const hasChanges = draftText !== originalText
-          const wordCount = draftText.trim()
-            ? draftText
-                .trim()
-                .split(/\s+/)
-                .filter(Boolean).length
-            : 0
-          return (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 px-4 py-6"
-              role="dialog"
-              aria-modal="true"
-              aria-label={`Edit ${coverLetterEditor.label || 'cover letter'}`}
-              onClick={closeCoverLetterEditor}
-            >
-              <div
-                className="w-full max-w-4xl rounded-3xl bg-white shadow-2xl border border-indigo-200/70 overflow-hidden"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-sky-50 px-6 py-4">
-                  <div>
-                    <h3 className="text-xl font-semibold text-indigo-900">
-                      {coverLetterEditor.label || 'Cover letter'}
-                    </h3>
-                    <p className="mt-1 text-sm text-indigo-700/90">
-                      Refine the draft text before downloading your personalised PDF.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={closeCoverLetterEditor}
-                    className="text-sm font-semibold text-indigo-700 hover:text-indigo-900"
-                  >
-                    Close
-                  </button>
-                </div>
-                <div className="px-6 py-6 space-y-4 text-indigo-900">
-                  <textarea
-                    value={draftText}
-                    onChange={(event) => handleCoverLetterTextChange(type, event.target.value)}
-                    rows={14}
-                    className="w-full rounded-2xl border border-indigo-200 bg-white/90 px-4 py-3 text-sm leading-relaxed shadow-inner focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    placeholder="Introduce yourself, highlight the top accomplishments that match the JD, and close with a confident call to action."
-                  />
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-indigo-600/80">
-                        {wordCount} word{wordCount === 1 ? '' : 's'}
-                      </span>
-                      {hasChanges ? (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                          Edited
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          Original draft
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => resetCoverLetterDraft(type)}
-                        className="px-4 py-2 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                      >
-                        Reset to original
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyCoverLetter(type, file)}
-                        className="px-4 py-2 rounded-xl border border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-                      >
-                        Copy to clipboard
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDownloadEditedCoverLetter}
-                        disabled={isCoverLetterDownloading}
-                        className={`px-4 py-2 rounded-xl font-semibold text-white shadow ${
-                          isCoverLetterDownloading
-                            ? 'bg-indigo-300 cursor-wait'
-                            : 'bg-indigo-600 hover:bg-indigo-700'
-                        }`}
-                      >
-                        {isCoverLetterDownloading ? 'Preparing PDF…' : 'Download updated PDF'}
-                      </button>
-                    </div>
-                  </div>
-                  {coverLetterDownloadError && (
-                    <p className="text-sm font-medium text-rose-600">
-                      {coverLetterDownloadError}
-                    </p>
-                  )}
-                  {coverLetterClipboardStatus && (
-                    <p className="text-sm text-indigo-600/80">
-                      {coverLetterClipboardStatus}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )
-        })()}
+        <CoverLetterEditorModal
+          isOpen={Boolean(coverLetterEditor)}
+          label={coverLetterEditor?.label}
+          draftText={coverLetterEditorDraftText}
+          hasChanges={coverLetterEditorHasChanges}
+          wordCount={coverLetterEditorWordCount}
+          onClose={closeCoverLetterEditor}
+          onChange={handleCoverEditorChange}
+          onReset={handleCoverEditorReset}
+          onCopy={handleCoverEditorCopy}
+          onDownload={handleDownloadEditedCoverLetter}
+          isDownloading={isCoverLetterDownloading}
+          downloadError={coverLetterDownloadError}
+          clipboardStatus={coverLetterClipboardStatus}
+        />
 
         {previewSuggestion && (
           <div
