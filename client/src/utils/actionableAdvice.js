@@ -7,6 +7,7 @@ const {
   buildActionableMessage,
   buildCategoryAdvice,
   buildSegmentAdvice,
+  buildActionableAddenda,
   buildImprovementHintFromSegment,
   buildMetricTip
 } = actionableAdvice
@@ -18,6 +19,7 @@ export {
   buildActionableMessage,
   buildCategoryAdvice,
   buildSegmentAdvice,
+  buildActionableAddenda,
   buildImprovementHintFromSegment,
   buildMetricTip
 }
