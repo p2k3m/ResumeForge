@@ -154,6 +154,8 @@ beforeEach(() => {
     data: '<html><title>Software Engineer</title><p>Design and build APIs.</p></html>'
   });
   setCoverLetterFallbackBuilder();
+  mockS3Send.mockReset();
+  mockS3Send.mockResolvedValue({});
 });
 
 describe('health check', () => {
@@ -2168,5 +2170,155 @@ describe('change log persistence safeguards', () => {
     );
 
     setupDefaultDynamoMock();
+  });
+});
+
+describe('change log session visibility', () => {
+  test('persists reverted entries when updating the change log', async () => {
+    const putCommands = [];
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        const payload = {
+          version: 1,
+          entries: [
+            {
+              id: 'entry-1',
+              title: 'Initial change',
+              detail: 'Original detail',
+              label: 'fixed',
+              acceptedAt: '2024-01-01T00:00:00.000Z',
+            },
+          ],
+        };
+        return Promise.resolve({ Body: Buffer.from(JSON.stringify(payload)) });
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command.input);
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    const updateCommands = [];
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-123' },
+              changeLog: { L: [] },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: 'cv/candidate/session/logs/change-log.json' },
+            },
+          });
+        case 'UpdateItemCommand':
+          updateCommands.push(cmd);
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const revertAt = '2024-05-02T12:00:00.000Z';
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-123',
+        entry: {
+          id: 'entry-1',
+          reverted: true,
+          revertedAt: revertAt,
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.changeLog)).toBe(true);
+    expect(response.body.changeLog).toHaveLength(1);
+    expect(response.body.changeLog[0].reverted).toBe(true);
+
+    const changeLogWrites = putCommands.filter((cmd) =>
+      typeof cmd?.Key === 'string' && cmd.Key.endsWith('logs/change-log.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    const persistedPayload = JSON.parse(changeLogWrites[0].Body);
+    expect(Array.isArray(persistedPayload.entries)).toBe(true);
+    expect(persistedPayload.entries[0].id).toBe('entry-1');
+    expect(persistedPayload.entries[0].reverted).toBe(true);
+    expect(typeof persistedPayload.entries[0].revertedAt).toBe('string');
+    expect(persistedPayload.dismissedEntries || []).toHaveLength(0);
+
+    expect(updateCommands).toHaveLength(1);
+  });
+
+  test('stores rejected entries in the session change log dismissed list', async () => {
+    const putCommands = [];
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        const payload = {
+          version: 1,
+          entries: [
+            {
+              id: 'entry-1',
+              title: 'Initial change',
+              detail: 'Original detail',
+              label: 'fixed',
+              acceptedAt: '2024-01-01T00:00:00.000Z',
+            },
+          ],
+        };
+        return Promise.resolve({ Body: Buffer.from(JSON.stringify(payload)) });
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command.input);
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-123' },
+              changeLog: { L: [] },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: 'cv/candidate/session/logs/change-log.json' },
+            },
+          });
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({ jobId: 'job-123', remove: true, entryId: 'entry-1' });
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.changeLog)).toBe(true);
+    expect(response.body.changeLog).toHaveLength(0);
+
+    const changeLogWrites = putCommands.filter((cmd) =>
+      typeof cmd?.Key === 'string' && cmd.Key.endsWith('logs/change-log.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    const persistedPayload = JSON.parse(changeLogWrites[0].Body);
+    expect(Array.isArray(persistedPayload.entries)).toBe(true);
+    expect(persistedPayload.entries).toHaveLength(0);
+    expect(Array.isArray(persistedPayload.dismissedEntries)).toBe(true);
+    expect(persistedPayload.dismissedEntries).toHaveLength(1);
+    const dismissed = persistedPayload.dismissedEntries[0];
+    expect(dismissed.id).toBe('entry-1');
+    expect(dismissed.rejected).toBe(true);
+    expect(typeof dismissed.rejectedAt).toBe('string');
   });
 });

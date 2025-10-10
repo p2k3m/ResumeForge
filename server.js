@@ -10803,13 +10803,26 @@ async function readJsonFromS3({ s3, bucket, key }) {
   }
 }
 
+function normalizeSessionChangeLogArray(entries = []) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries
+    .map((entry) => normalizeChangeLogEntryInput(entry))
+    .filter(Boolean);
+}
+
 async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = {}) {
   const data = await readJsonFromS3({ s3, bucket, key });
   if (!data) {
-    return Array.isArray(fallbackEntries) ? fallbackEntries : [];
+    return {
+      entries: normalizeSessionChangeLogArray(fallbackEntries),
+      dismissedEntries: [],
+    };
   }
-  const entries = Array.isArray(data.entries) ? data.entries : [];
-  return entries;
+  const entries = normalizeSessionChangeLogArray(data.entries);
+  const dismissedEntries = normalizeSessionChangeLogArray(data.dismissedEntries);
+  return { entries, dismissedEntries };
 }
 
 function resolveSessionChangeLogLocation({ bucket, key, jobId } = {}) {
@@ -10842,6 +10855,7 @@ async function writeSessionChangeLog({
   jobId,
   entries,
   summary,
+  dismissedEntries,
 }) {
   if (!s3) {
     return null;
@@ -10857,13 +10871,22 @@ async function writeSessionChangeLog({
     return null;
   }
   const normalizedSummary = normalizeChangeLogSummaryPayload(summary);
+  const normalizedEntries = Array.isArray(entries)
+    ? entries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
+    : [];
+  const normalizedDismissedEntries = Array.isArray(dismissedEntries)
+    ? dismissedEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
+    : [];
   const payload = {
     version: 1,
     jobId,
     updatedAt: new Date().toISOString(),
-    entries: Array.isArray(entries) ? entries : [],
+    entries: normalizedEntries,
     summary: normalizedSummary,
   };
+  if (normalizedDismissedEntries.length) {
+    payload.dismissedEntries = normalizedDismissedEntries;
+  }
   await s3.send(
     new PutObjectCommand({
       Bucket: resolvedBucket,
@@ -13032,6 +13055,13 @@ function normalizeChangeLogEntryInput(entry) {
   const historyContext = normalizeChangeLogHistoryContext(
     entry.historyContext || entry.resumeHistoryContext || entry.historySnapshot
   );
+  const reverted = Boolean(entry.reverted);
+  const revertedAt = normalizeChangeLogString(entry.revertedAt);
+  const rejected = Boolean(entry.rejected);
+  const rejectedAt = normalizeChangeLogString(entry.rejectedAt);
+  const rejectionReason = normalizeChangeLogString(
+    entry.rejectionReason || entry.rejectedReason || entry.dismissedReason
+  );
 
   let scoreDelta = null;
   const rawDelta = entry.scoreDelta;
@@ -13062,6 +13092,11 @@ function normalizeChangeLogEntryInput(entry) {
     scoreDelta,
     acceptedAt,
     historyContext,
+    reverted,
+    revertedAt: revertedAt || null,
+    rejected,
+    rejectedAt: rejectedAt || null,
+    rejectionReason: rejectionReason || null,
   };
 }
 
@@ -13180,6 +13215,11 @@ function parseDynamoChangeLog(attribute) {
     const itemizedChanges = parseDynamoItemizedChanges(map.itemizedChanges);
     const categoryChangelog = parseDynamoCategoryChangelog(map.categoryChangelog);
     const acceptedAt = normalizeChangeLogString(map.acceptedAt?.S);
+    const reverted = Boolean(map.reverted?.BOOL);
+    const revertedAt = normalizeChangeLogString(map.revertedAt?.S);
+    const rejected = Boolean(map.rejected?.BOOL);
+    const rejectedAt = normalizeChangeLogString(map.rejectedAt?.S);
+    const rejectionReason = normalizeChangeLogString(map.rejectionReason?.S);
     const scoreDelta = map.scoreDelta && map.scoreDelta.N ? Number(map.scoreDelta.N) : null;
     const historyContext = parseHistoryContextSource(
       normalizeChangeLogString(map.historyContext?.S)
@@ -13203,6 +13243,11 @@ function parseDynamoChangeLog(attribute) {
       scoreDelta: Number.isFinite(scoreDelta) ? scoreDelta : null,
       acceptedAt,
       historyContext,
+      reverted,
+      revertedAt,
+      rejected,
+      rejectedAt,
+      rejectionReason,
     };
   }).filter(Boolean);
 }
@@ -13397,6 +13442,21 @@ function serializeChangeLogEntries(entries = []) {
       );
       if (historyContextString) {
         map.historyContext = { S: historyContextString };
+      }
+      if (normalized.reverted) {
+        map.reverted = { BOOL: true };
+      }
+      if (normalized.revertedAt) {
+        map.revertedAt = { S: normalized.revertedAt };
+      }
+      if (normalized.rejected) {
+        map.rejected = { BOOL: true };
+      }
+      if (normalized.rejectedAt) {
+        map.rejectedAt = { S: normalized.rejectedAt };
+      }
+      if (normalized.rejectionReason) {
+        map.rejectionReason = { S: normalized.rejectionReason };
       }
 
       return { M: map };
@@ -13652,7 +13712,8 @@ async function handleImprovementRequest(type, req, res) {
   let storedBucket = '';
   let originalUploadKey = '';
   let logKey = '';
-  let existingChangeLog = [];
+  let existingChangeLogEntries = [];
+  let dismissedChangeLogEntries = [];
   let jobStatus = '';
   let sessionChangeLogKey = '';
   let targetBucket = '';
@@ -13709,12 +13770,18 @@ async function handleImprovementRequest(type, req, res) {
         logKey = `${existingPrefix}logs/processing.jsonl`;
       }
       try {
-        existingChangeLog = await loadSessionChangeLog({
+        const sessionChangeLogState = await loadSessionChangeLog({
           s3: s3Client,
           bucket: storedBucket,
           key: sessionChangeLogKey,
           fallbackEntries: parseDynamoChangeLog(item.changeLog),
         });
+        existingChangeLogEntries = Array.isArray(sessionChangeLogState?.entries)
+          ? sessionChangeLogState.entries
+          : [];
+        dismissedChangeLogEntries = Array.isArray(sessionChangeLogState?.dismissedEntries)
+          ? sessionChangeLogState.dismissedEntries
+          : [];
       } catch (loadErr) {
         logStructured('error', 'improvement_change_log_load_failed', {
           ...logContext,
@@ -14130,7 +14197,8 @@ async function handleImprovementRequest(type, req, res) {
         originalUploadKey: effectiveOriginalUploadKey,
         selection,
         geminiApiKey,
-        changeLogEntries: existingChangeLog,
+        changeLogEntries: existingChangeLogEntries,
+        dismissedChangeLogEntries,
         existingRecord,
         userId: res.locals.userId,
       });
@@ -14400,6 +14468,7 @@ async function generateEnhancedDocumentsResponse({
   selection,
   geminiApiKey,
   changeLogEntries = [],
+  dismissedChangeLogEntries = [],
   existingRecord = {},
   userId,
   plainPdfFallbackEnabled = false,
@@ -15774,6 +15843,7 @@ async function generateEnhancedDocumentsResponse({
       jobId,
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
+      dismissedEntries: dismissedChangeLogEntries,
     });
     if (persistedChangeLog?.key) {
       sessionChangeLogKey = persistedChangeLog.key;
@@ -16488,7 +16558,9 @@ app.post(
       const sanitizedName = sanitizeName(applicantName) || 'candidate';
       let originalUploadKey = '';
       let storedBucket = '';
-      let existingChangeLog = [];
+      let sessionChangeLogKey = '';
+      let existingChangeLogEntries = [];
+      let dismissedChangeLogEntries = [];
       let existingRecordItem = {};
       try {
         const record = await dynamo.send(
@@ -16528,7 +16600,33 @@ app.post(
           if (!bucket && storedBucket) {
             bucket = storedBucket;
           }
-          existingChangeLog = parseDynamoChangeLog(item.changeLog);
+          sessionChangeLogKey = deriveSessionChangeLogKey({
+            changeLogKey: item.sessionChangeLogKey?.S,
+            originalUploadKey,
+          });
+          try {
+            const sessionState = await loadSessionChangeLog({
+              s3,
+              bucket: storedBucket || bucket,
+              key: sessionChangeLogKey,
+              fallbackEntries: parseDynamoChangeLog(item.changeLog),
+            });
+            existingChangeLogEntries = Array.isArray(sessionState?.entries)
+              ? sessionState.entries
+              : [];
+            dismissedChangeLogEntries = Array.isArray(sessionState?.dismissedEntries)
+              ? sessionState.dismissedEntries
+              : [];
+          } catch (sessionErr) {
+            logStructured('warn', 'generation_change_log_load_failed', {
+              ...logContext,
+              bucket: storedBucket || bucket,
+              key: sessionChangeLogKey,
+              error: serializeError(sessionErr),
+            });
+            existingChangeLogEntries = parseDynamoChangeLog(item.changeLog);
+            dismissedChangeLogEntries = [];
+          }
         }
       } catch (err) {
         logStructured('error', 'generation_job_context_lookup_failed', {
@@ -16754,7 +16852,8 @@ app.post(
         originalUploadKey,
         selection,
         geminiApiKey,
-        changeLogEntries: existingChangeLog,
+        changeLogEntries: existingChangeLogEntries,
+        dismissedChangeLogEntries,
         existingRecord: existingRecordItem,
         userId: res.locals.userId,
       });
@@ -16960,7 +17059,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let originalUploadKey = '';
   let sessionChangeLogKey = '';
   let logKey = '';
-  let existingChangeLog = [];
+  let existingChangeLogEntries = [];
+  let existingDismissedChangeLogEntries = [];
   try {
     const record = await dynamo.send(
       new GetItemCommand({
@@ -16992,12 +17092,20 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       }
     }
     try {
-      existingChangeLog = await loadSessionChangeLog({
+      const sessionChangeLogState = await loadSessionChangeLog({
         s3,
         bucket: storedBucket,
         key: sessionChangeLogKey,
         fallbackEntries: parseDynamoChangeLog(item.changeLog),
       });
+      existingChangeLogEntries = Array.isArray(sessionChangeLogState?.entries)
+        ? sessionChangeLogState.entries
+        : [];
+      existingDismissedChangeLogEntries = Array.isArray(
+        sessionChangeLogState?.dismissedEntries
+      )
+        ? sessionChangeLogState.dismissedEntries
+        : [];
     } catch (loadErr) {
       logStructured('error', 'change_log_load_failed', {
         ...logContext,
@@ -17034,7 +17142,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
 
   const removeEntry = Boolean(req.body.remove) || req.body.action === 'remove';
   const nowIso = new Date().toISOString();
-  let updatedChangeLog = [...existingChangeLog];
+  let updatedChangeLog = [...existingChangeLogEntries];
+  let dismissedChangeLogEntries = [...existingDismissedChangeLogEntries];
 
   if (removeEntry) {
     const entryId = normalizeChangeLogString(
@@ -17048,7 +17157,22 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         'entryId is required to remove a change log entry.'
       );
     }
-    updatedChangeLog = existingChangeLog.filter((entry) => entry.id !== entryId);
+    updatedChangeLog = existingChangeLogEntries.filter((entry) => entry.id !== entryId);
+    const removedEntry = existingChangeLogEntries.find((entry) => entry.id === entryId);
+    const normalizedRemovedEntry = normalizeChangeLogEntryInput(removedEntry);
+    if (normalizedRemovedEntry) {
+      const rejectionTimestamp = nowIso;
+      dismissedChangeLogEntries = [
+        {
+          ...normalizedRemovedEntry,
+          rejected: true,
+          rejectedAt: rejectionTimestamp,
+          rejectionReason:
+            normalizedRemovedEntry.rejectionReason || 'user_rejected_change',
+        },
+        ...dismissedChangeLogEntries.filter((entry) => entry.id !== normalizedRemovedEntry.id),
+      ];
+    }
   } else {
     const normalizedEntry = normalizeChangeLogEntryInput(req.body.entry);
     if (!normalizedEntry) {
@@ -17059,8 +17183,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         'A valid change log entry is required.'
       );
     }
-    const existingIndex = existingChangeLog.findIndex((entry) => entry.id === normalizedEntry.id);
-    const baseEntry = existingIndex >= 0 ? existingChangeLog[existingIndex] : null;
+    const existingIndex = existingChangeLogEntries.findIndex(
+      (entry) => entry.id === normalizedEntry.id
+    );
+    const baseEntry = existingIndex >= 0 ? existingChangeLogEntries[existingIndex] : null;
     const mergedEntry = {
       ...baseEntry,
       ...normalizedEntry,
@@ -17069,17 +17195,29 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       mergedEntry.acceptedAt = baseEntry?.acceptedAt || nowIso;
     }
     if (existingIndex >= 0) {
-      updatedChangeLog = existingChangeLog.map((entry) =>
+      updatedChangeLog = existingChangeLogEntries.map((entry) =>
         entry.id === mergedEntry.id ? mergedEntry : entry
       );
     } else {
-      updatedChangeLog = [mergedEntry, ...existingChangeLog];
+      updatedChangeLog = [mergedEntry, ...existingChangeLogEntries];
     }
+    dismissedChangeLogEntries = dismissedChangeLogEntries.filter(
+      (entry) => entry.id !== mergedEntry.id
+    );
   }
 
   const normalizedChangeLogEntries = updatedChangeLog
     .map((entry) => normalizeChangeLogEntryInput(entry))
     .filter(Boolean);
+  const normalizedDismissedEntries = dismissedChangeLogEntries
+    .map((entry) => normalizeChangeLogEntryInput(entry))
+    .filter(Boolean)
+    .map((entry) => ({
+      ...entry,
+      rejected: true,
+      rejectedAt: entry.rejectedAt || nowIso,
+      rejectionReason: entry.rejectionReason || 'user_rejected_change',
+    }));
   const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
     normalizedChangeLogEntries
   );
@@ -17116,6 +17254,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       jobId,
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
+      dismissedEntries: normalizedDismissedEntries,
     });
     if (persistedChangeLog?.bucket) {
       storedBucket = persistedChangeLog.bucket;
@@ -18364,6 +18503,7 @@ app.post(
       selection,
       geminiApiKey: secrets.GEMINI_API_KEY,
       changeLogEntries: [],
+      dismissedChangeLogEntries: [],
       existingRecord: {
         device: { S: device },
         os: { S: os },
