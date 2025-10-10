@@ -11911,10 +11911,14 @@ const COVER_LETTER_PLACEHOLDER_PATTERNS = Object.freeze([
   /\b(?:insert|replace)\b[^.\n]*\b(?:here|placeholder|text|details|information)\b/i,
   /\badd\b[^.\n]*\b(?:details here|information here)\b/i,
   /\[(?:insert|add|replace|type|fill)[^\]]*\]/i,
+  /\[(?:your|the|company|organization|organisation|employer|hiring manager|recruiter|recipient|team|department|role|position|job|title|name|contact|email|phone|address|date)[^\]]*\]/i,
   /<(?:insert|add|replace|type|fill)[^>]*>/i,
+  /<(?:your|the|company|organization|organisation|employer|hiring manager|recruiter|recipient|team|department|role|position|job|title|name|contact|email|phone|address|date)[^>]*>/i,
+  /\{(?:your|the|company|organization|organisation|employer|hiring manager|recruiter|recipient|team|department|role|position|job|title|name|contact|email|phone|address|date)[^}]*\}/i,
   /{{(?!RF_ENH)[^}]+}}/i,
   /<<[^>]+>>/i,
   /\b(?:your (?:name|title|company|contact) here)\b/i,
+  /\b(?:company name|hiring manager name|recipient name|applicant name|applicant signature)\b/i,
   /\bInformation not provided\b/i,
 ]);
 const COVER_LETTER_RECOVERABLE_ISSUES = Object.freeze(
@@ -12463,6 +12467,14 @@ function auditCoverLetterStructure(
   const contactLines = Array.isArray(fields?.contact?.lines) ? fields.contact.lines : [];
   if (contactLines.length && !contactLines.some((line) => typeof line === 'string' && line.trim())) {
     issues.push('empty_contact_block');
+  }
+
+  const contactHasPlaceholder = contactLines.some((line) =>
+    typeof line === 'string' &&
+    COVER_LETTER_PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(line))
+  );
+  if (contactHasPlaceholder && !issues.includes('placeholder_detected')) {
+    issues.push('placeholder_detected');
   }
 
   return { valid: issues.length === 0, issues, fields };
