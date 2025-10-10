@@ -46,4 +46,43 @@ describe('auditCoverLetterStructure best practices enforcement', () => {
     expect(result.valid).toBe(true);
     expect(result.issues).not.toContain('weak_closing');
   });
+
+  it('flags section headings that are not followed by meaningful content', () => {
+    const letter = [
+      'Jordan Rivera',
+      'Email: jordan@example.com',
+      '',
+      'Dear Hiring Manager,',
+      '',
+      'Professional Summary',
+      '',
+      'Sincerely,',
+      'Jordan Rivera',
+    ].join('\n');
+
+    const result = auditCoverLetterStructure(letter, { applicantName: 'Jordan Rivera' });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContain('section_heading_without_content');
+  });
+
+  it('does not flag headings when substantive paragraphs follow them', () => {
+    const letter = [
+      'Jordan Rivera',
+      'Email: jordan@example.com',
+      '',
+      'Dear Hiring Manager,',
+      '',
+      'Key Achievements',
+      '',
+      '- Led a cross-functional team to launch a new platform that increased ARR by 18%.',
+      '',
+      'Sincerely,',
+      'Jordan Rivera',
+    ].join('\n');
+
+    const result = auditCoverLetterStructure(letter, { applicantName: 'Jordan Rivera' });
+
+    expect(result.issues).not.toContain('section_heading_without_content');
+  });
 });
