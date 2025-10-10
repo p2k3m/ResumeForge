@@ -80,23 +80,26 @@ describe('TemplatePreview comparison support', () => {
     renderComponent({ isCoverLinkedToResume: true })
 
     const resumePreviewGroup = screen.getByRole('group', { name: /Preview CV templates/i })
+    const resumePreviewCard = screen.getByText('CV Template Preview').closest('article')
+    expect(resumePreviewCard).toBeTruthy()
 
-    const initialHeader = screen.getByText('Alex Morgan').parentElement?.parentElement
+    const coverPreviewCard = screen.getByText('Cover Letter Preview').closest('article')
+    expect(coverPreviewCard).toBeTruthy()
+
+    const initialHeader = within(resumePreviewCard).getByText('Alex Morgan').parentElement?.parentElement
     expect(initialHeader).toHaveClass('from-indigo-500')
 
-    const initialFooter = screen
-      .getByText(/Thank you for your consideration/i)
-      .parentElement
+    const initialFooter = within(coverPreviewCard).getByText(/Thank you for your consideration/i).parentElement
     expect(initialFooter).toHaveClass('bg-slate-900/90')
 
     fireEvent.click(within(resumePreviewGroup).getByRole('button', { name: 'Classic' }))
 
     await screen.findByRole('heading', { name: 'Classic Cover' })
 
-    const updatedHeader = screen.getByText('Alex Morgan').parentElement?.parentElement
+    const updatedHeader = within(resumePreviewCard).getByText('Alex Morgan').parentElement?.parentElement
     expect(updatedHeader).toHaveClass('from-amber-700')
 
-    const updatedFooter = screen
+    const updatedFooter = within(coverPreviewCard)
       .getByText(/Thank you for your consideration/i)
       .parentElement
     expect(updatedFooter).toHaveClass('bg-amber-100')
