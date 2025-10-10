@@ -154,7 +154,7 @@ describe('ensureRequiredSections certifications merging', () => {
     const certSection = ensured.sections.find((s) => s.heading === 'Certification');
     expect(certSection.items).toHaveLength(1);
     expect(certSection.items[0][0].type).toBe('bullet');
-    expect(certSection.items[0][1].type).toBe('link');
+    expect(certSection.items[0][1].type).toBe('paragraph');
   });
 
   test('deduplicates existing certification entries', () => {
@@ -258,14 +258,44 @@ describe('ensureRequiredSections certifications merging', () => {
       expect(certSection).toBeUndefined();
     });
 
-    test('limits certification list to five most recent entries with clickable names', () => {
+    test('retains all certifications with hyperlinks when URLs are provided', () => {
       const resumeCertifications = [
-        { name: 'Cert1', provider: 'P1', url: 'https://c1', date: '2024-01-01' },
-        { name: 'Cert2', provider: 'P2', url: 'https://c2', date: '2023-01-01' },
-        { name: 'Cert3', provider: 'P3', url: 'https://c3', date: '2022-01-01' },
-        { name: 'Cert4', provider: 'P4', url: 'https://c4', date: '2021-01-01' },
-        { name: 'Cert5', provider: 'P5', url: 'https://c5', date: '2020-01-01' },
-        { name: 'Cert6', provider: 'P6', url: 'https://c6', date: '2019-01-01' }
+        {
+          name: 'Cert1',
+          provider: 'P1',
+          url: 'https://cert1.example.com',
+          date: '2024-01-01',
+        },
+        {
+          name: 'Cert2',
+          provider: 'P2',
+          url: 'https://cert2.example.com',
+          date: '2023-01-01',
+        },
+        {
+          name: 'Cert3',
+          provider: 'P3',
+          url: 'https://cert3.example.com',
+          date: '2022-01-01',
+        },
+        {
+          name: 'Cert4',
+          provider: 'P4',
+          url: 'https://cert4.example.com',
+          date: '2021-01-01',
+        },
+        {
+          name: 'Cert5',
+          provider: 'P5',
+          url: 'https://cert5.example.com',
+          date: '2020-01-01',
+        },
+        {
+          name: 'Cert6',
+          provider: 'P6',
+          url: 'https://cert6.example.com',
+          date: '2019-01-01',
+        }
       ];
       const ensured = ensureRequiredSections(
         { sections: [] },
@@ -274,16 +304,43 @@ describe('ensureRequiredSections certifications merging', () => {
       const certSection = ensured.sections.find(
         (s) => s.heading === 'Certification'
       );
-      expect(certSection.items).toHaveLength(5);
-      const texts = certSection.items.map((tokens) => tokens[1].text);
-      expect(texts.join(' ')).not.toMatch(/Cert6/);
-      expect(texts[0]).toContain('Cert1');
-      expect(texts[4]).toContain('Cert5');
+      expect(certSection.items).toHaveLength(resumeCertifications.length);
       certSection.items.forEach((tokens, idx) => {
         expect(tokens[0].type).toBe('bullet');
         const link = tokens[1];
-        expect(link.type).toBe('link');
-        expect(link.href).toBe(resumeCertifications[idx].url);
+        expect(link).toMatchObject({
+          type: 'link',
+          text: expect.stringContaining(`Cert${idx + 1}`),
+          href: resumeCertifications[idx].url,
+        });
+      });
+    });
+
+    test('preserves existing certification hyperlinks when no new URL is provided', () => {
+      const data = {
+        sections: [
+          {
+            heading: 'Certification',
+            items: [
+              [
+                { type: 'bullet' },
+                {
+                  type: 'link',
+                  text: 'Legacy Cert',
+                  href: 'https://legacy.example/cert',
+                },
+              ],
+            ],
+          },
+        ],
+      };
+      const ensured = ensureRequiredSections(data, { resumeCertifications: [] });
+      const certSection = ensured.sections.find((s) => s.heading === 'Certification');
+      expect(certSection.items).toHaveLength(1);
+      const link = certSection.items[0].find((token) => token.type === 'link');
+      expect(link).toMatchObject({
+        text: 'Legacy Cert',
+        href: 'https://legacy.example/cert',
       });
     });
   });
