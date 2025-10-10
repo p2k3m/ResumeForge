@@ -322,6 +322,27 @@ function normalizeSegmentList(value) {
   return text ? [text] : []
 }
 
+function formatCertificateDisplay(value) {
+  if (!value && value !== 0) {
+    return ''
+  }
+  if (typeof value === 'string') {
+    return normalizeSegmentText(value)
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  if (typeof value === 'object') {
+    const name = normalizeSegmentText(value.name || value.title)
+    const provider = normalizeSegmentText(
+      value.provider || value.issuer || value.organization || value.organisation
+    )
+    const combined = [name, provider].filter(Boolean).join(' — ')
+    return combined || name || provider
+  }
+  return ''
+}
+
 function buildSummarySegmentSignature(segments) {
   if (!Array.isArray(segments) || segments.length === 0) {
     return ''
@@ -4709,6 +4730,52 @@ function App() {
     [match, changeLog, certificateInsights, manualCertificatesData, jobSkills, resumeSkills]
   )
 
+  const recommendedCertificateNames = useMemo(() => {
+    const suggestions = Array.isArray(certificateInsights?.suggestions)
+      ? certificateInsights.suggestions
+      : []
+    const formatted = suggestions
+      .map((item) => formatCertificateDisplay(item))
+      .filter(Boolean)
+    return toUniqueList(formatted)
+  }, [certificateInsights])
+
+  const missingCertificateNames = useMemo(() => {
+    const missing = Array.isArray(deltaSummary?.certificates?.missing)
+      ? deltaSummary.certificates.missing
+      : []
+    const normalizedMissing = missing
+      .map((item) => formatCertificateDisplay(item))
+      .filter((item) => item && item.toLowerCase() !== 'manual entry required')
+    if (normalizedMissing.length > 0) {
+      return toUniqueList(normalizedMissing)
+    }
+    return recommendedCertificateNames
+  }, [deltaSummary, recommendedCertificateNames])
+
+  const knownCertificateNames = useMemo(() => {
+    const known = Array.isArray(certificateInsights?.known)
+      ? certificateInsights.known
+      : []
+    const manual = Array.isArray(manualCertificatesData) ? manualCertificatesData : []
+    const formatted = [...known, ...manual]
+      .map((item) => formatCertificateDisplay(item))
+      .filter(Boolean)
+    return toUniqueList(formatted)
+  }, [certificateInsights, manualCertificatesData])
+
+  const additionalRecommendedCertificates = useMemo(() => {
+    if (!recommendedCertificateNames.length) {
+      return []
+    }
+    const missingSet = new Set(
+      missingCertificateNames.map((item) => item.toLowerCase())
+    )
+    return recommendedCertificateNames.filter(
+      (item) => !missingSet.has(item.toLowerCase())
+    )
+  }, [recommendedCertificateNames, missingCertificateNames])
+
   const analysisHighlights = useMemo(() => {
     const items = []
     const seenKeys = new Set()
@@ -4782,15 +4849,12 @@ function App() {
       })
     }
 
-    const certificateMissing = getMissingFromSummary('certificates').filter(
-      (item) => item.toLowerCase() !== 'manual entry required'
-    )
-    if (certificateMissing.length > 0) {
+    if (missingCertificateNames.length > 0) {
       pushHighlight({
         key: 'missing-certificates',
         tone: 'warning',
         title: 'Certification gaps',
-        message: `List certifications such as ${summariseItems(certificateMissing, { limit: 4 })} to satisfy JD requirements.`
+        message: `List certifications such as ${summariseItems(missingCertificateNames, { limit: 4 })} to satisfy JD requirements.`
       })
     }
 
@@ -4814,20 +4878,23 @@ function App() {
       })
     }
 
-    const recommendedCertificates = Array.isArray(certificateInsights?.suggestions)
-      ? certificateInsights.suggestions.filter(Boolean)
-      : []
-    if (recommendedCertificates.length > 0) {
+    if (recommendedCertificateNames.length > 0) {
       pushHighlight({
         key: 'cert-suggestions',
         tone: 'info',
         title: 'Recommended certifications',
-        message: `Consider adding ${summariseItems(recommendedCertificates, { limit: 4 })} to strengthen the match.`
+        message: `Consider adding ${summariseItems(recommendedCertificateNames, { limit: 4 })} to strengthen the match.`
       })
     }
 
     return items
-  }, [deltaSummary, match, certificateInsights])
+  }, [
+    deltaSummary,
+    match,
+    certificateInsights,
+    missingCertificateNames,
+    recommendedCertificateNames
+  ])
 
   const jobFitScores = useMemo(() => {
     if (!Array.isArray(selectionInsights?.jobFitScores)) {
@@ -7298,24 +7365,48 @@ function App() {
           <section className="space-y-3 rounded-3xl bg-white/80 border border-blue-200/70 shadow-xl p-6">
             <h2 className="text-xl font-semibold text-blue-900">Certificate Insights</h2>
             <p className="text-sm text-blue-800/90">
-              We detected {certificateInsights.known?.length || 0} certificates across your resume,
-              LinkedIn, and manual inputs.
+              We detected {knownCertificateNames.length} certificates across your resume, LinkedIn, and
+              manual inputs.
             </p>
+            {knownCertificateNames.length > 0 && (
+              <div className="text-sm text-blue-800/90 space-y-1">
+                <p className="font-semibold">Currently listed on your resume:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  {knownCertificateNames.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {certificateInsights.manualEntryRequired && (
               <p className="text-sm text-rose-600 font-semibold">
                 Credly requires authentication. Please paste key certifications manually above so we can
                 include them.
               </p>
             )}
-            {certificateInsights.suggestions?.length > 0 ? (
-              <div className="text-sm text-blue-800/90 space-y-1">
-                <p className="font-semibold">Recommended additions for this job:</p>
+            {missingCertificateNames.length > 0 && (
+              <div className="text-sm text-amber-800/90 space-y-1">
+                <p className="font-semibold">Missing for this JD:</p>
                 <ul className="list-disc pl-5 space-y-1">
-                  {certificateInsights.suggestions.map((item) => (
-                    <li key={item}>{item}</li>
+                  {missingCertificateNames.map((item) => (
+                    <li key={`missing-${item}`}>{item}</li>
                   ))}
                 </ul>
               </div>
+            )}
+            {additionalRecommendedCertificates.length > 0 ? (
+              <div className="text-sm text-blue-800/90 space-y-1">
+                <p className="font-semibold">Recommended additions to boost this match:</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  {additionalRecommendedCertificates.map((item) => (
+                    <li key={`recommended-${item}`}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : recommendedCertificateNames.length > 0 ? (
+              <p className="text-sm text-blue-700/80">
+                Recommended additions align with the missing certifications listed above.
+              </p>
             ) : (
               <p className="text-sm text-blue-700/80">No additional certifications recommended.</p>
             )}
