@@ -85,4 +85,43 @@ describe('auditCoverLetterStructure best practices enforcement', () => {
 
     expect(result.issues).not.toContain('section_heading_without_content');
   });
+
+  it('flags placeholder contact details that slip through parsing', () => {
+    const letter = [
+      'Jordan Rivera',
+      'Email: [Your Email]',
+      'Phone: (555) 867-5309',
+      '',
+      'Dear Hiring Manager,',
+      '',
+      'I am excited about the Senior Product Manager role and the chance to bring my roadmap leadership to your team.',
+      '',
+      'Sincerely,',
+      'Jordan Rivera',
+    ].join('\n');
+
+    const result = auditCoverLetterStructure(letter, { applicantName: 'Jordan Rivera' });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContain('placeholder_detected');
+  });
+
+  it('rejects cover letters with bracketed placeholder recipients or signatures', () => {
+    const letter = [
+      'Jordan Rivera',
+      'Austin, TX',
+      '',
+      'Dear [Hiring Manager],',
+      '',
+      'My experience leading customer-obsessed product launches aligns strongly with this opportunity.',
+      '',
+      'Sincerely,',
+      '[Your Name]',
+    ].join('\n');
+
+    const result = auditCoverLetterStructure(letter, { applicantName: 'Jordan Rivera' });
+
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContain('placeholder_detected');
+  });
 });
