@@ -11917,7 +11917,14 @@ const COVER_LETTER_PLACEHOLDER_PATTERNS = Object.freeze([
   /\b(?:your (?:name|title|company|contact) here)\b/i,
   /\bInformation not provided\b/i,
 ]);
-const COVER_LETTER_RECOVERABLE_ISSUES = Object.freeze(new Set());
+const COVER_LETTER_RECOVERABLE_ISSUES = Object.freeze(
+  new Set([
+    // Allow cover letters that have otherwise solid structure but end with a
+    // simple expression of gratitude. These can be improved later without
+    // discarding the AI response entirely.
+    'weak_closing',
+  ])
+);
 const COVER_LETTER_SECTION_HEADING_PATTERNS = Object.freeze([
   /\bintroduction\b/i,
   /\bintro\b/i,
