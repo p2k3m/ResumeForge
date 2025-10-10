@@ -29,7 +29,7 @@ describe('ChangeComparisonView', () => {
       />
     )
 
-    expect(screen.getByText(/Keep spotlighting these skills: GraphQL and Rust/i)).toBeInTheDocument()
+    expect(screen.getByText(/Keep spotlighting GraphQL and Rust/i)).toBeInTheDocument()
     expect(screen.getByText(/Practice GraphQL/i)).toBeInTheDocument()
     expect(screen.getByText(/Practice Rust/i)).toBeInTheDocument()
     expect(
