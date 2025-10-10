@@ -17,6 +17,7 @@ describe('rewriteSectionsWithGemini', () => {
       certifications: [],
     };
     const sections = collectSectionText(resumeText, linkedinData, []);
+    expect(Array.isArray(sections.structuredExperience)).toBe(true);
     generateContentMock.mockReset();
     generateContentMock.mockResolvedValueOnce({
       response: {

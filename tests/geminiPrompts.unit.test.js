@@ -48,6 +48,14 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
     };
     const sections = collectSectionText(resume, linkedin, []);
     expect(sections.experience).toContain('Built resilient APIs');
+    expect(Array.isArray(sections.structuredExperience)).toBe(true);
+    expect(
+      sections.structuredExperience.some(
+        (entry) =>
+          Array.isArray(entry?.responsibilities) &&
+          entry.responsibilities.includes('Built resilient APIs')
+      )
+    ).toBe(true);
 
     await rewriteSectionsWithGemini(
       'Jane Doe',
@@ -68,6 +76,7 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
     expect(prompt).toContain('OUTPUT_SCHEMA');
     expect(prompt).toContain('INPUT_CONTEXT');
     expect(prompt).toMatch(/"resumeSections"/);
+    expect(prompt).toMatch(/"structuredExperience"/);
     expect(prompt).toMatch(/"summary"/);
     expect(prompt).toMatch(/"experience"/);
     expect(prompt).toMatch(/"projects"/);
