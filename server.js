@@ -4267,6 +4267,18 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     })
     .filter(Boolean)
     .join('\n');
+
+  const structuredExperience = combinedExperienceEntries.map((exp) => ({
+    title: exp.title || '',
+    company: exp.company || '',
+    startDate: exp.startDate || '',
+    endDate: exp.endDate || '',
+    responsibilities: Array.isArray(exp.responsibilities)
+      ? exp.responsibilities
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter(Boolean)
+      : [],
+  }));
   const education = [
     extractEducation(resumeText).join('\n'),
     extractEducation(linkedinData.education || []).join('\n'),
@@ -4288,7 +4300,16 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     .join(', ');
   const projects = sectionMap.projects || '';
 
-  return { summary, experience, education, certifications, skills, projects, highlights };
+  return {
+    summary,
+    experience,
+    education,
+    certifications,
+    skills,
+    projects,
+    highlights,
+    structuredExperience,
+  };
 }
 
 function normalizeGeminiLines(value) {
@@ -4738,12 +4759,16 @@ async function rewriteSectionsWithGemini(
       resumeSections: sections,
       jobDescription,
       jobSkills,
+      structuredExperience: Array.isArray(sections?.structuredExperience)
+        ? sections.structuredExperience
+        : [],
     };
     const prompt = [
       'You are an elite resume architect optimizing for Gemini/OpenAI outputs.',
       'Follow these rules precisely:',
       '- Never degrade CV structure; respect existing headings, chronology, and polished tone.',
       '- Align work experience bullets, summary lines, and highlights directly with the job description responsibilities using evidence from the candidate history.',
+      '- Use the structuredExperience array to rewrite each role\'s responsibilities so verbs, metrics, and focus mirror the job description while staying truthful to the provided achievements.',
       '- Blend JD-critical skills into the skills section only when the candidate context proves them—avoid isolated keyword stuffing.',
       '- Emphasise measurable impact and outcomes that demonstrate the candidate already performs what the JD requires; do not fabricate new roles or tools.',
       '- Respond using ONLY valid JSON conforming to the provided schema.',
