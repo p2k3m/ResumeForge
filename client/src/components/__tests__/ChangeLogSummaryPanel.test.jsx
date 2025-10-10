@@ -33,7 +33,8 @@ describe('ChangeLogSummaryPanel', () => {
               reasons: ['Score impact: +4 pts versus the baseline upload.']
             }
           ],
-          totals: { entries: 1, categories: 1, highlights: 2, addedItems: 2, removedItems: 0 }
+          totals: { entries: 1, categories: 1, highlights: 2, addedItems: 2, removedItems: 0 },
+          interviewPrepAdvice: 'We added AWS and Terraform; prepare for questions.'
         }}
       />
     )
@@ -45,6 +46,10 @@ describe('ChangeLogSummaryPanel', () => {
     expect(screen.getByText('Score movement and JD alignment rationale.')).toBeInTheDocument()
     expect(
       screen.getByText('Score impact: +4 pts versus the baseline upload.')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Interview prep spotlight')).toBeInTheDocument()
+    expect(
+      screen.getByText('We added AWS and Terraform; prepare for questions.')
     ).toBeInTheDocument()
   })
 

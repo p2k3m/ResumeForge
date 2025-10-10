@@ -183,6 +183,65 @@ function getHighlightLabel(categoryKey, type, fallback) {
   }
 }
 
+function formatInterviewList(values = [], { limit = 4 } = {}) {
+  if (!Array.isArray(values) || !values.length) {
+    return ''
+  }
+  const seen = new Set()
+  const ordered = []
+  values.forEach((value) => {
+    const text = typeof value === 'string' ? value.trim() : ''
+    if (!text) return
+    const lower = text.toLowerCase()
+    if (seen.has(lower)) return
+    seen.add(lower)
+    ordered.push(text)
+  })
+  if (ordered.length === 0) {
+    return ''
+  }
+  if (ordered.length === 1) {
+    return ordered[0]
+  }
+  if (ordered.length === 2) {
+    return `${ordered[0]} and ${ordered[1]}`
+  }
+  const truncated = ordered.slice(0, limit)
+  if (ordered.length > limit) {
+    return `${truncated.join(', ')} and ${ordered.length - limit} more`
+  }
+  return `${truncated.slice(0, -1).join(', ')} and ${truncated.slice(-1)}`
+}
+
+function buildInterviewPrepAdvice(categories = [], highlights = []) {
+  const addedSkillItems = []
+
+  categories.forEach((category) => {
+    if (!category || category.key !== 'skills') return
+    if (Array.isArray(category.added)) {
+      addedSkillItems.push(...category.added)
+    }
+  })
+
+  highlights.forEach((highlight) => {
+    if (!highlight || highlight.category !== 'skills' || highlight.type !== 'added') {
+      return
+    }
+    if (Array.isArray(highlight.items)) {
+      addedSkillItems.push(...highlight.items)
+    }
+  })
+
+  const formatted = formatInterviewList(addedSkillItems)
+  if (formatted) {
+    return `We added ${formatted}; prepare for questions.`
+  }
+  if (Array.isArray(categories) && categories.length > 0) {
+    return 'These JD-aligned additions were applied so you can prep for interview conversations with confidence.'
+  }
+  return ''
+}
+
 function buildHighlights(categories = []) {
   const highlights = []
   categories.forEach((category) => {
@@ -311,11 +370,13 @@ export function buildAggregatedChangeLogSummary(entries = []) {
 
   const highlights = buildHighlights(ordered)
   const totals = buildTotals(safeEntries, ordered, highlights)
+  const interviewPrepAdvice = buildInterviewPrepAdvice(ordered, highlights)
 
   return {
     categories: ordered,
     highlights,
-    totals
+    totals,
+    interviewPrepAdvice
   }
 }
 

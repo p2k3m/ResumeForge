@@ -51,6 +51,8 @@ describe('buildAggregatedChangeLogSummary', () => {
         items: expect.arrayContaining(['Kubernetes', 'AWS'])
       })
     )
+
+    expect(summary.interviewPrepAdvice).toBe('We added Kubernetes and AWS; prepare for questions.')
   })
 
   it('derives categories when categoryChangelog is missing', () => {
