@@ -6241,6 +6241,9 @@ function App() {
       }
 
       const applied = await applyImprovementSuggestion(suggestion)
+      if (applied) {
+        await runQueuedImprovementRescore()
+      }
       if (applied && suggestion.type === 'enhance-all') {
         const summaryTextCandidate = formatEnhanceAllSummary(suggestion?.improvementSummary)
         const explanationText = typeof suggestion?.explanation === 'string' ? suggestion.explanation : ''
@@ -6250,7 +6253,7 @@ function App() {
 
       return applied
     },
-    [applyImprovementSuggestion, improvementResults]
+    [applyImprovementSuggestion, improvementResults, runQueuedImprovementRescore]
   )
 
   const handleAcceptAllImprovements = useCallback(async () => {
@@ -6268,6 +6271,7 @@ function App() {
         if (!applied) {
           break
         }
+        await runQueuedImprovementRescore()
         if (suggestion.type === 'enhance-all') {
           const summaryTextCandidate = formatEnhanceAllSummary(suggestion?.improvementSummary)
           const explanationText = typeof suggestion?.explanation === 'string' ? suggestion.explanation : ''
@@ -6278,7 +6282,12 @@ function App() {
     } finally {
       setIsBulkAccepting(false)
     }
-  }, [applyImprovementSuggestion, improvementResults, setError])
+  }, [
+    applyImprovementSuggestion,
+    improvementResults,
+    runQueuedImprovementRescore,
+    setError
+  ])
 
   const handleImprovementClick = async (type) => {
     if (type !== 'enhance-all') {
