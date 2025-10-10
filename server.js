@@ -16021,10 +16021,16 @@ async function generateEnhancedDocumentsResponse({
     letterIndex: 2,
   });
 
-  const coverLetterPlaceholderMap = expandEnhancementTokenMap({
-    ...(coverLetter1Tokens.placeholders || {}),
-    ...(coverLetter2Tokens.placeholders || {}),
-  });
+  const coverLetter1PlaceholderMap = expandEnhancementTokenMap(
+    coverLetter1Tokens.placeholders || {}
+  );
+  const coverLetter2PlaceholderMap = expandEnhancementTokenMap(
+    coverLetter2Tokens.placeholders || {}
+  );
+  const coverLetterPlaceholderMap = {
+    ...coverLetter1PlaceholderMap,
+    ...coverLetter2PlaceholderMap,
+  };
 
   if (Object.keys(coverLetterPlaceholderMap).length) {
     enhancementTokenMap = {
@@ -16032,6 +16038,11 @@ async function generateEnhancedDocumentsResponse({
       ...coverLetterPlaceholderMap,
     };
   }
+
+  const coverLetterEnhancementTokenMaps = {
+    cover_letter1: coverLetter1PlaceholderMap,
+    cover_letter2: coverLetter2PlaceholderMap,
+  };
 
   const outputs = {
     version1: {
@@ -16356,7 +16367,7 @@ async function generateEnhancedDocumentsResponse({
           : coverTemplate2
         : template1;
 
-    const baseTemplateOptions = {
+    const sharedTemplateOptions = {
       jobSkills,
       linkedinExperience,
       resumeEducation,
@@ -16378,10 +16389,16 @@ async function generateEnhancedDocumentsResponse({
       enhancementTokenMap,
     };
 
+    const baseTemplateOptions = { ...sharedTemplateOptions };
+
     if (isCvDocument) {
       baseTemplateOptions.resumeExperience = resumeExperience;
     } else if (isCoverLetter) {
       baseTemplateOptions.skipRequiredSections = true;
+      baseTemplateOptions.enhancementTokenMap = {
+        ...(sharedTemplateOptions.enhancementTokenMap || {}),
+        ...(coverLetterEnhancementTokenMaps[name] || {}),
+      };
     }
 
     const canonicalPrimaryTemplate = isCvDocument
