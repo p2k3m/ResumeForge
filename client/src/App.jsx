@@ -544,6 +544,40 @@ function formatDownloadTimestampLabel(timestamp) {
   return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+function normalizeIsoTimestamp(timestamp) {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString()
+}
+
+function extractSessionLabelFromStorageKey(storageKey) {
+  if (!storageKey || typeof storageKey !== 'string') {
+    return ''
+  }
+  const segments = storageKey.split('/').filter(Boolean)
+  if (segments.length < 3) {
+    return ''
+  }
+  const sessionSegments = segments.slice(2)
+  const explicitSession = sessionSegments.find((segment) =>
+    /^session[-_]/i.test(segment)
+  )
+  if (explicitSession) {
+    return explicitSession
+  }
+  const [firstSegment = '', secondSegment = ''] = sessionSegments
+  const dateMatch = firstSegment.match(/^([0-9]{4})([0-9]{2})([0-9]{2})$/)
+  if (dateMatch) {
+    const formattedDate = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
+    return secondSegment ? `${formattedDate}/${secondSegment}` : formattedDate
+  }
+  if (secondSegment) {
+    return `${firstSegment}/${secondSegment}`
+  }
+  return firstSegment
+}
+
 function buildTimestampSlug(timestamp) {
   if (!timestamp) return ''
   const date = new Date(timestamp)
@@ -4065,13 +4099,9 @@ function App() {
     const presentation = file.presentation || getDownloadPresentation(file)
     const templateMeta = file.templateMeta
     const templateLabel = templateMeta?.name || ''
-    const generatedAtLabel = formatDownloadTimestampLabel(file.generatedAt)
-    const metaLine = [
-      templateLabel ? `Template: ${templateLabel}` : '',
-      generatedAtLabel ? `Generated ${generatedAtLabel}` : ''
-    ]
-      .filter(Boolean)
-      .join(' • ')
+    const normalizedGeneratedAt = file.generatedAt || downloadGeneratedAt || ''
+    const generatedAtLabel = formatDownloadTimestampLabel(normalizedGeneratedAt)
+    const generatedAtIso = normalizeIsoTimestamp(normalizedGeneratedAt)
     const cardClass = `p-5 rounded-2xl shadow-sm flex flex-col gap-4 border ${
       presentation.cardBorder || 'border-purple-200'
     } ${presentation.cardAccent || 'bg-white/85'}`
@@ -4094,6 +4124,7 @@ function App() {
     const downloadUrl = typeof file.url === 'string' ? file.url : ''
     const storageKey =
       typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
+    const sessionLabel = extractSessionLabelFromStorageKey(storageKey)
     const canRefresh = Boolean(storageKey)
     const isExpired = Boolean(isExpiryValid && expiryDate.getTime() <= Date.now())
     const isCoverLetter = presentation.category === 'cover' && isCoverLetterType(file.type)
@@ -4168,14 +4199,50 @@ function App() {
       if (isDownloading) return 'Downloading…'
       return 'Preview & Download'
     })()
+    const metaItems = []
+    if (templateLabel) {
+      metaItems.push({
+        key: 'template',
+        content: <span>Template: {templateLabel}</span>
+      })
+    }
+    if (sessionLabel) {
+      metaItems.push({
+        key: 'session',
+        content: (
+          <span>
+            Session:{' '}
+            <span className="font-mono text-[11px] tracking-tight text-purple-600/90">
+              {sessionLabel}
+            </span>
+          </span>
+        )
+      })
+    }
+    if (generatedAtLabel) {
+      metaItems.push({
+        key: 'generated',
+        content: (
+          <time dateTime={generatedAtIso || undefined}>Generated {generatedAtLabel}</time>
+        )
+      })
+    }
+
     return (
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <p className="text-lg font-semibold text-purple-900">{presentation.label}</p>
             <p className="text-sm text-purple-700/90 leading-relaxed">{presentation.description}</p>
-            {metaLine && (
-              <p className="text-xs font-medium text-purple-500">{metaLine}</p>
+            {metaItems.length > 0 && (
+              <p className="text-xs font-medium text-purple-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {metaItems.map((item, index) => (
+                  <span key={item.key} className="flex items-center gap-1">
+                    {index > 0 && <span aria-hidden="true">•</span>}
+                    {item.content}
+                  </span>
+                ))}
+              </p>
             )}
           </div>
           {presentation.badgeText && <span className={badgeClass}>{presentation.badgeText}</span>}
@@ -4233,6 +4300,17 @@ function App() {
               target={directDownloadDisabled ? undefined : '_blank'}
               rel={directDownloadDisabled ? undefined : 'noopener noreferrer'}
               download={directDownloadDisabled ? undefined : directDownloadFileName || undefined}
+              title={
+                [
+                  presentation.label,
+                  sessionLabel ? `Session: ${sessionLabel}` : '',
+                  generatedAtLabel ? `Generated ${generatedAtLabel}` : '',
+                  expiryLabel ? `Expires ${expiryLabel}` : '',
+                  storageKey ? `Storage key: ${storageKey}` : ''
+                ]
+                  .filter(Boolean)
+                  .join(' • ') || undefined
+              }
             >
               {downloadLinkLabel}
             </a>
