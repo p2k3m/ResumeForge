@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { canonicalizeTemplateId } from '../templateRegistry.js'
 
 const cx = (...classes) => classes.filter(Boolean).join(' ')
 
@@ -115,9 +116,27 @@ const DEFAULT_COVER_PREVIEW = {
   highlight: 'bg-slate-500/10'
 }
 
+const normalizeResumeTemplateId = (value) => {
+  if (typeof value !== 'string') return ''
+  const canonical = canonicalizeTemplateId(value)
+  if (canonical) return canonical
+  const trimmed = value.trim()
+  return trimmed ? trimmed.toLowerCase() : ''
+}
+
+const getResumePreviewStyle = (templateId) => {
+  const canonical = canonicalizeTemplateId(templateId)
+  if (!canonical) {
+    return DEFAULT_RESUME_PREVIEW
+  }
+  return RESUME_TEMPLATE_PREVIEWS[canonical] || DEFAULT_RESUME_PREVIEW
+}
+
 const deriveCoverTemplateFromResume = (resumeId) => {
   if (!resumeId) return ''
-  return RESUME_TO_COVER_TEMPLATE[resumeId] || ''
+  const canonical = canonicalizeTemplateId(resumeId)
+  if (!canonical) return ''
+  return RESUME_TO_COVER_TEMPLATE[canonical] || ''
 }
 
 const ResumeMockup = ({ style = {} }) => (
@@ -282,19 +301,20 @@ function TemplatePreview({
     const registry = new Map()
     availableResumeTemplates.forEach((option) => {
       if (!option || typeof option !== 'object') return
-      const id = option.id
-      if (!id) return
-      if (registry.has(id)) return
-      registry.set(id, {
-        id,
-        name: option.name || resumeTemplateName || id,
+      const normalizedId = normalizeResumeTemplateId(option.id)
+      if (!normalizedId) return
+      if (registry.has(normalizedId)) return
+      registry.set(normalizedId, {
+        id: normalizedId,
+        name: option.name || resumeTemplateName || normalizedId,
         description: option.description || ''
       })
     })
-    if (resumeTemplateId && !registry.has(resumeTemplateId)) {
-      registry.set(resumeTemplateId, {
-        id: resumeTemplateId,
-        name: resumeTemplateName || resumeTemplateId,
+    const normalizedPropId = normalizeResumeTemplateId(resumeTemplateId)
+    if (normalizedPropId && !registry.has(normalizedPropId)) {
+      registry.set(normalizedPropId, {
+        id: normalizedPropId,
+        name: resumeTemplateName || normalizedPropId,
         description: resumeTemplateDescription || ''
       })
     }
@@ -305,6 +325,8 @@ function TemplatePreview({
     resumeTemplateId,
     resumeTemplateName
   ])
+
+  const normalizedSelectedResumeId = normalizeResumeTemplateId(resumeTemplateId)
 
   const normalizedCoverTemplates = useMemo(() => {
     const registry = new Map()
@@ -335,7 +357,7 @@ function TemplatePreview({
   ])
 
   const [previewResumeTemplateId, setPreviewResumeTemplateId] = useState(
-    resumeTemplateId || normalizedResumeTemplates[0]?.id || ''
+    normalizedSelectedResumeId || normalizedResumeTemplates[0]?.id || ''
   )
   const [previewCoverTemplateId, setPreviewCoverTemplateId] = useState(() => {
     if (coverTemplateId) return coverTemplateId
@@ -347,7 +369,7 @@ function TemplatePreview({
     return normalizedCoverTemplates[0]?.id || DEFAULT_COVER_TEMPLATE_ID
   })
   const [resumeComparisonSelections, setResumeComparisonSelections] = useState(() => {
-    const initialId = resumeTemplateId || normalizedResumeTemplates[0]?.id
+    const initialId = normalizedSelectedResumeId || normalizedResumeTemplates[0]?.id
     return initialId ? [initialId] : []
   })
   const [coverComparisonSelections, setCoverComparisonSelections] = useState(() => {
@@ -357,7 +379,8 @@ function TemplatePreview({
 
   useEffect(() => {
     if (!resumeTemplateId) return
-    setPreviewResumeTemplateId(resumeTemplateId)
+    const nextId = normalizeResumeTemplateId(resumeTemplateId)
+    setPreviewResumeTemplateId(nextId)
   }, [resumeTemplateId])
 
   useEffect(() => {
@@ -387,7 +410,7 @@ function TemplatePreview({
     return (
       normalizedResumeTemplates.find((option) => option.id === previewResumeTemplateId) ||
       normalizedResumeTemplates[0] || {
-        id: resumeTemplateId,
+        id: normalizedSelectedResumeId,
         name: resumeTemplateName,
         description: resumeTemplateDescription
       }
@@ -396,7 +419,7 @@ function TemplatePreview({
     normalizedResumeTemplates,
     previewResumeTemplateId,
     resumeTemplateDescription,
-    resumeTemplateId,
+    normalizedSelectedResumeId,
     resumeTemplateName
   ])
 
@@ -441,11 +464,12 @@ function TemplatePreview({
   ])
 
   const appliedResumeOption = useMemo(() => {
-    if (!resumeTemplateId) return null
+    const normalizedId = normalizeResumeTemplateId(resumeTemplateId)
+    if (!normalizedId) return null
     return (
-      normalizedResumeTemplates.find((option) => option.id === resumeTemplateId) || {
-        id: resumeTemplateId,
-        name: resumeTemplateName || resumeTemplateId,
+      normalizedResumeTemplates.find((option) => option.id === normalizedId) || {
+        id: normalizedId,
+        name: resumeTemplateName || normalizedId,
         description: resumeTemplateDescription || ''
       }
     )
@@ -472,18 +496,19 @@ function TemplatePreview({
     normalizedCoverTemplates
   ])
 
-  const resumeStyle =
-    RESUME_TEMPLATE_PREVIEWS[previewResumeOption?.id] || DEFAULT_RESUME_PREVIEW
+  const resumeStyle = getResumePreviewStyle(previewResumeOption?.id)
   const coverStyle =
     COVER_TEMPLATE_PREVIEWS[previewCoverOption?.id] || DEFAULT_COVER_PREVIEW
 
-  const appliedResumeStyle =
-    RESUME_TEMPLATE_PREVIEWS[appliedResumeOption?.id] || DEFAULT_RESUME_PREVIEW
+  const appliedResumeStyle = getResumePreviewStyle(appliedResumeOption?.id)
   const appliedCoverStyle =
     COVER_TEMPLATE_PREVIEWS[appliedCoverOption?.id] || DEFAULT_COVER_PREVIEW
 
   const appliedResumeName =
-    appliedResumeOption?.name || resumeTemplateName || resumeTemplateId || 'your current CV style'
+    appliedResumeOption?.name ||
+    resumeTemplateName ||
+    normalizedSelectedResumeId ||
+    'your current CV style'
   const appliedCoverName =
     appliedCoverOption?.name || coverTemplateName || coverTemplateId || 'your current cover style'
 
@@ -502,7 +527,9 @@ function TemplatePreview({
   }, [appliedCoverName])
 
   const isPreviewingDifferentResume =
-    previewResumeOption?.id && resumeTemplateId && previewResumeOption.id !== resumeTemplateId
+    previewResumeOption?.id &&
+    normalizedSelectedResumeId &&
+    previewResumeOption.id !== normalizedSelectedResumeId
   const isPreviewingDifferentCover =
     previewCoverOption?.id && coverTemplateId && previewCoverOption.id !== coverTemplateId
 
@@ -530,10 +557,11 @@ function TemplatePreview({
   const hasCustomCoverComparison = normalizedCoverComparisonSelections.length >= 2
 
   const toggleResumeComparisonSelection = (templateId) => {
-    if (!templateId) return
+    const normalizedId = normalizeResumeTemplateId(templateId)
+    if (!normalizedId) return
     setResumeComparisonSelections((prev = []) => {
-      const exists = prev.includes(templateId)
-      let next = exists ? prev.filter((id) => id !== templateId) : [...prev, templateId]
+      const exists = prev.includes(normalizedId)
+      let next = exists ? prev.filter((id) => id !== normalizedId) : [...prev, normalizedId]
       if (next.length > 2) {
         next = next.slice(next.length - 2)
       }
@@ -555,8 +583,8 @@ function TemplatePreview({
 
   const resumeCards = hasCustomResumeComparison
     ? normalizedResumeComparisonSelections.map((option, index) => {
-        const style = RESUME_TEMPLATE_PREVIEWS[option?.id] || DEFAULT_RESUME_PREVIEW
-        const isApplied = option?.id === resumeTemplateId
+        const style = getResumePreviewStyle(option?.id)
+        const isApplied = option?.id === normalizedSelectedResumeId
         return {
           key: option?.id || `resume-comparison-${index}`,
           label: `Comparison choice ${index + 1}`,
@@ -680,7 +708,7 @@ function TemplatePreview({
                           ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
                           : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
                       )}
-                      onClick={() => setPreviewResumeTemplateId(option.id)}
+                      onClick={() => setPreviewResumeTemplateId(normalizeResumeTemplateId(option.id))}
                     >
                       {option.name}
                       {option.id === resumeTemplateId && (

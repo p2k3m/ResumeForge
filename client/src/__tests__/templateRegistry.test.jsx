@@ -27,6 +27,12 @@ describe('resume template registry', () => {
     expect(canonicalizeTemplateId('creative')).toBe('modern')
   })
 
+  it('maps seasonal 2025 variants back to the base Future Vision template', () => {
+    expect(canonicalizeTemplateId('2025-q4-emerald')).toBe('2025')
+    expect(canonicalizeTemplateId('2025 Q4 Slate')).toBe('2025')
+    expect(canonicalizeTemplateId('2025_q3_pilot')).toBe('2025')
+  })
+
   it('filters unsupported or experimental template identifiers', () => {
     ;['portal', 'precision', 'structured', 'beta-template'].forEach((id) => {
       expect(canonicalizeTemplateId(id)).toBe('')
