@@ -2869,6 +2869,9 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       ? [...baseResult.changeDetails]
       : [];
     const targetJobTitle = (context.jobTitle || '').trim();
+    const llmDescriptor = formatLlmDescriptor(
+      extractJobLlmVendors(context.jobDescription || '', context.jobSkills)
+    );
 
     const defaultReasons = {
       summary: targetJobTitle
@@ -2889,9 +2892,16 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       projects: targetJobTitle
         ? `Projects spotlight initiatives that mirror ${targetJobTitle} responsibilities.`
         : 'Projects spotlight initiatives that mirror the job description priorities.',
-      highlights: targetJobTitle
-        ? `Highlights now emphasise quantified wins tied to ${targetJobTitle} success metrics from the JD.`
-        : 'Highlights now emphasise quantified wins tied to the job description success metrics.',
+      highlights: (() => {
+        if (llmDescriptor) {
+          return targetJobTitle
+            ? `Highlights now emphasise quantified ${llmDescriptor} impact tied to ${targetJobTitle} KPIs from the JD.`
+            : `Highlights now emphasise quantified ${llmDescriptor} impact tied to the JD success metrics.`;
+        }
+        return targetJobTitle
+          ? `Highlights now emphasise quantified wins tied to ${targetJobTitle} success metrics from the JD.`
+          : 'Highlights now emphasise quantified wins tied to the job description success metrics.';
+      })(),
     };
 
     const trackChange = (key, label, sectionResult = {}, reasons, options = {}) => {
@@ -3295,16 +3305,56 @@ function formatPromptLine(label, value, { fallback = 'Not provided', maxLength =
   return `- ${label}: ${condensed || fallback}`;
 }
 
+function extractJobLlmVendors(jobDescription = '', jobSkills = []) {
+  const jobSkillText = Array.isArray(jobSkills) ? jobSkills.join(' ') : '';
+  const source = `${jobDescription}\n${jobSkillText}`.toLowerCase();
+  const vendors = new Set();
+
+  if (/(?:\bopen\s*ai\b|\bchatgpt\b|\bgpt(?:-[\w.]+)?\b|\bazure\s+openai\b)/.test(source)) {
+    vendors.add('OpenAI');
+  }
+
+  if (/\bgemini(?:\s+1\.5|\s+1\.0|\s+pro|\s+flash)?\b/.test(source) || /\bgoogle\s+gemini\b/.test(source)) {
+    vendors.add('Gemini');
+  }
+
+  return Array.from(vendors);
+}
+
+function formatLlmDescriptor(vendors = []) {
+  if (!Array.isArray(vendors) || !vendors.length) {
+    return '';
+  }
+  const unique = Array.from(new Set(vendors.filter(Boolean)));
+  if (!unique.length) {
+    return '';
+  }
+  const descriptor = summarizeList(unique, { conjunction: 'and' });
+  const suffix = unique.length > 1 ? ' LLMs' : ' LLM';
+  return `${descriptor}${suffix}`;
+}
+
 function buildImprovementPrompt(type, context, instructions) {
   let requests = Array.isArray(instructions)
     ? instructions.filter(Boolean)
     : [instructions].filter(Boolean);
+
+  const resumeText = context.resumeText || '';
+  const jobDescription = context.jobDescription || '';
+  const llmDescriptor = formatLlmDescriptor(
+    extractJobLlmVendors(jobDescription, context.jobSkills)
+  );
 
   if (type === 'improve-highlights') {
     const highlightDirectives = [
       'Expand the highlight bullets with quantified achievements tied directly to JD success metrics using only resume-backed facts.',
       'Explicitly call out the JD metric, KPI, or responsibility each highlight reinforces.',
     ];
+    if (llmDescriptor) {
+      highlightDirectives.push(
+        `Showcase measurable ${llmDescriptor} outcomes that the JD references by name.`
+      );
+    }
     const lowerRequests = new Set(requests.map((entry) => entry.toLowerCase()));
     highlightDirectives.forEach((directive) => {
       if (!lowerRequests.has(directive.toLowerCase())) {
@@ -3314,8 +3364,6 @@ function buildImprovementPrompt(type, context, instructions) {
     });
   }
 
-  const resumeText = context.resumeText || '';
-  const jobDescription = context.jobDescription || '';
   const sections = collectSectionText(resumeText, context.linkedinData || {}, context.knownCertificates || []);
   const combinedCertificates = [
     ...(context.knownCertificates || []),
@@ -3381,6 +3429,9 @@ function buildImprovementPrompt(type, context, instructions) {
   if (type === 'improve-highlights') {
     ruleLines.push('Tie each highlight to a JD metric, KPI, or responsibility using resume-backed evidence.');
     ruleLines.push('Prefer quantified language (%, $, #, volume) already present in the resume when rewriting highlights.');
+    if (llmDescriptor) {
+      ruleLines.push(`Reference the JD-specified ${llmDescriptor} work when it reinforces alignment.`);
+    }
   }
 
   if (requests.length) {
@@ -3412,6 +3463,9 @@ function fallbackImprovement(type, context) {
   const jobTitle = context.jobTitle || '';
   const jobSkills = context.jobSkills || [];
   const missingSkills = context.missingSkills || [];
+  const llmDescriptor = formatLlmDescriptor(
+    extractJobLlmVendors(context.jobDescription || '', jobSkills)
+  );
   const fallbackSkills = missingSkills.length ? missingSkills : jobSkills.slice(0, 3);
   const fallbackSkillText = summarizeList(fallbackSkills, {
     conjunction: 'and',
@@ -3778,7 +3832,9 @@ function fallbackImprovement(type, context) {
     const headingLabel = deriveHeadingLabel(section.heading, 'Highlights');
     const before = section.content.join('\n').trim();
     const focusText = fallbackSkillText || jobTitle || 'target role';
-    const addition = `- Spotlighted quantified wins that reinforce ${focusText} outcomes from the JD.`;
+    const addition = llmDescriptor
+      ? `- Quantified ${llmDescriptor} impact hitting ${focusText} KPIs from the JD.`
+      : `- Spotlighted quantified wins that reinforce ${focusText} outcomes from the JD.`;
     const alreadyPresent = section.content.some((line) =>
       line.trim().toLowerCase() === addition.toLowerCase()
     );
@@ -3796,8 +3852,12 @@ function fallbackImprovement(type, context) {
       { headingLabel, insertIndex: 2 }
     );
     const explanation = alreadyPresent
-      ? 'Highlights already underscore the job-aligned achievements.'
-      : 'Reinforced highlights with quantified wins tied to the JD success metrics.';
+      ? llmDescriptor
+        ? `Highlights already underscore the JD-referenced ${llmDescriptor} outcomes.`
+        : 'Highlights already underscore the job-aligned achievements.'
+      : llmDescriptor
+        ? `Reinforced highlights with quantified ${llmDescriptor} impact tied to the JD success metrics.`
+        : 'Reinforced highlights with quantified wins tied to the JD success metrics.';
     const beforeLines = extractDiffLines(before, {
       sectionTokens: [headingLabel || 'Highlights', 'highlights'],
     });
