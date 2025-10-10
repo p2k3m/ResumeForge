@@ -9155,14 +9155,34 @@ function idealRangeScore(
   return clamp01(1 - distance / tolerance);
 }
 
-function summarizeList(values = [], { limit = 3, conjunction = 'and' } = {}) {
+function buildActionLabeler(actionBuilder) {
+  return (value) => {
+    const text = typeof value === 'string' ? value.trim() : String(value || '').trim();
+    if (!text) return '';
+    const action = typeof actionBuilder === 'function' ? actionBuilder(text) : '';
+    const actionText = typeof action === 'string' ? action.trim() : '';
+    return actionText ? `${text} (${actionText})` : text;
+  };
+}
+
+function summarizeList(values = [], { limit = 3, conjunction = 'and', decorate } = {}) {
   if (!values.length) return '';
-  const unique = Array.from(new Set(values)).filter(Boolean);
+  const unique = Array.from(new Set(values))
+    .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
+    .filter(Boolean);
   if (!unique.length) return '';
-  if (unique.length === 1) return unique[0];
-  if (unique.length === 2) return `${unique[0]} ${conjunction} ${unique[1]}`;
-  const display = unique.slice(0, limit);
-  const remaining = unique.length - display.length;
+  const decorated =
+    typeof decorate === 'function'
+      ? unique
+          .map((value) => decorate(value))
+          .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
+          .filter(Boolean)
+      : unique;
+  if (!decorated.length) return '';
+  if (decorated.length === 1) return decorated[0];
+  if (decorated.length === 2) return `${decorated[0]} ${conjunction} ${decorated[1]}`;
+  const display = decorated.slice(0, limit);
+  const remaining = decorated.length - display.length;
   if (remaining > 0) {
     return `${display.join(', ')} and ${remaining} more`;
   }
@@ -9366,12 +9386,18 @@ function buildSelectionInsights(context = {}) {
   let skillsMessage = `Resume now covers ${skillCoverage}% of the JD skills.`;
   if (missing.length) {
     skillsStatus = 'gap';
-    skillsMessage = `Still missing ${summarizeList(missing, { limit: 4 })} from the JD.`;
+    skillsMessage = `Still missing ${summarizeList(missing, {
+      limit: 4,
+      decorate: buildActionLabeler((skill) => `Practice ${skill}`)
+    })} from the JD.`;
   } else if (skillCoverage < 70) {
     skillsStatus = 'partial';
     skillsMessage = `Resume covers ${skillCoverage}% of JD skills. Reinforce keywords in experience and summary.`;
   } else if (added.length) {
-    skillsMessage = `Resume now covers ${skillCoverage}% of the JD skills, adding ${summarizeList(added, { limit: 4 })}.`;
+    skillsMessage = `Resume now covers ${skillCoverage}% of the JD skills, adding ${summarizeList(added, {
+      limit: 4,
+      decorate: buildActionLabeler((skill) => `Practice ${skill}`)
+    })}.`;
   }
 
   const impactScore = Number(scoreBreakdown?.impact?.score) || 0;
@@ -9421,7 +9447,10 @@ function buildSelectionInsights(context = {}) {
   let certificationMessage = 'Existing certifications align with the posting.';
   if (suggestions.length) {
     certificationStatus = 'gap';
-    certificationMessage = `Consider adding ${summarizeList(suggestions, { limit: 3 })} to mirror the JD.`;
+    certificationMessage = `Consider adding ${summarizeList(suggestions, {
+      limit: 3,
+      decorate: buildActionLabeler((cert) => `Add credential ${cert}`)
+    })} to mirror the JD.`;
   }
   if (manualCertificatesRequired) {
     certificationStatus = certificationStatus === 'match' ? 'info' : certificationStatus;
