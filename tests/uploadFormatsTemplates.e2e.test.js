@@ -31,7 +31,6 @@ const JOB_DESCRIPTION = [
 ].join(' ');
 
 const TARGET_JOB_SKILLS = ['Leadership', 'Cloud Architecture', 'JavaScript'];
-const LINKEDIN_URL = 'https://linkedin.com/in/example';
 
 function extractTypes(urls = []) {
   return urls.map((entry) => entry.type).filter(Boolean);
@@ -85,7 +84,6 @@ describe('resume lifecycle coverage', () => {
       )
       .set('X-Forwarded-For', '198.51.100.50')
       .field('manualJobDescription', JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', LINKEDIN_URL)
       .attach('resume', Buffer.from('dummy'), fileName);
 
     expect(uploadResponse.status).toBe(200);
@@ -160,7 +158,6 @@ describe('resume lifecycle coverage', () => {
     await primeSuccessfulAi();
     const improvementResponse = await request(app).post('/api/enhance-all').send({
       jobId: uploadResponse.body.jobId,
-      linkedinProfileUrl: LINKEDIN_URL,
       resumeText,
       jobDescription: jobDescriptionText,
       jobSkills,
@@ -197,7 +194,6 @@ describe('resume lifecycle coverage', () => {
         missingSkills: uploadResponse.body.missingSkills || missingSkills,
         table: uploadResponse.body.table || [],
       },
-      linkedinProfileUrl: LINKEDIN_URL,
       manualCertificates: uploadResponse.body.manualCertificates || [],
       templateContext: uploadResponse.body.templateContext,
     });
@@ -301,7 +297,6 @@ describe('resume lifecycle coverage', () => {
       )
       .set('X-Forwarded-For', '198.51.100.50')
       .field('manualJobDescription', JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', LINKEDIN_URL)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(uploadResponse.status).toBe(200);
@@ -323,7 +318,6 @@ describe('resume lifecycle coverage', () => {
     await primeSuccessfulAi();
     const improvementResponse = await request(app).post('/api/enhance-all').send({
       jobId: uploadResponse.body.jobId,
-      linkedinProfileUrl: LINKEDIN_URL,
       resumeText,
       jobDescription: jobDescriptionText,
       jobSkills,
@@ -360,7 +354,6 @@ describe('resume lifecycle coverage', () => {
             missingSkills: uploadResponse.body.missingSkills || missingSkills,
             table: uploadResponse.body.table || [],
           },
-          linkedinProfileUrl: LINKEDIN_URL,
           manualCertificates: uploadResponse.body.manualCertificates || [],
           templateContext: {
             template1: cvTemplate,
