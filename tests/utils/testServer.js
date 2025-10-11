@@ -25,7 +25,8 @@ export async function setupTestServer({
   s3Impl,
   dynamoImpl,
   axiosImpl,
-  pdfText = 'John Doe\nProfessional Summary\nExperience\nEducation\nSkills\nProjects',
+  pdfText =
+    'John Doe\nLinkedIn: https://linkedin.com/in/example\nProfessional Summary\nExperience\nEducation\nSkills\nProjects',
   docxText = 'Doc text',
   docText,
   allowedOrigins,
