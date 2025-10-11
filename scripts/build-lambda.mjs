@@ -75,17 +75,24 @@ async function ensureCleanOutput() {
 }
 
 async function runEsbuild() {
-  const entry = path.join(projectRoot, 'lambda.js')
-  const outfile = path.join(outDir, 'lambda.mjs')
+  const entryPoints = [
+    path.join(projectRoot, 'lambdas', 'resumeUpload.js'),
+    path.join(projectRoot, 'lambdas', 'jobEvaluation.js'),
+    path.join(projectRoot, 'lambdas', 'scoring.js'),
+    path.join(projectRoot, 'lambdas', 'enhancement.js'),
+    path.join(projectRoot, 'lambdas', 'documentGeneration.js'),
+    path.join(projectRoot, 'lambdas', 'auditing.js'),
+  ]
   const shouldGenerateSourceMap = process.env.GENERATE_SOURCEMAP === 'true'
 
   await build({
-    entryPoints: [entry],
+    entryPoints,
     bundle: true,
     platform: 'node',
     target: 'node18',
     format: 'esm',
-    outfile,
+    outdir: outDir,
+    outbase: projectRoot,
     sourcemap: shouldGenerateSourceMap,
     minify: true,
     logLevel: 'info',
@@ -104,6 +111,9 @@ async function runEsbuild() {
         "globalThis.__filename = globalThis.__filename || __filename;",
         "globalThis.__dirname = globalThis.__dirname || __dirname;",
       ].join('\n'),
+    },
+    outExtension: {
+      '.js': '.mjs',
     },
   })
 }

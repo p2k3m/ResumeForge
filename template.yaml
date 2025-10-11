@@ -104,7 +104,7 @@ Resources:
         - application/pdf
         - application/octet-stream
       Cors:
-        AllowMethods: "'OPTIONS,POST'"
+        AllowMethods: "'OPTIONS,POST,GET'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
 
@@ -126,7 +126,13 @@ Resources:
           - Sid: AllowLambdaBucketActions
             Effect: Allow
             Principal:
-              AWS: !GetAtt ResumeForgeFunctionRole.Arn
+              AWS:
+                - !GetAtt ResumeUploadFunctionRole.Arn
+                - !GetAtt JobEvaluationFunctionRole.Arn
+                - !GetAtt ScoringFunctionRole.Arn
+                - !GetAtt EnhancementFunctionRole.Arn
+                - !GetAtt DocumentGenerationFunctionRole.Arn
+                - !GetAtt AuditingFunctionRole.Arn
             Action:
               - s3:GetObject
               - s3:PutObject
@@ -139,7 +145,13 @@ Resources:
           - Sid: AllowLambdaListBucket
             Effect: Allow
             Principal:
-              AWS: !GetAtt ResumeForgeFunctionRole.Arn
+              AWS:
+                - !GetAtt ResumeUploadFunctionRole.Arn
+                - !GetAtt JobEvaluationFunctionRole.Arn
+                - !GetAtt ScoringFunctionRole.Arn
+                - !GetAtt EnhancementFunctionRole.Arn
+                - !GetAtt DocumentGenerationFunctionRole.Arn
+                - !GetAtt AuditingFunctionRole.Arn
             Action:
               - s3:ListBucket
             Resource: !If
@@ -160,12 +172,12 @@ Resources:
         - AttributeName: linkedinProfileUrl
           KeyType: HASH
 
-  ResumeForgeFunction:
+  ResumeUploadFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeHandler
+      FunctionName: ResumeForgeResumeUpload
       CodeUri: .
-      Handler: lambda.handler
+      Handler: lambdas/resumeUpload.handler
       Runtime: nodejs18.x
       MemorySize: 2048
       Timeout: 300
@@ -176,19 +188,13 @@ Resources:
           ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
         - !Ref AWS::NoValue
       Events:
-        ApiProxy:
+        ProcessResume:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
-            Path: /{proxy+}
+            Path: /api/process-cv
             Method: ANY
-        ApiRoot:
-          Type: Api
-          Properties:
-            RestApiId: !Ref ResumeForgeApi
-            Path: /
-            Method: ANY
-      Environment:
+      Environment: &ResumeForgeFunctionEnvironment
         Variables:
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
@@ -198,7 +204,7 @@ Resources:
             - !Ref GeminiApiKey
           PRIMARY_REGION: !Ref AWS::Region
           SECONDARY_REGION: !Ref SecondaryRegion
-      Policies:
+      Policies: &ResumeForgeFunctionPolicies
         - AWSLambdaBasicExecutionRole
         - Statement:
             - Sid: AllowBucketAccess
@@ -232,6 +238,218 @@ Resources:
                   - !Ref SecretName
                   - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
           - !Ref AWS::NoValue
+      Layers: []
+    Metadata:
+      BuildMethod: makefile
+
+  JobEvaluationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeJobEvaluation
+      CodeUri: .
+      Handler: lambdas/jobEvaluation.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
+        EvaluateJobDescription:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/jd/evaluate
+            Method: ANY
+      Environment: *ResumeForgeFunctionEnvironment
+      Policies: *ResumeForgeFunctionPolicies
+      Layers: []
+    Metadata:
+      BuildMethod: makefile
+
+  ScoringFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeScoring
+      CodeUri: .
+      Handler: lambdas/scoring.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
+        ScoreMatch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/score-match
+            Method: ANY
+        RescoreImprovement:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/rescore-improvement
+            Method: ANY
+      Environment: *ResumeForgeFunctionEnvironment
+      Policies: *ResumeForgeFunctionPolicies
+      Layers: []
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeEnhancement
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
+        ImproveSummary:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-summary
+            Method: ANY
+        AddMissingSkills:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/add-missing-skills
+            Method: ANY
+        ChangeDesignation:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/change-designation
+            Method: ANY
+        AlignExperience:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/align-experience
+            Method: ANY
+        ImproveCertifications:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-certifications
+            Method: ANY
+        ImproveProjects:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-projects
+            Method: ANY
+        ImproveHighlights:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-highlights
+            Method: ANY
+        EnhanceAll:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/enhance-all
+            Method: ANY
+      Environment: *ResumeForgeFunctionEnvironment
+      Policies: *ResumeForgeFunctionPolicies
+      Layers: []
+    Metadata:
+      BuildMethod: makefile
+
+  DocumentGenerationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeDocumentGeneration
+      CodeUri: .
+      Handler: lambdas/documentGeneration.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
+        GenerateEnhancedDocs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/generate-enhanced-docs
+            Method: ANY
+        RenderCoverLetter:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/render-cover-letter
+            Method: ANY
+      Environment: *ResumeForgeFunctionEnvironment
+      Policies: *ResumeForgeFunctionPolicies
+      Layers: []
+    Metadata:
+      BuildMethod: makefile
+
+  AuditingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeAuditing
+      CodeUri: .
+      Handler: lambdas/auditing.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
+        ChangeLog:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/change-log
+            Method: ANY
+        RefreshDownloadLink:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/refresh-download-link
+            Method: ANY
+        PublishedCloudfront:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/published-cloudfront
+            Method: ANY
+        Healthz:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /healthz
+            Method: ANY
+      Environment: *ResumeForgeFunctionEnvironment
+      Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:
       BuildMethod: makefile
