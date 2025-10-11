@@ -14447,6 +14447,34 @@ function normalizeChangeLogActivityArray(entries = []) {
     .filter(Boolean);
 }
 
+function extractActivityLogArray(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === null) {
+    return [];
+  }
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidateKeys = ['entries', 'items', 'logs', 'events', 'history', 'list'];
+  for (const key of candidateKeys) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      continue;
+    }
+    const nested = value[key];
+    if (Array.isArray(nested)) {
+      return nested;
+    }
+    if (nested === null) {
+      return [];
+    }
+  }
+
+  return null;
+}
+
 function normalizeChangeLogSegment(segment = {}) {
   if (!segment || typeof segment !== 'object') {
     return null;
@@ -19855,9 +19883,13 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         continue;
       }
       for (const key of keys) {
+        if (!(key in source)) {
+          continue;
+        }
         const value = source[key];
-        if (Array.isArray(value)) {
-          return value;
+        const extracted = extractActivityLogArray(value);
+        if (extracted !== null) {
+          return extracted;
         }
       }
     }
