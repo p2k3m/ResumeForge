@@ -1525,21 +1525,29 @@ describe('/api/process-cv', () => {
     const MB = 1024 * 1024;
     const withinLimitCases = [
       {
-        label: 'small PDF (128 KB)',
-        filename: 'small.pdf',
+        label: 'tiny PDF (32 KB)',
+        filename: 'tiny.pdf',
         contentType: 'application/pdf',
-        size: 128 * 1024,
+        size: 32 * 1024,
       },
       {
-        label: 'mid-sized DOCX (2 MB)',
-        filename: 'mid.docx',
-        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        label: 'small DOCX (256 KB)',
+        filename: 'small.docx',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 256 * 1024,
+      },
+      {
+        label: 'mid-sized PDF (2 MB)',
+        filename: 'mid.pdf',
+        contentType: 'application/pdf',
         size: 2 * MB,
       },
       {
-        label: 'near-limit PDF (just under 5 MB)',
-        filename: 'near-limit.pdf',
-        contentType: 'application/pdf',
+        label: 'near-limit DOCX (just under 5 MB)',
+        filename: 'near-limit.docx',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         size: 5 * MB - 1024,
       },
     ];
