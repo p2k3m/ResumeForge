@@ -16,7 +16,7 @@ This primer helps new teammates explain ResumeForge to "regular" users — candi
 - **Emphasise control:** The improvement loop is user-driven. ResumeForge never auto-applies changes or forces the next step; candidates decide when to accept edits and when to re-run scoring.
 - **Highlight iteration:** Encourage users to evaluate, tweak, and re-evaluate multiple times. The dashboard updates instantly so they can observe the impact of each round of changes before downloading.
 - **Set expectations on data retention:** Explain that uploads and generated files are scoped to the active session and are overwritten on subsequent iterations, keeping storage lean without manual cleanup.
-- **Share the entry point:** Direct candidates to the active CloudFront domain listed in the README and `docs/cloudfront-url.md` so they always land on the latest deployment.
+- **Share the entry point:** Direct candidates to the active CloudFront domain listed in the README and `docs/cloudfront-url.md` so they always land on the latest deployment. Run `npm run verify:cloudfront` right after publishing to catch CDN regressions before sharing links.
 
 ## Where to learn more
 

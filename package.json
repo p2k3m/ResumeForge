@@ -13,7 +13,8 @@
     "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs",
     "refresh:templates": "node scripts/refresh-templates.mjs",
     "test:sam": "sam local invoke ResumeForgeFunction --event tests/sam/healthz-event.json",
-    "publish:cloudfront-url": "node scripts/publish-cloudfront-url.mjs"
+    "publish:cloudfront-url": "node scripts/publish-cloudfront-url.mjs",
+    "verify:cloudfront": "node scripts/verify-cloudfront.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.432.0",
@@ -57,7 +58,8 @@
     "js-yaml": "^4.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "supertest": "^6.3.4"
+    "supertest": "^6.3.4",
+    "undici": "^5.29.0"
   },
   "jest": {
     "testEnvironment": "node",
