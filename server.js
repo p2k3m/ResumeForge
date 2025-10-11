@@ -14550,6 +14550,70 @@ function sanitizeChangeLogActivityValue(value, depth = 0) {
   return undefined;
 }
 
+function hasMeaningfulActivityMessage(value) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return !/^internal server error$/i.test(trimmed);
+}
+
+function applyActivityLogFailureMessage(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return entry;
+  }
+
+  const contextFields = ['stage', 'event', 'type', 'category'];
+  const contextValues = contextFields
+    .map((field) => entry[field])
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.toLowerCase());
+
+  if (!contextValues.length) {
+    return entry;
+  }
+
+  const relatesToEnhancement = contextValues.some((value) => value.includes('enhancement'));
+  const relatesToEvaluation = contextValues.some((value) => value.includes('evaluation'));
+
+  if (!relatesToEnhancement && !relatesToEvaluation) {
+    return entry;
+  }
+
+  const statusText = typeof entry.status === 'string' ? entry.status.toLowerCase() : '';
+  const failureIndicators = ['fail', 'error', 'unavailable', 'timeout'];
+  const indicatesFailure =
+    failureIndicators.some((token) => statusText.includes(token)) ||
+    contextValues.some((value) => failureIndicators.some((token) => value.includes(token)));
+
+  if (!indicatesFailure) {
+    return entry;
+  }
+
+  const fallback = relatesToEnhancement
+    ? CV_GENERATION_ERROR_MESSAGE
+    : LAMBDA_PROCESSING_ERROR_MESSAGE;
+
+  const messageFields = ['message', 'detail', 'description', 'notes', 'resolution', 'summary'];
+  const hasMeaningfulField = messageFields.some((field) => hasMeaningfulActivityMessage(entry[field]));
+
+  if (!hasMeaningfulField) {
+    entry.message = fallback;
+  } else {
+    messageFields.forEach((field) => {
+      const value = entry[field];
+      if (typeof value === 'string' && !hasMeaningfulActivityMessage(value)) {
+        entry[field] = fallback;
+      }
+    });
+  }
+
+  return entry;
+}
+
 function normalizeChangeLogActivityEntry(entry) {
   if (!entry || typeof entry !== 'object') {
     return null;
@@ -14607,6 +14671,8 @@ function normalizeChangeLogActivityEntry(entry) {
       delete normalized.timestamp;
     }
   }
+
+  applyActivityLogFailureMessage(normalized);
 
   Object.keys(normalized).forEach((key) => {
     if (normalized[key] === undefined || normalized[key] === '') {
