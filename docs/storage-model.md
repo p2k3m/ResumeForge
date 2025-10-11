@@ -24,7 +24,9 @@ without reverse-engineering `server.js`.
    prefix by normalising the candidate, date, job, and request id segments (see
    [Key structure](#key-structure) below). The raw upload is copied into that
    prefix and the temporary object is deleted so storage only retains the
-   canonical version.
+   canonical version. When an existing session is regenerated, the pipeline
+   reuses this prefix and flags any superseded PDFs or JSON artefacts for
+   deletion once the replacement upload succeeds.
 3. **Metadata & logs** – DynamoDB receives a record containing the canonical key
    and contextual metadata. JSONL/JSON logs are written under
    `<prefix>/logs/processing.jsonl`, `<prefix>/logs/log.json`, and the session
@@ -59,13 +61,17 @@ Within each session the service writes:
 
 ## Retention expectations
 
-* The relocation step deletes the temporary upload, but canonical prefixes are
-  never pruned in application code. S3 therefore retains a full history of
-  sessions per candidate/job until a lifecycle policy deletes them manually.
+* The relocation step deletes the temporary upload and the generation pipeline
+  now prunes any superseded artefacts (PDFs and JSON exports) that were attached
+  to the session. Only the most recent document versions remain in the
+  `cv/<owner>/<session>/` prefix so Ops do not have to sift through stale
+  variants when debugging or exporting files.
 * Because each template/variant combination maps to a stable key inside the
-  session prefix, the latest run overwrites the previous PDF for that slot while
-  preserving historical JSON logs. Operators can still apply lifecycle rules at
-  the session level without worrying about orphaned directories.
+  session prefix, the latest run overwrites the previous PDF for that slot and
+  the cleanup routine removes any alternate keys (such as `*_2.pdf`) that might
+  have been created in older runs. Historical activity is preserved via the
+  session change log JSON; S3 no longer keeps superseded document bodies by
+  default.
 
 ## Download logic
 
