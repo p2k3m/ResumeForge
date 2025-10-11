@@ -28,7 +28,10 @@ describe('template coverage for /api/process-cv', () => {
       expect(response.body.success).toBe(true);
 
       const resumeEntries = response.body.urls.filter(
-        (entry) => entry.templateType === 'resume' && entry.type !== 'original_upload'
+        (entry) =>
+          entry.templateType === 'resume' &&
+          entry.type !== 'original_upload' &&
+          entry.type !== 'original_upload_pdf'
       );
 
       expect(resumeEntries.length).toBeGreaterThan(0);

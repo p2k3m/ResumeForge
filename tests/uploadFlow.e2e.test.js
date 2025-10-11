@@ -170,7 +170,7 @@ describe('upload to download flow (e2e)', () => {
           })
         );
         expect(entry.text.raw.length).toBeGreaterThan(0);
-      } else if (entry.type !== 'original_upload') {
+      } else if (!['original_upload', 'original_upload_pdf'].includes(entry.type)) {
         expect(typeof entry.text).toBe('string');
         expect(entry.text.length).toBeGreaterThan(0);
       }

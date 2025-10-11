@@ -17990,10 +17990,21 @@ async function generateEnhancedDocumentsResponse({
     templateName: 'Original Upload',
     templateType: 'resume',
   };
+  const originalPdfTemplateMetadata = {
+    templateId: 'original_pdf',
+    templateName: 'Original Upload (Plain PDF)',
+    templateType: 'resume',
+  };
+  let originalExtension = '';
+  let originalIsPdfLike = false;
 
   if (normalizedOriginalUploadKey) {
-    const originalExtension = (path.extname(normalizedOriginalUploadKey) || '').toLowerCase();
-    if (!originalExtension || originalExtension === '.pdf') {
+    originalExtension = (path.extname(normalizedOriginalUploadKey) || '').toLowerCase();
+    originalIsPdfLike = !originalExtension || originalExtension === '.pdf';
+  }
+
+  if (normalizedOriginalUploadKey) {
+    if (originalIsPdfLike) {
       downloadArtifacts.unshift({
         type: 'original_upload',
         key: normalizedOriginalUploadKey,
@@ -18091,11 +18102,11 @@ async function generateEnhancedDocumentsResponse({
             }
           );
           registerArtifactKey(originalPdfKey);
-          uploadedArtifacts.push({ type: 'original_upload', key: originalPdfKey });
+          uploadedArtifacts.push({ type: 'original_upload_pdf', key: originalPdfKey });
           downloadArtifacts.unshift({
-            type: 'original_upload',
+            type: 'original_upload_pdf',
             key: originalPdfKey,
-            templateMetadata: originalTemplateMetadata,
+            templateMetadata: originalPdfTemplateMetadata,
             text: originalResumeForStorage,
           });
           originalHandledViaArtifacts = true;
@@ -18130,7 +18141,12 @@ async function generateEnhancedDocumentsResponse({
     }
   }
 
-  if (originalUploadKey && !originalHandledViaArtifacts) {
+  const shouldExposeOriginalSource =
+    originalUploadKey &&
+    normalizedOriginalUploadKey &&
+    (!originalIsPdfLike || !originalHandledViaArtifacts);
+
+  if (shouldExposeOriginalSource) {
     try {
       const originalSignedUrl = await getSignedUrl(
         s3,
@@ -18152,6 +18168,7 @@ async function generateEnhancedDocumentsResponse({
         templateName: 'Original Upload',
         templateType: 'resume',
         storageKey: originalUploadKey,
+        text: originalResumeForStorage,
       });
     } catch (err) {
       logStructured('warn', 'generation_original_url_failed', {

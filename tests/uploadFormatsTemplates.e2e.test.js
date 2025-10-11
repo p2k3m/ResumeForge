@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import path from 'path';
 import request from 'supertest';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
@@ -123,7 +124,22 @@ describe('resume lifecycle coverage', () => {
       (entry) => entry.type === 'original_upload'
     );
     expect(originalUploadEntry).toBeDefined();
-    expect(originalUploadEntry.fileUrl).toContain('.pdf');
+    const expectedExtension = path.extname(fileName).toLowerCase();
+    if (expectedExtension) {
+      expect(originalUploadEntry.fileUrl.toLowerCase()).toContain(expectedExtension);
+    } else {
+      expect(originalUploadEntry.fileUrl).toContain('https://');
+    }
+
+    const fallbackOriginalPdf = uploadResponse.body.urls.find(
+      (entry) => entry.type === 'original_upload_pdf'
+    );
+    if (expectedExtension && expectedExtension !== '.pdf') {
+      expect(fallbackOriginalPdf).toBeDefined();
+      expect(fallbackOriginalPdf.fileUrl.toLowerCase()).toContain('.pdf');
+    } else {
+      expect(fallbackOriginalPdf).toBeUndefined();
+    }
 
     const resumeText = uploadResponse.body.resumeText || uploadResponse.body.originalResumeText;
     expectResumeStructure(resumeText);
@@ -226,7 +242,18 @@ describe('resume lifecycle coverage', () => {
       (entry) => entry.type === 'original_upload'
     );
     expect(generationOriginalEntry).toBeDefined();
-    expect(generationOriginalEntry.fileUrl).toContain('.pdf');
+    if (expectedExtension) {
+      expect(generationOriginalEntry.fileUrl.toLowerCase()).toContain(expectedExtension);
+    }
+    const generationFallbackPdf = generationResponse.body.urls.find(
+      (entry) => entry.type === 'original_upload_pdf'
+    );
+    if (expectedExtension && expectedExtension !== '.pdf') {
+      expect(generationFallbackPdf).toBeDefined();
+      expect(generationFallbackPdf.fileUrl.toLowerCase()).toContain('.pdf');
+    } else {
+      expect(generationFallbackPdf).toBeUndefined();
+    }
 
     generationResponse.body.urls.forEach((entry) => {
       expect(entry.url).toContain('https://example.com/');
@@ -246,7 +273,7 @@ describe('resume lifecycle coverage', () => {
           })
         );
         expect(entry.text.raw.length).toBeGreaterThan(0);
-      } else if (entry.type !== 'original_upload') {
+      } else if (!['original_upload', 'original_upload_pdf'].includes(entry.type)) {
         expect(typeof entry.text).toBe('string');
         expect(entry.text.length).toBeGreaterThan(0);
       }

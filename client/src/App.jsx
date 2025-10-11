@@ -1356,6 +1356,21 @@ function getDownloadPresentation(file = {}) {
         variantType: 'original',
         autoPreviewPriority: 4
       }
+    case 'original_upload_pdf':
+      return {
+        label: 'Original CV (Plain PDF)',
+        description:
+          'Text-only PDF fallback generated from your upload. Logos and design elements may be missing—use when you strictly need a PDF copy.',
+        badgeText: 'Plain PDF',
+        badgeStyle: 'bg-slate-100 text-slate-600 border-slate-200',
+        buttonStyle: 'bg-slate-600 hover:bg-slate-700 focus:ring-slate-500',
+        cardAccent: 'bg-gradient-to-br from-slate-50 via-white to-slate-50',
+        cardBorder: 'border-slate-200',
+        linkLabel: 'Download Plain PDF',
+        category: 'resume',
+        variantType: 'original',
+        autoPreviewPriority: 5
+      }
     case 'version1':
       return {
         label: 'Enhanced CV Version 1',
@@ -2900,6 +2915,11 @@ function App() {
 
     return {
       original_upload: { id: 'original', name: 'Original Upload', label: 'Original Upload' },
+      original_upload_pdf: {
+        id: 'original_pdf',
+        name: 'Original Upload (Plain PDF)',
+        label: 'Original Upload (Plain PDF)'
+      },
       version1: {
         id: canonicalPrimaryTemplate,
         name: pickResumeName(resumeMetadata.primary, canonicalPrimaryTemplate),
@@ -3348,7 +3368,7 @@ function App() {
     const resume = []
     const cover = []
     const other = []
-    const resumeOrder = { original_upload: 0, version1: 1, version2: 2 }
+    const resumeOrder = { original_upload: 0, original_upload_pdf: 1, version1: 2, version2: 3 }
     const coverOrder = { cover_letter1: 0, cover_letter2: 1 }
     outputFiles.forEach((file) => {
       if (!file || typeof file !== 'object') return
