@@ -725,7 +725,14 @@ describe('/api/process-cv', () => {
         error: expect.objectContaining({
           code: 'AI_RESPONSE_INVALID',
           message: 'Unable to prepare download links for the generated documents.',
-          details: {},
+          details: expect.objectContaining({
+            logs: expect.objectContaining({
+              s3: expect.objectContaining({
+                bucket: 'test-bucket',
+                key: expect.stringContaining('logs/errors/'),
+              }),
+            }),
+          }),
         }),
       })
     );
