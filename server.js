@@ -11570,11 +11570,17 @@ function sanitizeS3KeyComponent(value, { fallback = '', maxLength = 96 } = {}) {
 }
 
 function resolveDocumentOwnerSegment({ userId, sanitizedName } = {}) {
-  return (
-    sanitizeS3KeyComponent(userId) ||
-    sanitizeS3KeyComponent(sanitizedName) ||
-    'candidate'
-  );
+  const normalizedName = sanitizeS3KeyComponent(sanitizedName);
+  if (normalizedName) {
+    return normalizedName;
+  }
+
+  const normalizedUserId = sanitizeS3KeyComponent(userId);
+  if (normalizedUserId) {
+    return normalizedUserId;
+  }
+
+  return 'candidate';
 }
 
 function buildDocumentSessionPrefix({
