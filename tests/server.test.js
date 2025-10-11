@@ -138,6 +138,11 @@ const axios = (await import('axios')).default;
 axios.get = jest.fn();
 setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
 
+const LAMBDA_PROCESSING_ERROR_MESSAGE =
+  'Our Lambda resume engine is temporarily unavailable. Please try again shortly.';
+const CV_GENERATION_ERROR_MESSAGE =
+  'Our Lambda resume engine could not generate your PDFs. Please try again shortly.';
+
 const MANUAL_JOB_DESCRIPTION = `
 We are seeking a Software Engineer to design, build, and ship scalable web services.
 Collaborate with cross-functional teams, implement APIs, and improve developer workflows.
@@ -3280,6 +3285,13 @@ describe('change log session visibility', () => {
                 status: 'success',
                 notes: '  Completed ',
               },
+              {
+                id: 'evaluation-2',
+                event: 'evaluation_failed',
+                timestamp: '2024-05-04T10:07:00.000Z',
+                status: 'failed',
+                message: 'Internal Server Error',
+              },
             ],
           },
           enhancement: {
@@ -3289,6 +3301,14 @@ describe('change log session visibility', () => {
                 event: 'enhancement_applied',
                 timestamp: '2024-05-04T10:10:00.000Z',
                 stage: 'generation',
+              },
+              {
+                id: 'enhancement-2',
+                event: 'enhancement_failed',
+                timestamp: '2024-05-04T10:12:00.000Z',
+                stage: 'generation',
+                status: 'failed',
+                detail: 'Internal Server Error',
               },
             ],
           },
@@ -3315,6 +3335,34 @@ describe('change log session visibility', () => {
         message: 'Session began',
       })
     );
+    expect(Array.isArray(response.body.evaluationLogs)).toBe(true);
+    expect(response.body.evaluationLogs).toHaveLength(2);
+    const responseEvaluationSuccess = response.body.evaluationLogs.find(
+      (entry) => entry.id === 'evaluation-1'
+    );
+    expect(responseEvaluationSuccess).toEqual(
+      expect.objectContaining({ id: 'evaluation-1', notes: 'Completed' })
+    );
+    const responseEvaluationFailed = response.body.evaluationLogs.find(
+      (entry) => entry.id === 'evaluation-2'
+    );
+    expect(responseEvaluationFailed).toBeTruthy();
+    expect(responseEvaluationFailed.message).toBe(LAMBDA_PROCESSING_ERROR_MESSAGE);
+    expect(responseEvaluationFailed.status).toBe('failed');
+    expect(Array.isArray(response.body.enhancementLogs)).toBe(true);
+    expect(response.body.enhancementLogs).toHaveLength(2);
+    const responseEnhancementSuccess = response.body.enhancementLogs.find(
+      (entry) => entry.id === 'enhancement-1'
+    );
+    expect(responseEnhancementSuccess).toEqual(
+      expect.objectContaining({ id: 'enhancement-1', event: 'enhancement_applied' })
+    );
+    const responseEnhancementFailed = response.body.enhancementLogs.find(
+      (entry) => entry.id === 'enhancement-2'
+    );
+    expect(responseEnhancementFailed).toBeTruthy();
+    expect(responseEnhancementFailed.message).toBe(CV_GENERATION_ERROR_MESSAGE);
+    expect(responseEnhancementFailed.detail).toBe(CV_GENERATION_ERROR_MESSAGE);
     const changeLogWrites = putCommands.filter(
       (cmd) => typeof cmd?.Key === 'string' && cmd.Key.endsWith('logs/change-log.json')
     );
@@ -3336,18 +3384,33 @@ describe('change log session visibility', () => {
     expect(updatedEntry).toBeTruthy();
     expect(updatedEntry.event).toBe('session_updated');
     expect(Array.isArray(persistedPayload.evaluationLogs)).toBe(true);
-    expect(persistedPayload.evaluationLogs).toHaveLength(1);
-    expect(persistedPayload.evaluationLogs[0]).toEqual(
-      expect.objectContaining({
-        id: 'evaluation-1',
-        notes: 'Completed',
-      })
+    expect(persistedPayload.evaluationLogs).toHaveLength(2);
+    const persistedEvaluationSuccess = persistedPayload.evaluationLogs.find(
+      (entry) => entry.id === 'evaluation-1'
     );
+    expect(persistedEvaluationSuccess).toEqual(
+      expect.objectContaining({ id: 'evaluation-1', notes: 'Completed' })
+    );
+    const persistedEvaluationFailed = persistedPayload.evaluationLogs.find(
+      (entry) => entry.id === 'evaluation-2'
+    );
+    expect(persistedEvaluationFailed).toBeTruthy();
+    expect(persistedEvaluationFailed.message).toBe(LAMBDA_PROCESSING_ERROR_MESSAGE);
+    expect(persistedEvaluationFailed.status).toBe('failed');
     expect(Array.isArray(persistedPayload.enhancementLogs)).toBe(true);
-    expect(persistedPayload.enhancementLogs).toHaveLength(1);
-    expect(persistedPayload.enhancementLogs[0]).toEqual(
+    expect(persistedPayload.enhancementLogs).toHaveLength(2);
+    const persistedEnhancementSuccess = persistedPayload.enhancementLogs.find(
+      (entry) => entry.id === 'enhancement-1'
+    );
+    expect(persistedEnhancementSuccess).toEqual(
       expect.objectContaining({ id: 'enhancement-1', event: 'enhancement_applied' })
     );
+    const persistedEnhancementFailed = persistedPayload.enhancementLogs.find(
+      (entry) => entry.id === 'enhancement-2'
+    );
+    expect(persistedEnhancementFailed).toBeTruthy();
+    expect(persistedEnhancementFailed.message).toBe(CV_GENERATION_ERROR_MESSAGE);
+    expect(persistedEnhancementFailed.detail).toBe(CV_GENERATION_ERROR_MESSAGE);
     expect(Array.isArray(persistedPayload.downloadLogs)).toBe(true);
     expect(persistedPayload.downloadLogs).toHaveLength(1);
     expect(persistedPayload.downloadLogs[0]).toEqual(
