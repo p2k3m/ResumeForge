@@ -3378,6 +3378,106 @@ function App() {
     return 'upload'
   }, [flowSteps])
 
+  const handleExportErrorLog = useCallback(() => {
+    if (!error) {
+      return
+    }
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      setQueuedMessage('Error log export is not supported in this environment.')
+      return
+    }
+
+    try {
+      const normalizedSource = normalizeServiceSource(errorContext?.source)
+      const downloadStateSnapshot = Object.entries(downloadStates || {}).reduce(
+        (acc, [key, value = {}]) => {
+          const stateStatus = typeof value?.status === 'string' ? value.status : ''
+          const stateError = typeof value?.error === 'string' ? value.error : ''
+          if (stateStatus || stateError) {
+            acc[key] = {
+              status: stateStatus,
+              error: stateError
+            }
+          }
+          return acc
+        },
+        {}
+      )
+
+      const flowSnapshot = Array.isArray(flowSteps)
+        ? flowSteps.map((step) => ({
+            key: step.key,
+            status: step.status,
+            note: step.note || '',
+            noteTone: step.noteTone || ''
+          }))
+        : []
+
+      const navigatorInfo = typeof navigator === 'object' && navigator
+        ? {
+            userAgent: typeof navigator.userAgent === 'string' ? navigator.userAgent : '',
+            language: typeof navigator.language === 'string' ? navigator.language : '',
+            platform: typeof navigator.platform === 'string' ? navigator.platform : ''
+          }
+        : {
+            userAgent: '',
+            language: '',
+            platform: ''
+          }
+
+      const payload = {
+        timestamp: new Date().toISOString(),
+        message: error,
+        recovery: errorRecovery || '',
+        errorCode: typeof errorContext?.code === 'string' ? errorContext.code : '',
+        errorSource: normalizedSource || '',
+        jobId: jobId || '',
+        currentPhase,
+        activeDashboardStage,
+        isProcessing,
+        hasCvFile,
+        hasManualJobDescriptionInput,
+        queuedMessage,
+        downloadStates: Object.keys(downloadStateSnapshot).length
+          ? downloadStateSnapshot
+          : undefined,
+        flow: flowSnapshot,
+        environment: navigatorInfo
+      }
+
+      const json = JSON.stringify(payload, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `resumeforge-error-${stamp}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 1000)
+    } catch (err) {
+      console.error('Error log export failed', err)
+      setQueuedMessage('Unable to export the error log. Please try again.')
+    }
+  }, [
+    activeDashboardStage,
+    currentPhase,
+    downloadStates,
+    error,
+    errorContext,
+    errorRecovery,
+    flowSteps,
+    hasCvFile,
+    hasManualJobDescriptionInput,
+    isProcessing,
+    jobId,
+    queuedMessage,
+    setQueuedMessage
+  ])
+
   const downloadGroups = useMemo(() => {
     if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
       return { resume: [], cover: [], other: [] }
@@ -7786,16 +7886,25 @@ function App() {
         {error && (
           <div className="flex flex-col items-center gap-3 text-center">
             <p className="text-red-600 text-sm font-semibold">{error}</p>
-            {errorRecovery === 'generation' && (
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {errorRecovery === 'generation' && (
+                <button
+                  type="button"
+                  onClick={handleGenerateEnhancedDocs}
+                  disabled={isGeneratingDocs}
+                  className="inline-flex items-center justify-center rounded-full border border-purple-600 px-4 py-2 text-sm font-semibold text-purple-600 transition hover:bg-purple-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:cursor-not-allowed disabled:border-purple-300 disabled:text-purple-300"
+                >
+                  Retry generation
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleGenerateEnhancedDocs}
-                disabled={isGeneratingDocs}
-                className="inline-flex items-center justify-center rounded-full border border-purple-600 px-4 py-2 text-sm font-semibold text-purple-600 transition hover:bg-purple-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:cursor-not-allowed disabled:border-purple-300 disabled:text-purple-300"
+                onClick={handleExportErrorLog}
+                className="inline-flex items-center justify-center rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
               >
-                Retry generation
+                Export log
               </button>
-            )}
+            </div>
           </div>
         )}
 
