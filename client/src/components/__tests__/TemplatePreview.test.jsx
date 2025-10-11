@@ -41,6 +41,20 @@ describe('TemplatePreview comparison support', () => {
       />
     )
 
+  it('shows thumbnail previews for resume and cover templates before making a selection', () => {
+    renderComponent()
+
+    const resumeGroup = screen.getByRole('group', { name: /Preview CV templates/i })
+    expect(
+      within(resumeGroup).getByTestId('resume-preview-thumbnail-modern')
+    ).toBeInTheDocument()
+
+    const coverGroup = screen.getByRole('group', { name: /Preview cover letter templates/i })
+    expect(
+      within(coverGroup).getByTestId('cover-preview-thumbnail-cover_modern')
+    ).toBeInTheDocument()
+  })
+
   it('shows a custom resume comparison view when two templates are selected', () => {
     renderComponent()
 
