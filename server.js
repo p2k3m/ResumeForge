@@ -19858,10 +19858,13 @@ app.post(
       }
     );
   }
+  const initialContactDetails = extractContactDetails(text, linkedinProfileUrl);
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName) || 'candidate';
   const storedApplicantName = normalizePersonalData(applicantName);
-  const storedLinkedIn = normalizePersonalData(profileIdentifier);
+  const storedLinkedIn = normalizePersonalData(
+    initialContactDetails.linkedin || profileIdentifier
+  );
   const storedIpAddress = normalizePersonalData(ipAddress);
   const storedUserAgent = normalizePersonalData(userAgent);
   const storedCredlyProfile = normalizePersonalData(submittedCredly);
