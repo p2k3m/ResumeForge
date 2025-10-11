@@ -2821,6 +2821,55 @@ describe('change log persistence safeguards', () => {
 
     setupDefaultDynamoMock();
   });
+
+  test('stores session change logs under a user session prefix when no prior key exists', async () => {
+    const putCommands = [];
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command);
+      }
+      return Promise.resolve({});
+    });
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-session' },
+              requestId: { S: 'req-123' },
+              candidateName: { S: 'Jamie Doe' },
+              changeLog: { L: [] },
+              s3Bucket: { S: 'resume-bucket' },
+              uploadedAt: { S: '2024-05-01T12:00:00Z' },
+            },
+          });
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .set('x-user-id', 'user-789')
+      .send({
+        jobId: 'job-session',
+        entry: { id: 'entry-unique', detail: 'Initial edit', resumeBeforeText: 'Before', resumeAfterText: 'After' },
+      });
+
+    expect(response.status).toBe(200);
+    const changeLogWrites = putCommands.filter((command) =>
+      typeof command?.input?.Key === 'string' && command.input.Key.endsWith('logs/change-log.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    expect(changeLogWrites[0].input.Key).toBe('cv/jamie-doe/req-123/logs/change-log.json');
+
+    setupDefaultDynamoMock();
+  });
 });
 
 describe('change log session visibility', () => {
