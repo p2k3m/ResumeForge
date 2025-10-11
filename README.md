@@ -163,6 +163,18 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 
 The canonical domain is tracked in `config/published-cloudfront.json` and mirrored here so anyone with repository access can retrieve the production URL without opening the app.
 
+Run the verification helper whenever you update the distribution to confirm that the published domain responds with the expected health payload:
+
+```bash
+npm run verify:cloudfront
+```
+
+Optionally pass a specific URL (for example, a freshly deployed stack) to validate before publishing it:
+
+```bash
+npm run verify:cloudfront -- https://d123456abcdef8.cloudfront.net
+```
+
 The REST API remains available directly via API Gateway if you need to integrate programmatically:
 
 ```

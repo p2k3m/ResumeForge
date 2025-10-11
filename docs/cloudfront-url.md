@@ -32,4 +32,16 @@ The script automatically invalidates the previously published distribution after
 
 These endpoints reflect whatever value is stored in `config/published-cloudfront.json`, so keeping that file current keeps all documentation and redirects accurate.
 
+Before broadcasting the updated domain, run the verification helper to ensure the distribution answers its `/healthz` probe:
+
+```bash
+npm run verify:cloudfront
+```
+
+Pass an explicit URL to validate a newly deployed stack before publishing:
+
+```bash
+npm run verify:cloudfront -- https://d123456abcdef8.cloudfront.net/prod
+```
+
 After publishing, share the refreshed domain from `config/published-cloudfront.json` with downstream consumers so they can update bookmarks, integrations, or public references.
