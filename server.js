@@ -5337,6 +5337,35 @@ function dedupeContactLines(lines = []) {
   return result;
 }
 
+const SENSITIVE_CONTACT_PATTERNS = [/linkedin/i, /credly/i, /\bjd\b/i];
+
+function filterSensitiveContactLines(lines = []) {
+  if (!Array.isArray(lines)) {
+    return [];
+  }
+
+  return lines
+    .map((line) => (typeof line === 'string' ? line.trim() : ''))
+    .filter((line) => {
+      if (!line) {
+        return false;
+      }
+      const lower = line.toLowerCase();
+      const containsSensitiveLabel = SENSITIVE_CONTACT_PATTERNS.some((pattern) => pattern.test(lower));
+      if (!containsSensitiveLabel) {
+        return true;
+      }
+      const hasUrl = /(https?:\/\/|www\.)/i.test(line);
+      if (hasUrl) {
+        return false;
+      }
+      if (lower.includes('linkedin') || lower.includes('credly')) {
+        return false;
+      }
+      return true;
+    });
+}
+
 function buildTemplateContactContext({ text = '', options = {}, templateParams = {} } = {}) {
   const explicitContactDetails =
     options && typeof options.contactDetails === 'object'
@@ -12149,9 +12178,11 @@ function mapCoverLetterFields({
               : '',
           cityState:
             typeof contactDetails.cityState === 'string' ? contactDetails.cityState.trim() : '',
-          contactLines: Array.isArray(contactDetails.contactLines)
-            ? contactDetails.contactLines.filter((line) => typeof line === 'string')
-            : [],
+          contactLines: filterSensitiveContactLines(
+            Array.isArray(contactDetails.contactLines)
+              ? contactDetails.contactLines.filter((line) => typeof line === 'string')
+              : [],
+          ),
         }
       : {
           email: '',
@@ -12162,6 +12193,11 @@ function mapCoverLetterFields({
         };
 
   const detectedContactRaw = extractContactDetails(normalizedText, explicitContact.linkedin);
+  const detectedContactLines = filterSensitiveContactLines(
+    Array.isArray(detectedContactRaw.contactLines)
+      ? detectedContactRaw.contactLines
+      : [],
+  );
 
   const combinedContact = {
     email: explicitContact.email || detectedContactRaw.email || '',
@@ -12173,11 +12209,7 @@ function mapCoverLetterFields({
   const contactSources = {
     email: explicitContact.email ? 'provided' : detectedContactRaw.email ? 'detected' : '',
     phone: explicitContact.phone ? 'provided' : detectedContactRaw.phone ? 'detected' : '',
-    linkedin: explicitContact.linkedin
-      ? 'provided'
-      : detectedContactRaw.linkedin
-        ? 'detected'
-        : '',
+    linkedin: '',
     location: explicitContact.cityState
       ? 'provided'
       : detectedContactRaw.cityState
@@ -12185,20 +12217,24 @@ function mapCoverLetterFields({
         : '',
   };
 
-  const contactLines = dedupeContactLines(
-    [
-      ...explicitContact.contactLines,
-      ...(Array.isArray(detectedContactRaw.contactLines)
-        ? detectedContactRaw.contactLines
-        : []),
-      combinedContact.email ? `Email: ${combinedContact.email}` : '',
-      combinedContact.phone ? `Phone: ${combinedContact.phone}` : '',
-      combinedContact.linkedin ? `LinkedIn: ${combinedContact.linkedin}` : '',
-      combinedContact.cityState ? `Location: ${combinedContact.cityState}` : '',
-    ]
-      .map((line) => (typeof line === 'string' ? line.trim().replace(/\s+/g, ' ') : ''))
-      .filter(Boolean)
+  const contactLines = filterSensitiveContactLines(
+    dedupeContactLines(
+      [
+        ...explicitContact.contactLines,
+        ...detectedContactLines,
+        combinedContact.email ? `Email: ${combinedContact.email}` : '',
+        combinedContact.phone ? `Phone: ${combinedContact.phone}` : '',
+        combinedContact.cityState ? `Location: ${combinedContact.cityState}` : '',
+      ]
+        .map((line) => (typeof line === 'string' ? line.trim().replace(/\s+/g, ' ') : ''))
+        .filter(Boolean)
+    )
   );
+
+  const providedContactLines = explicitContact.contactLines;
+  const detectedContactSanitizedLines = detectedContactLines;
+
+  combinedContact.linkedin = '';
 
   const bodyIndexEntry =
     motivationBodyIndex !== -1 ? bodyParagraphMap[motivationBodyIndex] : null;
@@ -12251,26 +12287,22 @@ function mapCoverLetterFields({
     contact: {
       email: combinedContact.email,
       phone: combinedContact.phone,
-      linkedin: combinedContact.linkedin,
+      linkedin: '',
       location: combinedContact.cityState,
       lines: contactLines,
       provided: {
         email: explicitContact.email,
         phone: explicitContact.phone,
-        linkedin: explicitContact.linkedin,
+        linkedin: '',
         location: explicitContact.cityState,
-        lines: Array.isArray(explicitContact.contactLines)
-          ? explicitContact.contactLines
-          : [],
+        lines: providedContactLines,
       },
       detected: {
         email: detectedContactRaw.email || explicitContact.email || '',
         phone: detectedContactRaw.phone || explicitContact.phone || '',
-        linkedin: detectedContactRaw.linkedin || explicitContact.linkedin || '',
+        linkedin: '',
         location: detectedContactRaw.cityState || explicitContact.cityState || '',
-        lines: Array.isArray(detectedContactRaw.contactLines)
-          ? detectedContactRaw.contactLines
-          : [],
+        lines: detectedContactSanitizedLines,
       },
       sources: contactSources,
     },
@@ -14727,8 +14759,7 @@ async function handleImprovementRequest(type, req, res) {
     );
   }
 
-  const linkedinProfileUrlInput =
-    typeof payload.linkedinProfileUrl === 'string' ? payload.linkedinProfileUrl.trim() : '';
+  const linkedinProfileUrlInput = '';
 
   req.jobId = jobIdInput;
   res.locals.jobId = jobIdInput;
@@ -17827,18 +17858,8 @@ app.post(
       );
     }
 
-    const rawLinkedInBody =
-      typeof req.body.linkedinProfileUrl === 'string'
-        ? req.body.linkedinProfileUrl.trim()
-        : '';
-    const rawLinkedInQuery =
-      typeof req.query?.linkedinProfileUrl === 'string'
-        ? req.query.linkedinProfileUrl.trim()
-        : '';
-    const linkedinProfileUrlInput = rawLinkedInBody || rawLinkedInQuery || '';
-    const linkedinProfileUrl = linkedinProfileUrlInput
-      ? normalizeUrl(linkedinProfileUrlInput)
-      : '';
+    const linkedinProfileUrlInput = '';
+    const linkedinProfileUrl = '';
 
     const profileIdentifier =
       resolveProfileIdentifier({
@@ -17848,8 +17869,7 @@ app.post(
       }) || jobIdInput;
     const storedLinkedIn = normalizePersonalData(profileIdentifier);
 
-    const credlyProfileUrl =
-      typeof req.body.credlyProfileUrl === 'string' ? req.body.credlyProfileUrl.trim() : '';
+    const credlyProfileUrl = '';
 
     const jobSkills = (Array.isArray(req.body.jobSkills) ? req.body.jobSkills : [])
       .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
@@ -18439,9 +18459,11 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
     });
   }
 
-  const contactLines = Array.isArray(coverLetterFields?.contact?.lines)
-    ? coverLetterFields.contact.lines.filter((line) => typeof line === 'string')
-    : [];
+  const contactLines = filterSensitiveContactLines(
+    Array.isArray(coverLetterFields?.contact?.lines)
+      ? coverLetterFields.contact.lines.filter((line) => typeof line === 'string')
+      : [],
+  );
   const contactDetails = {
     contactLines,
     email:
@@ -18452,10 +18474,7 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
       typeof coverLetterFields?.contact?.phone === 'string'
         ? coverLetterFields.contact.phone
         : '',
-    linkedin:
-      typeof coverLetterFields?.contact?.linkedin === 'string'
-        ? coverLetterFields.contact.linkedin
-        : '',
+    linkedin: '',
     cityState:
       typeof coverLetterFields?.contact?.location === 'string'
         ? coverLetterFields.contact.location
@@ -18500,7 +18519,6 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
     email: contactDetails.email,
     phone: contactDetails.phone,
     cityState: contactDetails.cityState,
-    linkedinProfileUrl: contactDetails.linkedin,
     templateParams: {},
     skipRequiredSections: true,
     enhancementTokenMap
@@ -18526,7 +18544,6 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
           contact: {
             email: contactDetails.email,
             phone: contactDetails.phone,
-            linkedin: contactDetails.linkedin,
             location: contactDetails.cityState,
             lines: contactLines
           },
@@ -18693,9 +18710,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   captureUserContext(req, res);
   const profileIdentifier =
     resolveProfileIdentifier({
-      linkedinProfileUrl: typeof req.body.linkedinProfileUrl === 'string'
-        ? req.body.linkedinProfileUrl.trim()
-        : '',
+      linkedinProfileUrl: '',
       userId: res.locals.userId,
       jobId,
     }) || jobId;
@@ -19250,10 +19265,7 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
 
   const profileIdentifier =
     resolveProfileIdentifier({
-      linkedinProfileUrl:
-        typeof req.body.linkedinProfileUrl === 'string'
-          ? req.body.linkedinProfileUrl.trim()
-          : '',
+      linkedinProfileUrl: '',
       userId: res.locals.userId,
       jobId,
     }) || jobId;
@@ -19604,10 +19616,8 @@ app.post(
     typeof req.query?.linkedinProfileUrl === 'string'
       ? req.query.linkedinProfileUrl.trim()
       : '';
-  const linkedinProfileUrlInput = rawLinkedInBody || rawLinkedInQuery || '';
-  const linkedinProfileUrl = linkedinProfileUrlInput
-    ? normalizeUrl(linkedinProfileUrlInput)
-    : '';
+  const linkedinProfileUrlInput = '';
+  const linkedinProfileUrl = '';
   const manualJobDescriptionInput =
     typeof req.body.manualJobDescription === 'string'
       ? req.body.manualJobDescription
@@ -19616,8 +19626,7 @@ app.post(
         : '';
   const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
   const hasManualJobDescription = Boolean(manualJobDescription);
-  const submittedCredly =
-    typeof credlyProfileUrl === 'string' ? credlyProfileUrl.trim() : '';
+  const submittedCredly = '';
   const profileIdentifier =
     resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId }) || jobId;
   logStructured('info', 'process_cv_started', {

@@ -45,9 +45,9 @@ describe('mapCoverLetterFields', () => {
       expect.arrayContaining([
         'Email: jane@example.com',
         'Phone: +1 555-123-4567',
-        'LinkedIn: https://linkedin.com/in/janecandidate',
       ])
     )
+    expect(result.contact.lines.some((line) => /LinkedIn/i.test(line))).toBe(false)
     expect(result.job.title).toBe('Senior Software Engineer')
     expect(result.job.skills).toEqual(expect.arrayContaining(['JavaScript', 'AWS', 'TypeScript']))
     expect(result.job.summary).toContain('Design and build scalable services')

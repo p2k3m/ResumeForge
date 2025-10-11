@@ -3525,12 +3525,21 @@ function App() {
       file.coverLetterFields && typeof file.coverLetterFields === 'object'
         ? file.coverLetterFields
         : null
+    const sanitizeContactLines = (lines = []) =>
+      Array.isArray(lines)
+        ? lines.filter((line) =>
+            typeof line === 'string' &&
+            line.trim() &&
+            !/linkedin/i.test(line) &&
+            !/credly/i.test(line) &&
+            !/\bjd\b/i.test(line)
+          )
+        : []
+
     const contactDetails =
       coverLetterFields && typeof coverLetterFields.contact === 'object'
         ? {
-            contactLines: Array.isArray(coverLetterFields.contact.lines)
-              ? coverLetterFields.contact.lines.filter((line) => typeof line === 'string')
-              : [],
+            contactLines: sanitizeContactLines(coverLetterFields.contact.lines),
             email:
               typeof coverLetterFields.contact.email === 'string'
                 ? coverLetterFields.contact.email
@@ -3539,16 +3548,29 @@ function App() {
               typeof coverLetterFields.contact.phone === 'string'
                 ? coverLetterFields.contact.phone
                 : '',
-            linkedin:
-              typeof coverLetterFields.contact.linkedin === 'string'
-                ? coverLetterFields.contact.linkedin
-                : '',
             cityState:
               typeof coverLetterFields.contact.location === 'string'
                 ? coverLetterFields.contact.location
                 : ''
           }
         : undefined
+
+    const sanitizedCoverLetterFields = (() => {
+      if (!coverLetterFields || typeof coverLetterFields !== 'object') {
+        return undefined
+      }
+      const sanitizedContact = contactDetails
+        ? {
+            ...coverLetterFields.contact,
+            lines: contactDetails.contactLines,
+            linkedin: ''
+          }
+        : undefined
+      return {
+        ...coverLetterFields,
+        contact: sanitizedContact
+      }
+    })()
     const applicantName =
       (typeof coverLetterFields?.closing?.signature === 'string' &&
         coverLetterFields.closing.signature.trim()) ||
@@ -3575,7 +3597,7 @@ function App() {
       jobSkills,
       applicantName,
       ...(contactDetails ? { contactDetails } : {}),
-      ...(coverLetterFields ? { coverLetterFields } : {}),
+      ...(sanitizedCoverLetterFields ? { coverLetterFields: sanitizedCoverLetterFields } : {}),
       ...(userIdentifier ? { userId: userIdentifier } : {})
     }
 
