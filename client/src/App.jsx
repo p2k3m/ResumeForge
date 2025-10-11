@@ -2290,10 +2290,11 @@ function App() {
     setErrorState(trimmedMessage)
     const allowRetryOption =
       typeof options?.allowRetry === 'boolean' ? options.allowRetry : undefined
+    const allowRetry = allowRetryOption !== false
     const rawRecoveryKey =
       typeof options?.recovery === 'string' && options.recovery.trim()
         ? options.recovery.trim()
-        : allowRetryOption
+        : allowRetry
           ? 'generation'
           : ''
     let normalizedRecoveryKey = rawRecoveryKey
@@ -2312,11 +2313,7 @@ function App() {
               SERVICE_ERROR_SOURCE_BY_CODE[providedCode] || ''
             )
           : '')
-      if (
-        !normalizedRecoveryKey &&
-        allowRetryOption !== false &&
-        (isRetryableErrorCode(providedCode) || isRetryableServiceSource(derivedSource))
-      ) {
+      if (!normalizedRecoveryKey && allowRetry) {
         normalizedRecoveryKey = 'generation'
       }
       if (derivedSource || providedCode) {
