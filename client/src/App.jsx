@@ -49,7 +49,8 @@ const FRIENDLY_ERROR_MESSAGES = {
   GENERATION_FAILED:
     'Our Lambda resume engine is temporarily unavailable. Please try again shortly.',
   AI_RESPONSE_INVALID:
-    'Gemini enhancements are temporarily offline. Please try again soon.'
+    'Gemini enhancements are temporarily offline. Please try again soon.',
+  DOWNLOAD_SESSION_EXPIRED: DOWNLOAD_SESSION_EXPIRED_MESSAGE
 }
 
 const SERVICE_ERROR_SOURCE_BY_CODE = {
@@ -59,7 +60,8 @@ const SERVICE_ERROR_SOURCE_BY_CODE = {
   DOCUMENT_GENERATION_FAILED: 'lambda',
   PROCESSING_FAILED: 'lambda',
   GENERATION_FAILED: 'lambda',
-  AI_RESPONSE_INVALID: 'gemini'
+  AI_RESPONSE_INVALID: 'gemini',
+  DOWNLOAD_SESSION_EXPIRED: 's3'
 }
 
 const SERVICE_ERROR_STEP_BY_CODE = {
@@ -69,7 +71,8 @@ const SERVICE_ERROR_STEP_BY_CODE = {
   DOCUMENT_GENERATION_FAILED: 'evaluate',
   PROCESSING_FAILED: 'evaluate',
   GENERATION_FAILED: 'evaluate',
-  AI_RESPONSE_INVALID: 'enhance'
+  AI_RESPONSE_INVALID: 'enhance',
+  DOWNLOAD_SESSION_EXPIRED: 'download'
 }
 
 const SERVICE_ERROR_STEP_BY_SOURCE = {
