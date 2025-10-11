@@ -28,6 +28,7 @@ import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
 import { buildAggregatedChangeLogSummary } from './utils/changeLogSummaryShared.js'
 import { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
+import { BUILD_VERSION } from './buildInfo.js'
 import {
   CV_GENERATION_ERROR_MESSAGE,
   DOWNLOAD_SESSION_EXPIRED_MESSAGE
@@ -9124,6 +9125,9 @@ function App() {
             </div>
           </div>
         )}
+        <footer className="text-center text-[0.65rem] uppercase tracking-[0.2em] text-purple-800/60">
+          Build {BUILD_VERSION}
+        </footer>
       </div>
     </div>
   )
