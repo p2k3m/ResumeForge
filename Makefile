@@ -1,7 +1,7 @@
-build-ResumeUploadFunction:
+build-ResumeForgeFunction:
         node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR)
 
-clean-ResumeUploadFunction:
+clean-ResumeForgeFunction:
         rm -rf $(ARTIFACTS_DIR)
 
 build-JobEvaluationFunction:
