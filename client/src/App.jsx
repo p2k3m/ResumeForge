@@ -2429,6 +2429,7 @@ function App() {
   const autoPreviewSignatureRef = useRef('')
   const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
+  const cvInputRef = useRef(null)
   const analysisContextRef = useRef({ hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' })
   const cvSignatureRef = useRef('')
   const jobSignatureRef = useRef('')
@@ -2503,6 +2504,37 @@ function App() {
     () => !improvementsRequireAcceptance || hasAcceptedImprovement,
     [improvementsRequireAcceptance, hasAcceptedImprovement]
   )
+
+  const formattedCvFileSize = useMemo(() => {
+    if (!cvFile || typeof cvFile.size !== 'number' || Number.isNaN(cvFile.size)) {
+      return ''
+    }
+    const bytes = cvFile.size
+    if (bytes <= 0) {
+      return '0 B'
+    }
+    const units = ['B', 'KB', 'MB', 'GB']
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+    const size = bytes / Math.pow(1024, exponent)
+    const formattedValue = size >= 10 || exponent === 0 ? size.toFixed(0) : size.toFixed(1)
+    return `${formattedValue} ${units[exponent]}`
+  }, [cvFile])
+
+  const uploadStatusMessage = useMemo(() => {
+    if (isProcessing) {
+      return 'Uploading and scoring your resume…'
+    }
+    if (!cvFile) {
+      return 'Drag & drop a file or browse to upload. Supported formats: PDF, DOC, or DOCX (max 5 MB).'
+    }
+    if (!hasManualJobDescriptionInput) {
+      return 'Resume received. Paste the full job description to unlock ATS scoring.'
+    }
+    if (!scoreMetricCount) {
+      return 'Resume and JD ready — we’ll generate your ATS breakdown automatically.'
+    }
+    return 'Resume and JD uploaded. You can rerun ATS scoring at any time from the Score stage.'
+  }, [cvFile, hasManualJobDescriptionInput, isProcessing, scoreMetricCount])
 
   useEffect(() => {
     cvSignatureRef.current = currentCvSignature
@@ -4643,6 +4675,10 @@ function App() {
     }
     if (file) {
       lastAutoScoreSignatureRef.current = ''
+      setError('')
+      if (cvInputRef.current) {
+        cvInputRef.current.value = ''
+      }
       setCvFile(file)
     }
   }, [])
@@ -4655,9 +4691,19 @@ function App() {
     }
     if (file) {
       lastAutoScoreSignatureRef.current = ''
+      setError('')
+      if (cvInputRef.current) {
+        cvInputRef.current.value = ''
+      }
       setCvFile(file)
     }
   }
+
+  const handleUploadAreaClick = useCallback(() => {
+    if (cvInputRef.current && typeof cvInputRef.current.click === 'function') {
+      cvInputRef.current.click()
+    }
+  }, [])
 
   useEffect(() => {
     const context = analysisContextRef.current || {}
@@ -7574,35 +7620,48 @@ function App() {
             </p>
           </header>
           <div
-            className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50"
+            className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
+            onClick={handleUploadAreaClick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleUploadAreaClick()
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Upload resume by dragging and dropping or browsing for a file"
           >
-            {cvFile ? (
-              <p className="text-purple-800 font-semibold">{cvFile.name}</p>
-            ) : (
-              <p className="text-purple-700">
-                Drag and drop your CV here, or click to select (PDF, DOC, or DOCX · max 5MB)
-              </p>
-            )}
             <input
               type="file"
               accept=".pdf,.doc,.docx"
               onChange={handleFileChange}
               className="hidden"
               id="cv-input"
+              ref={cvInputRef}
             />
-            <label
-              htmlFor="cv-input"
-              className="inline-flex mt-3 px-4 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold cursor-pointer hover:from-indigo-600 hover:to-purple-700"
-            >
-              Choose File
-            </label>
-            <p className="mt-3 text-xs font-medium text-purple-600">
-              {isProcessing
-                ? 'Uploading and scoring your resume…'
-                : 'Upload your file to kick off automated scoring.'}
-            </p>
+            <div className="flex flex-col items-center gap-3">
+              {cvFile ? (
+                <div className="space-y-1">
+                  <p className="text-purple-900 font-semibold break-all">{cvFile.name}</p>
+                  {formattedCvFileSize && (
+                    <p className="text-xs font-medium text-purple-600">File size · {formattedCvFileSize}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold text-purple-800">Drag &amp; drop your CV</p>
+                  <p className="text-sm text-purple-600">or click to browse (PDF, DOC, or DOCX · max 5 MB)</p>
+                </div>
+              )}
+              <div className="inline-flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-purple-600">
+                <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Drag &amp; drop</span>
+                <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Browse files</span>
+              </div>
+            </div>
+            <p className="mt-4 text-xs font-medium text-purple-600">{uploadStatusMessage}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
