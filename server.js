@@ -609,6 +609,9 @@ async function getClientIndexHtml() {
 const DEFAULT_AWS_REGION = 'ap-south-1';
 const DEFAULT_ALLOWED_ORIGINS = [];
 const URL_EXPIRATION_SECONDS = 60 * 60; // 1 hour
+const DOWNLOAD_SESSION_RETENTION_MS = URL_EXPIRATION_SECONDS * 1000;
+const DOWNLOAD_SESSION_EXPIRED_MESSAGE =
+  'Your download session expired. Regenerate the documents to get new links.';
 const isTestEnvironment = process.env.NODE_ENV === 'test';
 
 const parsePositiveInt = (value) => {
@@ -15604,6 +15607,208 @@ improvementRoutes.forEach(({ path: routePath, type }) => {
   });
 });
 
+const DOWNLOAD_ARTIFACT_ATTRIBUTE_KEYS = [
+  'cv1Url',
+  'cv2Url',
+  'coverLetter1Url',
+  'coverLetter2Url',
+  'originalTextKey',
+  'enhancedVersion1Key',
+  'enhancedVersion2Key',
+  'changeLogKey',
+];
+
+function normalizeDynamoStringAttribute(attribute) {
+  if (!attribute || typeof attribute.S !== 'string') {
+    return '';
+  }
+  const trimmed = attribute.S.trim();
+  return trimmed;
+}
+
+async function handleExpiredDownloadSession({
+  record,
+  dynamo,
+  tableName,
+  storedLinkedIn,
+  jobId,
+  s3,
+  bucket,
+  logContext = {},
+  logKey,
+}) {
+  const result = {
+    record,
+    expired: false,
+    clearedKeys: [],
+  };
+
+  if (!record || typeof record !== 'object') {
+    return result;
+  }
+
+  const lastAction = normalizeDynamoStringAttribute(record.lastAction);
+  if (lastAction !== 'artifacts_uploaded') {
+    return result;
+  }
+
+  const lastActionAtRaw = normalizeDynamoStringAttribute(record.lastActionAt);
+  const lastActionAtMs = lastActionAtRaw ? Date.parse(lastActionAtRaw) : Number.NaN;
+  if (!Number.isFinite(lastActionAtMs)) {
+    return result;
+  }
+
+  const now = Date.now();
+  if (now - lastActionAtMs <= DOWNLOAD_SESSION_RETENTION_MS) {
+    return result;
+  }
+
+  result.expired = true;
+  const sanitizedRecord = { ...record };
+  const attributesToRemove = [];
+  const clearedKeys = [];
+
+  for (const attribute of DOWNLOAD_ARTIFACT_ATTRIBUTE_KEYS) {
+    const normalized = normalizeDynamoStringAttribute(record[attribute]);
+    if (normalized) {
+      clearedKeys.push(normalized);
+      attributesToRemove.push(attribute);
+    }
+    if (sanitizedRecord[attribute]) {
+      delete sanitizedRecord[attribute];
+    }
+  }
+
+  const uniqueClearedKeys = Array.from(new Set(clearedKeys));
+
+  result.record = sanitizedRecord;
+  result.clearedKeys = uniqueClearedKeys;
+
+  const cleanupBucketCandidate = normalizeDynamoStringAttribute(record.s3Bucket);
+  const cleanupBucket = cleanupBucketCandidate || (typeof bucket === 'string' ? bucket.trim() : '');
+
+  if (s3 && cleanupBucket && uniqueClearedKeys.length) {
+    const deleteResults = await Promise.allSettled(
+      uniqueClearedKeys.map((key) =>
+        s3.send(
+          new DeleteObjectCommand({
+            Bucket: cleanupBucket,
+            Key: key,
+          })
+        )
+      )
+    );
+
+    const deletedKeys = [];
+    const failedDeletes = [];
+
+    for (let index = 0; index < deleteResults.length; index += 1) {
+      const entry = deleteResults[index];
+      const key = uniqueClearedKeys[index];
+      if (entry.status === 'fulfilled') {
+        deletedKeys.push(key);
+      } else {
+        failedDeletes.push({ key, error: serializeError(entry.reason) });
+      }
+    }
+
+    if (deletedKeys.length) {
+      logStructured('info', 'download_session_artifacts_cleared', {
+        ...logContext,
+        bucket: cleanupBucket,
+        clearedKeys: deletedKeys,
+        totalCleared: deletedKeys.length,
+      });
+
+      if (logKey) {
+        try {
+          await logEvent({
+            s3,
+            bucket: cleanupBucket,
+            key: logKey,
+            jobId,
+            event: 'download_session_artifacts_cleared',
+            metadata: {
+              reason: 'expired',
+              deletedCount: deletedKeys.length,
+              attemptedCount: uniqueClearedKeys.length,
+            },
+          });
+        } catch (logErr) {
+          logStructured('warn', 'download_session_cleanup_log_failed', {
+            ...logContext,
+            bucket: cleanupBucket,
+            key: logKey,
+            error: serializeError(logErr),
+          });
+        }
+      }
+    }
+
+    if (failedDeletes.length) {
+      logStructured('error', 'download_session_artifact_cleanup_failed', {
+        ...logContext,
+        bucket: cleanupBucket,
+        failures: failedDeletes,
+      });
+    }
+  }
+
+  const nowIso = new Date(now).toISOString();
+  sanitizedRecord.lastAction = { S: 'session_expired' };
+  sanitizedRecord.lastActionAt = { S: nowIso };
+  sanitizedRecord.lastActionMetadata = {
+    S: JSON.stringify({
+      previousAction: lastAction,
+      reason: 'expired',
+      clearedArtifacts: uniqueClearedKeys.length,
+    }),
+  };
+
+  if (dynamo && storedLinkedIn) {
+    try {
+      const updateExpressionParts = ['#lastAction = :lastAction', 'lastActionAt = :lastActionAt', 'lastActionMetadata = :lastActionMetadata'];
+      const removeExpression = attributesToRemove.length
+        ? ` REMOVE ${attributesToRemove.join(', ')}`
+        : '';
+      const expressionAttributeNames = { '#lastAction': 'lastAction' };
+      const expressionAttributeValues = {
+        ':lastAction': { S: 'session_expired' },
+        ':lastActionAt': { S: nowIso },
+        ':lastActionMetadata': {
+          S: JSON.stringify({
+            previousAction: lastAction,
+            reason: 'expired',
+            clearedArtifacts: uniqueClearedKeys.length,
+          }),
+        },
+      };
+
+      if (jobId) {
+        expressionAttributeValues[':jobId'] = { S: jobId };
+      }
+
+      await dynamo.send(
+        new UpdateItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+          UpdateExpression: `SET ${updateExpressionParts.join(', ')}${removeExpression}`,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ...(jobId ? { ConditionExpression: 'jobId = :jobId' } : {}),
+        })
+      );
+    } catch (err) {
+      logStructured('warn', 'download_session_expiry_update_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
+  }
+
+  return result;
+}
+
 async function generateEnhancedDocumentsResponse({
   res,
   s3,
@@ -15659,6 +15864,32 @@ async function generateEnhancedDocumentsResponse({
       S3_STORAGE_ERROR_MESSAGE
     );
     return null;
+  }
+
+  let expiredDownloadSessionNotice = '';
+  if (!isTestEnvironment) {
+    try {
+      const expiryResult = await handleExpiredDownloadSession({
+        record: existingRecord,
+        dynamo,
+        tableName,
+        storedLinkedIn,
+        jobId,
+        s3,
+        bucket,
+        logContext: { ...logContext, route: 'download_session_cleanup' },
+        logKey,
+      });
+      existingRecord = expiryResult.record;
+      if (expiryResult.expired) {
+        expiredDownloadSessionNotice = DOWNLOAD_SESSION_EXPIRED_MESSAGE;
+      }
+    } catch (err) {
+      logStructured('warn', 'download_session_cleanup_check_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+    }
   }
 
   const artifactCleanupKeys = new Set();
@@ -16683,6 +16914,9 @@ async function generateEnhancedDocumentsResponse({
   const pushDocumentPopulationMessage = (value) => {
     pushCategorizedMessage(value, documentPopulationMessages);
   };
+  if (expiredDownloadSessionNotice) {
+    pushUniqueMessage(generationMessages, expiredDownloadSessionNotice);
+  }
   const templateFallbackApplied = {
     resumePrimary: false,
     resumeSecondary: false,
@@ -19425,7 +19659,7 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
       })
     );
 
-    const item = record.Item || {};
+    let item = record.Item || {};
     if (!item.jobId || item.jobId.S !== jobId) {
       return sendError(
         res,
@@ -19435,8 +19669,41 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
       );
     }
 
-    storedBucket = item.s3Bucket?.S || '';
-    originalUploadKey = item.s3Key?.S || '';
+    storedBucket = normalizeDynamoStringAttribute(item.s3Bucket) || '';
+    originalUploadKey = normalizeDynamoStringAttribute(item.s3Key) || '';
+
+    try {
+      const expiryResult = await handleExpiredDownloadSession({
+        record: item,
+        dynamo,
+        tableName,
+        storedLinkedIn,
+        jobId,
+        s3,
+        bucket: storedBucket,
+        logContext: { ...logContext, route: 'refresh-download-link' },
+        logKey,
+      });
+      item = expiryResult.record;
+      if (expiryResult.expired) {
+        logStructured('info', 'refresh_download_session_expired', {
+          ...logContext,
+          bucket: storedBucket,
+          clearedKeys: expiryResult.clearedKeys,
+        });
+        return sendError(
+          res,
+          410,
+          'DOWNLOAD_SESSION_EXPIRED',
+          DOWNLOAD_SESSION_EXPIRED_MESSAGE
+        );
+      }
+    } catch (expiryErr) {
+      logStructured('warn', 'refresh_download_session_check_failed', {
+        ...logContext,
+        error: serializeError(expiryErr),
+      });
+    }
 
     const registerKey = (value) => {
       if (typeof value !== 'string') return;
