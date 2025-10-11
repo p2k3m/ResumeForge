@@ -2517,6 +2517,63 @@ function App() {
     return `${formattedValue} ${units[exponent]}`
   }, [cvFile])
 
+  const uploadStatusDetail = useMemo(() => {
+    if (error) {
+      return {
+        label: error,
+        badgeClass:
+          'border-rose-200/80 bg-rose-50/80 text-rose-600'
+      }
+    }
+    if (isProcessing) {
+      return {
+        label: 'Uploading and scoring in progress…',
+        badgeClass:
+          'border-amber-200/80 bg-amber-50/80 text-amber-700'
+      }
+    }
+    if (queuedText) {
+      return {
+        label: queuedText,
+        badgeClass:
+          'border-sky-200/80 bg-sky-50/80 text-sky-700'
+      }
+    }
+    if (uploadReady) {
+      return {
+        label: 'Resume and JD ready — run ATS scoring when you are set.',
+        badgeClass:
+          'border-emerald-200/80 bg-emerald-50/80 text-emerald-700'
+      }
+    }
+    if (hasCvFile && !hasManualJobDescriptionInput) {
+      return {
+        label: 'Resume received. Paste the job description to continue.',
+        badgeClass:
+          'border-amber-200/80 bg-amber-50/80 text-amber-700'
+      }
+    }
+    if (hasCvFile) {
+      return {
+        label: 'Resume uploaded and waiting for ATS scoring.',
+        badgeClass:
+          'border-purple-200/80 bg-white/80 text-purple-600'
+      }
+    }
+    return {
+      label: 'No resume selected. Drag & drop or browse to upload.',
+      badgeClass:
+        'border-slate-200/80 bg-white/80 text-slate-600'
+    }
+  }, [
+    error,
+    hasCvFile,
+    hasManualJobDescriptionInput,
+    isProcessing,
+    queuedText,
+    uploadReady
+  ])
+
   const uploadStatusMessage = useMemo(() => {
     if (isProcessing) {
       return 'Uploading and scoring your resume…'
@@ -7641,11 +7698,22 @@ function App() {
             />
             <div className="flex flex-col items-center gap-3">
               {cvFile ? (
-                <div className="space-y-1">
+                <div className="space-y-3">
                   <p className="text-purple-900 font-semibold break-all">{cvFile.name}</p>
-                  {formattedCvFileSize && (
-                    <p className="text-xs font-medium text-purple-600">File size · {formattedCvFileSize}</p>
-                  )}
+                  <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
+                    {formattedCvFileSize && (
+                      <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1 text-purple-600">
+                        File size · {formattedCvFileSize}
+                      </span>
+                    )}
+                    {uploadStatusDetail.label && (
+                      <span
+                        className={`rounded-full border px-3 py-1 ${uploadStatusDetail.badgeClass}`}
+                      >
+                        Status · {uploadStatusDetail.label}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -7657,6 +7725,13 @@ function App() {
                 <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Drag &amp; drop</span>
                 <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Browse files</span>
               </div>
+              {!cvFile && uploadStatusDetail.label && (
+                <span
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${uploadStatusDetail.badgeClass}`}
+                >
+                  {uploadStatusDetail.label}
+                </span>
+              )}
             </div>
             <p className="mt-4 text-xs font-medium text-purple-600">{uploadStatusMessage}</p>
           </div>
