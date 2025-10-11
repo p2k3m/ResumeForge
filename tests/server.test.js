@@ -2114,7 +2114,6 @@ describe('/api/generate-enhanced-docs', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(res.status).toBe(200);

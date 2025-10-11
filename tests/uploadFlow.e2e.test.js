@@ -26,7 +26,6 @@ const JOB_DESCRIPTION = [
 
 const TARGET_JOB_SKILLS = ['Leadership', 'Cloud Architecture', 'JavaScript'];
 
-const LINKEDIN_URL = 'https://linkedin.com/in/example';
 
 function extractTypes(urls = []) {
   return urls.map((entry) => entry.type).filter(Boolean);
@@ -54,7 +53,6 @@ describe('upload to download flow (e2e)', () => {
       )
       .set('X-Forwarded-For', '198.51.100.50')
       .field('manualJobDescription', JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', LINKEDIN_URL)
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(uploadResponse.status).toBe(200);
@@ -102,7 +100,6 @@ describe('upload to download flow (e2e)', () => {
 
     const improvementResponse = await request(app).post('/api/enhance-all').send({
       jobId,
-      linkedinProfileUrl: LINKEDIN_URL,
       resumeText,
       jobDescription: jobDescriptionText,
       jobSkills,
@@ -137,7 +134,6 @@ describe('upload to download flow (e2e)', () => {
         missingSkills: uploadResponse.body.missingSkills || missingSkills,
         table: uploadResponse.body.table || [],
       },
-      linkedinProfileUrl: LINKEDIN_URL,
       manualCertificates: uploadResponse.body.manualCertificates || [],
       templateContext: uploadResponse.body.templateContext,
     });

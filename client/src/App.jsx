@@ -3782,10 +3782,6 @@ function App() {
       if (userIdentifier) {
         payload.userId = userIdentifier
       }
-      if (typeof file.linkedinProfileUrl === 'string' && file.linkedinProfileUrl.trim()) {
-        payload.linkedinProfileUrl = file.linkedinProfileUrl.trim()
-      }
-
       let response
       try {
         response = await fetch(

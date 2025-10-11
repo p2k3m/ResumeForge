@@ -19,7 +19,6 @@ describe('end-to-end CV processing', () => {
       .set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
       .set('X-Forwarded-For', '198.51.100.23')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(200);
@@ -96,7 +95,6 @@ describe('end-to-end CV processing', () => {
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
       .set('X-Forwarded-For', '198.51.100.24')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(400);
@@ -114,7 +112,6 @@ describe('end-to-end CV processing', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('userId', 'user-123')
       .field('template', 'professional')
       .field('templateId', 'professional')
@@ -131,7 +128,6 @@ describe('end-to-end CV processing', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_0) AppleWebKit/605.1.15')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .field('userId', 'user-123')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 

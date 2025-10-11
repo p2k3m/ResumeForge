@@ -15,7 +15,6 @@ describe('AWS integrations for /api/process-cv', () => {
     const response = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(200);
@@ -173,7 +172,6 @@ describe('AWS integrations for /api/process-cv', () => {
     const response = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(500);
@@ -200,7 +198,6 @@ describe('AWS integrations for /api/process-cv', () => {
     const response = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .field('linkedinProfileUrl', 'https://linkedin.com/in/example')
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
     expect(response.status).toBe(200);
