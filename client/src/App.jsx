@@ -7702,9 +7702,11 @@ function App() {
                     metrics={scoreBreakdown}
                     baselineMetrics={baselineScoreBreakdown}
                     match={match}
-                    metricActionMap={metricImprovementActionMap}
-                    onImproveMetric={handleImprovementClick}
-                    improvementState={metricImprovementState}
+                    metricActionMap={currentPhase === 'enhance' ? metricImprovementActionMap : null}
+                    onImproveMetric={currentPhase === 'enhance' ? handleImprovementClick : undefined}
+                    improvementState={
+                      currentPhase === 'enhance' ? metricImprovementState : {}
+                    }
                   />
                   {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
                 </>
