@@ -1,4 +1,2 @@
-import { createServiceHandler } from '../microservices/createServiceHandler.js';
-import { getServiceConfig } from '../microservices/services.js';
-
-export const handler = createServiceHandler(getServiceConfig('jobEvaluation'));
+export { handler } from '../services/jobEvaluation/handler.js';
+export { handler as default } from '../services/jobEvaluation/handler.js';
