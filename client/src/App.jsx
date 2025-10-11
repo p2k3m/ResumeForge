@@ -363,6 +363,23 @@ function extractFileNameFromUrl(downloadUrl) {
   }
 }
 
+function extractFileExtension(source) {
+  if (!source || typeof source !== 'string') {
+    return ''
+  }
+  const sanitized = source.trim()
+  if (!sanitized) {
+    return ''
+  }
+  const withoutQuery = sanitized.split('?')[0]
+  const withoutHash = withoutQuery.split('#')[0]
+  const lastDot = withoutHash.lastIndexOf('.')
+  if (lastDot === -1 || lastDot === withoutHash.length - 1) {
+    return ''
+  }
+  return withoutHash.slice(lastDot).toLowerCase()
+}
+
 function isSameOriginUrl(downloadUrl) {
   if (!downloadUrl || typeof downloadUrl !== 'string') return false
   try {
@@ -4219,11 +4236,39 @@ function App() {
           throw new Error(`Download failed with status ${response.status}`)
         }
         const responseContentType = response.headers?.get?.('content-type') || ''
+        const normalizedResponseType = responseContentType.split(';')[0]?.trim().toLowerCase() || ''
         const rawBlob = await response.blob()
-        const { blob: pdfBlob, contentType: normalizedContentType } = await normalizePdfBlob(
-          rawBlob,
-          { contentType: responseContentType }
-        )
+        const typeHint = typeof activeFile.type === 'string' ? activeFile.type.trim().toLowerCase() : ''
+        const storageExtension = extractFileExtension(storageKey)
+        const urlExtension = extractFileExtension(activeFile.url)
+        const fileNameExtension = extractFileExtension(activeFile.fileName)
+        const expectsPdfByType = Boolean(typeHint && typeHint !== 'original_upload')
+        const expectsPdfByExtension =
+          storageExtension === '.pdf' || urlExtension === '.pdf' || fileNameExtension === '.pdf'
+        const expectsPdfByHeader = normalizedResponseType.includes('pdf')
+        const shouldNormalizePdf = expectsPdfByType || expectsPdfByExtension || expectsPdfByHeader
+        let downloadBlob = rawBlob
+        let normalizedContentType = normalizedResponseType || responseContentType
+
+        const hasDocxExtension =
+          storageExtension === '.docx' || urlExtension === '.docx' || fileNameExtension === '.docx'
+        const hasDocExtension =
+          storageExtension === '.doc' || urlExtension === '.doc' || fileNameExtension === '.doc'
+
+        if (shouldNormalizePdf) {
+          const normalizedPdf = await normalizePdfBlob(rawBlob, { contentType: responseContentType })
+          downloadBlob = normalizedPdf.blob
+          normalizedContentType = normalizedPdf.contentType || normalizedContentType || 'application/pdf'
+        } else if (
+          (!normalizedContentType ||
+            normalizedContentType === 'application/octet-stream' ||
+            normalizedContentType === 'binary/octet-stream') &&
+          (hasDocxExtension || hasDocExtension)
+        ) {
+          normalizedContentType = hasDocxExtension
+            ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            : 'application/msword'
+        }
         const templateMeta =
           activeFile.templateMeta || downloadTemplateMetadata[activeFile.type] || {}
         const fileTimestamp =
@@ -4233,9 +4278,9 @@ function App() {
           templateId: templateMeta.id,
           generatedAt: fileTimestamp,
           contentTypeOverride: normalizedContentType,
-          forcePdfExtension: true
+          forcePdfExtension: shouldNormalizePdf
         })
-        const blobUrl = URL.createObjectURL(pdfBlob)
+        const blobUrl = URL.createObjectURL(downloadBlob)
         const link = document.createElement('a')
         link.href = blobUrl
         link.download = fileName
