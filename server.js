@@ -12852,9 +12852,16 @@ function reparseAndStringify(text, options = {}) {
 }
 
 function buildSectionPreservationContext(text = '') {
+  const emptyContext = {
+    sectionOrder: [],
+    sectionFallbacks: [],
+    contactLines: ['Contact: Update with your email, phone, and location.'],
+  };
+
   if (!text) {
-    return { sectionOrder: [], sectionFallbacks: [] };
+    return emptyContext;
   }
+
   const parsed = parseContent(text, { skipRequiredSections: true });
   const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
   const seenOrder = new Set();
@@ -12873,7 +12880,32 @@ function buildSectionPreservationContext(text = '') {
       (tokens || []).map((token) => ({ ...token }))
     ),
   }));
-  return { sectionOrder, sectionFallbacks };
+
+  const contactSection = sections.find(
+    (sec) => normalizeHeading(sec.heading || '').toLowerCase() === 'contact'
+  );
+  const contactLinesFromSection = contactSection
+    ? (contactSection.items || [])
+        .map((tokens) => stringifyTokens(tokens || []))
+        .map((line) => String(line || '').trim())
+        .filter(Boolean)
+    : [];
+
+  const detectedContactDetails = extractContactDetails(text);
+  const detectedContactLines = Array.isArray(detectedContactDetails.contactLines)
+    ? detectedContactDetails.contactLines.map((line) => String(line || '').trim())
+    : [];
+
+  const combinedContactLines = dedupeContactLines([
+    ...contactLinesFromSection,
+    ...detectedContactLines,
+  ]);
+
+  const contactLines = combinedContactLines.length
+    ? combinedContactLines
+    : emptyContext.contactLines;
+
+  return { sectionOrder, sectionFallbacks, contactLines };
 }
 
 function sanitizeGeneratedText(text, options = {}) {
