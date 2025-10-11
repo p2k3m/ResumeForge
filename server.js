@@ -15821,11 +15821,24 @@ async function generateEnhancedDocumentsResponse({
     ? `${originalUploadKey.replace(/[^/]+$/, '')}logs/log.json`
     : '';
 
-  const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
-    ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
+  const effectiveChangeLogEntries = refreshSessionArtifacts ? [] : changeLogEntries;
+  const effectiveDismissedChangeLogEntries = refreshSessionArtifacts
+    ? []
+    : dismissedChangeLogEntries;
+  const effectiveCoverLetterEntries = refreshSessionArtifacts
+    ? []
+    : coverLetterChangeLogEntries;
+  const effectiveDismissedCoverLetterEntries = refreshSessionArtifacts
+    ? []
+    : dismissedCoverLetterChangeLogEntries;
+
+  const normalizedChangeLogEntries = Array.isArray(effectiveChangeLogEntries)
+    ? effectiveChangeLogEntries
+        .map((entry) => normalizeChangeLogEntryInput(entry))
+        .filter(Boolean)
     : [];
-  const normalizedDismissedChangeLogEntries = Array.isArray(dismissedChangeLogEntries)
-    ? dismissedChangeLogEntries
+  const normalizedDismissedChangeLogEntries = Array.isArray(effectiveDismissedChangeLogEntries)
+    ? effectiveDismissedChangeLogEntries
         .map((entry) => normalizeChangeLogEntryInput(entry))
         .filter(Boolean)
     : [];
@@ -15833,15 +15846,15 @@ async function generateEnhancedDocumentsResponse({
     normalizedChangeLogEntries
   );
   const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
-  const normalizedCoverLetterEntries = Array.isArray(coverLetterChangeLogEntries)
-    ? coverLetterChangeLogEntries
+  const normalizedCoverLetterEntries = Array.isArray(effectiveCoverLetterEntries)
+    ? effectiveCoverLetterEntries
         .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
         .filter(Boolean)
     : [];
   const normalizedDismissedCoverLetterEntries = Array.isArray(
-    dismissedCoverLetterChangeLogEntries
+    effectiveDismissedCoverLetterEntries
   )
-    ? dismissedCoverLetterChangeLogEntries
+    ? effectiveDismissedCoverLetterEntries
         .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
         .filter(Boolean)
         .map((entry) => ({
