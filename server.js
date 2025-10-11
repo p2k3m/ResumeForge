@@ -67,6 +67,7 @@ import {
 } from './services/common/skills.js';
 import { evaluateJobDescription } from './services/jobEvaluation/service.js';
 import { scoreResumeAgainstJob } from './services/scoring/service.js';
+import { resolveServiceForRoute } from './microservices/services.js';
 
 const WordExtractor = WordExtractorPackage?.default || WordExtractorPackage;
 
@@ -1995,6 +1996,59 @@ function resolveCurrentAllowedOrigins() {
   return DEFAULT_ALLOWED_ORIGINS;
 }
 
+function resolveActiveServiceAllowList() {
+  const raw =
+    (typeof process.env.ACTIVE_SERVICE === 'string'
+      ? process.env.ACTIVE_SERVICE
+      : '') +
+    (typeof process.env.ACTIVE_SERVICES === 'string'
+      ? `,${process.env.ACTIVE_SERVICES}`
+      : '');
+
+  if (!raw.trim()) {
+    return null;
+  }
+
+  const values = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!values.length) {
+    return null;
+  }
+
+  if (values.some((value) => value === '*' || value.toLowerCase() === 'all')) {
+    return null;
+  }
+
+  return new Set(values);
+}
+
+const activeServiceAllowList = resolveActiveServiceAllowList();
+
+const SERVICE_GUARD_HEADERS = Object.freeze({
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+  'Access-Control-Allow-Methods': 'OPTIONS,GET,POST',
+});
+
+function respondWithServiceNotFound(res, method, path, serviceKey) {
+  try {
+    res.set(SERVICE_GUARD_HEADERS);
+  } catch {
+    // ignore header assignment failures
+  }
+  res.status(404).json({
+    message: 'Not Found',
+    method,
+    path,
+    service: serviceKey || null,
+  });
+}
+
 const app = express();
 
 app.use((req, res, next) => {
@@ -2068,6 +2122,29 @@ const corsOptions = {
   credentials: true
 };
 app.use(cors(corsOptions));
+
+app.use((req, res, next) => {
+  if (!(activeServiceAllowList instanceof Set) || activeServiceAllowList.size === 0) {
+    return next();
+  }
+
+  const method = typeof req.method === 'string' ? req.method.toUpperCase() : 'GET';
+  const rawPath =
+    typeof req.path === 'string'
+      ? req.path
+      : typeof req.originalUrl === 'string'
+        ? (req.originalUrl.split('?')[0] || '/')
+        : '/';
+
+  const serviceKey = resolveServiceForRoute(method, rawPath);
+
+  if (!serviceKey || !activeServiceAllowList.has(serviceKey)) {
+    return respondWithServiceNotFound(res, method, rawPath, serviceKey);
+  }
+
+  res.locals.activeService = serviceKey;
+  return next();
+});
 
 app.use((req, res, next) => {
   const socket = req.socket;

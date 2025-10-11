@@ -1,8 +1,10 @@
-const DEFAULT_BINARY_TYPES = [
-  'multipart/form-data',
-  'application/octet-stream',
-  'application/pdf',
-];
+import {
+  DEFAULT_BINARY_TYPES,
+  buildNormalizedRoutes,
+  normalizeMethod,
+  normalizeRoutePath,
+  routeMatchesRequest,
+} from './routing.js';
 
 export const services = {
   resumeUpload: {
@@ -62,6 +64,18 @@ export const services = {
   },
 };
 
+const normalizedRouteCache = new Map();
+
+function primeNormalizedRoutes() {
+  for (const [key, config] of Object.entries(services)) {
+    if (!normalizedRouteCache.has(key)) {
+      normalizedRouteCache.set(key, buildNormalizedRoutes(config.allowedRoutes));
+    }
+  }
+}
+
+primeNormalizedRoutes();
+
 export function getServiceConfig(key) {
   if (!key) {
     throw new Error('Service key is required.');
@@ -70,7 +84,38 @@ export function getServiceConfig(key) {
   if (!config) {
     throw new Error(`Unknown microservice "${key}".`);
   }
-  return config;
+  return {
+    ...config,
+    key,
+  };
+}
+
+export function getNormalizedRoutesForService(key) {
+  if (!normalizedRouteCache.has(key)) {
+    const config = getServiceConfig(key);
+    normalizedRouteCache.set(key, buildNormalizedRoutes(config.allowedRoutes));
+  }
+  return normalizedRouteCache.get(key);
+}
+
+export function resolveServiceForRoute(method, path) {
+  const normalizedMethod = normalizeMethod(method);
+  const normalizedPath = normalizeRoutePath(path);
+
+  for (const [serviceKey, routes] of normalizedRouteCache.entries()) {
+    if (!Array.isArray(routes) || routes.length === 0) {
+      continue;
+    }
+    const matched = routes.some((route) =>
+      routeMatchesRequest(route, normalizedMethod, normalizedPath)
+    );
+    if (matched) {
+      return serviceKey;
+    }
+  }
+  return null;
 }
 
 export default services;
+
+export { DEFAULT_BINARY_TYPES };
