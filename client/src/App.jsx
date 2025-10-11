@@ -3557,6 +3557,58 @@ function App() {
     return { resume, cover, other }
   }, [outputFiles, downloadTemplateMetadata, downloadGeneratedAt])
 
+  const resumeDownloadsByTemplate = useMemo(() => {
+    if (!downloadGroups.resume.length) {
+      return {}
+    }
+    return downloadGroups.resume.reduce((acc, file) => {
+      if (!file || typeof file !== 'object') {
+        return acc
+      }
+      const templateCandidates = [
+        file.templateMeta?.id,
+        file.templateId,
+        file.template,
+        file.presentation?.templateId
+      ]
+      const templateId = templateCandidates
+        .map((candidate) => canonicalizeTemplateId(candidate))
+        .find(Boolean)
+      if (!templateId) {
+        return acc
+      }
+      const existing = acc[templateId] || []
+      acc[templateId] = [...existing, file]
+      return acc
+    }, {})
+  }, [downloadGroups.resume])
+
+  const coverDownloadsByTemplate = useMemo(() => {
+    if (!downloadGroups.cover.length) {
+      return {}
+    }
+    return downloadGroups.cover.reduce((acc, file) => {
+      if (!file || typeof file !== 'object') {
+        return acc
+      }
+      const templateCandidates = [
+        file.templateMeta?.id,
+        file.coverTemplateId,
+        file.templateId,
+        file.template
+      ]
+      const templateId = templateCandidates
+        .map((candidate) => canonicalizeCoverTemplateId(candidate))
+        .find(Boolean)
+      if (!templateId) {
+        return acc
+      }
+      const existing = acc[templateId] || []
+      acc[templateId] = [...existing, file]
+      return acc
+    }, {})
+  }, [downloadGroups.cover])
+
   useEffect(() => {
     setDownloadStates({})
     if (outputFiles.length > 0) {
@@ -3879,6 +3931,7 @@ function App() {
   }, [])
 
   const renderTemplateSelection = (context = 'improvements') => {
+    const showDownloadActions = context === 'downloads'
     return (
       <TemplatePicker
         context={context}
@@ -3897,6 +3950,10 @@ function App() {
         onCoverLinkToggle={handleCoverLinkToggle}
         disabled={isProcessing}
         isApplying={isProcessing}
+        showDownloadActions={showDownloadActions}
+        resumeDownloadsByTemplate={showDownloadActions ? resumeDownloadsByTemplate : undefined}
+        coverDownloadsByTemplate={showDownloadActions ? coverDownloadsByTemplate : undefined}
+        onDownloadPreview={showDownloadActions ? openDownloadPreview : undefined}
       />
     )
   }

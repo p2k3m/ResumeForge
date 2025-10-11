@@ -91,6 +91,11 @@ const deriveCoverTemplateFromResume = (resumeId) => {
   return RESUME_TO_COVER_TEMPLATE[canonical] || ''
 }
 
+const normalizeCoverTemplateIdValue = (value) => {
+  if (typeof value !== 'string') return ''
+  return value.trim().toLowerCase()
+}
+
 const ResumeMockup = ({ style = {} }) => (
   <div
     className={cx('relative overflow-hidden rounded-3xl border shadow-inner', style.container)}
@@ -167,9 +172,21 @@ const CoverMockup = ({ style = {} }) => (
   </div>
 )
 
-const ResumeCard = ({ label, option, style = {}, note, children }) => {
+const ResumeCard = ({
+  label,
+  option,
+  style = {},
+  note,
+  children,
+  downloads = [],
+  onDownloadPreview
+}) => {
   const headingText = option?.name || 'CV Template'
   const isPreviewLabel = label === 'CV Template Preview'
+  const hasDownloadActions =
+    Array.isArray(downloads) && downloads.length > 0 && typeof onDownloadPreview === 'function'
+  const downloadButtonClass =
+    'inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300'
   return (
     <article className="space-y-4 rounded-3xl border border-purple-100 bg-white/80 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -197,13 +214,63 @@ const ResumeCard = ({ label, option, style = {}, note, children }) => {
       </div>
       <ResumeMockup style={style} />
       {children ? <div className="pt-2">{children}</div> : null}
+      {hasDownloadActions && (
+        <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-3">
+          <p className="caps-label-tight text-[11px] font-semibold text-purple-500">Download options</p>
+          <ul className="mt-2 space-y-2">
+            {downloads.map((file, index) => {
+              const key =
+                file?.storageKey ||
+                file?.url ||
+                `${file?.type || 'file'}-${index}`
+              const presentation = file?.presentation || {}
+              const fileLabel =
+                (typeof presentation.label === 'string' && presentation.label) || 'Download'
+              const badgeText =
+                typeof presentation.badgeText === 'string' ? presentation.badgeText : ''
+              return (
+                <li
+                  key={key}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-purple-100 bg-white/80 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-purple-700">{fileLabel}</p>
+                    {badgeText && (
+                      <p className="text-[10px] uppercase tracking-wide text-purple-500">{badgeText}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={downloadButtonClass}
+                    onClick={() => onDownloadPreview(file)}
+                  >
+                    Preview &amp; download
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
     </article>
   )
 }
 
-const CoverCard = ({ label, option, style = {}, note, children }) => {
+const CoverCard = ({
+  label,
+  option,
+  style = {},
+  note,
+  children,
+  downloads = [],
+  onDownloadPreview
+}) => {
   const headingText = option?.name || 'Cover Letter'
   const isPreviewLabel = label === 'Cover Letter Preview'
+  const hasDownloadActions =
+    Array.isArray(downloads) && downloads.length > 0 && typeof onDownloadPreview === 'function'
+  const downloadButtonClass =
+    'inline-flex items-center rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-600 shadow-sm transition hover:border-purple-300 hover:text-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-300'
   return (
     <article className="space-y-4 rounded-3xl border border-purple-100 bg-white/80 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -231,6 +298,44 @@ const CoverCard = ({ label, option, style = {}, note, children }) => {
       </div>
       <CoverMockup style={style} />
       {children ? <div className="pt-2">{children}</div> : null}
+      {hasDownloadActions && (
+        <div className="rounded-2xl border border-purple-100 bg-purple-50/50 p-3">
+          <p className="caps-label-tight text-[11px] font-semibold text-purple-500">Download options</p>
+          <ul className="mt-2 space-y-2">
+            {downloads.map((file, index) => {
+              const key =
+                file?.storageKey ||
+                file?.url ||
+                `${file?.type || 'file'}-${index}`
+              const presentation = file?.presentation || {}
+              const fileLabel =
+                (typeof presentation.label === 'string' && presentation.label) || 'Download'
+              const badgeText =
+                typeof presentation.badgeText === 'string' ? presentation.badgeText : ''
+              return (
+                <li
+                  key={key}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-purple-100 bg-white/80 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-purple-700">{fileLabel}</p>
+                    {badgeText && (
+                      <p className="text-[10px] uppercase tracking-wide text-purple-500">{badgeText}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={downloadButtonClass}
+                    onClick={() => onDownloadPreview(file)}
+                  >
+                    Preview &amp; download
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      )}
     </article>
   )
 }
@@ -247,7 +352,11 @@ function TemplatePreview({
   onResumeTemplateApply,
   onCoverTemplateApply,
   isCoverLinkedToResume = false,
-  isApplying = false
+  isApplying = false,
+  showDownloadActions = false,
+  resumeDownloadsByTemplate = {},
+  coverDownloadsByTemplate = {},
+  onDownloadPreview
 }) {
   const normalizedResumeTemplates = useMemo(() => {
     const registry = new Map()
@@ -508,6 +617,32 @@ function TemplatePreview({
   const hasCustomResumeComparison = normalizedResumeComparisonSelections.length >= 2
   const hasCustomCoverComparison = normalizedCoverComparisonSelections.length >= 2
 
+  const resolveResumeDownloads = (templateId) => {
+    if (!showDownloadActions) return []
+    const normalizedId = normalizeResumeTemplateId(templateId)
+    if (!normalizedId) return []
+    if (!resumeDownloadsByTemplate) return []
+    if (resumeDownloadsByTemplate instanceof Map) {
+      const entry = resumeDownloadsByTemplate.get(normalizedId)
+      return Array.isArray(entry) ? entry : []
+    }
+    const entry = resumeDownloadsByTemplate?.[normalizedId]
+    return Array.isArray(entry) ? entry : []
+  }
+
+  const resolveCoverDownloads = (templateId) => {
+    if (!showDownloadActions) return []
+    const normalizedId = normalizeCoverTemplateIdValue(templateId)
+    if (!normalizedId) return []
+    if (!coverDownloadsByTemplate) return []
+    if (coverDownloadsByTemplate instanceof Map) {
+      const entry = coverDownloadsByTemplate.get(normalizedId)
+      return Array.isArray(entry) ? entry : []
+    }
+    const entry = coverDownloadsByTemplate?.[normalizedId]
+    return Array.isArray(entry) ? entry : []
+  }
+
   const toggleResumeComparisonSelection = (templateId) => {
     const normalizedId = normalizeResumeTemplateId(templateId)
     if (!normalizedId) return
@@ -545,7 +680,8 @@ function TemplatePreview({
           note: isApplied
             ? 'This template is currently selected for your downloads.'
             : 'Apply this template to use it for your downloads.',
-          canApply: !isApplied && Boolean(onResumeTemplateApply)
+          canApply: !isApplied && Boolean(onResumeTemplateApply),
+          downloads: resolveResumeDownloads(option?.id)
         }
       })
     : [
@@ -557,7 +693,8 @@ function TemplatePreview({
                 option: appliedResumeOption,
                 style: appliedResumeStyle,
                 note: 'This is the template currently used for your downloads.',
-                canApply: false
+                canApply: false,
+                downloads: resolveResumeDownloads(appliedResumeOption?.id)
               }
             ]
           : [])
@@ -577,7 +714,8 @@ function TemplatePreview({
             : isCoverLinkedToResume
             ? 'Apply this cover letter style to break the sync with your CV template and use it for your downloads.'
             : 'Apply this cover letter style to use it for your downloads.',
-          canApply: !isApplied && Boolean(onCoverTemplateApply)
+          canApply: !isApplied && Boolean(onCoverTemplateApply),
+          downloads: resolveCoverDownloads(option?.id)
         }
       })
     : [
@@ -589,7 +727,8 @@ function TemplatePreview({
                 option: appliedCoverOption,
                 style: appliedCoverStyle,
                 note: 'This is the template currently used for your downloads.',
-                canApply: false
+                canApply: false,
+                downloads: resolveCoverDownloads(appliedCoverOption?.id)
               }
             ]
           : [])
@@ -632,6 +771,8 @@ function TemplatePreview({
                 ? `Currently applied: ${appliedResumeName}. Compare them below before updating.`
                 : 'This template is already applied to your downloads.'
             }
+            downloads={resolveResumeDownloads(previewResumeOption?.id)}
+            onDownloadPreview={onDownloadPreview}
           >
             {isPreviewingDifferentResume && onResumeTemplateApply && previewResumeOption?.id ? (
               <button
@@ -715,8 +856,16 @@ function TemplatePreview({
 
           {resumeCards.length > 0 && (
             <div className={cx('grid gap-4', resumeGridColumns)}>
-              {resumeCards.map(({ key, label, option, style, note, canApply }) => (
-                <ResumeCard key={key} label={label} option={option} style={style} note={note}>
+              {resumeCards.map(({ key, label, option, style, note, canApply, downloads }) => (
+                <ResumeCard
+                  key={key}
+                  label={label}
+                  option={option}
+                  style={style}
+                  note={note}
+                  downloads={downloads}
+                  onDownloadPreview={onDownloadPreview}
+                >
                   {canApply && option?.id && onResumeTemplateApply && (
                     <button
                       type="button"
@@ -743,6 +892,8 @@ function TemplatePreview({
                 ? `Currently applied: ${appliedCoverName}. Compare styles below before updating.`
                 : 'This template is already applied to your downloads.'
             }
+            downloads={resolveCoverDownloads(previewCoverOption?.id)}
+            onDownloadPreview={onDownloadPreview}
           >
             <p className="text-xs text-purple-500">
               {isCoverLinkedToResume
@@ -831,8 +982,16 @@ function TemplatePreview({
 
           {coverCards.length > 0 && (
             <div className={cx('grid gap-4', coverGridColumns)}>
-              {coverCards.map(({ key, label, option, style, note, canApply }) => (
-                <CoverCard key={key} label={label} option={option} style={style} note={note}>
+              {coverCards.map(({ key, label, option, style, note, canApply, downloads }) => (
+                <CoverCard
+                  key={key}
+                  label={label}
+                  option={option}
+                  style={style}
+                  note={note}
+                  downloads={downloads}
+                  onDownloadPreview={onDownloadPreview}
+                >
                   {canApply && option?.id && onCoverTemplateApply && (
                     <button
                       type="button"

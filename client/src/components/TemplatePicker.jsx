@@ -17,7 +17,11 @@ function TemplatePicker({
   isCoverLinkedToResume = true,
   onCoverLinkToggle,
   disabled = false,
-  isApplying = false
+  isApplying = false,
+  showDownloadActions = false,
+  resumeDownloadsByTemplate = {},
+  coverDownloadsByTemplate = {},
+  onDownloadPreview
 }) {
   const resumeSelectorIdPrefix =
     context === 'downloads' ? 'download-resume-template-selector' : 'resume-template-selector'
@@ -110,6 +114,10 @@ function TemplatePicker({
           onCoverTemplateApply={onCoverTemplateSelect}
           isCoverLinkedToResume={isCoverLinkedToResume}
           isApplying={isApplying}
+          showDownloadActions={showDownloadActions}
+          resumeDownloadsByTemplate={resumeDownloadsByTemplate}
+          coverDownloadsByTemplate={coverDownloadsByTemplate}
+          onDownloadPreview={onDownloadPreview}
         />
       )}
     </>
