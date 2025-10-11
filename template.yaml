@@ -194,17 +194,19 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/process-cv
             Method: ANY
-      Environment: &ResumeForgeFunctionEnvironment
-        Variables: &ResumeForgeFunctionEnvironmentVariables
-          S3_BUCKET: !Ref DataBucketName
-          RESUME_TABLE_NAME: !Ref ResumeTableName
-          GEMINI_API_KEY: !If
-            - UseSecretName
-            - !Sub '{{resolve:secretsmanager:${SecretName}:SecretString:GEMINI_API_KEY}}'
-            - !Ref GeminiApiKey
-          PRIMARY_REGION: !Ref AWS::Region
-          SECONDARY_REGION: !Ref SecondaryRegion
-          STAGE_NAME: !Ref StageName
+      Environment:
+        Variables:
+          <<: &ResumeForgeFunctionEnvironmentVariables
+            S3_BUCKET: !Ref DataBucketName
+            RESUME_TABLE_NAME: !Ref ResumeTableName
+            GEMINI_API_KEY: !If
+              - UseSecretName
+              - !Sub '{{resolve:secretsmanager:${SecretName}:SecretString:GEMINI_API_KEY}}'
+              - !Ref GeminiApiKey
+            PRIMARY_REGION: !Ref AWS::Region
+            SECONDARY_REGION: !Ref SecondaryRegion
+            STAGE_NAME: !Ref StageName
+          ACTIVE_SERVICE: resumeUpload
       Policies: &ResumeForgeFunctionPolicies
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -265,7 +267,10 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/jd/evaluate
             Method: ANY
-      Environment: *ResumeForgeFunctionEnvironment
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: jobEvaluation
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:
@@ -299,7 +304,10 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/rescore-improvement
             Method: ANY
-      Environment: *ResumeForgeFunctionEnvironment
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: scoring
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:
@@ -369,7 +377,10 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/enhance-all
             Method: ANY
-      Environment: *ResumeForgeFunctionEnvironment
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:
@@ -414,6 +425,7 @@ Resources:
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: documentGeneration
           DOCUMENT_GENERATION_QUEUE_URL: !GetAtt DocumentGenerationQueue.QueueUrl
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
@@ -435,7 +447,10 @@ Resources:
           Properties:
             Queue: !GetAtt DocumentGenerationQueue.Arn
             BatchSize: 1
-      Environment: *ResumeForgeFunctionEnvironment
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: documentGeneration
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:
@@ -495,7 +510,10 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /healthz
             Method: ANY
-      Environment: *ResumeForgeFunctionEnvironment
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: auditing
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:

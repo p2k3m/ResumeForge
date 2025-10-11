@@ -1,11 +1,11 @@
 import { configure } from '@vendia/serverless-express';
 import app from '../server.js';
-
-const DEFAULT_BINARY_TYPES = [
-  'multipart/form-data',
-  'application/octet-stream',
-  'application/pdf',
-];
+import {
+  DEFAULT_BINARY_TYPES,
+  normalizeMethod,
+  matchesPath,
+} from './routing.js';
+import { getNormalizedRoutesForService } from './services.js';
 
 function normalizeIncomingPath(event) {
   const rawPath =
@@ -29,43 +29,8 @@ function normalizeIncomingPath(event) {
   return rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
 }
 
-function normalizeRoutePath(path) {
-  if (!path) {
-    return '/';
-  }
-  if (path === '/') {
-    return path;
-  }
-  const normalized = path.startsWith('/') ? path : `/${path}`;
-  return normalized.endsWith('/') && normalized !== '/'
-    ? normalized.slice(0, -1)
-    : normalized;
-}
-
-function matchesPath(requestPath, allowedPath) {
-  if (allowedPath === '*') {
-    return true;
-  }
-  const normalizedRequest = normalizeRoutePath(requestPath);
-  if (allowedPath.endsWith('*')) {
-    const prefix = normalizeRoutePath(allowedPath.slice(0, -1));
-    return normalizedRequest === prefix || normalizedRequest.startsWith(`${prefix}/`);
-  }
-  const normalizedAllowed = normalizeRoutePath(allowedPath);
-  return (
-    normalizedRequest === normalizedAllowed ||
-    `${normalizedRequest}/` === normalizedAllowed ||
-    normalizedRequest === `${normalizedAllowed}/`
-  );
-}
-
-function normalizeMethod(method) {
-  return typeof method === 'string' && method.trim()
-    ? method.trim().toUpperCase()
-    : 'ANY';
-}
-
 export function createServiceHandler({
+  key: serviceKey,
   serviceName = 'service',
   allowedRoutes = [],
   binaryTypes = DEFAULT_BINARY_TYPES,
@@ -74,10 +39,11 @@ export function createServiceHandler({
     throw new Error(`createServiceHandler requires at least one allowed route for ${serviceName}.`);
   }
 
-  const normalizedRoutes = allowedRoutes.map((route) => ({
-    method: normalizeMethod(route?.method),
-    path: route?.path ? String(route.path) : '*',
-  }));
+  const normalizedRoutes = (serviceKey && getNormalizedRoutesForService(serviceKey)) ||
+    allowedRoutes.map((route) => ({
+      method: normalizeMethod(route?.method),
+      path: route?.path ? String(route.path) : '*',
+    }));
 
   let serverlessExpressInstance;
 
