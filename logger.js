@@ -1,4 +1,9 @@
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import {
+  executeWithRetry,
+  getErrorStatus,
+  shouldRetryS3Error,
+} from './lib/retry.js';
 import { randomBytes, randomUUID } from 'crypto';
 
 async function streamToString(stream) {
@@ -42,7 +47,34 @@ export async function logEvent({
   }
 
   const body = existing + JSON.stringify(entry) + '\n';
-  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: 'application/json' }));
+  await executeWithRetry(
+    () =>
+      s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: body,
+          ContentType: 'application/json',
+        })
+      ),
+    {
+      maxAttempts: 4,
+      baseDelayMs: 500,
+      maxDelayMs: 4000,
+      jitterMs: 300,
+      shouldRetry: (err) => shouldRetryS3Error(err),
+      onRetry: (err, attempt, delayMs) => {
+        console.warn('Retrying S3 log upload', {
+          bucket,
+          key,
+          attempt,
+          delayMs,
+          status: getErrorStatus(err),
+          code: err?.code,
+        });
+      },
+    }
+  );
 }
 
 function makeRandomId() {
@@ -93,12 +125,32 @@ export async function logErrorTrace({
     timestamp
   };
 
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: JSON.stringify(payload),
-      ContentType: 'application/json'
-    })
+  await executeWithRetry(
+    () =>
+      s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: JSON.stringify(payload),
+          ContentType: 'application/json'
+        })
+      ),
+    {
+      maxAttempts: 4,
+      baseDelayMs: 500,
+      maxDelayMs: 4000,
+      jitterMs: 300,
+      shouldRetry: (err) => shouldRetryS3Error(err),
+      onRetry: (err, attempt, delayMs) => {
+        console.warn('Retrying S3 trace upload', {
+          bucket,
+          key,
+          attempt,
+          delayMs,
+          status: getErrorStatus(err),
+          code: err?.code,
+        });
+      },
+    }
   );
 }
