@@ -36,6 +36,7 @@ export async function setupTestServer({
   process.env.GEMINI_API_KEY = 'integration-key';
   process.env.AWS_REGION = 'us-integration-1';
   process.env.CLOUDFRONT_ORIGINS = allowedOrigins ?? '';
+  process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'false';
 
   const s3Store = new Map();
 

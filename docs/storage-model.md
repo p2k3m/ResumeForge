@@ -61,20 +61,23 @@ Within each session the service writes:
 
 ## Retention expectations
 
-* The relocation step deletes the temporary upload and the generation pipeline
-  now prunes any superseded artefacts (PDFs and JSON exports) that were attached
-  to the session. Only the most recent document versions remain in the
-  `cv/<owner>/<session>/` prefix so Ops do not have to sift through stale
-  variants when debugging or exporting files.
+* The relocation step deletes the temporary upload. When
+  `ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP=true`, the generation pipeline also
+  prunes any superseded artefacts (PDFs and JSON exports) that were attached to
+  the session so Ops do not have to sift through stale variants when debugging
+  or exporting files.
 * Because each template/variant combination maps to a stable key inside the
-  session prefix, the latest run overwrites the previous PDF for that slot and
-  the cleanup routine removes any alternate keys (such as `*_2.pdf`) that might
-  have been created in older runs. Historical activity is preserved via the
-  session change log JSON; S3 no longer keeps superseded document bodies by
-  default.
+  session prefix, the latest run overwrites the previous PDF for that slot. When
+  stale artefact cleanup is enabled, the routine removes any alternate keys
+  (such as `*_2.pdf`) that might have been created in older runs. Historical
+  activity is preserved via the session change log JSON; S3 retains superseded
+  document bodies unless the cleanup flag is enabled.
 * Set `ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP=true` when operating at scale to drop
   `logs/change-log.json` once a download session expires. Leave the flag unset
   to retain the change log for audits and manual investigations.
+* Set `ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP=true` when reclaiming storage is
+  more important than retaining previous generated documents. Leave the flag
+  unset to keep prior artefact versions for audits and debugging.
 
 ## Download logic
 

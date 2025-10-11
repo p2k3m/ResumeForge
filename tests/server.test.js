@@ -7,6 +7,7 @@ process.env.S3_BUCKET = 'test-bucket';
 process.env.GEMINI_API_KEY = 'test-key';
 process.env.AWS_REGION = 'us-east-1';
 process.env.CLOUDFRONT_ORIGINS = 'https://test.cloudfront.net';
+process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'false';
 
 const mockS3Send = jest.fn().mockResolvedValue({});
 const getObjectCommandMock = jest.fn((input) => ({ input }));
@@ -377,67 +378,76 @@ describe('/api/process-cv', () => {
     const previousSessionKey = 'cv/candidate/session-old/logs/change-log.json';
     const previousTextKey = 'cv/candidate/session-old/artifacts/changelog.json';
 
-    mockS3Send.mockClear();
-    mockDynamoSend.mockImplementation((cmd) => {
-      switch (cmd.__type) {
-        case 'DescribeTableCommand':
-          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
-        case 'GetItemCommand':
-          if (cmd.input.ProjectionExpression === 's3Bucket, sessionChangeLogKey, changeLogKey') {
+    const originalCleanupFlag = process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP;
+    process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'true';
+
+    try {
+      mockS3Send.mockClear();
+      mockDynamoSend.mockImplementation((cmd) => {
+        switch (cmd.__type) {
+          case 'DescribeTableCommand':
+            return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+          case 'GetItemCommand':
+            if (cmd.input.ProjectionExpression === 's3Bucket, sessionChangeLogKey, changeLogKey') {
+              return Promise.resolve({
+                Item: {
+                  s3Bucket: { S: 'test-bucket' },
+                  sessionChangeLogKey: { S: previousSessionKey },
+                  changeLogKey: { S: previousTextKey },
+                },
+              });
+            }
             return Promise.resolve({
               Item: {
+                jobId: { S: 'job-stale' },
+                status: { S: 'scored' },
                 s3Bucket: { S: 'test-bucket' },
+                s3Key: { S: 'cv/candidate/session-old/original.pdf' },
                 sessionChangeLogKey: { S: previousSessionKey },
-                changeLogKey: { S: previousTextKey },
+                changeLog: { L: [] },
               },
             });
-          }
-          return Promise.resolve({
-            Item: {
-              jobId: { S: 'job-stale' },
-              status: { S: 'scored' },
-              s3Bucket: { S: 'test-bucket' },
-              s3Key: { S: 'cv/candidate/session-old/original.pdf' },
-              sessionChangeLogKey: { S: previousSessionKey },
-              changeLog: { L: [] },
-            },
-          });
-        case 'PutItemCommand':
-        case 'UpdateItemCommand':
-          return Promise.resolve({});
-        default:
-          return Promise.resolve({});
-      }
-    });
+          case 'PutItemCommand':
+          case 'UpdateItemCommand':
+            return Promise.resolve({});
+          default:
+            return Promise.resolve({});
+        }
+      });
 
-    const response = await request(app)
-      .post('/api/process-cv')
-      .field('jobId', 'job-stale')
-      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      const response = await request(app)
+        .post('/api/process-cv')
+        .field('jobId', 'job-stale')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
-    expect(response.status).toBe(200);
+      expect(response.status).toBe(200);
 
-    const deletedKeys = mockS3Send.mock.calls
-      .filter(([command]) => command.__type === 'DeleteObjectCommand')
-      .map(([command]) => ({
-        bucket: command.input.Bucket,
-        key: command.input.Key,
-      }));
+      const deletedKeys = mockS3Send.mock.calls
+        .filter(([command]) => command.__type === 'DeleteObjectCommand')
+        .map(([command]) => ({
+          bucket: command.input.Bucket,
+          key: command.input.Key,
+        }));
 
-    expect(deletedKeys).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ bucket: 'test-bucket', key: previousSessionKey }),
-        expect.objectContaining({ bucket: 'test-bucket', key: previousTextKey }),
-      ])
-    );
-
-    setupDefaultDynamoMock();
+      expect(deletedKeys).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ bucket: 'test-bucket', key: previousSessionKey }),
+          expect.objectContaining({ bucket: 'test-bucket', key: previousTextKey }),
+        ])
+      );
+    } finally {
+      process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = originalCleanupFlag;
+      setupDefaultDynamoMock();
+    }
   });
 
   test('removes session change log data when the session prefix is reused', async () => {
     const previousSessionKey = 'cv/candidate/repeat/logs/change-log.json';
     const previousTextKey = 'cv/candidate/repeat/artifacts/changelog.json';
+
+    const originalCleanupFlag = process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP;
+    process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'true';
 
     const originalRandomUUID = crypto.randomUUID;
     const randomUuidMock = jest.fn().mockReturnValue('repeat');
@@ -508,9 +518,9 @@ describe('/api/process-cv', () => {
       } else {
         delete crypto.randomUUID;
       }
+      process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = originalCleanupFlag;
+      setupDefaultDynamoMock();
     }
-
-    setupDefaultDynamoMock();
   });
 
   test('requires manual job description input', async () => {
