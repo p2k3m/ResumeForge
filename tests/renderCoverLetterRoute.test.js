@@ -75,22 +75,39 @@ describe('render cover letter route', () => {
       })
       .expect(500)
 
+    const expectedSummary =
+      'Unable to generate cover letter PDF. Tried templates: Modern Cover Letter, Classic Cover Letter, Professional Cover Letter, ATS Cover Letter, and Future Vision 2025 Cover Letter. Last error: Minimal fallback unavailable'
+
     expect(response.body).toEqual(
       expect.objectContaining({
         success: false,
         messages: expect.arrayContaining([
-          'Unable to generate cover letter PDF. Tried templates: Modern Cover Letter. Last error: Minimal fallback unavailable'
+          expect.stringContaining('Could not generate PDF for Modern Cover Letter template'),
+          expectedSummary
         ]),
         error: expect.objectContaining({
           code: 'COVER_LETTER_GENERATION_FAILED',
-          message: expect.stringContaining('Unable to generate cover letter PDF'),
+          message: expectedSummary,
+          jobId: 'job-789',
+          requestId: expect.any(String),
           details: expect.objectContaining({
             source: 'lambda',
             documentType: 'cover_letter',
-            templates: expect.arrayContaining(['cover_modern']),
+            templates: expect.arrayContaining([
+              'cover_modern',
+              'cover_classic',
+              'cover_professional',
+              'cover_ats',
+              'cover_2025'
+            ]),
             messages: expect.arrayContaining([
-              'Unable to generate cover letter PDF. Tried templates: Modern Cover Letter. Last error: Minimal fallback unavailable'
-            ])
+              expect.stringContaining('Could not generate PDF for Modern Cover Letter template'),
+              expectedSummary
+            ]),
+            summary: expectedSummary,
+            reason: 'Minimal fallback unavailable',
+            lastTemplate: 'cover_2025',
+            actions: expect.arrayContaining(['retry'])
           })
         })
       })
