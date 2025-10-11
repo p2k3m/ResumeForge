@@ -12,7 +12,7 @@
     "build:lambda": "node scripts/build-lambda.mjs",
     "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs",
     "refresh:templates": "node scripts/refresh-templates.mjs",
-    "test:sam": "sam local invoke ResumeForgeFunction --event tests/sam/healthz-event.json",
+    "test:sam": "sam local invoke AuditingFunction --event tests/sam/healthz-event.json",
     "publish:cloudfront-url": "node scripts/publish-cloudfront-url.mjs",
     "verify:cloudfront": "node scripts/verify-cloudfront.mjs"
   },

@@ -4865,6 +4865,46 @@ function calculateMatchScore(jobSkills = [], resumeSkills = []) {
   return { score, table, newSkills };
 }
 
+function normalizeSkillListInput(value) {
+  const values = [];
+
+  const pushValues = (input) => {
+    if (input === null || input === undefined) {
+      return;
+    }
+    if (Array.isArray(input)) {
+      input.forEach((entry) => pushValues(entry));
+      return;
+    }
+    if (typeof input === 'object') {
+      Object.values(input).forEach((entry) => pushValues(entry));
+      return;
+    }
+    if (typeof input === 'string') {
+      input
+        .split(/[\n,]/)
+        .map((token) => token.trim())
+        .filter(Boolean)
+        .forEach((token) => values.push(token));
+    }
+  };
+
+  pushValues(value);
+
+  const seen = new Set();
+  const normalized = [];
+  for (const entry of values) {
+    const key = entry.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(entry);
+  }
+
+  return normalized;
+}
+
 function collectSectionText(resumeText = '', linkedinData = {}, credlyCertifications = []) {
   const parsed = parseContent(resumeText, { skipRequiredSections: true });
   const sectionMap = {};
@@ -16244,6 +16284,142 @@ app.get('/favicon.ico', (req, res) => {
 
 app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.post('/api/jd/evaluate', assignJobContext, async (req, res) => {
+  const payload = req.body || {};
+  const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
+  if (!jobIdInput) {
+    return sendError(
+      res,
+      400,
+      'JOB_ID_REQUIRED',
+      'jobId is required to evaluate the job description fit.'
+    );
+  }
+
+  const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
+  if (!resumeText.trim()) {
+    return sendError(
+      res,
+      400,
+      'RESUME_TEXT_REQUIRED',
+      'resumeText is required to evaluate the job description fit.'
+    );
+  }
+
+  const jobDescriptionText =
+    typeof payload.jobDescriptionText === 'string' ? payload.jobDescriptionText : '';
+
+  const skillCandidates = [
+    payload.jobSkills,
+    payload.prioritySkills,
+    payload.requiredSkills,
+    payload.jobKeywords,
+  ];
+
+  let jobSkills = [];
+  for (const candidate of skillCandidates) {
+    jobSkills = normalizeSkillListInput(candidate);
+    if (jobSkills.length) {
+      break;
+    }
+  }
+
+  if (!jobSkills.length) {
+    return sendError(
+      res,
+      400,
+      'JOB_SKILLS_REQUIRED',
+      'Provide jobSkills with at least one keyword to evaluate the fit.'
+    );
+  }
+
+  req.jobId = jobIdInput;
+  res.locals.jobId = jobIdInput;
+  captureUserContext(req, res);
+  const requestId = res.locals.requestId;
+
+  const resumeSkills = extractResumeSkills(resumeText);
+  const match = calculateMatchScore(jobSkills, resumeSkills);
+  const breakdown = buildScoreBreakdown(resumeText, {
+    jobText: jobDescriptionText,
+    jobSkills,
+    resumeSkills,
+  });
+  const atsMetrics = scoreBreakdownToArray(breakdown);
+
+  logStructured('info', 'jd_evaluation_completed', {
+    requestId,
+    jobId: jobIdInput,
+    score: match.score,
+    missingSkillCount: match.newSkills.length,
+  });
+
+  return res.json({
+    success: true,
+    jobId: jobIdInput,
+    score: match.score,
+    missingSkills: match.newSkills,
+    matchedSkills: match.table.filter((entry) => entry.matched).map((entry) => entry.skill),
+    breakdown: atsMetrics,
+  });
+});
+
+app.post('/api/score-match', assignJobContext, async (req, res) => {
+  const payload = req.body || {};
+  const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
+  if (!jobIdInput) {
+    return sendError(
+      res,
+      400,
+      'JOB_ID_REQUIRED',
+      'jobId is required to score the resume against the job description.'
+    );
+  }
+
+  const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
+  if (!resumeText.trim()) {
+    return sendError(
+      res,
+      400,
+      'RESUME_TEXT_REQUIRED',
+      'resumeText is required to score the resume against the job description.'
+    );
+  }
+
+  const jobSkills = normalizeSkillListInput(payload.jobSkills);
+  if (!jobSkills.length) {
+    return sendError(
+      res,
+      400,
+      'JOB_SKILLS_REQUIRED',
+      'Provide jobSkills with at least one keyword to calculate a score.'
+    );
+  }
+
+  req.jobId = jobIdInput;
+  res.locals.jobId = jobIdInput;
+  captureUserContext(req, res);
+  const requestId = res.locals.requestId;
+
+  const resumeSkills = extractResumeSkills(resumeText);
+  const match = calculateMatchScore(jobSkills, resumeSkills);
+
+  logStructured('info', 'match_score_calculated', {
+    requestId,
+    jobId: jobIdInput,
+    score: match.score,
+    missingSkillCount: match.newSkills.length,
+  });
+
+  return res.json({
+    success: true,
+    jobId: jobIdInput,
+    score: match.score,
+    missingSkills: match.newSkills,
+    alignmentTable: match.table,
+  });
 });
 
 const improvementRoutes = [
