@@ -11608,6 +11608,68 @@ function buildDocumentSessionPrefix({
   return `${segments.join('/')}/`;
 }
 
+function extractSessionScopedPrefixFromKey(key) {
+  if (typeof key !== 'string') {
+    return '';
+  }
+  const trimmed = key.trim();
+  if (!trimmed) {
+    return '';
+  }
+  const normalizedWithFileRemoved = trimmed.replace(/[^/]+$/, '');
+  const segments = ensureTrailingSlash(normalizedWithFileRemoved)
+    .split('/')
+    .filter(Boolean);
+  if (segments.length < 3) {
+    return '';
+  }
+  const sessionCandidate = segments[2];
+  if (!sessionCandidate) {
+    return '';
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(sessionCandidate)) {
+    return '';
+  }
+  if (sessionCandidate === 'incoming') {
+    return '';
+  }
+  return `${segments.slice(0, 3).join('/')}/`;
+}
+
+function resolveSessionArtifactPrefix({
+  originalUploadKey,
+  ownerSegment,
+  sanitizedName,
+  userId,
+  sessionSegment,
+  requestId,
+  dateSegment,
+  jobId,
+  jobSegment,
+} = {}) {
+  const existingSessionPrefix = extractSessionScopedPrefixFromKey(originalUploadKey);
+  if (existingSessionPrefix) {
+    return existingSessionPrefix;
+  }
+
+  const normalizedOwnerSegment =
+    sanitizeS3KeyComponent(ownerSegment) ||
+    resolveDocumentOwnerSegment({ userId, sanitizedName });
+  const normalizedSessionSegment =
+    sanitizeS3KeyComponent(sessionSegment) ||
+    sanitizeS3KeyComponent(requestId, { fallback: '' });
+  const normalizedDateSegment = sanitizeS3KeyComponent(dateSegment);
+  const normalizedJobSegment =
+    sanitizeS3KeyComponent(jobSegment) || sanitizeJobSegment(jobId);
+
+  return buildDocumentSessionPrefix({
+    ownerSegment: normalizedOwnerSegment,
+    sessionSegment: normalizedSessionSegment,
+    dateSegment: normalizedDateSegment,
+    jobSegment: normalizedJobSegment,
+  });
+}
+
 function deriveSessionChangeLogKey({ changeLogKey, originalUploadKey } = {}) {
   const explicitKey = typeof changeLogKey === 'string' ? changeLogKey.trim() : '';
   if (explicitKey) {
@@ -11617,7 +11679,7 @@ function deriveSessionChangeLogKey({ changeLogKey, originalUploadKey } = {}) {
   if (!uploadKey) {
     return '';
   }
-  const prefix = uploadKey.replace(/[^/]+$/, '');
+  const prefix = extractSessionScopedPrefixFromKey(uploadKey);
   if (!prefix) {
     return '';
   }
@@ -11876,33 +11938,18 @@ function resolveSessionChangeLogLocation({
   let resolvedKey = typeof key === 'string' ? key.trim() : '';
 
   if (!resolvedKey) {
-    const uploadKey = typeof originalUploadKey === 'string' ? originalUploadKey.trim() : '';
-    if (uploadKey) {
-      const prefix = uploadKey.replace(/[^/]+$/, '');
-      if (prefix) {
-        resolvedKey = `${prefix}logs/change-log.json`;
-      }
-    }
-  }
+    const sessionPrefix = resolveSessionArtifactPrefix({
+      originalUploadKey,
+      ownerSegment,
+      sanitizedName,
+      userId,
+      sessionSegment,
+      requestId,
+      dateSegment,
+      jobId,
+    });
 
-  if (!resolvedKey) {
-    const normalizedOwnerSegment =
-      sanitizeS3KeyComponent(ownerSegment) ||
-      resolveDocumentOwnerSegment({ userId, sanitizedName });
-    const normalizedSessionSegment =
-      sanitizeS3KeyComponent(sessionSegment) ||
-      sanitizeS3KeyComponent(requestId, { fallback: '' });
-    const normalizedDateSegment =
-      sanitizeS3KeyComponent(dateSegment) || new Date().toISOString().slice(0, 10);
-    const normalizedJobSegment = sanitizeJobSegment(jobId);
-
-    if (normalizedOwnerSegment) {
-      const sessionPrefix = buildDocumentSessionPrefix({
-        ownerSegment: normalizedOwnerSegment,
-        sessionSegment: normalizedSessionSegment,
-        dateSegment: normalizedDateSegment,
-        jobSegment: normalizedJobSegment,
-      });
+    if (sessionPrefix) {
       resolvedKey = `${sessionPrefix}logs/change-log.json`;
     }
   }
@@ -16009,17 +16056,20 @@ async function handleImprovementRequest(type, req, res) {
         userId: res.locals.userId,
         sanitizedName,
       });
-      const prefix = originalUploadKey
-        ? originalUploadKey.replace(/[^/]+$/, '')
-        : buildDocumentSessionPrefix({
-            ownerSegment,
-            dateSegment,
-            jobSegment: jobKeySegment,
-            sessionSegment: improvementSessionSegment,
-          });
-      const effectiveOriginalUploadKey = originalUploadKey || `${prefix}original.pdf`;
-      const effectiveLogKey = logKey || `${prefix}logs/processing.jsonl`;
-      improvementMetadataKey = `${prefix}logs/log.json`;
+      const sessionPrefix = resolveSessionArtifactPrefix({
+        originalUploadKey,
+        ownerSegment,
+        sanitizedName,
+        userId: res.locals.userId,
+        sessionSegment: improvementSessionSegment,
+        requestId,
+        dateSegment,
+        jobId: jobIdInput,
+        jobSegment: jobKeySegment,
+      });
+      const effectiveOriginalUploadKey = originalUploadKey || `${sessionPrefix}original.pdf`;
+      const effectiveLogKey = logKey || `${sessionPrefix}logs/processing.jsonl`;
+      improvementMetadataKey = `${sessionPrefix}logs/log.json`;
 
       let templateContextInput =
         typeof payload.templateContext === 'object' && payload.templateContext
@@ -16803,9 +16853,7 @@ async function generateEnhancedDocumentsResponse({
     enhancedVersion2Key: readExistingArtifactKey('enhancedVersion2Key'),
     changeLogKey: readExistingArtifactKey('changeLogKey'),
   };
-  const stageMetadataKey = originalUploadKey
-    ? `${originalUploadKey.replace(/[^/]+$/, '')}logs/log.json`
-    : '';
+  let stageMetadataKey = '';
 
   const effectiveChangeLogEntries = refreshSessionArtifacts ? [] : changeLogEntries;
   const effectiveDismissedChangeLogEntries = refreshSessionArtifacts
@@ -17588,15 +17636,18 @@ async function generateEnhancedDocumentsResponse({
   });
   const jobSegmentForKeys = sanitizeJobSegment(jobId);
   const generationDateSegment = new Date().toISOString().slice(0, 10);
-  const prefix = originalUploadKey
-    ? originalUploadKey.replace(/[^/]+$/, '')
-    : buildDocumentSessionPrefix({
-        ownerSegment: ownerSegmentForKeys,
-        dateSegment: generationDateSegment,
-        jobSegment: jobSegmentForKeys,
-        sessionSegment: generationRunSegment,
-      });
-  const sessionPrefix = prefix;
+  const sessionPrefix = resolveSessionArtifactPrefix({
+    originalUploadKey,
+    ownerSegment: ownerSegmentForKeys,
+    sanitizedName,
+    userId,
+    sessionSegment: generationRunSegment,
+    requestId,
+    dateSegment: generationDateSegment,
+    jobId,
+    jobSegment: jobSegmentForKeys,
+  });
+  stageMetadataKey = sessionPrefix ? `${sessionPrefix}logs/log.json` : '';
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
   });
@@ -19324,15 +19375,18 @@ app.post(
         userId: res.locals.userId,
         sanitizedName,
       });
-      const prefix = originalUploadKey
-        ? originalUploadKey.replace(/[^/]+$/, '')
-        : buildDocumentSessionPrefix({
-            ownerSegment,
-            dateSegment: date,
-            jobSegment: jobKeySegment,
-            sessionSegment: generationSessionSegment,
-          });
-      const logKey = `${prefix}logs/processing.jsonl`;
+      const sessionPrefix = resolveSessionArtifactPrefix({
+        originalUploadKey,
+        ownerSegment,
+        sanitizedName,
+        userId: res.locals.userId,
+        sessionSegment: generationSessionSegment,
+        requestId,
+        dateSegment: date,
+        jobId,
+        jobSegment: jobKeySegment,
+      });
+      const logKey = `${sessionPrefix}logs/processing.jsonl`;
 
       await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_started' });
 
@@ -20142,9 +20196,9 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     previousSessionChangeLogKey = sessionChangeLogKey;
     previousSessionChangeLogBucket = storedBucket;
     if (originalUploadKey) {
-      const prefix = originalUploadKey.replace(/[^/]+$/, '');
-      if (prefix) {
-        logKey = `${prefix}logs/processing.jsonl`;
+      const existingSessionPrefix = extractSessionScopedPrefixFromKey(originalUploadKey);
+      if (existingSessionPrefix) {
+        logKey = `${existingSessionPrefix}logs/processing.jsonl`;
       }
     }
     try {
@@ -20531,6 +20585,13 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   storedBucket = resolvedSessionLocation.bucket;
   sessionChangeLogKey = resolvedSessionLocation.key;
 
+  if (!logKey) {
+    const sessionLogPrefix = extractSessionScopedPrefixFromKey(sessionChangeLogKey);
+    if (sessionLogPrefix) {
+      logKey = `${sessionLogPrefix}logs/processing.jsonl`;
+    }
+  }
+
   let persistedSessionChangeLog = null;
 
   try {
@@ -20846,9 +20907,15 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
     registerKey(sessionChangeLogKey);
 
     if (originalUploadKey) {
-      const prefix = originalUploadKey.replace(/[^/]+$/, '');
-      if (prefix) {
-        logKey = `${prefix}logs/processing.jsonl`;
+      const existingSessionPrefix = extractSessionScopedPrefixFromKey(originalUploadKey);
+      if (existingSessionPrefix) {
+        logKey = `${existingSessionPrefix}logs/processing.jsonl`;
+      }
+    }
+    if (!logKey) {
+      const sessionPrefix = extractSessionScopedPrefixFromKey(sessionChangeLogKey);
+      if (sessionPrefix) {
+        logKey = `${sessionPrefix}logs/processing.jsonl`;
       }
     }
   } catch (err) {
@@ -21965,8 +22032,11 @@ app.post(
       ? Number(originalMatch.score)
       : 0;
     const scoringCompletedAt = new Date().toISOString();
-    const scoringMetadataKey = originalUploadKey
-      ? `${originalUploadKey.replace(/[^/]+$/, '')}logs/log.json`
+    const scoringMetadataPrefix =
+      extractSessionScopedPrefixFromKey(logKey) ||
+      extractSessionScopedPrefixFromKey(originalUploadKey);
+    const scoringMetadataKey = scoringMetadataPrefix
+      ? `${scoringMetadataPrefix}logs/log.json`
       : '';
 
     const scoringUpdate = {
