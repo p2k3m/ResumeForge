@@ -11366,6 +11366,10 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
       dismissedEntries: [],
       coverLetterEntries: [],
       dismissedCoverLetterEntries: [],
+      sessionLogs: [],
+      evaluationLogs: [],
+      enhancementLogs: [],
+      downloadLogs: [],
     };
   }
   const entries = normalizeSessionChangeLogArray(data.entries);
@@ -11393,7 +11397,21 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
     rejectedAt: entry.rejectedAt || null,
     rejectionReason: entry.rejectionReason || null,
   }));
-  return { entries, dismissedEntries, coverLetterEntries, dismissedCoverLetterEntries };
+  const sessionLogs = normalizeChangeLogActivityArray(data.sessionLogs);
+  const evaluationLogs = normalizeChangeLogActivityArray(data.evaluationLogs);
+  const enhancementLogs = normalizeChangeLogActivityArray(data.enhancementLogs);
+  const downloadLogs = normalizeChangeLogActivityArray(data.downloadLogs);
+
+  return {
+    entries,
+    dismissedEntries,
+    coverLetterEntries,
+    dismissedCoverLetterEntries,
+    sessionLogs,
+    evaluationLogs,
+    enhancementLogs,
+    downloadLogs,
+  };
 }
 
 function resolveSessionChangeLogLocation({ bucket, key, jobId } = {}) {
@@ -11429,6 +11447,10 @@ async function writeSessionChangeLog({
   dismissedEntries,
   coverLetterEntries,
   dismissedCoverLetterEntries,
+  sessionLogs = [],
+  evaluationLogs = [],
+  enhancementLogs = [],
+  downloadLogs = [],
 }) {
   if (!s3) {
     return null;
@@ -11466,6 +11488,10 @@ async function writeSessionChangeLog({
           rejectionReason: entry.rejectionReason || null,
         }))
     : [];
+  const normalizedSessionLogs = normalizeChangeLogActivityArray(sessionLogs);
+  const normalizedEvaluationLogs = normalizeChangeLogActivityArray(evaluationLogs);
+  const normalizedEnhancementLogs = normalizeChangeLogActivityArray(enhancementLogs);
+  const normalizedDownloadLogs = normalizeChangeLogActivityArray(downloadLogs);
   const payload = {
     version: 1,
     jobId,
@@ -11477,6 +11503,10 @@ async function writeSessionChangeLog({
       entries: normalizedCoverLetterEntries,
       dismissedEntries: normalizedDismissedCoverLetters,
     },
+    sessionLogs: normalizedSessionLogs,
+    evaluationLogs: normalizedEvaluationLogs,
+    enhancementLogs: normalizedEnhancementLogs,
+    downloadLogs: normalizedDownloadLogs,
   };
   await s3.send(
     new PutObjectCommand({
@@ -13902,6 +13932,129 @@ function normalizeChangeLogList(value) {
   return text ? [text] : [];
 }
 
+function normalizeActivityString(value, maxLength = MAX_CHANGE_LOG_DETAIL_LENGTH) {
+  const text = normalizeChangeLogString(value);
+  if (!text) {
+    return '';
+  }
+  return truncateChangeLogText(text, maxLength);
+}
+
+function sanitizeChangeLogActivityValue(value, depth = 0) {
+  if (depth > 5) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return normalizeActivityString(value.toISOString());
+  }
+  if (typeof value === 'string') {
+    const text = normalizeActivityString(value);
+    return text ? text : undefined;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const sanitized = value
+      .map((item) => sanitizeChangeLogActivityValue(item, depth + 1))
+      .filter((item) => item !== undefined);
+    return sanitized.length ? sanitized : undefined;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value).reduce((acc, [key, val]) => {
+      const sanitizedValue = sanitizeChangeLogActivityValue(val, depth + 1);
+      if (sanitizedValue !== undefined) {
+        acc[key] = sanitizedValue;
+      }
+      return acc;
+    }, {});
+    return Object.keys(entries).length ? entries : undefined;
+  }
+  return undefined;
+}
+
+function normalizeChangeLogActivityEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const sanitized = sanitizeChangeLogActivityValue(entry);
+  if (!sanitized || typeof sanitized !== 'object' || Array.isArray(sanitized)) {
+    return null;
+  }
+
+  const normalized = { ...sanitized };
+
+  const shortStringFields = [
+    'id',
+    'stage',
+    'stageLabel',
+    'event',
+    'status',
+    'type',
+    'category',
+    'actor',
+    'source',
+    'label',
+    'title',
+  ];
+  const longTextFields = ['message', 'detail', 'description', 'notes', 'resolution', 'summary'];
+
+  shortStringFields.forEach((field) => {
+    if (field in normalized) {
+      const value = normalizeActivityString(normalized[field]);
+      if (value) {
+        normalized[field] = value;
+      } else {
+        delete normalized[field];
+      }
+    }
+  });
+
+  longTextFields.forEach((field) => {
+    if (field in normalized) {
+      const value = normalizeActivityString(normalized[field]);
+      if (value) {
+        normalized[field] = value;
+      } else {
+        delete normalized[field];
+      }
+    }
+  });
+
+  if ('timestamp' in normalized) {
+    const timestamp = normalizeChangeLogString(normalized.timestamp);
+    if (timestamp) {
+      normalized.timestamp = timestamp;
+    } else {
+      delete normalized.timestamp;
+    }
+  }
+
+  Object.keys(normalized).forEach((key) => {
+    if (normalized[key] === undefined || normalized[key] === '') {
+      delete normalized[key];
+    }
+  });
+
+  return Object.keys(normalized).length ? normalized : null;
+}
+
+function normalizeChangeLogActivityArray(entries = []) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+  return entries
+    .map((entry) => normalizeChangeLogActivityEntry(entry))
+    .filter(Boolean);
+}
+
 function normalizeChangeLogSegment(segment = {}) {
   if (!segment || typeof segment !== 'object') {
     return null;
@@ -14859,6 +15012,10 @@ async function handleImprovementRequest(type, req, res) {
   let dismissedChangeLogEntries = [];
   let existingCoverLetterChangeLogEntries = [];
   let dismissedCoverLetterChangeLogEntries = [];
+  let sessionActivityLogs = [];
+  let evaluationActivityLogs = [];
+  let enhancementActivityLogs = [];
+  let downloadActivityLogs = [];
   let jobStatus = '';
   let sessionChangeLogKey = '';
   let targetBucket = '';
@@ -14936,6 +15093,18 @@ async function handleImprovementRequest(type, req, res) {
           sessionChangeLogState?.dismissedCoverLetterEntries
         )
           ? sessionChangeLogState.dismissedCoverLetterEntries
+          : [];
+        sessionActivityLogs = Array.isArray(sessionChangeLogState?.sessionLogs)
+          ? sessionChangeLogState.sessionLogs
+          : [];
+        evaluationActivityLogs = Array.isArray(sessionChangeLogState?.evaluationLogs)
+          ? sessionChangeLogState.evaluationLogs
+          : [];
+        enhancementActivityLogs = Array.isArray(sessionChangeLogState?.enhancementLogs)
+          ? sessionChangeLogState.enhancementLogs
+          : [];
+        downloadActivityLogs = Array.isArray(sessionChangeLogState?.downloadLogs)
+          ? sessionChangeLogState.downloadLogs
           : [];
       } catch (loadErr) {
         logStructured('error', 'improvement_change_log_load_failed', {
@@ -15376,6 +15545,10 @@ async function handleImprovementRequest(type, req, res) {
         dismissedCoverLetterChangeLogEntries: dismissedCoverLetterChangeLogEntries,
         existingRecord,
         userId: res.locals.userId,
+        sessionLogs: sessionActivityLogs,
+        evaluationLogs: evaluationActivityLogs,
+        enhancementLogs: enhancementActivityLogs,
+        downloadLogs: downloadActivityLogs,
       });
 
       if (!enhancedDocs) {
@@ -15853,6 +16026,10 @@ async function generateEnhancedDocumentsResponse({
   userId,
   plainPdfFallbackEnabled = false,
   refreshSessionArtifacts = false,
+  sessionLogs = [],
+  evaluationLogs = [],
+  enhancementLogs = [],
+  downloadLogs = [],
 }) {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (!bucket) {
@@ -16062,6 +16239,10 @@ async function generateEnhancedDocumentsResponse({
   const effectiveDismissedCoverLetterEntries = refreshSessionArtifacts
     ? []
     : dismissedCoverLetterChangeLogEntries;
+  const effectiveSessionLogs = refreshSessionArtifacts ? [] : sessionLogs;
+  const effectiveEvaluationLogs = refreshSessionArtifacts ? [] : evaluationLogs;
+  const effectiveEnhancementLogs = refreshSessionArtifacts ? [] : enhancementLogs;
+  const effectiveDownloadLogs = refreshSessionArtifacts ? [] : downloadLogs;
 
   const normalizedChangeLogEntries = Array.isArray(effectiveChangeLogEntries)
     ? effectiveChangeLogEntries
@@ -16095,6 +16276,16 @@ async function generateEnhancedDocumentsResponse({
           rejectionReason: entry.rejectionReason || null,
         }))
     : [];
+  const normalizedSessionLogs = normalizeChangeLogActivityArray(effectiveSessionLogs);
+  const normalizedEvaluationLogs = normalizeChangeLogActivityArray(
+    effectiveEvaluationLogs
+  );
+  const normalizedEnhancementLogs = normalizeChangeLogActivityArray(
+    effectiveEnhancementLogs
+  );
+  const normalizedDownloadLogs = normalizeChangeLogActivityArray(
+    effectiveDownloadLogs
+  );
 
   const generationRunSegment =
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
@@ -17493,6 +17684,10 @@ async function generateEnhancedDocumentsResponse({
           entries: normalizedCoverLetterEntries,
           dismissedEntries: normalizedDismissedCoverLetterEntries,
         },
+        sessionLogs: normalizedSessionLogs,
+        evaluationLogs: normalizedEvaluationLogs,
+        enhancementLogs: normalizedEnhancementLogs,
+        downloadLogs: normalizedDownloadLogs,
       },
     },
   ];
@@ -17541,6 +17736,10 @@ async function generateEnhancedDocumentsResponse({
       dismissedEntries: normalizedDismissedChangeLogEntries,
       coverLetterEntries: normalizedCoverLetterEntries,
       dismissedCoverLetterEntries: normalizedDismissedCoverLetterEntries,
+      sessionLogs: normalizedSessionLogs,
+      evaluationLogs: normalizedEvaluationLogs,
+      enhancementLogs: normalizedEnhancementLogs,
+      downloadLogs: normalizedDownloadLogs,
     });
     persistedSessionChangeLogResult = persistedChangeLog;
 
@@ -18099,6 +18298,10 @@ async function generateEnhancedDocumentsResponse({
     selectionInsights,
     changeLog: normalizedChangeLogEntries,
     changeLogSummary,
+    sessionLogs: normalizedSessionLogs,
+    evaluationLogs: normalizedEvaluationLogs,
+    enhancementLogs: normalizedEnhancementLogs,
+    downloadLogs: normalizedDownloadLogs,
     coverLetterChangeLog: {
       entries: normalizedCoverLetterEntries,
       dismissedEntries: normalizedDismissedCoverLetterEntries,
@@ -18326,6 +18529,10 @@ app.post(
       let dismissedChangeLogEntries = [];
       let existingCoverLetterEntries = [];
       let dismissedCoverLetterEntries = [];
+      let sessionActivityLogs = [];
+      let evaluationActivityLogs = [];
+      let enhancementActivityLogs = [];
+      let downloadActivityLogs = [];
       let existingRecordItem = {};
       let storedJobDescriptionDigest = '';
       try {
@@ -18392,6 +18599,18 @@ app.post(
             )
               ? sessionState.dismissedCoverLetterEntries
               : [];
+            sessionActivityLogs = Array.isArray(sessionState?.sessionLogs)
+              ? sessionState.sessionLogs
+              : [];
+            evaluationActivityLogs = Array.isArray(sessionState?.evaluationLogs)
+              ? sessionState.evaluationLogs
+              : [];
+            enhancementActivityLogs = Array.isArray(sessionState?.enhancementLogs)
+              ? sessionState.enhancementLogs
+              : [];
+            downloadActivityLogs = Array.isArray(sessionState?.downloadLogs)
+              ? sessionState.downloadLogs
+              : [];
           } catch (sessionErr) {
             logStructured('warn', 'generation_change_log_load_failed', {
               ...logContext,
@@ -18403,6 +18622,10 @@ app.post(
             dismissedChangeLogEntries = [];
             existingCoverLetterEntries = [];
             dismissedCoverLetterEntries = [];
+            sessionActivityLogs = [];
+            evaluationActivityLogs = [];
+            enhancementActivityLogs = [];
+            downloadActivityLogs = [];
           }
         }
       } catch (err) {
@@ -18442,6 +18665,10 @@ app.post(
         dismissedChangeLogEntries = [];
         existingCoverLetterEntries = [];
         dismissedCoverLetterEntries = [];
+        sessionActivityLogs = [];
+        evaluationActivityLogs = [];
+        enhancementActivityLogs = [];
+        downloadActivityLogs = [];
       }
 
       const jobKeySegment = sanitizeJobSegment(jobId);
@@ -18653,6 +18880,10 @@ app.post(
         existingRecord: existingRecordItem,
         userId: res.locals.userId,
         refreshSessionArtifacts,
+        sessionLogs: sessionActivityLogs,
+        evaluationLogs: evaluationActivityLogs,
+        enhancementLogs: enhancementActivityLogs,
+        downloadLogs: downloadActivityLogs,
       });
 
       if (!responseBody) {
@@ -19099,6 +19330,28 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let existingDismissedChangeLogEntries = [];
   let existingCoverLetterEntries = [];
   let existingDismissedCoverLetterEntries = [];
+  let sessionActivityLogs = [];
+  let evaluationActivityLogs = [];
+  let enhancementActivityLogs = [];
+  let downloadActivityLogs = [];
+
+  const resolveActivityLogsInput = (primaryKey, alternativeKeys = []) => {
+    const keys = [primaryKey, ...alternativeKeys];
+    const sources = [req.body, req.body?.logs, req.body?.activityLogs];
+    for (const source of sources) {
+      if (!source || typeof source !== 'object') {
+        continue;
+      }
+      for (const key of keys) {
+        const value = source[key];
+        if (Array.isArray(value)) {
+          return value;
+        }
+      }
+    }
+    return null;
+  };
+
   try {
     const record = await dynamo.send(
       new GetItemCommand({
@@ -19155,6 +19408,18 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         sessionChangeLogState?.dismissedCoverLetterEntries
       )
         ? sessionChangeLogState.dismissedCoverLetterEntries
+        : [];
+      sessionActivityLogs = Array.isArray(sessionChangeLogState?.sessionLogs)
+        ? sessionChangeLogState.sessionLogs
+        : [];
+      evaluationActivityLogs = Array.isArray(sessionChangeLogState?.evaluationLogs)
+        ? sessionChangeLogState.evaluationLogs
+        : [];
+      enhancementActivityLogs = Array.isArray(sessionChangeLogState?.enhancementLogs)
+        ? sessionChangeLogState.enhancementLogs
+        : [];
+      downloadActivityLogs = Array.isArray(sessionChangeLogState?.downloadLogs)
+        ? sessionChangeLogState.downloadLogs
         : [];
     } catch (loadErr) {
       logStructured('error', 'change_log_load_failed', {
@@ -19392,6 +19657,41 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     );
   }
 
+  const sessionLogsInput = resolveActivityLogsInput('sessionLogs', [
+    'sessionLog',
+    'sessionHistory',
+    'session',
+  ]);
+  if (sessionLogsInput !== null) {
+    sessionActivityLogs = normalizeChangeLogActivityArray(sessionLogsInput);
+  }
+
+  const evaluationLogsInput = resolveActivityLogsInput('evaluationLogs', [
+    'evaluationHistory',
+    'evaluation',
+  ]);
+  if (evaluationLogsInput !== null) {
+    evaluationActivityLogs = normalizeChangeLogActivityArray(evaluationLogsInput);
+  }
+
+  const enhancementLogsInput = resolveActivityLogsInput('enhancementLogs', [
+    'enhancementHistory',
+    'enhancements',
+    'enhancement',
+  ]);
+  if (enhancementLogsInput !== null) {
+    enhancementActivityLogs = normalizeChangeLogActivityArray(enhancementLogsInput);
+  }
+
+  const downloadLogsInput = resolveActivityLogsInput('downloadLogs', [
+    'downloadHistory',
+    'downloads',
+    'download',
+  ]);
+  if (downloadLogsInput !== null) {
+    downloadActivityLogs = normalizeChangeLogActivityArray(downloadLogsInput);
+  }
+
   const normalizedChangeLogEntries = updatedChangeLog
     .map((entry) => normalizeChangeLogEntryInput(entry))
     .filter(Boolean);
@@ -19416,6 +19716,14 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       rejectedAt: entry.rejectedAt || nowIso,
       rejectionReason: entry.rejectionReason || 'user_rejected_change',
     }));
+  const normalizedSessionLogs = normalizeChangeLogActivityArray(sessionActivityLogs);
+  const normalizedEvaluationLogs = normalizeChangeLogActivityArray(
+    evaluationActivityLogs
+  );
+  const normalizedEnhancementLogs = normalizeChangeLogActivityArray(
+    enhancementActivityLogs
+  );
+  const normalizedDownloadLogs = normalizeChangeLogActivityArray(downloadActivityLogs);
   const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
     normalizedChangeLogEntries
   );
@@ -19457,6 +19765,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       dismissedEntries: normalizedDismissedEntries,
       coverLetterEntries: normalizedCoverLetterEntriesForResponse,
       dismissedCoverLetterEntries: normalizedDismissedCoverLettersForResponse,
+      sessionLogs: normalizedSessionLogs,
+      evaluationLogs: normalizedEvaluationLogs,
+      enhancementLogs: normalizedEnhancementLogs,
+      downloadLogs: normalizedDownloadLogs,
     });
     persistedSessionChangeLog = persistedChangeLog;
 
@@ -19575,6 +19887,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     success: true,
     changeLog: normalizedChangeLogEntries,
     changeLogSummary,
+    sessionLogs: normalizedSessionLogs,
+    evaluationLogs: normalizedEvaluationLogs,
+    enhancementLogs: normalizedEnhancementLogs,
+    downloadLogs: normalizedDownloadLogs,
     coverLetters: {
       entries: normalizedCoverLetterEntriesForResponse,
       dismissedEntries: normalizedDismissedCoverLettersForResponse,
