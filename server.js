@@ -15824,6 +15824,11 @@ async function generateEnhancedDocumentsResponse({
   const normalizedChangeLogEntries = Array.isArray(changeLogEntries)
     ? changeLogEntries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
     : [];
+  const normalizedDismissedChangeLogEntries = Array.isArray(dismissedChangeLogEntries)
+    ? dismissedChangeLogEntries
+        .map((entry) => normalizeChangeLogEntryInput(entry))
+        .filter(Boolean)
+    : [];
   const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
     normalizedChangeLogEntries
   );
@@ -17235,6 +17240,7 @@ async function generateEnhancedDocumentsResponse({
         jobId,
         generatedAt: artifactTimestamp,
         entries: normalizedChangeLogEntries,
+        dismissedEntries: normalizedDismissedChangeLogEntries,
         summary: changeLogSummary,
         coverLetters: {
           entries: normalizedCoverLetterEntries,
@@ -17285,7 +17291,7 @@ async function generateEnhancedDocumentsResponse({
       jobId,
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
-      dismissedEntries: dismissedChangeLogEntries,
+      dismissedEntries: normalizedDismissedChangeLogEntries,
       coverLetterEntries: normalizedCoverLetterEntries,
       dismissedCoverLetterEntries: normalizedDismissedCoverLetterEntries,
     });
