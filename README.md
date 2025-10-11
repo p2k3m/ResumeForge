@@ -163,7 +163,7 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 
 The canonical domain is tracked in `config/published-cloudfront.json` and mirrored here so anyone with repository access can retrieve the production URL without opening the app.
 
-Run the verification helper whenever you update the distribution to confirm that the published domain responds with the expected health payload:
+Run the verification helper whenever you update the distribution to confirm that the published domain responds with the expected health payload. If the check fails, follow the CloudFront troubleshooting guide in [docs/troubleshooting-cloudfront.md](docs/troubleshooting-cloudfront.md) to validate the recorded metadata and redeploy as needed.
 
 ```bash
 npm run verify:cloudfront
