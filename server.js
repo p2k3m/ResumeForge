@@ -172,6 +172,23 @@ const S3_STORAGE_ERROR_MESSAGE =
   'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.';
 const S3_CHANGE_LOG_ERROR_MESSAGE =
   'Amazon S3 is currently unavailable, so we could not save your updates. Please retry shortly.';
+
+function normalizeMessageList(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return [];
+  }
+  const normalized = [];
+  const seen = new Set();
+  for (const entry of messages) {
+    if (typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
 function formatRetryTemplateDisplayName(templateId) {
   if (!templateId) return '';
   const normalized = String(templateId).trim();
@@ -193,6 +210,106 @@ function buildTemplateRetryMessage(failedTemplateId, fallbackTemplateId) {
       : `${failedLabel} template`
     : 'selected template';
   return `Could not generate PDF for ${failedSegment}, retrying with ${fallbackLabel}`;
+}
+
+function formatDocumentTypeLabel(documentType) {
+  if (!documentType) {
+    return 'document';
+  }
+  const normalized = String(documentType).trim().toLowerCase();
+  if (!normalized) {
+    return 'document';
+  }
+  if (normalized === 'cover_letter' || normalized === 'cover-letter') {
+    return 'cover letter';
+  }
+  if (normalized === 'resume' || normalized === 'cv') {
+    return 'resume';
+  }
+  return normalized.replace(/[_\-]+/g, ' ');
+}
+
+function formatTemplateDisplayNames(templates = [], documentType) {
+  const names = [];
+  const seen = new Set();
+  for (const entry of templates) {
+    if (!entry || typeof entry !== 'string') continue;
+    const trimmed = entry.trim();
+    if (!trimmed) continue;
+    const display =
+      documentType === 'cover_letter'
+        ? formatCoverTemplateDisplayName(trimmed)
+        : formatTemplateDisplayName(trimmed);
+    const normalized = display && display.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    names.push(normalized);
+  }
+  return names;
+}
+
+function formatListForMessage(values = []) {
+  if (!values.length) return '';
+  if (values.length === 1) return values[0];
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  const last = values[values.length - 1];
+  return `${values.slice(0, -1).join(', ')}, and ${last}`;
+}
+
+function buildPdfFailureSummary({ documentType, templates = [], lastError }) {
+  const docLabel = formatDocumentTypeLabel(documentType);
+  const templateNames = formatTemplateDisplayNames(templates, documentType);
+  const templateSegment = templateNames.length
+    ? ` Tried templates: ${formatListForMessage(templateNames)}.`
+    : '';
+  const lastErrorMessage =
+    typeof lastError?.message === 'string' ? lastError.message.trim() : '';
+  const errorSegment = lastErrorMessage ? ` Last error: ${lastErrorMessage}` : '';
+  return `Unable to generate ${docLabel} PDF.${templateSegment}${errorSegment}`.trim();
+}
+
+class PdfGenerationError extends Error {
+  constructor({
+    message,
+    documentType,
+    templates,
+    cause,
+    summary,
+    messages,
+    details,
+    code,
+  } = {}) {
+    const normalizedSummary = summary || message;
+    super(normalizedSummary || 'PDF generation failed.');
+    this.name = 'PdfGenerationError';
+    if (cause) {
+      this.cause = cause;
+    }
+    if (documentType) {
+      this.documentType = documentType;
+    }
+    const templateList = Array.isArray(templates) ? templates.filter(Boolean) : [];
+    if (templateList.length) {
+      this.templates = [...templateList];
+      this.templatesTried = [...templateList];
+    }
+    const normalizedMessages = normalizeMessageList(messages);
+    if (normalizedMessages.length) {
+      this.messages = normalizedMessages;
+    }
+    if (summary) {
+      this.summary = summary;
+    }
+    this.code =
+      typeof code === 'string' && code.trim()
+        ? code.trim()
+        : documentType === 'cover_letter'
+          ? 'COVER_LETTER_GENERATION_FAILED'
+          : 'PDF_GENERATION_FAILED';
+    if (details && typeof details === 'object') {
+      this.details = { ...details };
+    }
+  }
 }
 
 let chromium;
@@ -1248,6 +1365,8 @@ const SERVICE_ERROR_FALLBACK_MESSAGES = {
   DOCUMENT_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
   PROCESSING_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
   GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
+  PDF_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
+  COVER_LETTER_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
   AI_RESPONSE_INVALID: GEMINI_ENHANCEMENT_ERROR_MESSAGE,
 };
 
@@ -1306,6 +1425,19 @@ function sendError(res, status, code, message, details) {
     enrichedDetails = ensureRetryAction(enrichedDetails);
   }
 
+  let detailMessages = [];
+  if (enrichedDetails && typeof enrichedDetails === 'object') {
+    if (Array.isArray(enrichedDetails.messages)) {
+      detailMessages = normalizeMessageList(enrichedDetails.messages);
+      if (detailMessages.length) {
+        enrichedDetails = { ...enrichedDetails, messages: detailMessages };
+      } else {
+        const { messages: _messages, ...rest } = enrichedDetails;
+        enrichedDetails = rest;
+      }
+    }
+  }
+
   const finalMessage =
     !normalizedMessage || /internal server error/i.test(normalizedMessage)
       ? fallbackMessage
@@ -1324,6 +1456,9 @@ function sendError(res, status, code, message, details) {
   }
   const userId = res.locals.userId;
   const payload = { success: false, error };
+  if (detailMessages.length) {
+    payload.messages = detailMessages;
+  }
   logStructured(status >= 500 ? 'error' : 'warn', 'api_error_response', {
     requestId: res.locals.requestId,
     jobId: res.locals.jobId,
@@ -7097,6 +7232,16 @@ function createMinimalPlainPdfBuffer({
   return Buffer.from(pdfContent, 'utf8');
 }
 
+let minimalPlainPdfBufferGenerator = createMinimalPlainPdfBuffer;
+
+function setMinimalPlainPdfBufferGenerator(fn) {
+  if (typeof fn === 'function') {
+    minimalPlainPdfBufferGenerator = fn;
+    return;
+  }
+  minimalPlainPdfBufferGenerator = createMinimalPlainPdfBuffer;
+}
+
 const GENERIC_MIME_TYPES = new Set([
   'application/octet-stream',
   'binary/octet-stream',
@@ -7197,7 +7342,7 @@ function determineUploadContentType(file) {
   return fallbackType;
 }
 
-async function generatePlainPdfFallback({
+async function defaultGeneratePlainPdfFallback({
   requestedTemplateId,
   templateId,
   text,
@@ -7525,7 +7670,7 @@ async function generatePlainPdfFallback({
   }
 
   try {
-    const minimalBuffer = createMinimalPlainPdfBuffer({
+    const minimalBuffer = minimalPlainPdfBufferGenerator({
       lines,
       name,
       jobTitle,
@@ -7557,6 +7702,26 @@ async function generatePlainPdfFallback({
     failure.cause = lastError;
   }
   throw failure;
+}
+
+let plainPdfFallbackOverride = null;
+
+function setPlainPdfFallbackOverride(fn) {
+  if (typeof fn === 'function') {
+    plainPdfFallbackOverride = fn;
+    return;
+  }
+  plainPdfFallbackOverride = null;
+}
+
+async function generatePlainPdfFallback(payload) {
+  if (plainPdfFallbackOverride) {
+    return plainPdfFallbackOverride({
+      ...payload,
+      defaultGenerator: () => defaultGeneratePlainPdfFallback(payload),
+    });
+  }
+  return defaultGeneratePlainPdfFallback(payload);
 }
 
 let templateBackstop = runPdfTemplateBackstop;
@@ -8639,13 +8804,37 @@ async function generatePdfWithFallback({
   const candidates = uniqueTemplates(Array.isArray(templates) ? templates : []);
   const environmentDetails = collectPdfEnvironmentDetails();
   if (!candidates.length) {
-    const error = new Error(`No PDF templates provided for ${documentType}`);
+    const missingTemplatesError = new Error(
+      `No PDF templates provided for ${documentType}`
+    );
+    const summary = buildPdfFailureSummary({
+      documentType,
+      templates: [],
+      lastError: missingTemplatesError,
+    });
+    const failureMessages = normalizeMessageList([summary]);
     logStructured('error', 'pdf_generation_no_templates', {
       ...logContext,
       documentType,
       environment: environmentDetails,
+      summary,
     });
-    throw error;
+    const failureDetails = {
+      documentType,
+      templates: [],
+      messages: failureMessages,
+      summary,
+      reason: missingTemplatesError.message,
+    };
+    throw new PdfGenerationError({
+      message: summary,
+      summary,
+      documentType,
+      templates: [],
+      cause: missingTemplatesError,
+      messages: failureMessages,
+      details: failureDetails,
+    });
   }
 
   const messages = [];
@@ -8929,7 +9118,7 @@ async function generatePdfWithFallback({
   if (fallbackContext) {
     fallbackContext.lastError = lastError;
     try {
-      const minimalBuffer = createMinimalPlainPdfBuffer({
+      const minimalBuffer = minimalPlainPdfBufferGenerator({
         lines: fallbackContext.text.split('\n'),
         name: fallbackContext.name,
         jobTitle: fallbackContext.jobTitle,
@@ -8961,8 +9150,18 @@ async function generatePdfWithFallback({
           : undefined,
         environment: environmentDetails,
       });
+      fallbackContext.lastError = minimalError;
+      lastError = minimalError;
     }
   }
+
+  const summary = buildPdfFailureSummary({
+    documentType,
+    templates: candidates,
+    lastError,
+  });
+  appendMessage(summary);
+  const failureMessages = normalizeMessageList(messages);
 
   logStructured('error', 'pdf_generation_all_attempts_failed', {
     ...logContext,
@@ -8971,18 +9170,112 @@ async function generatePdfWithFallback({
     error: serializeError(lastError),
     targetFilePath: lastAttemptFilePath,
     environment: environmentDetails,
+    summary,
+    messages: failureMessages,
   });
 
-  const failure = new Error(
-    `PDF generation failed for ${documentType}. Tried templates: ${candidates.join(
-      ', '
-    )}`
-  );
-  if (lastError) {
-    failure.cause = lastError;
+  const failureDetails = {
+    documentType,
+    templates: candidates,
+    messages: failureMessages,
+    summary,
+  };
+  if (typeof lastError?.message === 'string' && lastError.message.trim()) {
+    failureDetails.reason = lastError.message.trim();
   }
-  failure.templatesTried = candidates;
+  if (typeof lastAttemptTemplate === 'string') {
+    failureDetails.lastTemplate = lastAttemptTemplate;
+  }
+
+  const failure = new PdfGenerationError({
+    message: summary,
+    summary,
+    documentType,
+    templates: candidates,
+    cause: lastError,
+    messages: failureMessages,
+    details: failureDetails,
+  });
+  if (lastAttemptFilePath) {
+    failure.targetFilePath = lastAttemptFilePath;
+  }
+  if (!failure.templatesTried) {
+    failure.templatesTried = candidates;
+  }
   throw failure;
+}
+
+function extractPdfGenerationError(err) {
+  let current = err;
+  const seen = new Set();
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    if (current instanceof PdfGenerationError) {
+      return current;
+    }
+    seen.add(current);
+    current = current.cause;
+  }
+  return null;
+}
+
+function buildPdfGenerationErrorDetails(error, { source = 'lambda' } = {}) {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+  const baseDetails =
+    error.details && typeof error.details === 'object'
+      ? { ...error.details }
+      : {};
+  if (source && (!baseDetails || typeof baseDetails !== 'object')) {
+    return { source };
+  }
+  if (source && !baseDetails.source) {
+    baseDetails.source = source;
+  }
+  const templateCandidates = [];
+  if (Array.isArray(error.templates)) {
+    templateCandidates.push(...error.templates);
+  }
+  if (Array.isArray(error.templatesTried)) {
+    templateCandidates.push(...error.templatesTried);
+  }
+  const templateSet = new Set();
+  const templates = [];
+  for (const candidate of templateCandidates) {
+    if (typeof candidate !== 'string') continue;
+    const trimmed = candidate.trim();
+    if (!trimmed || templateSet.has(trimmed)) continue;
+    templateSet.add(trimmed);
+    templates.push(trimmed);
+  }
+  if (templates.length && !baseDetails.templates) {
+    baseDetails.templates = templates;
+  }
+  const messageCandidates = [];
+  if (Array.isArray(error.messages)) {
+    messageCandidates.push(...error.messages);
+  }
+  if (Array.isArray(baseDetails.messages)) {
+    messageCandidates.push(...baseDetails.messages);
+  }
+  const normalizedMessages = normalizeMessageList(messageCandidates);
+  if (normalizedMessages.length) {
+    baseDetails.messages = normalizedMessages;
+  } else if (baseDetails.messages) {
+    delete baseDetails.messages;
+  }
+  if (error.summary && !baseDetails.summary) {
+    baseDetails.summary = error.summary;
+  }
+  if (error.documentType && !baseDetails.documentType) {
+    baseDetails.documentType = error.documentType;
+  }
+  const causeMessage =
+    typeof error?.cause?.message === 'string' ? error.cause.message.trim() : '';
+  if (causeMessage && !baseDetails.reason) {
+    baseDetails.reason = causeMessage;
+  }
+  return baseDetails;
 }
 
 function normalizeExtractedText(text = '') {
@@ -17241,7 +17534,7 @@ async function generateEnhancedDocumentsResponse({
 
       if (!originalPdfBuffer) {
         try {
-          originalPdfBuffer = createMinimalPlainPdfBuffer({
+          originalPdfBuffer = minimalPlainPdfBufferGenerator({
             lines: originalResumeForStorage.split('\n'),
             name: applicantName,
             jobTitle: versionsContext.jobTitle || applicantTitle || '',
@@ -18896,6 +19189,25 @@ app.post(
         ...logContext,
         error: serializeError(err),
       });
+      const pdfError = extractPdfGenerationError(err);
+      if (pdfError) {
+        const pdfMessage =
+          (typeof pdfError.summary === 'string' && pdfError.summary.trim()) ||
+          (typeof pdfError.message === 'string' && pdfError.message.trim()) ||
+          CV_GENERATION_ERROR_MESSAGE;
+        const pdfDetails =
+          buildPdfGenerationErrorDetails(pdfError, { source: 'lambda' }) || {};
+        if (pdfMessage && !pdfDetails.summary) {
+          pdfDetails.summary = pdfMessage;
+        }
+        return sendError(
+          res,
+          500,
+          pdfError.code || 'PDF_GENERATION_FAILED',
+          pdfMessage,
+          pdfDetails
+        );
+      }
       const rawMessage =
         typeof err?.message === 'string' && err.message.trim()
           ? err.message.trim()
@@ -19172,6 +19484,33 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
       templateCandidates,
       error: serializeError(err)
     });
+    const pdfError = extractPdfGenerationError(err);
+    if (pdfError) {
+      const pdfMessage =
+        (typeof pdfError.summary === 'string' && pdfError.summary.trim()) ||
+        (typeof pdfError.message === 'string' && pdfError.message.trim()) ||
+        'Unable to generate the cover letter PDF.';
+      const pdfDetails =
+        buildPdfGenerationErrorDetails(pdfError, { source: 'lambda' }) || {};
+      if (!pdfDetails.summary) {
+        pdfDetails.summary = pdfMessage;
+      }
+      if (!pdfDetails.documentType) {
+        pdfDetails.documentType = 'cover_letter';
+      }
+      if (Array.isArray(templateCandidates) && templateCandidates.length) {
+        if (!Array.isArray(pdfDetails.templates) || !pdfDetails.templates.length) {
+          pdfDetails.templates = templateCandidates;
+        }
+      }
+      return sendError(
+        res,
+        500,
+        pdfError.code || 'COVER_LETTER_GENERATION_FAILED',
+        pdfMessage,
+        pdfDetails
+      );
+    }
     return sendError(
       res,
       500,
@@ -21411,6 +21750,9 @@ export {
   generatePdfWithFallback,
   setGeneratePdf,
   setTemplateBackstop,
+  setPlainPdfFallbackOverride,
+  setMinimalPlainPdfBufferGenerator,
+  PdfGenerationError,
   setChromiumLauncher,
   setS3Client,
   setPlainPdfFallbackEngines,

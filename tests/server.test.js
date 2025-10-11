@@ -122,6 +122,9 @@ const {
   setGeneratePdf,
   generatePdfWithFallback,
   setTemplateBackstop,
+  setPlainPdfFallbackOverride,
+  setMinimalPlainPdfBufferGenerator,
+  PdfGenerationError,
   parseContent,
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
@@ -157,6 +160,8 @@ beforeEach(() => {
   setCoverLetterFallbackBuilder();
   mockS3Send.mockReset();
   mockS3Send.mockResolvedValue({});
+  setPlainPdfFallbackOverride();
+  setMinimalPlainPdfBufferGenerator();
 });
 
 describe('health check', () => {
@@ -2322,6 +2327,8 @@ describe('generatePdfWithFallback', () => {
   afterEach(() => {
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
     setTemplateBackstop();
+    setPlainPdfFallbackOverride();
+    setMinimalPlainPdfBufferGenerator();
   });
 
   test('records retry message when 2025 renderer fails', async () => {
@@ -2414,6 +2421,47 @@ describe('generatePdfWithFallback', () => {
     expect(result.messages).toContain(
       'Could not generate PDF for Future Vision 2025 template, retrying with Professional'
     );
+  });
+
+  test('throws explicit PdfGenerationError with summary when all strategies fail', async () => {
+    setGeneratePdf(jest.fn().mockRejectedValue(new Error('Primary renderer offline')));
+    setPlainPdfFallbackOverride(() => {
+      throw new Error('Plain fallback offline');
+    });
+    setMinimalPlainPdfBufferGenerator(() => {
+      throw new Error('Minimal fallback unavailable');
+    });
+
+    const invocation = generatePdfWithFallback({
+      documentType: 'cover_letter',
+      templates: ['cover_modern'],
+      buildOptionsForTemplate: () => ({}),
+      inputText: 'Dear Hiring Manager,\nBody text',
+      generativeModel: null,
+      logContext: {},
+      allowPlainFallback: true,
+    }).catch((error) => {
+      expect(error).toBeInstanceOf(PdfGenerationError);
+      expect(error.code).toBe('COVER_LETTER_GENERATION_FAILED');
+      expect(error.documentType).toBe('cover_letter');
+      expect(error.templates).toEqual(['cover_modern']);
+      expect(error.summary).toMatch(/Unable to generate cover letter PDF/i);
+      expect(error.messages).toContain(
+        'Unable to generate cover letter PDF. Tried templates: Modern Cover Letter. Last error: Minimal fallback unavailable'
+      );
+      expect(error.details).toEqual(
+        expect.objectContaining({
+          documentType: 'cover_letter',
+          templates: ['cover_modern'],
+          messages: expect.arrayContaining([
+            'Unable to generate cover letter PDF. Tried templates: Modern Cover Letter. Last error: Minimal fallback unavailable'
+          ]),
+        })
+      );
+      throw error;
+    });
+
+    await expect(invocation).rejects.toThrow('Unable to generate cover letter PDF');
   });
 });
 

@@ -34,6 +34,8 @@ export { SUPPORTED_RESUME_TEMPLATE_IDS } from './templateRegistry.js'
 
 const CV_GENERATION_ERROR_MESSAGE =
   'Our Lambda resume engine could not generate your PDFs. Please try again shortly.'
+const COVER_LETTER_GENERATION_ERROR_MESSAGE =
+  'Our Lambda resume engine could not generate your cover letter PDF. Please try again shortly.'
 
 const FRIENDLY_ERROR_MESSAGES = {
   INITIAL_UPLOAD_FAILED:
@@ -48,6 +50,8 @@ const FRIENDLY_ERROR_MESSAGES = {
     'Our Lambda resume engine is temporarily unavailable. Please try again shortly.',
   GENERATION_FAILED:
     'Our Lambda resume engine is temporarily unavailable. Please try again shortly.',
+  PDF_GENERATION_FAILED: CV_GENERATION_ERROR_MESSAGE,
+  COVER_LETTER_GENERATION_FAILED: COVER_LETTER_GENERATION_ERROR_MESSAGE,
   AI_RESPONSE_INVALID:
     'Gemini enhancements are temporarily offline. Please try again soon.',
   DOWNLOAD_SESSION_EXPIRED: DOWNLOAD_SESSION_EXPIRED_MESSAGE
@@ -60,6 +64,8 @@ const SERVICE_ERROR_SOURCE_BY_CODE = {
   DOCUMENT_GENERATION_FAILED: 'lambda',
   PROCESSING_FAILED: 'lambda',
   GENERATION_FAILED: 'lambda',
+  PDF_GENERATION_FAILED: 'lambda',
+  COVER_LETTER_GENERATION_FAILED: 'lambda',
   AI_RESPONSE_INVALID: 'gemini',
   DOWNLOAD_SESSION_EXPIRED: 's3'
 }
@@ -71,6 +77,8 @@ const SERVICE_ERROR_STEP_BY_CODE = {
   DOCUMENT_GENERATION_FAILED: 'evaluate',
   PROCESSING_FAILED: 'evaluate',
   GENERATION_FAILED: 'evaluate',
+  PDF_GENERATION_FAILED: 'evaluate',
+  COVER_LETTER_GENERATION_FAILED: 'evaluate',
   AI_RESPONSE_INVALID: 'enhance',
   DOWNLOAD_SESSION_EXPIRED: 'download'
 }
@@ -201,6 +209,29 @@ function resolveApiError({ data, fallback, status }) {
   const isFriendly = Boolean(friendlyFromCode) || message !== rawMessage
 
   return { message, code: normalizedCode, isFriendly, source: normalizedSource }
+}
+
+function extractServerMessages(data) {
+  const candidates = []
+  if (Array.isArray(data?.messages)) {
+    candidates.push(...data.messages)
+  }
+  if (Array.isArray(data?.error?.details?.messages)) {
+    candidates.push(...data.error.details.messages)
+  }
+  if (Array.isArray(data?.error?.messages)) {
+    candidates.push(...data.error.messages)
+  }
+  const seen = new Set()
+  const normalized = []
+  for (const entry of candidates) {
+    if (typeof entry !== 'string') continue
+    const trimmed = entry.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+  return normalized
 }
 
 const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
@@ -6889,6 +6920,12 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
+        const errorMessages = extractServerMessages(errPayload)
+        if (errorMessages.length > 0) {
+          setQueuedMessage(errorMessages[errorMessages.length - 1])
+        } else {
+          setQueuedMessage('')
+        }
         const { message, code, isFriendly, source } = resolveApiError({
           data: errPayload,
           fallback: CV_GENERATION_ERROR_MESSAGE,
@@ -6909,13 +6946,7 @@ function App() {
       }
 
       const data = await response.json()
-      const serverMessages = Array.isArray(data.messages)
-        ? data.messages
-            .map((message) =>
-              typeof message === 'string' ? message.trim() : ''
-            )
-            .filter(Boolean)
-        : []
+      const serverMessages = extractServerMessages(data)
       if (serverMessages.length > 0) {
         setQueuedMessage(serverMessages[serverMessages.length - 1])
       } else {
