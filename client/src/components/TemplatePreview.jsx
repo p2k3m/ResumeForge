@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { canonicalizeTemplateId } from '../templateRegistry.js'
+import TemplatePreviewThumbnail, {
+  getTemplatePreviewVariant
+} from './TemplatePreviewThumbnail.jsx'
 import getCoverTemplateStyle, {
   DEFAULT_COVER_TEMPLATE_STYLE
 } from '../utils/coverTemplateStyles.js'
@@ -788,27 +791,42 @@ function TemplatePreview({
 
           {normalizedResumeTemplates.length > 1 && (
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Preview CV templates">
+              <div
+                className="grid gap-3 sm:grid-cols-2"
+                role="group"
+                aria-label="Preview CV templates"
+              >
                 {normalizedResumeTemplates.map((option) => {
                   const isActive = option.id === previewResumeOption?.id
+                  const variant = getTemplatePreviewVariant(option.id)
                   return (
                     <button
                       key={option.id}
                       type="button"
                       className={cx(
-                        'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
+                        'flex w-full flex-col gap-2 rounded-2xl border bg-white p-3 text-left text-purple-600 transition focus:outline-none focus:ring-2 focus:ring-purple-300',
                         isActive
-                          ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
-                          : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                          ? 'border-purple-400 bg-purple-50/60 text-purple-700 shadow-sm'
+                          : 'border-purple-200 hover:border-purple-300 hover:shadow-sm'
                       )}
                       onClick={() => setPreviewResumeTemplateId(normalizeResumeTemplateId(option.id))}
                     >
-                      {option.name}
-                      {option.id === resumeTemplateId && (
-                        <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
-                          Selected
+                      <TemplatePreviewThumbnail
+                        templateId={option.id}
+                        variant={variant}
+                        testId={`resume-preview-thumbnail-${option.id}`}
+                        className="h-20"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+                          {option.name}
                         </span>
-                      )}
+                        {option.id === resumeTemplateId && (
+                          <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
+                            Selected
+                          </span>
+                        )}
+                      </div>
                     </button>
                   )
                 })}
@@ -914,27 +932,42 @@ function TemplatePreview({
 
           {normalizedCoverTemplates.length > 1 && (
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Preview cover letter templates">
+              <div
+                className="grid gap-3 sm:grid-cols-2"
+                role="group"
+                aria-label="Preview cover letter templates"
+              >
                 {normalizedCoverTemplates.map((option) => {
                   const isActive = option.id === previewCoverOption?.id
+                  const variant = getTemplatePreviewVariant(option.id)
                   return (
                     <button
                       key={option.id}
                       type="button"
                       className={cx(
-                        'rounded-full border px-3 py-1 text-xs font-semibold transition focus:outline-none focus:ring-2 focus:ring-purple-300',
+                        'flex w-full flex-col gap-2 rounded-2xl border bg-white p-3 text-left text-purple-600 transition focus:outline-none focus:ring-2 focus:ring-purple-300',
                         isActive
-                          ? 'border-purple-400 bg-purple-100 text-purple-700 shadow-sm'
-                          : 'border-purple-200 bg-white text-purple-500 hover:border-purple-300 hover:text-purple-600'
+                          ? 'border-purple-400 bg-purple-50/60 text-purple-700 shadow-sm'
+                          : 'border-purple-200 hover:border-purple-300 hover:shadow-sm'
                       )}
                       onClick={() => setPreviewCoverTemplateId(option.id)}
                     >
-                      {option.name}
-                      {option.id === coverTemplateId && (
-                        <span className="ml-1 text-[10px] uppercase tracking-wide text-purple-500">
-                          Selected
+                      <TemplatePreviewThumbnail
+                        templateId={option.id}
+                        variant={variant}
+                        testId={`cover-preview-thumbnail-${option.id}`}
+                        className="h-20"
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+                          {option.name}
                         </span>
-                      )}
+                        {option.id === coverTemplateId && (
+                          <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
+                            Selected
+                          </span>
+                        )}
+                      </div>
                     </button>
                   )
                 })}
