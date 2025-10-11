@@ -2548,7 +2548,7 @@ function App() {
     }
     if (hasCvFile && !hasManualJobDescriptionInput) {
       return {
-        label: 'Resume received. Paste the job description to continue.',
+        label: 'Must paste JD',
         badgeClass:
           'border-amber-200/80 bg-amber-50/80 text-amber-700'
       }
@@ -2582,7 +2582,7 @@ function App() {
       return 'Drag & drop a file or browse to upload. Supported formats: PDF, DOC, or DOCX (max 5 MB).'
     }
     if (!hasManualJobDescriptionInput) {
-      return 'Resume received. Paste the full job description to unlock ATS scoring.'
+      return 'Must paste JD to unlock ATS scoring.'
     }
     if (!scoreMetricCount) {
       return 'Resume and JD ready — we’ll generate your ATS breakdown automatically.'
@@ -3333,7 +3333,7 @@ function App() {
               note = 'Waiting for your resume upload.'
               noteTone = 'info'
             } else if (!hasManualJobDescriptionInput) {
-              note = 'You must supply the JD before we can continue.'
+              note = 'Must paste JD'
               noteTone = 'warning'
             } else {
               note = 'Ready to submit for scoring.'
@@ -3356,7 +3356,7 @@ function App() {
             noteTone = 'info'
           } else if (resumeExperienceMissing) {
             const prefix = scoreComplete ? 'ATS dashboard ready. ' : ''
-            note = `${prefix}CV missing Experience section — would you like to auto-generate it now? Run “Improve Experience” to draft ATS-aligned bullets.`
+            note = `${prefix}Experience section missing, would you like to auto-generate?`
             noteTone = 'warning'
           } else if (scoreComplete) {
             note = 'ATS dashboard ready.'
@@ -3378,7 +3378,7 @@ function App() {
               improvementCount > 0
                 ? ` ${improvementCount} suggestion${improvementCount === 1 ? '' : 's'} ready.`
                 : ''
-            note = `CV missing Experience section — would you like to auto-generate it now? Run “Improve Experience” to draft ATS-aligned bullets.${suggestionText}`
+            note = `Experience section missing, would you like to auto-generate?${suggestionText}`
             noteTone = 'warning'
           } else if (improvementCount > 0) {
             note = `${improvementCount} suggestion${improvementCount === 1 ? '' : 's'} ready.`
