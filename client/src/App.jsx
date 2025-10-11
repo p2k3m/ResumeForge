@@ -1473,6 +1473,19 @@ const ITEM_REASON_HINTS_BY_SUGGESTION = {
   }
 }
 
+const DOWNLOAD_VARIANT_BADGE_STYLES = {
+  original: {
+    text: 'Original',
+    className:
+      'inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-700'
+  },
+  enhanced: {
+    text: 'Enhanced',
+    className:
+      'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700'
+  }
+}
+
 function getDownloadPresentation(file = {}) {
   const type = file?.type || ''
   switch (type) {
@@ -1487,6 +1500,7 @@ function getDownloadPresentation(file = {}) {
         cardBorder: 'border-slate-200',
         linkLabel: 'Download Original CV',
         category: 'resume',
+        variantType: 'original',
         autoPreviewPriority: 4
       }
     case 'version1':
@@ -1500,6 +1514,7 @@ function getDownloadPresentation(file = {}) {
         cardBorder: 'border-emerald-200',
         linkLabel: 'Download Enhanced CV',
         category: 'resume',
+        variantType: 'enhanced',
         autoPreviewPriority: 0
       }
     case 'version2':
@@ -1513,6 +1528,7 @@ function getDownloadPresentation(file = {}) {
         cardBorder: 'border-emerald-200',
         linkLabel: 'Download Enhanced CV',
         category: 'resume',
+        variantType: 'enhanced',
         autoPreviewPriority: 1
       }
     case 'cover_letter1':
@@ -1526,6 +1542,7 @@ function getDownloadPresentation(file = {}) {
         cardBorder: 'border-indigo-200',
         linkLabel: 'Download Cover Letter',
         category: 'cover',
+        variantType: 'enhanced',
         autoPreviewPriority: 2
       }
     case 'cover_letter2':
@@ -1539,6 +1556,7 @@ function getDownloadPresentation(file = {}) {
         cardBorder: 'border-indigo-200',
         linkLabel: 'Download Cover Letter',
         category: 'cover',
+        variantType: 'enhanced',
         autoPreviewPriority: 3
       }
     default:
@@ -1552,6 +1570,7 @@ function getDownloadPresentation(file = {}) {
         cardBorder: 'border-purple-200',
         linkLabel: 'Download File',
         category: 'other',
+        variantType: 'enhanced',
         autoPreviewPriority: 10
       }
   }
@@ -4235,6 +4254,23 @@ function App() {
     const presentation = file.presentation || getDownloadPresentation(file)
     const templateMeta = file.templateMeta
     const templateLabel = templateMeta?.name || ''
+    const rawVariantType =
+      typeof presentation.variantType === 'string'
+        ? presentation.variantType.trim().toLowerCase()
+        : ''
+    const derivedVariantType = (() => {
+      if (rawVariantType && DOWNLOAD_VARIANT_BADGE_STYLES[rawVariantType]) {
+        return rawVariantType
+      }
+      const badgeText =
+        typeof presentation.badgeText === 'string' ? presentation.badgeText.toLowerCase() : ''
+      if (badgeText.includes('original')) return 'original'
+      if (badgeText.includes('enhanced')) return 'enhanced'
+      return ''
+    })()
+    const variantBadge = derivedVariantType
+      ? DOWNLOAD_VARIANT_BADGE_STYLES[derivedVariantType]
+      : null
     const normalizedGeneratedAt = file.generatedAt || downloadGeneratedAt || ''
     const generatedAtLabel = formatDownloadTimestampLabel(normalizedGeneratedAt)
     const generatedAtIso = normalizeIsoTimestamp(normalizedGeneratedAt)
@@ -4376,7 +4412,12 @@ function App() {
       <div key={file.type} className={cardClass}>
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
-            <p className="text-lg font-semibold text-purple-900">{presentation.label}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-lg font-semibold text-purple-900">{presentation.label}</p>
+              {variantBadge && (
+                <span className={variantBadge.className}>{variantBadge.text}</span>
+              )}
+            </div>
             <p className="text-sm text-purple-700/90 leading-relaxed">{presentation.description}</p>
             {metaItems.length > 0 && (
               <p className="text-xs font-medium text-purple-500 flex flex-wrap items-center gap-x-2 gap-y-1">
