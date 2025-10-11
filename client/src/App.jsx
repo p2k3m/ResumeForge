@@ -2430,7 +2430,7 @@ function App() {
       setManualJobDescriptionRequired(false)
       setManualCertificatesInput('')
       setCvFile(null)
-      setSelectedTemplate('modern')
+      setSelectedTemplate((current) => canonicalizeTemplateId(current) || 'modern')
       lastAutoScoreSignatureRef.current = ''
       const inviteMessage = typeof message === 'string' ? message.trim() : ''
       if (inviteMessage) {
