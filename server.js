@@ -29,6 +29,12 @@ const {
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import { logEvent, logErrorTrace } from './logger.js';
+import {
+  executeWithRetry,
+  getErrorStatus,
+  shouldRetryGeminiError,
+  shouldRetryS3Error,
+} from './lib/retry.js';
 import Handlebars from './lib/handlebars.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import mammoth from 'mammoth';
@@ -525,7 +531,10 @@ async function generateLearningResources(skills, context = {}) {
     try {
       const model = await getSharedGenerativeModel();
       if (model?.generateContent) {
-        const response = await model.generateContent(prompt);
+        const response = await generateContentWithRetry(model, prompt, {
+          retryLogEvent: 'learning_resource_generation',
+          retryLogContext: { skills: normalizedSkills },
+        });
         const parsed = parseAiJson(response?.response?.text?.());
         const sanitized = sanitizeLearningResourceEntries(parsed?.resources, {
           missingSkills: normalizedSkills,
@@ -842,6 +851,44 @@ function serializeError(err) {
     }
   }
   return { message: String(err) };
+}
+
+async function generateContentWithRetry(model, prompt, options = {}) {
+  if (!model?.generateContent) {
+    return null;
+  }
+
+  const {
+    maxAttempts = 3,
+    retryLogEvent,
+    retryLogContext = {},
+    baseDelayMs = 800,
+    maxDelayMs = 6000,
+    jitterMs = 400,
+  } = options;
+
+  return await executeWithRetry(
+    () => model.generateContent(prompt),
+    {
+      maxAttempts,
+      baseDelayMs,
+      maxDelayMs,
+      jitterMs,
+      shouldRetry: (err) => shouldRetryGeminiError(err),
+      onRetry: (err, attempt, delayMs) => {
+        if (!retryLogEvent) {
+          return;
+        }
+        logStructured('warn', `${retryLogEvent}_retry`, {
+          ...retryLogContext,
+          attempt,
+          delayMs,
+          status: getErrorStatus(err),
+          error: serializeError(err),
+        });
+      },
+    }
+  );
 }
 
 function toLoggable(value) {
@@ -4412,7 +4459,10 @@ async function runTargetedImprovement(type, context = {}) {
     const model = await getSharedGenerativeModel();
     if (model?.generateContent) {
       const prompt = buildImprovementPrompt(type, promptContext, config.focus);
-      const response = await model.generateContent(prompt);
+      const response = await generateContentWithRetry(model, prompt, {
+        retryLogEvent: 'targeted_improvement_ai',
+        retryLogContext: { type },
+      });
       const parsed = parseAiJson(response?.response?.text?.());
       if (parsed && typeof parsed === 'object') {
         const updated = sanitizeGeneratedText(
@@ -5266,7 +5316,14 @@ async function rewriteSectionsWithGemini(
       'INPUT_CONTEXT:',
       JSON.stringify(inputPayload, null, 2),
     ].join('\n');
-    const result = await generativeModel.generateContent(prompt);
+    const retryContext = {
+      resumeDigest: createTextDigest(name || baseResumeData?.name || ''),
+      hasJobDescription: Boolean(jobDescription),
+    };
+    const result = await generateContentWithRetry(generativeModel, prompt, {
+      retryLogEvent: 'generation_section_rewrite',
+      retryLogContext: retryContext,
+    });
     const parsed = parseAiJson(result?.response?.text?.());
     if (parsed) {
       const resumeData = buildResumeDataFromGeminiOutput(
@@ -5328,7 +5385,7 @@ async function generateProjectSummary(
         `write one concise sentence that begins with "Led a project" and ` +
         `describes a project using those skills.\nJob Description: ${cleaned}\n` +
         `Top Skills: ${skillList}`;
-      const result = await generativeModel.generateContent(prompt);
+      const result = await generateContentWithRetry(generativeModel, prompt);
       const text = result?.response?.text?.().trim() || '';
       if (text) {
         const aiSummary = text.replace(/[(){}]/g, '');
@@ -9648,7 +9705,9 @@ async function classifyDocument(text = '') {
         'Return ONLY valid JSON with keys: type ("resume" or "non_resume"), probableType (string describing the document if not a resume), ' +
         'confidence (0-1), and reason (short explanation). Consider layout clues, section headings, and whether the text emphasises experience.\n\n' +
         `Document excerpt:\n"""${excerpt}"""`;
-      const response = await model.generateContent(prompt);
+      const response = await generateContentWithRetry(model, prompt, {
+        retryLogEvent: 'document_classification_ai',
+      });
       const parsed = parseAiJson(response?.response?.text?.());
       if (parsed && typeof parsed === 'object' && typeof parsed.type === 'string') {
         const type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
@@ -11604,13 +11663,32 @@ async function updateStageMetadata({
       updatedAt: new Date().toISOString(),
     };
 
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: metadataKey,
-        Body: JSON.stringify(nextPayload, null, 2),
-        ContentType: 'application/json',
-      })
+    await executeWithRetry(
+      () =>
+        s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: metadataKey,
+            Body: JSON.stringify(nextPayload, null, 2),
+            ContentType: 'application/json',
+          })
+        ),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 500,
+        maxDelayMs: 4000,
+        jitterMs: 300,
+        shouldRetry: (err) => shouldRetryS3Error(err),
+        onRetry: (err, attempt, delayMs) => {
+          logStructured('warn', 'stage_metadata_update_retry', {
+            ...context,
+            attempt,
+            delayMs,
+            status: getErrorStatus(err),
+            error: serializeError(err),
+          });
+        },
+      }
     );
 
     return true;
@@ -11801,13 +11879,34 @@ async function writeSessionChangeLog({
     enhancementLogs: normalizedEnhancementLogs,
     downloadLogs: normalizedDownloadLogs,
   };
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: resolvedBucket,
-      Key: resolvedKey,
-      Body: JSON.stringify(payload, null, 2),
-      ContentType: 'application/json',
-    })
+  await executeWithRetry(
+    () =>
+      s3.send(
+        new PutObjectCommand({
+          Bucket: resolvedBucket,
+          Key: resolvedKey,
+          Body: JSON.stringify(payload, null, 2),
+          ContentType: 'application/json',
+        })
+      ),
+    {
+      maxAttempts: 4,
+      baseDelayMs: 500,
+      maxDelayMs: 4000,
+      jitterMs: 300,
+      shouldRetry: (err) => shouldRetryS3Error(err),
+      onRetry: (err, attempt, delayMs) => {
+        logStructured('warn', 'session_changelog_write_retry', {
+          jobId,
+          bucket: resolvedBucket,
+          key: resolvedKey,
+          attempt,
+          delayMs,
+          status: getErrorStatus(err),
+          error: serializeError(err),
+        });
+      },
+    }
   );
   return { payload, bucket: resolvedBucket, key: resolvedKey };
 }
@@ -13774,7 +13873,7 @@ async function verifyResume(
       'Job Description:',
       jobDescription,
     ].join('\n');
-    const result = await generativeModel.generateContent(prompt);
+    const result = await generateContentWithRetry(generativeModel, prompt);
     const improved = result?.response?.text?.();
     if (improved) {
       // Run sanitization twice so any guidance bullets introduced by the AI
@@ -16977,7 +17076,17 @@ async function generateEnhancedDocumentsResponse({
     const maxAttempts = 2;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        const coverResult = await generativeModel.generateContent(coverPrompt);
+        const coverResult = await generateContentWithRetry(
+          generativeModel,
+          coverPrompt,
+          {
+            retryLogEvent: 'generation_cover_letters',
+            retryLogContext: {
+              ...logContext,
+              outerAttempt: attempt,
+            },
+          }
+        );
         const coverText = coverResult?.response?.text?.();
         const parsed = parseAiJson(coverText);
         if (parsed && typeof parsed === 'object') {
@@ -17555,13 +17664,35 @@ async function generateEnhancedDocumentsResponse({
 
       if (originalPdfBuffer) {
         try {
-          await s3.send(
-            new PutObjectCommand({
-              Bucket: bucket,
-              Key: originalPdfKey,
-              Body: originalPdfBuffer,
-              ContentType: 'application/pdf',
-            })
+          await executeWithRetry(
+            () =>
+              s3.send(
+                new PutObjectCommand({
+                  Bucket: bucket,
+                  Key: originalPdfKey,
+                  Body: originalPdfBuffer,
+                  ContentType: 'application/pdf',
+                })
+              ),
+            {
+              maxAttempts: 4,
+              baseDelayMs: 500,
+              maxDelayMs: 5000,
+              jitterMs: 300,
+              shouldRetry: (err) => shouldRetryS3Error(err),
+              onRetry: (err, attempt, delayMs) => {
+                logStructured('warn', 'original_upload_pdf_upload_retry', {
+                  ...logContext,
+                  attempt,
+                  delayMs,
+                  originalUploadKey: normalizedOriginalUploadKey,
+                  originalUploadExtension: originalExtension,
+                  storageKey: originalPdfKey,
+                  status: getErrorStatus(err),
+                  error: serializeError(err),
+                });
+              },
+            }
           );
           registerArtifactKey(originalPdfKey);
           uploadedArtifacts.push({ type: 'original_upload', key: originalPdfKey });
@@ -17824,13 +17955,34 @@ async function generateEnhancedDocumentsResponse({
       usedKeys: usedPdfKeys,
     });
 
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: pdfBuffer,
-        ContentType: 'application/pdf',
-      })
+    await executeWithRetry(
+      () =>
+        s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: pdfBuffer,
+            ContentType: 'application/pdf',
+          })
+        ),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 500,
+        maxDelayMs: 5000,
+        jitterMs: 300,
+        shouldRetry: (err) => shouldRetryS3Error(err),
+        onRetry: (err, attempt, delayMs) => {
+          logStructured('warn', 'generation_artifact_upload_retry', {
+            ...logContext,
+            attempt,
+            delayMs,
+            artifactType: name,
+            storageKey: key,
+            status: getErrorStatus(err),
+            error: serializeError(err),
+          });
+        },
+      }
     );
 
     registerArtifactKey(key);
@@ -17987,13 +18139,34 @@ async function generateEnhancedDocumentsResponse({
 
   for (const artifact of textArtifacts) {
     const key = `${textArtifactPrefix}${artifact.fileName}`;
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: JSON.stringify(artifact.payload, null, 2),
-        ContentType: 'application/json',
-      })
+    await executeWithRetry(
+      () =>
+        s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: JSON.stringify(artifact.payload, null, 2),
+            ContentType: 'application/json',
+          })
+        ),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 500,
+        maxDelayMs: 4000,
+        jitterMs: 300,
+        shouldRetry: (err) => shouldRetryS3Error(err),
+        onRetry: (err, attempt, delayMs) => {
+          logStructured('warn', 'generation_text_artifact_upload_retry', {
+            ...logContext,
+            attempt,
+            delayMs,
+            artifactType: artifact.type,
+            storageKey: key,
+            status: getErrorStatus(err),
+            error: serializeError(err),
+          });
+        },
+      }
     );
     registerArtifactKey(key);
     uploadedArtifacts.push({ type: artifact.type, key });
@@ -20789,13 +20962,34 @@ app.post(
   }
 
   try {
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: originalUploadKey,
-        Body: req.file.buffer,
-        ContentType: originalContentType,
-      })
+    await executeWithRetry(
+      () =>
+        s3.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: originalUploadKey,
+            Body: req.file.buffer,
+            ContentType: originalContentType,
+          })
+        ),
+      {
+        maxAttempts: 4,
+        baseDelayMs: 500,
+        maxDelayMs: 5000,
+        jitterMs: 300,
+        shouldRetry: (err) => shouldRetryS3Error(err),
+        onRetry: (err, attempt, delayMs) => {
+          logStructured('warn', 'initial_upload_retry', {
+            ...logContext,
+            bucket,
+            key: originalUploadKey,
+            attempt,
+            delayMs,
+            status: getErrorStatus(err),
+            error: serializeError(err),
+          });
+        },
+      }
     );
     logStructured('info', 'initial_upload_completed', {
       ...logContext,
