@@ -4636,7 +4636,13 @@ function App() {
                       console.warn('Download link refresh failed', refreshErr)
                     }
                   }
+                  return
                 }
+
+                // Allow the browser to handle the download, then reset the UI state.
+                setTimeout(() => {
+                  resetUiAfterDownload()
+                }, 0)
               }}
               className={downloadLinkClass}
               aria-disabled={directDownloadDisabled ? 'true' : undefined}
@@ -4716,7 +4722,8 @@ function App() {
     coverLetterOriginals,
     coverLetterReviewState,
     downloadStates,
-    refreshDownloadLink
+    refreshDownloadLink,
+    resetUiAfterDownload
   ])
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
@@ -8941,7 +8948,12 @@ function App() {
                                   console.warn('Preview download refresh failed', refreshErr)
                                 }
                               }
+                              return
                             }
+
+                            setTimeout(() => {
+                              resetUiAfterDownload()
+                            }, 0)
                           }}
                           className={previewDownloadLinkClass}
                           aria-disabled={previewLinkDisabled ? 'true' : undefined}
