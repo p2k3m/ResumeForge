@@ -195,7 +195,7 @@ Resources:
             Path: /api/process-cv
             Method: ANY
       Environment: &ResumeForgeFunctionEnvironment
-        Variables:
+        Variables: &ResumeForgeFunctionEnvironmentVariables
           S3_BUCKET: !Ref DataBucketName
           RESUME_TABLE_NAME: !Ref ResumeTableName
           GEMINI_API_KEY: !If
@@ -204,6 +204,7 @@ Resources:
             - !Ref GeminiApiKey
           PRIMARY_REGION: !Ref AWS::Region
           SECONDARY_REGION: !Ref SecondaryRegion
+          STAGE_NAME: !Ref StageName
       Policies: &ResumeForgeFunctionPolicies
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -374,6 +375,14 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
+  DocumentGenerationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ResumeForgeDocumentGeneration-${AWS::StackName}.fifo
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      VisibilityTimeout: 900
+
   DocumentGenerationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -402,11 +411,49 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/render-cover-letter
             Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          DOCUMENT_GENERATION_QUEUE_URL: !GetAtt DocumentGenerationQueue.QueueUrl
+      Policies: *ResumeForgeFunctionPolicies
+      Layers: []
+    Metadata:
+      BuildMethod: makefile
+
+  DocumentGenerationWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeDocumentGenerationWorker
+      CodeUri: .
+      Handler: lambdas/documentGenerationWorker.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      Events:
+        DocumentGenerationQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt DocumentGenerationQueue.Arn
+            BatchSize: 1
       Environment: *ResumeForgeFunctionEnvironment
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
     Metadata:
       BuildMethod: makefile
+
+  DocumentGenerationSendPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ResumeForgeDocumentGenerationSend
+      Roles:
+        - !Ref DocumentGenerationFunctionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: !GetAtt DocumentGenerationQueue.Arn
 
   AuditingFunction:
     Type: AWS::Serverless::Function
