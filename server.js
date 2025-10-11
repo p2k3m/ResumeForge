@@ -903,6 +903,30 @@ let errorLogS3Client;
 let errorLogBucket;
 const ERROR_LOG_PREFIX = 'logs/errors/';
 
+function createErrorLogDescriptor(entry = {}) {
+  const now = new Date();
+  const timestamp = now.toISOString();
+  const fallbackRequestId = `request-${createIdentifier()}`;
+  const fallbackTimestamp = `ts-${createIdentifier()}`;
+  const dateSegment = sanitizeS3KeyComponent(timestamp.slice(0, 10), {
+    fallback: 'unknown-date',
+  }) || 'unknown-date';
+  const safeTimestampSegment =
+    sanitizeS3KeyComponent(timestamp, { fallback: fallbackTimestamp }) ||
+    sanitizeS3KeyComponent(fallbackTimestamp) ||
+    fallbackTimestamp;
+  const safeRequestSegment =
+    sanitizeS3KeyComponent(entry.requestId, { fallback: fallbackRequestId }) ||
+    sanitizeS3KeyComponent(fallbackRequestId) ||
+    fallbackRequestId;
+  const normalizedPrefix = ERROR_LOG_PREFIX.replace(/^\/+/, '');
+  const prefix = normalizedPrefix.endsWith('/')
+    ? normalizedPrefix
+    : `${normalizedPrefix}/`;
+  const key = `${prefix}${dateSegment}/${safeTimestampSegment}-${safeRequestSegment}.json`;
+  return { key, timestamp };
+}
+
 function ensureRequestContext(requestId) {
   if (!requestId) {
     return undefined;
@@ -1018,24 +1042,59 @@ function scheduleErrorLog(entry) {
     return;
   }
   const payload = { ...entry };
+  const descriptor = createErrorLogDescriptor(payload);
+  if (payload.requestId) {
+    updateRequestContext(payload.requestId, {
+      errorLogReference: {
+        bucket: errorLogBucket,
+        key: descriptor.key,
+        timestamp: descriptor.timestamp,
+        status: 'pending',
+      },
+    });
+  }
   scheduleTask(() => {
     logErrorTrace({
       s3: errorLogS3Client,
       bucket: errorLogBucket,
       prefix: ERROR_LOG_PREFIX,
-      entry: payload,
-    }).catch((err) => {
-      const fallback = {
-        timestamp: new Date().toISOString(),
-        level: 'error',
-        message: 's3_error_log_failed',
-        error: serializeError(err),
-      };
-      try {
-        console.error(JSON.stringify(fallback));
-      } catch {
-        console.error('Failed to persist error log', err);
-      }
+      entry: { ...payload, timestamp: descriptor.timestamp },
+      key: descriptor.key,
+    })
+      .then(() => {
+        if (payload.requestId && getRequestContext(payload.requestId)) {
+          updateRequestContext(payload.requestId, {
+            errorLogReference: {
+              bucket: errorLogBucket,
+              key: descriptor.key,
+              timestamp: descriptor.timestamp,
+              status: 'stored',
+            },
+          });
+        }
+      })
+      .catch((err) => {
+        if (payload.requestId && getRequestContext(payload.requestId)) {
+          updateRequestContext(payload.requestId, {
+            errorLogReference: {
+              bucket: errorLogBucket,
+              key: descriptor.key,
+              timestamp: descriptor.timestamp,
+              status: 'failed',
+            },
+          });
+        }
+        const fallback = {
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          message: 's3_error_log_failed',
+          error: serializeError(err),
+        };
+        try {
+          console.error(JSON.stringify(fallback));
+        } catch {
+          console.error('Failed to persist error log', err);
+        }
     });
   });
 }
@@ -1470,6 +1529,44 @@ function sendError(res, status, code, message, details) {
 
   if (shouldOfferRetry && hasDetailsContent) {
     enrichedDetails = ensureRetryAction(enrichedDetails);
+  }
+
+  if (status >= 500) {
+    const requestId = res.locals.requestId;
+    if (requestId) {
+      const context = getRequestContext(requestId);
+      const reference = context?.errorLogReference;
+      if (reference?.bucket && reference?.key) {
+        const logEntry = {
+          bucket: reference.bucket,
+          key: reference.key,
+        };
+        if (reference.status && reference.status !== 'stored') {
+          logEntry.status = reference.status;
+        }
+        const existingLogs =
+          enrichedDetails &&
+          typeof enrichedDetails === 'object' &&
+          typeof enrichedDetails.logs === 'object'
+            ? enrichedDetails.logs
+            : undefined;
+        const mergedLogs = {
+          ...(existingLogs || {}),
+          s3: {
+            ...(existingLogs?.s3 || {}),
+            ...logEntry,
+          },
+        };
+        if (!enrichedDetails || typeof enrichedDetails !== 'object') {
+          enrichedDetails = { logs: mergedLogs };
+        } else {
+          enrichedDetails = {
+            ...enrichedDetails,
+            logs: mergedLogs,
+          };
+        }
+      }
+    }
   }
 
   let detailMessages = [];

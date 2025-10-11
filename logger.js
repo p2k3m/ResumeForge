@@ -107,22 +107,29 @@ export async function logErrorTrace({
   s3,
   bucket,
   entry,
-  prefix = 'logs/errors/'
+  prefix = 'logs/errors/',
+  key,
 }) {
   if (!s3 || !bucket || !entry) {
     return;
   }
 
-  const timestamp = new Date().toISOString();
-  const dateSegment = timestamp.slice(0, 10);
+  const resolvedTimestamp =
+    typeof entry?.timestamp === 'string' && entry.timestamp.trim()
+      ? entry.timestamp
+      : new Date().toISOString();
+  const dateSegment = resolvedTimestamp.slice(0, 10);
   const requestSegment = sanitizeKeySegment(entry.requestId) || makeRandomId();
-  const tsSegment = sanitizeKeySegment(timestamp) || makeRandomId();
+  const tsSegment = sanitizeKeySegment(resolvedTimestamp) || makeRandomId();
   const safePrefix = normalisePrefix(prefix);
-  const key = `${safePrefix}${dateSegment}/${tsSegment}-${requestSegment}.json`;
+  const objectKey =
+    typeof key === 'string' && key.trim()
+      ? key.trim()
+      : `${safePrefix}${dateSegment}/${tsSegment}-${requestSegment}.json`;
 
   const payload = {
     ...entry,
-    timestamp
+    timestamp: resolvedTimestamp,
   };
 
   await executeWithRetry(
@@ -130,7 +137,7 @@ export async function logErrorTrace({
       s3.send(
         new PutObjectCommand({
           Bucket: bucket,
-          Key: key,
+          Key: objectKey,
           Body: JSON.stringify(payload),
           ContentType: 'application/json'
         })
