@@ -65,7 +65,15 @@ function normalizeMethod(method) {
     : 'ANY';
 }
 
-export function createServiceHandler({ allowedRoutes = [], binaryTypes = DEFAULT_BINARY_TYPES } = {}) {
+export function createServiceHandler({
+  serviceName = 'service',
+  allowedRoutes = [],
+  binaryTypes = DEFAULT_BINARY_TYPES,
+} = {}) {
+  if (!Array.isArray(allowedRoutes) || allowedRoutes.length === 0) {
+    throw new Error(`createServiceHandler requires at least one allowed route for ${serviceName}.`);
+  }
+
   const normalizedRoutes = allowedRoutes.map((route) => ({
     method: normalizeMethod(route?.method),
     path: route?.path ? String(route.path) : '*',
@@ -98,7 +106,12 @@ export function createServiceHandler({ allowedRoutes = [], binaryTypes = DEFAULT
             'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
           'Access-Control-Allow-Methods': 'OPTIONS,GET,POST',
         },
-        body: JSON.stringify({ message: 'Not Found' }),
+        body: JSON.stringify({
+          message: 'Not Found',
+          service: serviceName,
+          requestedPath: path,
+          requestedMethod: method,
+        }),
       };
     }
 

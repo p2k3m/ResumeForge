@@ -21,6 +21,21 @@ Every interaction is processed via the serverless Express Lambda/API Gateway sta
 
 > Need the storage deep-dive? Share [docs/storage-model.md](docs/storage-model.md) with engineers and SystemOps to explain the S3 layout and download flow.
 
+## Microservice layout
+
+ResumeForge now deploys six discrete Lambda functions, each fronted by dedicated API Gateway resources. This keeps cold starts predictable and prevents resume upload traffic from competing with AI-heavy scoring or document generation flows. The microservice catalogue lives in [`microservices/services.js`](microservices/services.js) and is summarised below (see [docs/microservices.md](docs/microservices.md) for the architecture deep-dive):
+
+| Service | Lambda handler | API surface |
+| --- | --- | --- |
+| Resume upload | `lambdas/resumeUpload.handler` | `POST /api/process-cv` |
+| Job description evaluation | `lambdas/jobEvaluation.handler` | `POST /api/jd/evaluate` |
+| Scoring | `lambdas/scoring.handler` | `POST /api/score-match`, `POST /api/rescore-improvement` |
+| Enhancement | `lambdas/enhancement.handler` | `POST /api/improve-*`, `POST /api/enhance-all` |
+| Document generation | `lambdas/documentGeneration.handler` | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
+| Auditing & metrics | `lambdas/auditing.handler` | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
+
+Each handler is created with `createServiceHandler`, which mounts the shared Express app but rejects out-of-scope routes with a `404` that includes the service name for observability. Because the SAM template wires every endpoint to its corresponding function, an upload failure never exhausts scoring capacity and vice versa.
+
 ### Multi-stage, user-driven improvement
 
 ResumeForge is intentionally cyclical for regular users: upload a résumé, evaluate against the target job, accept or reject suggested edits, and immediately run the analysis again. Each evaluation pass uses the candidate's latest choices, so the updated ATS dashboard, probability of selection, and narrative insights always reflect their current draft. Because the candidate controls when to accept edits or trigger another analysis run, the improvement loop stays user-directed rather than automatic, making it easy to experiment with targeted changes before finalising downloads.

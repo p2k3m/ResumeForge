@@ -1,8 +1,4 @@
 import { createServiceHandler } from '../microservices/createServiceHandler.js';
+import { getServiceConfig } from '../microservices/services.js';
 
-export const handler = createServiceHandler({
-  allowedRoutes: [
-    { method: 'POST', path: '/api/score-match' },
-    { method: 'POST', path: '/api/rescore-improvement' },
-  ],
-});
+export const handler = createServiceHandler(getServiceConfig('scoring'));
