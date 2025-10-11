@@ -2,7 +2,7 @@
 
 This guide walks a candidate through ResumeForge end to end so every action has a clearly defined outcome.
 
-> **Start here:** [`https://d3exampleabcdef8.cloudfront.net`](https://d3exampleabcdef8.cloudfront.net) is the active CloudFront entry point. Share this link with candidates so they always land on the latest deployment.
+> **Start here:** [`https://dk892hgnzrcsl.cloudfront.net`](https://dk892hgnzrcsl.cloudfront.net) is the active CloudFront entry point. Share this link with candidates so they always land on the latest deployment.
 
 ## 1. Upload a résumé
 - **What to do:** Drag-and-drop or browse for a PDF, DOC, or DOCX résumé.
