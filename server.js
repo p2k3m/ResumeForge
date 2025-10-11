@@ -14584,18 +14584,12 @@ const MAX_CHANGE_LOG_DIFF_LENGTH = 5000;
 const MAX_CHANGE_LOG_RESUME_TEXT_LENGTH = 10000;
 const MAX_COVER_LETTER_CHANGE_LOG_TEXT_LENGTH = 10000;
 const MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH = 20000;
-const MAX_DYNAMO_ITEM_BYTES = 400 * 1024;
-const CHANGE_LOG_DYNAMO_SIZE_BUDGET = 350 * 1024;
 const CHANGE_LOG_FIELD_LIMITS = Object.freeze({
   detail: MAX_CHANGE_LOG_DETAIL_LENGTH,
   diff: MAX_CHANGE_LOG_DIFF_LENGTH,
   resume: MAX_CHANGE_LOG_RESUME_TEXT_LENGTH,
   history: MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH,
   suffix: CHANGE_LOG_TRUNCATION_SUFFIX,
-});
-const CHANGE_LOG_DYNAMO_LIMITS = Object.freeze({
-  maxItemBytes: MAX_DYNAMO_ITEM_BYTES,
-  budget: CHANGE_LOG_DYNAMO_SIZE_BUDGET,
 });
 
 function normalizeChangeLogString(value) {
@@ -14998,25 +14992,6 @@ function normalizeChangeLogHistoryContext(input) {
   return Object.keys(context).length ? context : null;
 }
 
-function stringifyChangeLogHistoryContext(context) {
-  if (!context || typeof context !== 'object') {
-    return '';
-  }
-  try {
-    const serialized = JSON.stringify(context);
-    if (
-      typeof MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH === 'number' &&
-      MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH > 0 &&
-      serialized.length > MAX_CHANGE_LOG_HISTORY_CONTEXT_LENGTH
-    ) {
-      return '';
-    }
-    return serialized;
-  } catch (err) {
-    return '';
-  }
-}
-
 function isCoverLetterEntryIdentifier(value) {
   const identifier = normalizeChangeLogString(value);
   if (!identifier) {
@@ -15355,217 +15330,6 @@ function parseDynamoChangeLog(attribute) {
   }).filter(Boolean);
 }
 
-function toDynamoStringList(values = []) {
-  if (!Array.isArray(values) || !values.length) {
-    return undefined;
-  }
-  const normalized = values
-    .map((value) => normalizeChangeLogString(value))
-    .filter(Boolean);
-  if (!normalized.length) {
-    return undefined;
-  }
-  return { L: normalized.map((value) => ({ S: value })) };
-}
-
-function toDynamoSummarySegments(segments = []) {
-  if (!Array.isArray(segments) || !segments.length) {
-    return undefined;
-  }
-  const normalized = segments
-    .map((segment) => normalizeChangeLogSegment(segment))
-    .filter(Boolean);
-  if (!normalized.length) {
-    return undefined;
-  }
-  return {
-    L: normalized.map((segment) => {
-      const map = {};
-      if (segment.section) {
-        map.section = { S: segment.section };
-      }
-      const added = toDynamoStringList(segment.added);
-      if (added) {
-        map.added = added;
-      }
-      const removed = toDynamoStringList(segment.removed);
-      if (removed) {
-        map.removed = removed;
-      }
-      const reason = toDynamoStringList(segment.reason);
-      if (reason) {
-        map.reason = reason;
-      }
-      return { M: map };
-    }),
-  };
-}
-
-function toDynamoItemizedChanges(changes = []) {
-  if (!Array.isArray(changes) || !changes.length) {
-    return undefined;
-  }
-  const normalized = changes
-    .map((change) => normalizeChangeLogItemizedChange(change))
-    .filter(Boolean);
-  if (!normalized.length) {
-    return undefined;
-  }
-  return {
-    L: normalized.map((change) => {
-      const map = {
-        item: { S: change.item },
-      };
-      if (change.changeType) {
-        map.changeType = { S: change.changeType };
-      }
-      const reasons = toDynamoStringList(change.reasons);
-      if (reasons) {
-        map.reasons = reasons;
-      }
-      return { M: map };
-    }),
-  };
-}
-
-function toDynamoCategoryChangelog(entries = []) {
-  if (!Array.isArray(entries) || !entries.length) {
-    return undefined;
-  }
-
-  const normalized = entries
-    .map((entry) => normalizeChangeLogCategoryEntry(entry))
-    .filter(Boolean);
-
-  if (!normalized.length) {
-    return undefined;
-  }
-
-  return {
-    L: normalized.map((entry) => {
-      const map = {};
-      if (entry.key) {
-        map.key = { S: entry.key };
-      }
-      if (entry.label) {
-        map.label = { S: entry.label };
-      }
-      if (entry.description) {
-        map.description = { S: entry.description };
-      }
-      const added = toDynamoStringList(entry.added);
-      if (added) {
-        map.added = added;
-      }
-      const removed = toDynamoStringList(entry.removed);
-      if (removed) {
-        map.removed = removed;
-      }
-      const reasons = toDynamoStringList(entry.reasons);
-      if (reasons) {
-        map.reasons = reasons;
-      }
-
-      return { M: map };
-    }),
-  };
-}
-
-function serializeChangeLogEntries(entries = []) {
-  if (!Array.isArray(entries) || !entries.length) {
-    return [];
-  }
-
-  return entries
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
-      const normalized = normalizeChangeLogEntryInput(entry);
-      if (!normalized) {
-        return null;
-      }
-
-      const map = {
-        id: { S: normalized.id },
-      };
-      if (normalized.type) {
-        map.type = { S: normalized.type };
-      }
-      if (normalized.title) {
-        map.title = { S: normalized.title };
-      }
-      if (normalized.detail) {
-        map.detail = { S: normalized.detail };
-      }
-      if (normalized.label) {
-        map.label = { S: normalized.label };
-      }
-      if (normalized.before) {
-        map.before = { S: normalized.before };
-      }
-      if (normalized.after) {
-        map.after = { S: normalized.after };
-      }
-      if (normalized.resumeBeforeText) {
-        map.resumeBeforeText = { S: normalized.resumeBeforeText };
-      }
-      if (normalized.resumeAfterText) {
-        map.resumeAfterText = { S: normalized.resumeAfterText };
-      }
-      const addedItems = toDynamoStringList(normalized.addedItems);
-      if (addedItems) {
-        map.addedItems = addedItems;
-      }
-      const removedItems = toDynamoStringList(normalized.removedItems);
-      if (removedItems) {
-        map.removedItems = removedItems;
-      }
-      const summarySegments = toDynamoSummarySegments(normalized.summarySegments);
-      if (summarySegments) {
-        map.summarySegments = summarySegments;
-      }
-      const itemizedChanges = toDynamoItemizedChanges(normalized.itemizedChanges);
-      if (itemizedChanges) {
-        map.itemizedChanges = itemizedChanges;
-      }
-      const categoryChangelog = toDynamoCategoryChangelog(normalized.categoryChangelog);
-      if (categoryChangelog) {
-        map.categoryChangelog = categoryChangelog;
-      }
-      if (typeof normalized.scoreDelta === 'number' && Number.isFinite(normalized.scoreDelta)) {
-        map.scoreDelta = { N: String(normalized.scoreDelta) };
-      }
-      const acceptedAt = normalizeChangeLogString(normalized.acceptedAt);
-      if (acceptedAt) {
-        map.acceptedAt = { S: acceptedAt };
-      }
-      const historyContextString = stringifyChangeLogHistoryContext(
-        normalized.historyContext
-      );
-      if (historyContextString) {
-        map.historyContext = { S: historyContextString };
-      }
-      if (normalized.reverted) {
-        map.reverted = { BOOL: true };
-      }
-      if (normalized.revertedAt) {
-        map.revertedAt = { S: normalized.revertedAt };
-      }
-      if (normalized.rejected) {
-        map.rejected = { BOOL: true };
-      }
-      if (normalized.rejectedAt) {
-        map.rejectedAt = { S: normalized.rejectedAt };
-      }
-      if (normalized.rejectionReason) {
-        map.rejectionReason = { S: normalized.rejectionReason };
-      }
-
-      return { M: map };
-    })
-    .filter(Boolean);
-}
 
 function normalizeChangeLogSummaryPayload(summary) {
   const defaultTotals = {
@@ -15681,101 +15445,6 @@ function normalizeChangeLogSummaryPayload(summary) {
   return { categories, highlights, totals, interviewPrepAdvice };
 }
 
-function cloneSerializedChangeLogEntries(serializedEntries = []) {
-  if (!Array.isArray(serializedEntries)) {
-    return [];
-  }
-
-  return serializedEntries
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object' || !entry.M) {
-        return null;
-      }
-
-      const clonedMap = Object.entries(entry.M).reduce((acc, [key, value]) => {
-        if (value && typeof value === 'object') {
-          acc[key] = JSON.parse(JSON.stringify(value));
-        } else {
-          acc[key] = value;
-        }
-        return acc;
-      }, {});
-
-      return { M: clonedMap };
-    })
-    .filter(Boolean);
-}
-
-function calculateDynamoAttributeSize(attribute) {
-  try {
-    return Buffer.byteLength(JSON.stringify(attribute));
-  } catch (err) {
-    return Number.MAX_SAFE_INTEGER;
-  }
-}
-
-function enforceChangeLogDynamoSize(serializedEntries = [], {
-  budget = CHANGE_LOG_DYNAMO_SIZE_BUDGET,
-  hardLimit = MAX_DYNAMO_ITEM_BYTES,
-} = {}) {
-  if (!Array.isArray(serializedEntries) || !serializedEntries.length) {
-    return [];
-  }
-
-  const safeBudget = Math.min(Math.max(0, budget || 0), hardLimit || MAX_DYNAMO_ITEM_BYTES);
-  const wrapper = { L: cloneSerializedChangeLogEntries(serializedEntries) };
-  let size = calculateDynamoAttributeSize(wrapper);
-
-  if (size <= safeBudget) {
-    return wrapper.L;
-  }
-
-  const trimmingStages = [
-    ['historyContext'],
-    ['resumeBeforeText', 'resumeAfterText'],
-    ['before', 'after'],
-    ['detail'],
-    ['summarySegments', 'itemizedChanges', 'categoryChangelog'],
-    ['addedItems', 'removedItems'],
-  ];
-
-  const recalculateSize = () => {
-    size = calculateDynamoAttributeSize(wrapper);
-    return size;
-  };
-
-  for (const fields of trimmingStages) {
-    if (wrapper.L.length === 0 || size <= safeBudget) {
-      break;
-    }
-
-    for (let index = wrapper.L.length - 1; index >= 0 && size > safeBudget; index -= 1) {
-      const entry = wrapper.L[index];
-      if (!entry || !entry.M) {
-        continue;
-      }
-
-      let changed = false;
-      for (const field of fields) {
-        if (entry.M[field]) {
-          delete entry.M[field];
-          changed = true;
-        }
-      }
-
-      if (changed) {
-        recalculateSize();
-      }
-    }
-  }
-
-  while (wrapper.L.length && size > safeBudget) {
-    wrapper.L.pop();
-    recalculateSize();
-  }
-
-  return wrapper.L;
-}
 
 async function handleImprovementRequest(type, req, res) {
   const payload = req.body || {};
@@ -20797,17 +20466,6 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   const resolvedSessionSegment = requestSessionIdentifier || existingSessionId;
   const resolvedDateSegment = existingUploadedAt ? existingUploadedAt.slice(0, 10) : '';
 
-  const serializedChangeLogEntries = serializeChangeLogEntries(
-    normalizedChangeLogEntries
-  );
-  const dynamoChangeLogEntries = enforceChangeLogDynamoSize(
-    serializedChangeLogEntries,
-    {
-      budget: CHANGE_LOG_DYNAMO_LIMITS.budget,
-      hardLimit: CHANGE_LOG_DYNAMO_LIMITS.maxItemBytes,
-    }
-  );
-
   if (!sessionChangeLogKey) {
     sessionChangeLogKey = deriveSessionChangeLogKey({ originalUploadKey });
   }
@@ -20947,13 +20605,18 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   const expressionAttributeValues = {
     ':jobId': { S: jobId },
     ':updatedAt': { S: nowIso },
-    ':changeLog': { L: Array.isArray(dynamoChangeLogEntries) ? dynamoChangeLogEntries : [] },
   };
-  let updateExpression = 'SET changeLog = :changeLog, changeLogUpdatedAt = :updatedAt';
+  const setExpressions = ['changeLogUpdatedAt = :updatedAt'];
+  const removeExpressions = ['changeLog'];
 
   if (sessionChangeLogKey) {
     expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
-    updateExpression += ', sessionChangeLogKey = :sessionChangeLogKey';
+    setExpressions.push('sessionChangeLogKey = :sessionChangeLogKey');
+  }
+
+  let updateExpression = `SET ${setExpressions.join(', ')}`;
+  if (removeExpressions.length) {
+    updateExpression += ` REMOVE ${removeExpressions.join(', ')}`;
   }
 
   try {
@@ -22637,7 +22300,6 @@ export {
   buildTemplateSectionContext,
   buildTemplateContactEntries,
   CHANGE_LOG_FIELD_LIMITS,
-  CHANGE_LOG_DYNAMO_LIMITS,
   mapCoverLetterFields,
   auditCoverLetterStructure,
   ensureOutputFileUrls,

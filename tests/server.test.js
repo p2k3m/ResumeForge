@@ -129,7 +129,6 @@ const {
   parseContent,
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
-  CHANGE_LOG_DYNAMO_LIMITS,
   setCoverLetterFallbackBuilder,
 } = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
@@ -2674,6 +2673,7 @@ describe('change log persistence safeguards', () => {
     };
 
     const updateCommands = [];
+    const putCommands = [];
     mockDynamoSend.mockImplementation((cmd) => {
       switch (cmd.__type) {
         case 'DescribeTableCommand':
@@ -2692,6 +2692,12 @@ describe('change log persistence safeguards', () => {
           return Promise.resolve({});
       }
     });
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command);
+      }
+      return Promise.resolve({});
+    });
 
     const response = await request(app)
       .post('/api/change-log')
@@ -2709,90 +2715,31 @@ describe('change log persistence safeguards', () => {
     expect(response.status).toBe(200);
     expect(updateCommands).toHaveLength(1);
     const updateCommand = updateCommands[0];
-    const { ExpressionAttributeValues } = updateCommand.input;
-    const serializedEntries = ExpressionAttributeValues[':changeLog'].L;
-    expect(serializedEntries).toHaveLength(1);
+    const { ExpressionAttributeValues, UpdateExpression } = updateCommand.input;
+    expect(ExpressionAttributeValues).not.toHaveProperty(':changeLog');
+    expect(UpdateExpression).toContain('SET changeLogUpdatedAt = :updatedAt');
+    expect(UpdateExpression).toContain('REMOVE changeLog');
 
-    const entryMap = serializedEntries[0].M;
-    expect(entryMap.detail.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.detail);
-    expect(entryMap.detail.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
-    expect(entryMap.resumeBeforeText.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
-    expect(entryMap.resumeBeforeText.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
-    expect(entryMap.resumeAfterText.S.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
-    expect(entryMap.resumeAfterText.S.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
-    expect(entryMap.historyContext).toBeUndefined();
+    const putChangeLog = putCommands.find(
+      (command) => command.__type === 'PutObjectCommand'
+    );
+    expect(putChangeLog).toBeDefined();
+    const payload = JSON.parse(putChangeLog.input.Body);
+    expect(Array.isArray(payload.entries)).toBe(true);
+    expect(payload.entries).toHaveLength(1);
+
+    const [entry] = payload.entries;
+    expect(entry.detail.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.detail);
+    expect(entry.detail.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
+    expect(entry.resumeBeforeText.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
+    expect(entry.resumeBeforeText.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
+    expect(entry.resumeAfterText.length).toBeLessThanOrEqual(CHANGE_LOG_FIELD_LIMITS.resume);
+    expect(entry.resumeAfterText.endsWith(CHANGE_LOG_FIELD_LIMITS.suffix)).toBe(true);
   });
-
-  test('removes heavy fields from older entries when exceeding Dynamo size limits', async () => {
-    const largeResume = 'R'.repeat(CHANGE_LOG_FIELD_LIMITS.resume);
-    const largeDetail = 'D'.repeat(CHANGE_LOG_FIELD_LIMITS.detail);
-    const existingEntries = Array.from({ length: 30 }, (_, index) => ({
-      M: {
-        id: { S: `entry-${index}` },
-        detail: { S: largeDetail },
-        resumeBeforeText: { S: largeResume },
-        resumeAfterText: { S: largeResume },
-        acceptedAt: { S: `2024-01-01T00:00:${String(index).padStart(2, '0')}Z` },
-      },
-    }));
-
-    const updateCommands = [];
-    mockDynamoSend.mockImplementation((cmd) => {
-      switch (cmd.__type) {
-        case 'DescribeTableCommand':
-          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
-        case 'GetItemCommand':
-          return Promise.resolve({
-            Item: {
-              jobId: { S: 'job-oversize' },
-              changeLog: { L: existingEntries },
-            },
-          });
-        case 'UpdateItemCommand':
-          updateCommands.push(cmd);
-          return Promise.resolve({});
-        default:
-          return Promise.resolve({});
-      }
-    });
-
-    const response = await request(app)
-      .post('/api/change-log')
-      .send({
-        jobId: 'job-oversize',
-        entry: {
-          id: 'new-entry',
-          detail: largeDetail,
-          resumeBeforeText: largeResume,
-          resumeAfterText: largeResume,
-        },
-      });
-
-    expect(response.status).toBe(200);
-    expect(updateCommands).toHaveLength(1);
-
-    const updateCommand = updateCommands[0];
-    const { ExpressionAttributeValues } = updateCommand.input;
-    const dynamoChangeLog = ExpressionAttributeValues[':changeLog'];
-
-    const attributeSize = Buffer.byteLength(JSON.stringify(dynamoChangeLog));
-    expect(attributeSize).toBeLessThanOrEqual(CHANGE_LOG_DYNAMO_LIMITS.budget);
-
-    const [latestEntry, ...olderEntries] = dynamoChangeLog.L;
-    expect(latestEntry.M.id.S).toBe('new-entry');
-    expect(latestEntry.M.resumeBeforeText).toBeDefined();
-    expect(latestEntry.M.resumeAfterText).toBeDefined();
-
-    const oldestEntry = olderEntries[olderEntries.length - 1];
-    expect(oldestEntry.M.resumeBeforeText).toBeUndefined();
-    expect(oldestEntry.M.resumeAfterText).toBeUndefined();
-
-    setupDefaultDynamoMock();
-  });
-
   test('persists category changelog details for ATS, skills, and related sections', async () => {
     mockS3Send.mockClear();
     const updateCommands = [];
+    const putCommands = [];
     mockDynamoSend.mockImplementation((cmd) => {
       switch (cmd.__type) {
         case 'DescribeTableCommand':
@@ -2810,6 +2757,12 @@ describe('change log persistence safeguards', () => {
         default:
           return Promise.resolve({});
       }
+    });
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command);
+      }
+      return Promise.resolve({});
     });
 
     const entryPayload = {
@@ -2842,17 +2795,9 @@ describe('change log persistence safeguards', () => {
     expect(updateCommands).toHaveLength(1);
 
     const updateCommand = updateCommands[0];
-    const serializedEntries = updateCommand.input.ExpressionAttributeValues[':changeLog'].L;
-    expect(serializedEntries).toHaveLength(1);
-
-    const serializedCategory = serializedEntries[0].M.categoryChangelog;
-    expect(serializedCategory).toBeDefined();
-    expect(serializedCategory.L).toHaveLength(2);
-    const [skillsEntry, atsEntry] = serializedCategory.L.map((item) => item.M);
-    expect(skillsEntry.key.S).toBe('skills');
-    expect(skillsEntry.added.L[0].S).toBe('Kubernetes');
-    expect(skillsEntry.reasons.L[0].S).toContain('better fit to JD');
-    expect(atsEntry.key.S).toBe('ats');
+    const { ExpressionAttributeValues, UpdateExpression } = updateCommand.input;
+    expect(ExpressionAttributeValues).not.toHaveProperty(':changeLog');
+    expect(UpdateExpression).toContain('REMOVE changeLog');
 
     const [responseEntry] = response.body.changeLog;
     expect(responseEntry.categoryChangelog).toEqual([
@@ -2891,19 +2836,15 @@ describe('change log persistence safeguards', () => {
       })
     );
 
-    const putCommands = mockS3Send.mock.calls.filter(
-      ([command]) => command.__type === 'PutObjectCommand'
+    const changeLogWrite = putCommands.find(
+      (command) => command.__type === 'PutObjectCommand'
     );
-    const changeLogWrite = putCommands.find(([command]) => {
-      try {
-        const body = JSON.parse(command.input.Body);
-        return Array.isArray(body.entries);
-      } catch (err) {
-        return false;
-      }
-    });
     expect(changeLogWrite).toBeDefined();
-    const storedPayload = JSON.parse(changeLogWrite[0].input.Body);
+    const storedPayload = JSON.parse(changeLogWrite.input.Body);
+    expect(Array.isArray(storedPayload.entries)).toBe(true);
+    expect(storedPayload.entries).toHaveLength(1);
+    const persistedEntry = storedPayload.entries[0];
+    expect(persistedEntry.categoryChangelog).toEqual(responseEntry.categoryChangelog);
     expect(storedPayload.summary).toEqual(
       expect.objectContaining({
         highlights: expect.arrayContaining([
