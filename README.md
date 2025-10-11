@@ -61,6 +61,7 @@ The runtime looks for the following keys:
 - `GEMINI_API_KEY` – Google Gemini API key. This value must be supplied via the environment; the server verifies a non-empty value is present and never logs the secret.
 - `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Provide the bucket name through the `S3_BUCKET` environment variable so artifacts are stored in the correct account and region.
 - `CLOUDFRONT_ORIGINS` – Optional, comma-separated list of CloudFront origins that are permitted through the server's CORS middleware. Include your distribution domain to restrict browser calls to trusted hosts.
+- `ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP` – Optional toggle that removes the session change log from S3 when a download session expires. Enable this flag when aggressively reclaiming storage for large-scale environments; leave it unset to retain audit history.
 - `AWS_REGION`, `PORT`, and `RESUME_TABLE_NAME` can continue to come from the environment. Reasonable defaults are provided for local development.
 
 Because the configuration is loaded and cached once, the service reuses the same credentials across requests instead of recreating clients every time.
@@ -68,7 +69,7 @@ Because the configuration is loaded and cached once, the service reuses the same
 ### Privacy and data handling
 
 - DynamoDB stores candidate names, LinkedIn URLs, IP addresses, and user agents exactly as submitted (only trimmed for whitespace) so ongoing sessions can be resumed without any anonymisation or background cleanup processes.
-- Generated PDFs, cover letters, and the canonical change log (`logs/change-log.json`) are stored in S3 only for the active session that produced them. Old keys are overwritten as users regenerate documents, so the bucket naturally keeps just the current versions without relying on scheduled deletion jobs.
+- Generated PDFs, cover letters, and the canonical change log (`logs/change-log.json`) are stored in S3 only for the active session that produced them. Old keys are overwritten as users regenerate documents, so the bucket naturally keeps just the current versions without relying on scheduled deletion jobs. When `ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP` is enabled, expired sessions also drop their change log file from S3 to free storage for large multi-tenant deployments.
 
 ### Required parameters for AWS deployment
 
