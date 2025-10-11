@@ -1002,6 +1002,48 @@ function normalizeErrorDetails(details) {
   return { value: details };
 }
 
+function isRetryActionEntry(entry) {
+  if (!entry) {
+    return false;
+  }
+  if (typeof entry === 'string') {
+    return entry.trim().toLowerCase() === 'retry';
+  }
+  if (typeof entry === 'object') {
+    const candidates = [entry.type, entry.key, entry.label, entry.action];
+    return candidates.some(
+      (value) => typeof value === 'string' && value.trim().toLowerCase() === 'retry'
+    );
+  }
+  return false;
+}
+
+function ensureRetryAction(details) {
+  const base =
+    details && typeof details === 'object'
+      ? { ...details }
+      : {};
+  const normalizedActions = [];
+  const appendAction = (value) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(appendAction);
+      return;
+    }
+    normalizedActions.push(value);
+  };
+
+  appendAction(base.actions);
+
+  if (!normalizedActions.some(isRetryActionEntry)) {
+    normalizedActions.push('retry');
+  }
+
+  return { ...base, actions: normalizedActions };
+}
+
 function detectServiceErrorSource({ code, message, details }) {
   const normalizedCode = typeof code === 'string' ? code.trim().toUpperCase() : '';
   const textSegments = [];
@@ -1213,6 +1255,9 @@ function sendError(res, status, code, message, details) {
     : {};
 
   const shouldAnnotateSource = status >= 500 && hasExplicitDetails;
+  const shouldOfferRetry =
+    status >= 500 ||
+    (typeof code === 'string' && /FAILED|UNAVAILABLE|ERROR|TIMEOUT/i.test(code));
   let enrichedDetails = baseDetails;
 
   if (shouldAnnotateSource) {
@@ -1238,6 +1283,10 @@ function sendError(res, status, code, message, details) {
         details: enrichedDetails,
       });
     }
+  }
+
+  if (shouldOfferRetry) {
+    enrichedDetails = ensureRetryAction(enrichedDetails);
   }
 
   const finalMessage =

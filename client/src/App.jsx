@@ -78,12 +78,31 @@ const SERVICE_ERROR_STEP_BY_SOURCE = {
   gemini: 'enhance'
 }
 
+const RETRYABLE_SERVICE_SOURCES = new Set(['s3', 'lambda', 'gemini'])
+const RETRYABLE_ERROR_CODE_PATTERNS = ['FAILED', 'UNAVAILABLE', 'ERROR', 'TIMEOUT']
+
 function normalizeServiceSource(value) {
   if (typeof value !== 'string') {
     return ''
   }
   const normalized = value.trim().toLowerCase()
   return ['s3', 'lambda', 'gemini'].includes(normalized) ? normalized : ''
+}
+
+function isRetryableServiceSource(source) {
+  const normalized = normalizeServiceSource(source)
+  return normalized ? RETRYABLE_SERVICE_SOURCES.has(normalized) : false
+}
+
+function isRetryableErrorCode(code) {
+  if (typeof code !== 'string') {
+    return false
+  }
+  const normalized = code.trim().toUpperCase()
+  if (!normalized) {
+    return false
+  }
+  return RETRYABLE_ERROR_CODE_PATTERNS.some((pattern) => normalized.includes(pattern))
 }
 
 function deriveServiceContextFromError(err) {
@@ -2269,20 +2288,17 @@ function App() {
           : ''
     const trimmedMessage = nextMessage.trim()
     setErrorState(trimmedMessage)
+    const allowRetryOption =
+      typeof options?.allowRetry === 'boolean' ? options.allowRetry : undefined
     const rawRecoveryKey =
       typeof options?.recovery === 'string' && options.recovery.trim()
         ? options.recovery.trim()
-        : options?.allowRetry
+        : allowRetryOption
           ? 'generation'
           : ''
-    const normalizedRecoveryKey = rawRecoveryKey
+    let normalizedRecoveryKey = rawRecoveryKey
       ? rawRecoveryKey.toLowerCase()
       : ''
-    if (trimmedMessage && normalizedRecoveryKey) {
-      setErrorRecovery(normalizedRecoveryKey)
-    } else {
-      setErrorRecovery(null)
-    }
     if (trimmedMessage) {
       const providedCode =
         typeof options?.errorCode === 'string'
@@ -2296,6 +2312,13 @@ function App() {
               SERVICE_ERROR_SOURCE_BY_CODE[providedCode] || ''
             )
           : '')
+      if (
+        !normalizedRecoveryKey &&
+        allowRetryOption !== false &&
+        (isRetryableErrorCode(providedCode) || isRetryableServiceSource(derivedSource))
+      ) {
+        normalizedRecoveryKey = 'generation'
+      }
       if (derivedSource || providedCode) {
         setErrorContext({ source: derivedSource, code: providedCode })
       } else {
@@ -2303,6 +2326,11 @@ function App() {
       }
     } else {
       setErrorContext({ source: '', code: '' })
+    }
+    if (trimmedMessage && normalizedRecoveryKey) {
+      setErrorRecovery(normalizedRecoveryKey)
+    } else {
+      setErrorRecovery(null)
     }
   }, [setErrorContext])
   const [queuedMessage, setQueuedMessage] = useState('')
