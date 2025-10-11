@@ -1521,6 +1521,72 @@ describe('/api/process-cv', () => {
     });
   });
 
+  describe('resume size handling', () => {
+    const MB = 1024 * 1024;
+    const withinLimitCases = [
+      {
+        label: 'small PDF (128 KB)',
+        filename: 'small.pdf',
+        contentType: 'application/pdf',
+        size: 128 * 1024,
+      },
+      {
+        label: 'mid-sized DOCX (2 MB)',
+        filename: 'mid.docx',
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 2 * MB,
+      },
+      {
+        label: 'near-limit PDF (just under 5 MB)',
+        filename: 'near-limit.pdf',
+        contentType: 'application/pdf',
+        size: 5 * MB - 1024,
+      },
+    ];
+
+    test.each(withinLimitCases)(
+      'accepts $label uploads up to 5 MB',
+      async ({ filename, contentType, size }) => {
+        const buffer = Buffer.alloc(size, 0);
+
+        const response = await request(app)
+          .post('/api/process-cv')
+          .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+          .attach('resume', buffer, { filename, contentType });
+
+        expect(response.status).toBe(200);
+        expect(response.body.success).toBe(true);
+        expect(response.body.resumeText || response.body.originalResumeText).toEqual(
+          expect.any(String)
+        );
+      }
+    );
+
+    test('rejects resumes larger than 5 MB', async () => {
+      const oversized = Buffer.alloc(5 * MB + 1024, 0);
+
+      const response = await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .attach('resume', oversized, {
+          filename: 'oversized.pdf',
+          contentType: 'application/pdf',
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({
+        success: false,
+        error: {
+          code: 'UPLOAD_VALIDATION_FAILED',
+          message: 'File too large',
+          requestId: expect.any(String),
+          jobId: expect.any(String),
+          details: { field: 'resume' },
+        },
+      });
+    });
+  });
+
   test('rejects non-resume content with descriptive feedback', async () => {
     pdfParseMock.mockResolvedValueOnce({
       text: 'Invoice Number: 12345\nBill To: Example Corp\nPayment Terms: Net 30 days',
