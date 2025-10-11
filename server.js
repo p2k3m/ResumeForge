@@ -4531,6 +4531,48 @@ class JobDescriptionFetchBlockedError extends Error {
   }
 }
 
+async function sendS3CommandWithRetry(
+  s3Client,
+  commandFactory,
+  {
+    maxAttempts = 4,
+    baseDelayMs = 500,
+    maxDelayMs = 6000,
+    jitterMs = 400,
+    retryLogEvent,
+    retryLogContext = {},
+  } = {}
+) {
+  if (!s3Client || typeof s3Client.send !== 'function') {
+    throw new Error('A valid S3 client must be provided for retries.');
+  }
+
+  const operation = () => {
+    const command = typeof commandFactory === 'function' ? commandFactory() : commandFactory;
+    return s3Client.send(command);
+  };
+
+  return await executeWithRetry(operation, {
+    maxAttempts,
+    baseDelayMs,
+    maxDelayMs,
+    jitterMs,
+    shouldRetry: (err) => shouldRetryS3Error(err),
+    onRetry: (err, attempt, delayMs) => {
+      if (!retryLogEvent) {
+        return;
+      }
+      logStructured('warn', retryLogEvent, {
+        ...retryLogContext,
+        attempt,
+        delayMs,
+        status: getErrorStatus(err),
+        error: serializeError(err),
+      });
+    },
+  });
+}
+
 function isJobDescriptionFetchBlocked(err = {}) {
   if (err instanceof JobDescriptionFetchBlockedError) {
     return true;
@@ -11626,8 +11668,14 @@ async function updateStageMetadata({
   try {
     let existingPayload = {};
     try {
-      const existing = await s3.send(
-        new GetObjectCommand({ Bucket: bucket, Key: metadataKey })
+      const existing = await sendS3CommandWithRetry(
+        s3,
+        () => new GetObjectCommand({ Bucket: bucket, Key: metadataKey }),
+        {
+          maxAttempts: 3,
+          baseDelayMs: 300,
+          maxDelayMs: 2500,
+        }
       );
       const raw = await streamToString(existing.Body);
       if (raw) {
@@ -11663,31 +11711,22 @@ async function updateStageMetadata({
       updatedAt: new Date().toISOString(),
     };
 
-    await executeWithRetry(
+    await sendS3CommandWithRetry(
+      s3,
       () =>
-        s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: metadataKey,
-            Body: JSON.stringify(nextPayload, null, 2),
-            ContentType: 'application/json',
-          })
-        ),
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: metadataKey,
+          Body: JSON.stringify(nextPayload, null, 2),
+          ContentType: 'application/json',
+        }),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
         maxDelayMs: 4000,
         jitterMs: 300,
-        shouldRetry: (err) => shouldRetryS3Error(err),
-        onRetry: (err, attempt, delayMs) => {
-          logStructured('warn', 'stage_metadata_update_retry', {
-            ...context,
-            attempt,
-            delayMs,
-            status: getErrorStatus(err),
-            error: serializeError(err),
-          });
-        },
+        retryLogEvent: 'stage_metadata_update_retry',
+        retryLogContext: context,
       }
     );
 
@@ -11706,7 +11745,15 @@ async function readJsonFromS3({ s3, bucket, key }) {
     return null;
   }
   try {
-    const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const response = await sendS3CommandWithRetry(
+      s3,
+      () => new GetObjectCommand({ Bucket: bucket, Key: key }),
+      {
+        maxAttempts: 3,
+        baseDelayMs: 300,
+        maxDelayMs: 2500,
+      }
+    );
     const raw = await streamToString(response.Body);
     if (!raw) {
       return null;
@@ -11879,32 +11926,25 @@ async function writeSessionChangeLog({
     enhancementLogs: normalizedEnhancementLogs,
     downloadLogs: normalizedDownloadLogs,
   };
-  await executeWithRetry(
+  await sendS3CommandWithRetry(
+    s3,
     () =>
-      s3.send(
-        new PutObjectCommand({
-          Bucket: resolvedBucket,
-          Key: resolvedKey,
-          Body: JSON.stringify(payload, null, 2),
-          ContentType: 'application/json',
-        })
-      ),
+      new PutObjectCommand({
+        Bucket: resolvedBucket,
+        Key: resolvedKey,
+        Body: JSON.stringify(payload, null, 2),
+        ContentType: 'application/json',
+      }),
     {
       maxAttempts: 4,
       baseDelayMs: 500,
       maxDelayMs: 4000,
       jitterMs: 300,
-      shouldRetry: (err) => shouldRetryS3Error(err),
-      onRetry: (err, attempt, delayMs) => {
-        logStructured('warn', 'session_changelog_write_retry', {
-          jobId,
-          bucket: resolvedBucket,
-          key: resolvedKey,
-          attempt,
-          delayMs,
-          status: getErrorStatus(err),
-          error: serializeError(err),
-        });
+      retryLogEvent: 'session_changelog_write_retry',
+      retryLogContext: {
+        jobId,
+        bucket: resolvedBucket,
+        key: resolvedKey,
       },
     }
   );
@@ -16283,11 +16323,20 @@ async function handleExpiredDownloadSession({
   if (s3 && cleanupBucket && uniqueClearedKeys.length) {
     const deleteResults = await Promise.allSettled(
       uniqueClearedKeys.map((key) =>
-        s3.send(
-          new DeleteObjectCommand({
-            Bucket: cleanupBucket,
-            Key: key,
-          })
+        sendS3CommandWithRetry(
+          s3,
+          () =>
+            new DeleteObjectCommand({
+              Bucket: cleanupBucket,
+              Key: key,
+            }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 3000,
+            retryLogEvent: 'download_session_artifact_delete_retry',
+            retryLogContext: { ...logContext, bucket: cleanupBucket, key },
+          }
         )
       )
     );
@@ -16534,11 +16583,20 @@ async function generateEnhancedDocumentsResponse({
 
       const results = await Promise.allSettled(
         keys.map((key) =>
-          s3.send(
-            new DeleteObjectCommand({
-              Bucket: bucket,
-              Key: key,
-            })
+          sendS3CommandWithRetry(
+            s3,
+            () =>
+              new DeleteObjectCommand({
+                Bucket: bucket,
+                Key: key,
+              }),
+            {
+              maxAttempts: 3,
+              baseDelayMs: 300,
+              maxDelayMs: 3000,
+              retryLogEvent: `${structuredEventName}_retry`,
+              retryLogContext: { ...logContext, bucket, key, reason },
+            }
           )
         )
       );
@@ -17692,33 +17750,26 @@ async function generateEnhancedDocumentsResponse({
 
       if (originalPdfBuffer) {
         try {
-          await executeWithRetry(
+          await sendS3CommandWithRetry(
+            s3,
             () =>
-              s3.send(
-                new PutObjectCommand({
-                  Bucket: bucket,
-                  Key: originalPdfKey,
-                  Body: originalPdfBuffer,
-                  ContentType: 'application/pdf',
-                })
-              ),
+              new PutObjectCommand({
+                Bucket: bucket,
+                Key: originalPdfKey,
+                Body: originalPdfBuffer,
+                ContentType: 'application/pdf',
+              }),
             {
               maxAttempts: 4,
               baseDelayMs: 500,
               maxDelayMs: 5000,
               jitterMs: 300,
-              shouldRetry: (err) => shouldRetryS3Error(err),
-              onRetry: (err, attempt, delayMs) => {
-                logStructured('warn', 'original_upload_pdf_upload_retry', {
-                  ...logContext,
-                  attempt,
-                  delayMs,
-                  originalUploadKey: normalizedOriginalUploadKey,
-                  originalUploadExtension: originalExtension,
-                  storageKey: originalPdfKey,
-                  status: getErrorStatus(err),
-                  error: serializeError(err),
-                });
+              retryLogEvent: 'original_upload_pdf_upload_retry',
+              retryLogContext: {
+                ...logContext,
+                originalUploadKey: normalizedOriginalUploadKey,
+                originalUploadExtension: originalExtension,
+                storageKey: originalPdfKey,
               },
             }
           );
@@ -17983,33 +18034,22 @@ async function generateEnhancedDocumentsResponse({
       usedKeys: usedPdfKeys,
     });
 
-    await executeWithRetry(
+    await sendS3CommandWithRetry(
+      s3,
       () =>
-        s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: pdfBuffer,
-            ContentType: 'application/pdf',
-          })
-        ),
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: pdfBuffer,
+          ContentType: 'application/pdf',
+        }),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
         maxDelayMs: 5000,
         jitterMs: 300,
-        shouldRetry: (err) => shouldRetryS3Error(err),
-        onRetry: (err, attempt, delayMs) => {
-          logStructured('warn', 'generation_artifact_upload_retry', {
-            ...logContext,
-            attempt,
-            delayMs,
-            artifactType: name,
-            storageKey: key,
-            status: getErrorStatus(err),
-            error: serializeError(err),
-          });
-        },
+        retryLogEvent: 'generation_artifact_upload_retry',
+        retryLogContext: { ...logContext, artifactType: name, storageKey: key },
       }
     );
 
@@ -18167,32 +18207,25 @@ async function generateEnhancedDocumentsResponse({
 
   for (const artifact of textArtifacts) {
     const key = `${textArtifactPrefix}${artifact.fileName}`;
-    await executeWithRetry(
+    await sendS3CommandWithRetry(
+      s3,
       () =>
-        s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: JSON.stringify(artifact.payload, null, 2),
-            ContentType: 'application/json',
-          })
-        ),
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: JSON.stringify(artifact.payload, null, 2),
+          ContentType: 'application/json',
+        }),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
         maxDelayMs: 4000,
         jitterMs: 300,
-        shouldRetry: (err) => shouldRetryS3Error(err),
-        onRetry: (err, attempt, delayMs) => {
-          logStructured('warn', 'generation_text_artifact_upload_retry', {
-            ...logContext,
-            attempt,
-            delayMs,
-            artifactType: artifact.type,
-            storageKey: key,
-            status: getErrorStatus(err),
-            error: serializeError(err),
-          });
+        retryLogEvent: 'generation_text_artifact_upload_retry',
+        retryLogContext: {
+          ...logContext,
+          artifactType: artifact.type,
+          storageKey: key,
         },
       }
     );
@@ -18276,11 +18309,25 @@ async function generateEnhancedDocumentsResponse({
       previousSessionChangeLogKey !== nextSessionChangeLogKey
     ) {
       try {
-        await s3.send(
-          new DeleteObjectCommand({
-            Bucket: cleanupBucket,
-            Key: previousSessionChangeLogKey,
-          })
+        await sendS3CommandWithRetry(
+          s3,
+          () =>
+            new DeleteObjectCommand({
+              Bucket: cleanupBucket,
+              Key: previousSessionChangeLogKey,
+            }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 2500,
+            retryLogEvent: 'session_change_log_cleanup_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket: cleanupBucket,
+              key: previousSessionChangeLogKey,
+              reason: 'replaced',
+            },
+          }
         );
         logStructured('info', 'session_change_log_removed', {
           ...logContext,
@@ -20415,11 +20462,25 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       typeof cleanupBucket === 'string' ? cleanupBucket.trim() : '';
     if (normalizedCleanupBucket) {
       try {
-        await s3.send(
-          new DeleteObjectCommand({
-            Bucket: normalizedCleanupBucket,
-            Key: previousSessionChangeLogKey,
-          })
+        await sendS3CommandWithRetry(
+          s3,
+          () =>
+            new DeleteObjectCommand({
+              Bucket: normalizedCleanupBucket,
+              Key: previousSessionChangeLogKey,
+            }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 2500,
+            retryLogEvent: 'session_change_log_cleanup_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket: normalizedCleanupBucket,
+              key: previousSessionChangeLogKey,
+              reason: 'relocated',
+            },
+          }
         );
         logStructured('info', 'session_change_log_removed', {
           ...logContext,
@@ -21047,33 +21108,22 @@ app.post(
   }
 
   try {
-    await executeWithRetry(
+    await sendS3CommandWithRetry(
+      s3,
       () =>
-        s3.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: originalUploadKey,
-            Body: req.file.buffer,
-            ContentType: originalContentType,
-          })
-        ),
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: originalUploadKey,
+          Body: req.file.buffer,
+          ContentType: originalContentType,
+        }),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
         maxDelayMs: 5000,
         jitterMs: 300,
-        shouldRetry: (err) => shouldRetryS3Error(err),
-        onRetry: (err, attempt, delayMs) => {
-          logStructured('warn', 'initial_upload_retry', {
-            ...logContext,
-            bucket,
-            key: originalUploadKey,
-            attempt,
-            delayMs,
-            status: getErrorStatus(err),
-            error: serializeError(err),
-          });
-        },
+        retryLogEvent: 'initial_upload_retry',
+        retryLogContext: { ...logContext, bucket, key: originalUploadKey },
       }
     );
     logStructured('info', 'initial_upload_completed', {
@@ -21215,16 +21265,46 @@ app.post(
 
   if (finalUploadKey !== originalUploadKey) {
     try {
-      await s3.send(
-        new CopyObjectCommand({
-          Bucket: bucket,
-          CopySource: buildCopySource(bucket, originalUploadKey),
-          Key: finalUploadKey,
-          MetadataDirective: 'COPY'
-        })
+      await sendS3CommandWithRetry(
+        s3,
+        () =>
+          new CopyObjectCommand({
+            Bucket: bucket,
+            CopySource: buildCopySource(bucket, originalUploadKey),
+            Key: finalUploadKey,
+            MetadataDirective: 'COPY'
+          }),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 500,
+          maxDelayMs: 5000,
+          jitterMs: 300,
+          retryLogEvent: 'raw_upload_relocation_retry',
+          retryLogContext: {
+            ...logContext,
+            bucket,
+            fromKey: originalUploadKey,
+            toKey: finalUploadKey,
+            operation: 'copy',
+          },
+        }
       );
-      await s3.send(
-        new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey })
+      await sendS3CommandWithRetry(
+        s3,
+        () => new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+        {
+          maxAttempts: 3,
+          baseDelayMs: 300,
+          maxDelayMs: 3000,
+          retryLogEvent: 'raw_upload_relocation_retry',
+          retryLogContext: {
+            ...logContext,
+            bucket,
+            fromKey: originalUploadKey,
+            toKey: finalUploadKey,
+            operation: 'delete_source',
+          },
+        }
       );
       await logEvent({
         s3,
@@ -21448,8 +21528,18 @@ app.post(
 
     if (cleanupBucket && staleSessionArtifacts.length) {
       const cleanupResults = await Promise.allSettled(
-        staleSessionArtifacts.map(({ key }) =>
-          s3.send(new DeleteObjectCommand({ Bucket: cleanupBucket, Key: key }))
+        staleSessionArtifacts.map(({ key, type }) =>
+          sendS3CommandWithRetry(
+            s3,
+            () => new DeleteObjectCommand({ Bucket: cleanupBucket, Key: key }),
+            {
+              maxAttempts: 3,
+              baseDelayMs: 300,
+              maxDelayMs: 3000,
+              retryLogEvent: 'session_transition_cleanup_retry',
+              retryLogContext: { ...logContext, bucket: cleanupBucket, key, type },
+            }
+          )
         )
       );
 
