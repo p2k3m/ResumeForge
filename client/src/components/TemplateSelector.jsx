@@ -44,13 +44,18 @@ const DEFAULT_PREVIEW_VARIANT = {
   layout: 'two-column'
 }
 
-function TemplatePreviewThumbnail({ variant, testId }) {
+function TemplatePreviewThumbnail({ variant, testId, className }) {
   const { accent, highlight, bullet, border, layout } = variant
-  const containerBase = `h-28 w-full overflow-hidden rounded-xl border ${border} bg-white p-2 shadow-inner`
+  const dimensionClasses = className?.trim() ? `w-full ${className.trim()}` : 'h-28 w-full'
+  const containerBase = `overflow-hidden rounded-xl border ${border} bg-white p-2 shadow-inner`
 
   if (layout === 'single-column') {
     return (
-      <div className={`${containerBase} flex flex-col gap-2`} data-testid={testId} aria-hidden="true">
+      <div
+        className={`${containerBase} ${dimensionClasses} flex flex-col gap-2`}
+        data-testid={testId}
+        aria-hidden="true"
+      >
         <div className={`h-5 w-2/5 rounded-md ${accent}`}></div>
         <div className="space-y-1">
           <div className={`h-2.5 w-4/5 rounded-full ${highlight}`}></div>
@@ -72,7 +77,11 @@ function TemplatePreviewThumbnail({ variant, testId }) {
 
   if (layout === 'modular') {
     return (
-      <div className={`${containerBase} flex flex-col gap-2`} data-testid={testId} aria-hidden="true">
+      <div
+        className={`${containerBase} ${dimensionClasses} flex flex-col gap-2`}
+        data-testid={testId}
+        aria-hidden="true"
+      >
         <div className="flex items-center justify-between">
           <div className={`h-4 w-1/3 rounded-full ${accent}`}></div>
           <div className="flex gap-1">
@@ -105,7 +114,11 @@ function TemplatePreviewThumbnail({ variant, testId }) {
   }
 
   return (
-    <div className={`${containerBase} flex gap-2`} data-testid={testId} aria-hidden="true">
+    <div
+      className={`${containerBase} ${dimensionClasses} flex gap-2`}
+      data-testid={testId}
+      aria-hidden="true"
+    >
       <div className="flex w-2/5 flex-col gap-1.5">
         <div className={`h-6 w-4/5 rounded-md ${accent}`}></div>
         <div className={`h-2.5 w-3/5 rounded-full ${highlight}`}></div>
@@ -161,6 +174,10 @@ function TemplateSelector({
   const descriptionId = description ? `${idPrefix}-description` : undefined
   const historyId = historySummary ? `${idPrefix}-history` : undefined
   const selectedOption = options.find((option) => option.id === selectedTemplate) || null
+  const previewOption = selectedOption || options[0] || null
+  const previewVariant = previewOption
+    ? TEMPLATE_PREVIEW_VARIANTS[previewOption.id] || DEFAULT_PREVIEW_VARIANT
+    : DEFAULT_PREVIEW_VARIANT
 
   const handleSelect = (optionId) => {
     if (disabled || optionId === selectedTemplate) return
@@ -183,6 +200,34 @@ function TemplateSelector({
         <p className="text-xs text-purple-500" id={historyId}>
           You tried {historySummary}
         </p>
+      )}
+      {previewOption && (
+        <div
+          className="space-y-2 rounded-2xl border border-purple-100 bg-white p-4 shadow-sm"
+          data-testid={`${idPrefix}-current-preview-card`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-purple-500">
+                Preview this style
+              </p>
+              <p className="text-sm font-semibold text-purple-900">{previewOption.name}</p>
+            </div>
+            {selectedOption?.id === previewOption.id && !disabled && (
+              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-purple-700">
+                Selected
+              </span>
+            )}
+          </div>
+          <TemplatePreviewThumbnail
+            variant={previewVariant}
+            testId={`${idPrefix}-current-preview`}
+            className="h-32"
+          />
+          {previewOption.description && (
+            <p className="text-xs text-purple-600">{previewOption.description}</p>
+          )}
+        </div>
       )}
       <div
         role="radiogroup"

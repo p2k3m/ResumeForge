@@ -25,6 +25,11 @@ describe('TemplateSelector', () => {
       <TemplateSelector options={options} selectedTemplate="modern" onSelect={jest.fn()} />
     )
 
+    const previewCard = screen.getByTestId('template-selector-current-preview-card')
+    expect(previewCard).toBeInTheDocument()
+    expect(within(previewCard).getByText(/Preview this style/i)).toBeInTheDocument()
+    expect(within(previewCard).getByText(/Modern Minimal/i)).toBeInTheDocument()
+    expect(screen.getByTestId('template-selector-current-preview')).toBeInTheDocument()
     const group = screen.getByRole('radiogroup', { name: /Template Style/i })
     const modernOption = within(group).getByRole('radio', { name: /Modern Minimal/i })
     expect(modernOption).toHaveAttribute('aria-checked', 'true')
@@ -36,6 +41,8 @@ describe('TemplateSelector', () => {
 
     rerender(<TemplateSelector options={options} selectedTemplate="professional" onSelect={jest.fn()} />)
 
+    const updatedPreviewCard = screen.getByTestId('template-selector-current-preview-card')
+    expect(within(updatedPreviewCard).getByText(/Professional Blue/i)).toBeInTheDocument()
     const professionalOption = within(group).getByRole('radio', { name: /Professional Blue/i })
     expect(professionalOption).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('template-selector-selected-description')).toHaveTextContent(
