@@ -43,6 +43,14 @@ async function main() {
   } catch (err) {
     console.error('CloudFront verification failed:');
     console.error(err?.message || err);
+    console.error('');
+    console.error('Next steps:');
+    console.error('- Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output.');
+    console.error('- If the distribution was replaced or removed, redeploy the SAM stack and republish the CloudFront URL:');
+    console.error('    sam build --use-container');
+    console.error('    sam deploy --guided');
+    console.error('    npm run publish:cloudfront-url -- <stack-name>');
+    console.error('- See docs/troubleshooting-cloudfront.md for a detailed runbook.');
     process.exit(1);
   }
 }
