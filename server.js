@@ -3,7 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import os from 'os';
-import crypto from 'crypto';
+import crypto, { createHash } from 'crypto';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
@@ -688,6 +688,17 @@ function createIdentifier() {
     return crypto.randomUUID();
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createTextDigest(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+  return createHash('sha256').update(normalized).digest('hex');
 }
 
 function serializeError(err) {
@@ -15606,6 +15617,7 @@ async function generateEnhancedDocumentsResponse({
   resumeText,
   originalResumeTextInput,
   jobDescription,
+  jobDescriptionDigest: jobDescriptionDigestInput = '',
   jobSkills,
   resumeSkills,
   originalMatch,
@@ -15635,6 +15647,7 @@ async function generateEnhancedDocumentsResponse({
   existingRecord = {},
   userId,
   plainPdfFallbackEnabled = false,
+  refreshSessionArtifacts = false,
 }) {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (!bucket) {
@@ -15948,6 +15961,8 @@ async function generateEnhancedDocumentsResponse({
     generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   }
   const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
+  const resolvedJobDescriptionDigest =
+    jobDescriptionDigestInput || createTextDigest(jobDescription);
 
   let text = resumeText;
   let resolvedTextForContext = null;
@@ -17646,6 +17661,7 @@ async function generateEnhancedDocumentsResponse({
     assignKey('enhancedVersion1Key', ':version1TextKey', textArtifactKeys.version1_text);
     assignKey('enhancedVersion2Key', ':version2TextKey', textArtifactKeys.version2_text);
     assignKey('changeLogKey', ':changeLogTextKey', textArtifactKeys.change_log);
+    assignKey('jobDescriptionDigest', ':jobDescriptionDigest', resolvedJobDescriptionDigest);
 
     if (sessionChangeLogKey) {
       updateExpressionParts.push('sessionChangeLogKey = :sessionChangeLogKey');
@@ -17910,6 +17926,20 @@ app.post(
       );
     }
 
+    const enhancementIntentInput = [
+      req.body.enhancementIntent,
+      req.body.enhancementMode,
+      req.body.enhancementRequest,
+      req.body.intent,
+      req.body.mode,
+    ].find((value) => typeof value === 'string' && value.trim());
+    const enhancementIntent = enhancementIntentInput
+      ? enhancementIntentInput.trim().toLowerCase()
+      : '';
+    const wantsNewEnhancement =
+      enhancementIntent === 'new' || req.body.newEnhancement === true;
+    const jobDescriptionDigest = createTextDigest(jobDescription);
+
     const linkedinProfileUrlInput = '';
     const linkedinProfileUrl = '';
 
@@ -18044,6 +18074,7 @@ app.post(
       let existingCoverLetterEntries = [];
       let dismissedCoverLetterEntries = [];
       let existingRecordItem = {};
+      let storedJobDescriptionDigest = '';
       try {
         const record = await dynamo.send(
           new GetItemCommand({
@@ -18059,6 +18090,7 @@ app.post(
             hasRecord: Boolean(item.jobId?.S),
           });
         } else {
+          storedJobDescriptionDigest = item.jobDescriptionDigest?.S || '';
           const currentStatus = item.status?.S || '';
           if (
             currentStatus &&
@@ -18141,6 +18173,22 @@ app.post(
           'STORAGE_UNAVAILABLE',
           S3_STORAGE_ERROR_MESSAGE
         );
+      }
+
+      const jobDescriptionChanged =
+        Boolean(storedJobDescriptionDigest && jobDescriptionDigest) &&
+        storedJobDescriptionDigest !== jobDescriptionDigest;
+      const refreshSessionArtifacts = wantsNewEnhancement && jobDescriptionChanged;
+
+      if (refreshSessionArtifacts) {
+        logStructured('info', 'generation_session_artifacts_refreshed', {
+          ...logContext,
+          reason: 'job_description_changed',
+        });
+        existingChangeLogEntries = [];
+        dismissedChangeLogEntries = [];
+        existingCoverLetterEntries = [];
+        dismissedCoverLetterEntries = [];
       }
 
       const jobKeySegment = sanitizeJobSegment(jobId);
@@ -18327,6 +18375,7 @@ app.post(
         resumeText,
         originalResumeTextInput,
         jobDescription,
+        jobDescriptionDigest,
         jobSkills,
         resumeSkills,
         originalMatch,
@@ -18350,6 +18399,7 @@ app.post(
         dismissedCoverLetterChangeLogEntries: dismissedCoverLetterEntries,
         existingRecord: existingRecordItem,
         userId: res.locals.userId,
+        refreshSessionArtifacts,
       });
 
       if (!responseBody) {
@@ -19677,6 +19727,7 @@ app.post(
         ? req.body.jobDescriptionText
         : '';
   const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
+  const manualJobDescriptionDigest = createTextDigest(manualJobDescription);
   const hasManualJobDescription = Boolean(manualJobDescription);
   const submittedCredly = '';
   const profileIdentifier =
@@ -20071,6 +20122,7 @@ app.post(
         fileType: { S: storedFileType },
         status: { S: 'uploaded' },
         sessionChangeLogKey: { S: sessionChangeLogKey },
+        jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
       }
     };
     await dynamo.send(new PutItemCommand(putItemPayload));
@@ -20491,7 +20543,7 @@ app.post(
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
           UpdateExpression:
-            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score)',
+            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score), jobDescriptionDigest = :jobDescriptionDigest',
           ExpressionAttributeValues: {
             ':status': { S: 'scored' },
             ':completedAt': { S: scoringCompletedAt },
@@ -20506,6 +20558,7 @@ app.post(
               })),
             },
             ':score': { N: String(scoringUpdate.normalizedScore) },
+            ':jobDescriptionDigest': { S: manualJobDescriptionDigest || '' },
             ':jobId': { S: jobId },
             ':statusUploaded': { S: 'uploaded' },
           },
