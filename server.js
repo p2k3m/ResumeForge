@@ -9967,6 +9967,65 @@ async function isResume(text) {
   return result.isResume;
 }
 
+const STRONG_NON_RESUME_KEYWORDS = [
+  'job description',
+  'job-posting',
+  'cover letter',
+  'invoice',
+  'meeting notes',
+  'academic paper',
+  'policy',
+  'compliance',
+  'marketing brochure',
+  'slide deck',
+  'certificate',
+  'does not contain any text',
+  'empty document',
+];
+
+function isStrongNonResumeSignal(description = '', reason = '') {
+  const normalizedDescription =
+    typeof description === 'string' ? description.toLowerCase() : '';
+  const normalizedReason = typeof reason === 'string' ? reason.toLowerCase() : '';
+
+  return STRONG_NON_RESUME_KEYWORDS.some((keyword) => {
+    const needle = keyword.toLowerCase();
+    return (
+      (normalizedDescription && normalizedDescription.includes(needle)) ||
+      (normalizedReason && normalizedReason.includes(needle))
+    );
+  });
+}
+
+function shouldRejectBasedOnClassification(result, context = {}) {
+  if (!result || typeof result !== 'object' || result.isResume) {
+    return false;
+  }
+
+  const { confidence = 0, description, reason } = result;
+
+  if (isStrongNonResumeSignal(description, reason)) {
+    return true;
+  }
+
+  if (confidence >= 0.4) {
+    return true;
+  }
+
+  const fileExtension =
+    typeof context.fileExtension === 'string' ? context.fileExtension.toLowerCase() : '';
+  const wordCount = Number.isFinite(context.wordCount) ? context.wordCount : 0;
+  const lacksResumeSections =
+    typeof reason === 'string' && /lacks resume-defining sections/i.test(reason);
+  const isWordDocument = fileExtension === '.doc' || fileExtension === '.docx';
+
+  if (isWordDocument && lacksResumeSections && confidence < 0.4 && wordCount <= 150) {
+    return false;
+  }
+
+  return true;
+}
+
 function scoreRatingLabel(score) {
   if (score >= 85) return 'EXCELLENT';
   if (score >= 70) return 'GOOD';
@@ -21591,12 +21650,18 @@ app.post(
     description: classification.description,
     confidence: classification.confidence,
   });
-  if (!classification.isResume) {
+  const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  const classificationShouldReject = shouldRejectBasedOnClassification(classification, {
+    fileExtension: normalizedExt,
+    wordCount,
+  });
+  if (!classification.isResume && classificationShouldReject) {
     logStructured('warn', 'resume_validation_failed', {
       ...logContext,
       reason: 'not_identified_as_resume',
       description: classification.description,
       confidence: classification.confidence,
+      wordCount,
     });
     const rawDescription =
       typeof classification.description === 'string'
@@ -21631,6 +21696,16 @@ app.post(
         reason: detailReason,
       }
     );
+  }
+  if (!classification.isResume) {
+    logStructured('info', 'resume_validation_soft_pass', {
+      ...logContext,
+      description: classification.description,
+      confidence: classification.confidence,
+      reason: classification.reason,
+      wordCount,
+      fileExtension: normalizedExt,
+    });
   }
   const initialContactDetails = extractContactDetails(text, linkedinProfileUrl);
   const applicantName = extractName(text);
