@@ -42,9 +42,9 @@ describe('published CloudFront helpers', () => {
   test('responds with published metadata when available', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3exampleabcdef8.cloudfront.net/',
-      distributionId: 'E123456789ABC',
-      updatedAt: '2024-05-28T00:00:00.000Z',
+      url: 'https://dk892hgnzrcsl.cloudfront.net/',
+      distributionId: 'E2XOR1G42QPKU2',
+      updatedAt: '2024-06-03T00:00:00.000Z',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -54,9 +54,9 @@ describe('published CloudFront helpers', () => {
         success: true,
         cloudfront: {
           stackName: metadata.stackName,
-          url: 'https://d3exampleabcdef8.cloudfront.net',
-          fileUrl: 'https://d3exampleabcdef8.cloudfront.net',
-          typeUrl: 'https://d3exampleabcdef8.cloudfront.net#download',
+          url: 'https://dk892hgnzrcsl.cloudfront.net',
+          fileUrl: 'https://dk892hgnzrcsl.cloudfront.net',
+          typeUrl: 'https://dk892hgnzrcsl.cloudfront.net#download',
           distributionId: metadata.distributionId,
           updatedAt: metadata.updatedAt,
         },
@@ -69,15 +69,15 @@ describe('published CloudFront helpers', () => {
   test('redirects callers to the published domain', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3exampleabcdef8.cloudfront.net/prod',
-      distributionId: 'E123456789ABC',
-      updatedAt: '2024-05-28T00:00:00.000Z',
+      url: 'https://dk892hgnzrcsl.cloudfront.net/prod',
+      distributionId: 'E2XOR1G42QPKU2',
+      updatedAt: '2024-06-03T00:00:00.000Z',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
       const response = await request(app).get('/go/cloudfront');
       expect(response.status).toBe(308);
-      expect(response.headers.location).toBe('https://d3exampleabcdef8.cloudfront.net/prod');
+      expect(response.headers.location).toBe('https://dk892hgnzrcsl.cloudfront.net/prod');
     } finally {
       await cleanup();
     }
@@ -86,9 +86,9 @@ describe('published CloudFront helpers', () => {
   test('allows redirecting to a specific path on the published domain', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3exampleabcdef8.cloudfront.net',
-      distributionId: 'E123456789ABC',
-      updatedAt: '2024-05-28T00:00:00.000Z',
+      url: 'https://dk892hgnzrcsl.cloudfront.net',
+      distributionId: 'E2XOR1G42QPKU2',
+      updatedAt: '2024-06-03T00:00:00.000Z',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -97,7 +97,7 @@ describe('published CloudFront helpers', () => {
         .query({ path: 'api/process-cv' });
       expect(response.status).toBe(308);
       expect(response.headers.location).toBe(
-        'https://d3exampleabcdef8.cloudfront.net/api/process-cv'
+        'https://dk892hgnzrcsl.cloudfront.net/api/process-cv'
       );
     } finally {
       await cleanup();
