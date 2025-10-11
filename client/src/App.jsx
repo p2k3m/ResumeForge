@@ -3540,6 +3540,10 @@ function App() {
 
   useEffect(() => {
     setDownloadStates({})
+    if (outputFiles.length > 0) {
+      setIsGeneratingDocs(false)
+      setIsCoverLetterDownloading(false)
+    }
   }, [outputFiles])
 
   useEffect(() => {
