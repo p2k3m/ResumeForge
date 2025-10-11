@@ -19386,27 +19386,54 @@ app.post(
 
       return res.json(responseBody);
     } catch (err) {
-      logStructured('error', 'generation_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
       const pdfError = extractPdfGenerationError(err);
+      let pdfMessage = '';
+      let pdfDetails;
+      let pdfErrorCode = 'PDF_GENERATION_FAILED';
       if (pdfError) {
-        const pdfMessage =
+        pdfMessage =
           (typeof pdfError.summary === 'string' && pdfError.summary.trim()) ||
           (typeof pdfError.message === 'string' && pdfError.message.trim()) ||
           CV_GENERATION_ERROR_MESSAGE;
-        const pdfDetails =
+        pdfErrorCode = pdfError.code || 'PDF_GENERATION_FAILED';
+        pdfDetails =
           buildPdfGenerationErrorDetails(pdfError, { source: 'lambda' }) || {};
         if (pdfMessage && !pdfDetails.summary) {
           pdfDetails.summary = pdfMessage;
         }
+      }
+
+      logStructured('error', 'generation_failed', {
+        ...logContext,
+        error: serializeError(err),
+        ...(pdfError
+          ? {
+              pdfGeneration: {
+                code: pdfErrorCode,
+                summary: pdfMessage,
+                details: pdfDetails,
+              },
+            }
+          : {}),
+      });
+      if (pdfError) {
+        const responseDetails = pdfDetails && typeof pdfDetails === 'object'
+          ? {
+              ...pdfDetails,
+              ...(Array.isArray(pdfDetails.messages)
+                ? { messages: [...pdfDetails.messages] }
+                : {}),
+              ...(Array.isArray(pdfDetails.templates)
+                ? { templates: [...pdfDetails.templates] }
+                : {}),
+            }
+          : pdfDetails;
         return sendError(
           res,
           500,
-          pdfError.code || 'PDF_GENERATION_FAILED',
-          pdfMessage,
-          pdfDetails
+          pdfErrorCode,
+          pdfMessage || CV_GENERATION_ERROR_MESSAGE,
+          responseDetails
         );
       }
       const rawMessage =
@@ -19680,20 +19707,19 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
 
     return res.status(200).send(buffer);
   } catch (err) {
-    logStructured('error', 'cover_letter_pdf_render_failed', {
-      ...logContext,
-      templateCandidates,
-      error: serializeError(err)
-    });
     const pdfError = extractPdfGenerationError(err);
+    let pdfMessage = '';
+    let pdfDetails;
+    let pdfErrorCode = 'COVER_LETTER_GENERATION_FAILED';
     if (pdfError) {
-      const pdfMessage =
+      pdfMessage =
         (typeof pdfError.summary === 'string' && pdfError.summary.trim()) ||
         (typeof pdfError.message === 'string' && pdfError.message.trim()) ||
         'Unable to generate the cover letter PDF.';
-      const pdfDetails =
+      pdfErrorCode = pdfError.code || 'COVER_LETTER_GENERATION_FAILED';
+      pdfDetails =
         buildPdfGenerationErrorDetails(pdfError, { source: 'lambda' }) || {};
-      if (!pdfDetails.summary) {
+      if (!pdfDetails.summary && pdfMessage) {
         pdfDetails.summary = pdfMessage;
       }
       if (!pdfDetails.documentType) {
@@ -19704,12 +19730,39 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
           pdfDetails.templates = templateCandidates;
         }
       }
+    }
+    logStructured('error', 'cover_letter_pdf_render_failed', {
+      ...logContext,
+      templateCandidates,
+      error: serializeError(err),
+      ...(pdfError
+        ? {
+            pdfGeneration: {
+              code: pdfErrorCode,
+              summary: pdfMessage,
+              details: pdfDetails,
+            },
+          }
+        : {}),
+    });
+    if (pdfError) {
+      const responseDetails = pdfDetails && typeof pdfDetails === 'object'
+        ? {
+            ...pdfDetails,
+            ...(Array.isArray(pdfDetails.messages)
+              ? { messages: [...pdfDetails.messages] }
+              : {}),
+            ...(Array.isArray(pdfDetails.templates)
+              ? { templates: [...pdfDetails.templates] }
+              : {}),
+          }
+        : pdfDetails;
       return sendError(
         res,
         500,
-        pdfError.code || 'COVER_LETTER_GENERATION_FAILED',
-        pdfMessage,
-        pdfDetails
+        pdfErrorCode,
+        pdfMessage || 'Unable to generate the cover letter PDF.',
+        responseDetails
       );
     }
     return sendError(
