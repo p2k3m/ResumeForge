@@ -1561,6 +1561,10 @@ function readBooleanEnv(name, defaultValue = false) {
   return parseBoolean(raw, defaultValue);
 }
 
+function isDownloadSessionLogCleanupEnabled() {
+  return readBooleanEnv('ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP', false);
+}
+
 function normaliseOrigins(value) {
   if (Array.isArray(value)) {
     return value
@@ -1798,6 +1802,10 @@ function buildRuntimeConfig() {
     'ENABLE_PLAIN_PDF_FALLBACK',
     parseBoolean(fileConfig.ENABLE_PLAIN_PDF_FALLBACK, false)
   );
+  const downloadSessionLogCleanupEnabled = readBooleanEnv(
+    'ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP',
+    parseBoolean(fileConfig.ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP, false)
+  );
   const missing = [];
   if (!s3Bucket) missing.push('S3_BUCKET');
   if (!geminiApiKey) missing.push('GEMINI_API_KEY');
@@ -1812,6 +1820,9 @@ function buildRuntimeConfig() {
   process.env.S3_BUCKET = s3Bucket;
   process.env.GEMINI_API_KEY = geminiApiKey;
   process.env.ENABLE_PLAIN_PDF_FALLBACK = plainPdfFallbackEnabled ? 'true' : 'false';
+  process.env.ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP = downloadSessionLogCleanupEnabled
+    ? 'true'
+    : 'false';
 
   return Object.freeze({
     AWS_REGION: region,
@@ -1819,6 +1830,7 @@ function buildRuntimeConfig() {
     GEMINI_API_KEY: geminiApiKey,
     CLOUDFRONT_ORIGINS: allowedOrigins,
     ENABLE_PLAIN_PDF_FALLBACK: plainPdfFallbackEnabled,
+    ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP: downloadSessionLogCleanupEnabled,
   });
 }
 
@@ -16377,6 +16389,20 @@ async function handleExpiredDownloadSession({
 
     if (sanitizedRecord[attribute] && !isProtected) {
       delete sanitizedRecord[attribute];
+    }
+  }
+
+  const shouldCleanupSessionLogs = isDownloadSessionLogCleanupEnabled();
+  if (shouldCleanupSessionLogs) {
+    const sessionChangeLogKey = normalizeDynamoStringAttribute(
+      record.sessionChangeLogKey
+    );
+    if (sessionChangeLogKey) {
+      clearedKeys.push(sessionChangeLogKey);
+      attributesToRemove.push('sessionChangeLogKey');
+      if (sanitizedRecord.sessionChangeLogKey) {
+        delete sanitizedRecord.sessionChangeLogKey;
+      }
     }
   }
 

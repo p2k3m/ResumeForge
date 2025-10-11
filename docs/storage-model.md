@@ -72,6 +72,9 @@ Within each session the service writes:
   have been created in older runs. Historical activity is preserved via the
   session change log JSON; S3 no longer keeps superseded document bodies by
   default.
+* Set `ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP=true` when operating at scale to drop
+  `logs/change-log.json` once a download session expires. Leave the flag unset
+  to retain the change log for audits and manual investigations.
 
 ## Download logic
 

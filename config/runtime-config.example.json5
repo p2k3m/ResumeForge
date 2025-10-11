@@ -15,5 +15,9 @@
   ],
   // Optional: set to true to enable plaintext PDF fallback generation when
   // template rendering fails. Leave unset to return an error instead.
-  ENABLE_PLAIN_PDF_FALLBACK: false
+  ENABLE_PLAIN_PDF_FALLBACK: false,
+  // Optional: set to true to remove session change logs when download sessions
+  // expire. Enable when scaling storage aggressively; leave unset to retain
+  // the logs for audits.
+  ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP: false
 }
