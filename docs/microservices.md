@@ -1,0 +1,33 @@
+# Microservice architecture
+
+ResumeForge retains a single Express implementation but deploys it as discrete Lambda functions. Each function exposes only the endpoints required for its domain so we can scale traffic hotspots independently while keeping the codebase familiar for teams used to Express.
+
+## Service catalogue
+
+| Key | Description | Endpoints |
+| --- | --- | --- |
+| `resumeUpload` | Accepts résumé uploads, persists session metadata, and kicks off preprocessing. | `POST /api/process-cv` |
+| `jobEvaluation` | Consumes résumé text plus a job description and returns fit analysis. | `POST /api/jd/evaluate` |
+| `scoring` | Calculates match scores and supports re-scoring after enhancements. | `POST /api/score-match`, `POST /api/rescore-improvement` |
+| `enhancement` | Runs Gemini-powered improvements for summaries, skills, experience and more. | `POST /api/improve-summary`, `POST /api/add-missing-skills`, `POST /api/change-designation`, `POST /api/align-experience`, `POST /api/improve-certifications`, `POST /api/improve-projects`, `POST /api/improve-highlights`, `POST /api/enhance-all` |
+| `documentGeneration` | Generates downloadable CV variants and cover letters. | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
+| `auditing` | Publishes change logs, download refreshes, CloudFront metadata and health checks. | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
+
+See [`microservices/services.js`](../microservices/services.js) for the source of truth used by all Lambda entrypoints.
+
+## Handler factory
+
+[`microservices/createServiceHandler.js`](../microservices/createServiceHandler.js) wraps the shared Express app with `@vendia/serverless-express`. The factory accepts a service configuration (name, routes, and optional binary media types) and returns the Lambda handler. Requests that miss the declared route list receive a structured `404` response containing the service name and the attempted path/method, which simplifies API Gateway log searches when a client accidentally calls the wrong microservice.
+
+```js
+import { createServiceHandler } from '../microservices/createServiceHandler.js';
+import { getServiceConfig } from '../microservices/services.js';
+
+export const handler = createServiceHandler(getServiceConfig('resumeUpload'));
+```
+
+## Infrastructure wiring
+
+`template.yaml` registers each endpoint as an independent `AWS::Serverless::Function` wired to `ResumeForgeApi`. Provisioned concurrency, IAM policies, and environment configuration stay identical across microservices thanks to YAML anchors. Operations teams can dial up concurrency for AI-heavy services (enhancement, document generation) without touching lightweight auditing flows.
+
+Because every function mounts the same Express app, we still share validation, logging, and retry helpers. When a feature spans services—for example, resume enhancement writing audit entries consumed by the auditing Lambda—it does so through shared modules, not cross-service HTTP calls. This keeps latency low while retaining microservice isolation at the deployment level.
