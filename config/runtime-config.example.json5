@@ -19,5 +19,9 @@
   // Optional: set to true to remove session change logs when download sessions
   // expire. Enable when scaling storage aggressively; leave unset to retain
   // the logs for audits.
-  ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP: false
+  ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP: false,
+  // Optional: set to true to delete superseded generated artifacts after a
+  // successful session completes. Enable when scaling storage aggressively;
+  // leave unset to retain prior versions for troubleshooting or audit trails.
+  ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP: false
 }

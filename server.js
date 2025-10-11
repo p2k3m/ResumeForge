@@ -1565,6 +1565,10 @@ function isDownloadSessionLogCleanupEnabled() {
   return readBooleanEnv('ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP', false);
 }
 
+function isGenerationStaleArtifactCleanupEnabled() {
+  return readBooleanEnv('ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP', false);
+}
+
 function normaliseOrigins(value) {
   if (Array.isArray(value)) {
     return value
@@ -1806,6 +1810,10 @@ function buildRuntimeConfig() {
     'ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP',
     parseBoolean(fileConfig.ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP, false)
   );
+  const generationStaleArtifactCleanupEnabled = readBooleanEnv(
+    'ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP',
+    parseBoolean(fileConfig.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP, false)
+  );
   const missing = [];
   if (!s3Bucket) missing.push('S3_BUCKET');
   if (!geminiApiKey) missing.push('GEMINI_API_KEY');
@@ -1823,6 +1831,9 @@ function buildRuntimeConfig() {
   process.env.ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP = downloadSessionLogCleanupEnabled
     ? 'true'
     : 'false';
+  process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = generationStaleArtifactCleanupEnabled
+    ? 'true'
+    : 'false';
 
   return Object.freeze({
     AWS_REGION: region,
@@ -1831,6 +1842,7 @@ function buildRuntimeConfig() {
     CLOUDFRONT_ORIGINS: allowedOrigins,
     ENABLE_PLAIN_PDF_FALLBACK: plainPdfFallbackEnabled,
     ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP: downloadSessionLogCleanupEnabled,
+    ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP: generationStaleArtifactCleanupEnabled,
   });
 }
 
@@ -16690,6 +16702,7 @@ async function generateEnhancedDocumentsResponse({
 
   const artifactCleanupKeys = new Set();
   const staleArtifactKeys = new Set();
+  const staleArtifactCleanupEnabled = isGenerationStaleArtifactCleanupEnabled();
   let generationSucceeded = false;
   let cleanupReason = 'aborted';
   let shouldDeleteStaleArtifacts = false;
@@ -18831,7 +18844,7 @@ async function generateEnhancedDocumentsResponse({
             'jobId = :jobId AND (#status = :statusScored OR #status = :statusCompleted)',
         })
       );
-      if (staleArtifactKeys.size) {
+      if (staleArtifactCleanupEnabled && staleArtifactKeys.size) {
         shouldDeleteStaleArtifacts = true;
       }
       await logEvent({
