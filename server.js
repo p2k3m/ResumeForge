@@ -11832,7 +11832,18 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
   };
 }
 
-function resolveSessionChangeLogLocation({ bucket, key, jobId } = {}) {
+function resolveSessionChangeLogLocation({
+  bucket,
+  key,
+  jobId,
+  originalUploadKey,
+  ownerSegment,
+  sanitizedName,
+  userId,
+  sessionSegment,
+  requestId,
+  dateSegment,
+} = {}) {
   const preferredBuckets = [
     typeof bucket === 'string' ? bucket.trim() : '',
     typeof process.env.SESSION_CHANGE_LOG_BUCKET === 'string'
@@ -11845,10 +11856,47 @@ function resolveSessionChangeLogLocation({ bucket, key, jobId } = {}) {
   let resolvedBucket = preferredBuckets.find((value) => value) || '';
 
   let resolvedKey = typeof key === 'string' ? key.trim() : '';
+
+  if (!resolvedKey) {
+    const uploadKey = typeof originalUploadKey === 'string' ? originalUploadKey.trim() : '';
+    if (uploadKey) {
+      const prefix = uploadKey.replace(/[^/]+$/, '');
+      if (prefix) {
+        resolvedKey = `${prefix}logs/change-log.json`;
+      }
+    }
+  }
+
+  if (!resolvedKey) {
+    const normalizedOwnerSegment =
+      sanitizeS3KeyComponent(ownerSegment) ||
+      resolveDocumentOwnerSegment({ userId, sanitizedName });
+    const normalizedSessionSegment =
+      sanitizeS3KeyComponent(sessionSegment) ||
+      sanitizeS3KeyComponent(requestId, { fallback: '' });
+    const normalizedDateSegment =
+      sanitizeS3KeyComponent(dateSegment) || new Date().toISOString().slice(0, 10);
+    const normalizedJobSegment = sanitizeJobSegment(jobId);
+
+    if (normalizedOwnerSegment) {
+      const sessionPrefix = buildDocumentSessionPrefix({
+        ownerSegment: normalizedOwnerSegment,
+        sessionSegment: normalizedSessionSegment,
+        dateSegment: normalizedDateSegment,
+        jobSegment: normalizedJobSegment,
+      });
+      resolvedKey = `${sessionPrefix}logs/change-log.json`;
+    }
+  }
+
   if (!resolvedKey && jobId) {
     const jobSegment = sanitizeJobSegment(jobId);
     if (jobSegment) {
-      resolvedKey = `cv/${jobSegment}/logs/change-log.json`;
+      const fallbackSessionSegment =
+        sanitizeS3KeyComponent(sessionSegment) ||
+        sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+        'session';
+      resolvedKey = `cv/${jobSegment}/${fallbackSessionSegment}/logs/change-log.json`;
     }
   }
 
@@ -11860,6 +11908,13 @@ async function writeSessionChangeLog({
   bucket,
   key,
   jobId,
+  originalUploadKey,
+  ownerSegment,
+  sanitizedName,
+  userId,
+  sessionSegment,
+  requestId,
+  dateSegment,
   entries,
   summary,
   dismissedEntries,
@@ -11878,6 +11933,13 @@ async function writeSessionChangeLog({
     bucket,
     key,
     jobId,
+    originalUploadKey,
+    ownerSegment,
+    sanitizedName,
+    userId,
+    sessionSegment,
+    requestId,
+    dateSegment,
   });
 
   if (!resolvedBucket || !resolvedKey) {
@@ -18264,6 +18326,13 @@ async function generateEnhancedDocumentsResponse({
       bucket,
       key: sessionChangeLogKey,
       jobId,
+      originalUploadKey,
+      ownerSegment: ownerSegmentForKeys,
+      sanitizedName,
+      userId: res.locals.userId,
+      sessionSegment: generationRunSegment,
+      requestId,
+      dateSegment: generationDateSegment,
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
       dismissedEntries: normalizedDismissedChangeLogEntries,
@@ -19980,6 +20049,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let evaluationActivityLogs = [];
   let enhancementActivityLogs = [];
   let downloadActivityLogs = [];
+  let existingSessionId = '';
+  let existingCandidateName = '';
+  let storedUserId = '';
+  let existingUploadedAt = '';
 
   const resolveActivityLogsInput = (primaryKey, alternativeKeys = []) => {
     const keys = [primaryKey, ...alternativeKeys];
@@ -20020,6 +20093,14 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         'The upload context could not be located to update the change log.'
       );
     }
+    existingSessionId =
+      typeof item.requestId?.S === 'string' ? item.requestId.S.trim() : '';
+    existingCandidateName =
+      typeof item.candidateName?.S === 'string' ? item.candidateName.S.trim() : '';
+    storedUserId =
+      typeof item.userId?.S === 'string' ? item.userId.S.trim() : '';
+    existingUploadedAt =
+      typeof item.uploadedAt?.S === 'string' ? item.uploadedAt.S.trim() : '';
     storedBucket = item.s3Bucket?.S || '';
     originalUploadKey = item.s3Key?.S || '';
     sessionChangeLogKey = deriveSessionChangeLogKey({
@@ -20107,6 +20188,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
 
   const removeEntry = Boolean(req.body.remove) || req.body.action === 'remove';
   const nowIso = new Date().toISOString();
+  const requestSessionIdentifier =
+    typeof req.body.sessionId === 'string' ? req.body.sessionId.trim() : '';
   let updatedChangeLog = [...existingChangeLogEntries];
   let dismissedChangeLogEntries = [...existingDismissedChangeLogEntries];
   let coverLetterEntries = [...existingCoverLetterEntries];
@@ -20379,6 +20462,13 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   );
   const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
 
+  const resolvedSessionOwnerSegment = resolveDocumentOwnerSegment({
+    userId: res.locals.userId || storedUserId,
+    sanitizedName: existingCandidateName,
+  });
+  const resolvedSessionSegment = requestSessionIdentifier || existingSessionId;
+  const resolvedDateSegment = existingUploadedAt ? existingUploadedAt.slice(0, 10) : '';
+
   const serializedChangeLogEntries = serializeChangeLogEntries(
     normalizedChangeLogEntries
   );
@@ -20398,6 +20488,13 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     bucket: storedBucket,
     key: sessionChangeLogKey,
     jobId,
+    originalUploadKey,
+    ownerSegment: resolvedSessionOwnerSegment,
+    sanitizedName: existingCandidateName,
+    userId: res.locals.userId || storedUserId,
+    sessionSegment: resolvedSessionSegment,
+    requestId,
+    dateSegment: resolvedDateSegment,
   });
   storedBucket = resolvedSessionLocation.bucket;
   sessionChangeLogKey = resolvedSessionLocation.key;
@@ -20410,6 +20507,13 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       bucket: storedBucket,
       key: sessionChangeLogKey,
       jobId,
+      originalUploadKey,
+      ownerSegment: resolvedSessionOwnerSegment,
+      sanitizedName: existingCandidateName,
+      userId: res.locals.userId || storedUserId,
+      sessionSegment: resolvedSessionSegment,
+      requestId,
+      dateSegment: resolvedDateSegment,
       entries: normalizedChangeLogEntries,
       summary: changeLogSummary,
       dismissedEntries: normalizedDismissedEntries,
