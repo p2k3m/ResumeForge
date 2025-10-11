@@ -16251,6 +16251,9 @@ const DOWNLOAD_ARTIFACT_ATTRIBUTE_KEYS = [
   'changeLogKey',
 ];
 
+// Preserve canonical source assets unless the user explicitly discards them.
+const DOWNLOAD_ARTIFACT_PROTECTED_ATTRIBUTES = new Set(['originalTextKey']);
+
 function normalizeDynamoStringAttribute(attribute) {
   if (!attribute || typeof attribute.S !== 'string') {
     return '';
@@ -16303,11 +16306,14 @@ async function handleExpiredDownloadSession({
 
   for (const attribute of DOWNLOAD_ARTIFACT_ATTRIBUTE_KEYS) {
     const normalized = normalizeDynamoStringAttribute(record[attribute]);
-    if (normalized) {
+    const isProtected = DOWNLOAD_ARTIFACT_PROTECTED_ATTRIBUTES.has(attribute);
+
+    if (normalized && !isProtected) {
       clearedKeys.push(normalized);
       attributesToRemove.push(attribute);
     }
-    if (sanitizedRecord[attribute]) {
+
+    if (sanitizedRecord[attribute] && !isProtected) {
       delete sanitizedRecord[attribute];
     }
   }
