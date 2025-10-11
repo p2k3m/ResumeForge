@@ -1255,9 +1255,7 @@ function sendError(res, status, code, message, details) {
     : {};
 
   const shouldAnnotateSource = status >= 500 && hasExplicitDetails;
-  const shouldOfferRetry =
-    status >= 500 ||
-    (typeof code === 'string' && /FAILED|UNAVAILABLE|ERROR|TIMEOUT/i.test(code));
+  const shouldOfferRetry = status >= 500;
   let enrichedDetails = baseDetails;
 
   if (shouldAnnotateSource) {
@@ -1285,7 +1283,12 @@ function sendError(res, status, code, message, details) {
     }
   }
 
-  if (shouldOfferRetry) {
+  const hasDetailsContent =
+    enrichedDetails &&
+    typeof enrichedDetails === 'object' &&
+    Object.keys(enrichedDetails).length > 0;
+
+  if (shouldOfferRetry && hasDetailsContent) {
     enrichedDetails = ensureRetryAction(enrichedDetails);
   }
 
