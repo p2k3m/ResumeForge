@@ -42,6 +42,16 @@ import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
 import mime from 'mime-types';
 import { buildAggregatedChangeLogSummary } from './client/src/utils/changeLogSummaryShared.js';
+import {
+  API_ERROR_CONTRACTS,
+  CV_GENERATION_ERROR_MESSAGE,
+  DOWNLOAD_SESSION_EXPIRED_MESSAGE,
+  GEMINI_ENHANCEMENT_ERROR_MESSAGE,
+  LAMBDA_PROCESSING_ERROR_MESSAGE,
+  S3_CHANGE_LOG_ERROR_MESSAGE,
+  S3_STORAGE_ERROR_MESSAGE,
+  buildServiceErrorFallbackMessages
+} from './client/src/shared/serviceErrorContracts.js';
 import { MIMEType } from 'node:util';
 import { renderTemplatePdf } from './lib/pdf/index.js';
 import { backstopPdfTemplates as runPdfTemplateBackstop } from './lib/pdf/backstop.js';
@@ -166,18 +176,8 @@ axiosResponseInterceptor?.use(
   }
 );
 
-const LAMBDA_PROCESSING_ERROR_MESSAGE =
-  'Our Lambda resume engine is temporarily unavailable. Please try again shortly.';
-const CV_GENERATION_ERROR_MESSAGE =
-  'Our Lambda resume engine could not generate your PDFs. Please try again shortly.';
-const GEMINI_ENHANCEMENT_ERROR_MESSAGE =
-  'Gemini enhancements are temporarily offline. Please try again soon.';
 const DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE =
   'Unable to prepare download links for the generated documents.';
-const S3_STORAGE_ERROR_MESSAGE =
-  'Amazon S3 storage is temporarily unavailable. Please try again in a few minutes.';
-const S3_CHANGE_LOG_ERROR_MESSAGE =
-  'Amazon S3 is currently unavailable, so we could not save your updates. Please retry shortly.';
 
 function normalizeMessageList(messages) {
   if (!Array.isArray(messages) || messages.length === 0) {
@@ -736,8 +736,6 @@ const DEFAULT_AWS_REGION = 'ap-south-1';
 const DEFAULT_ALLOWED_ORIGINS = [];
 const URL_EXPIRATION_SECONDS = 60 * 60; // 1 hour
 const DOWNLOAD_SESSION_RETENTION_MS = URL_EXPIRATION_SECONDS * 1000;
-const DOWNLOAD_SESSION_EXPIRED_MESSAGE =
-  'Your download session expired. Regenerate the documents to get new links.';
 const isTestEnvironment = process.env.NODE_ENV === 'test';
 
 const parsePositiveInt = (value) => {
@@ -1464,17 +1462,9 @@ function ensureOutputFileUrls(entries) {
     .filter((entry) => entry && typeof entry === 'object');
 }
 
-const SERVICE_ERROR_FALLBACK_MESSAGES = {
-  INITIAL_UPLOAD_FAILED: S3_STORAGE_ERROR_MESSAGE,
-  STORAGE_UNAVAILABLE: S3_STORAGE_ERROR_MESSAGE,
-  CHANGE_LOG_PERSISTENCE_FAILED: S3_CHANGE_LOG_ERROR_MESSAGE,
-  DOCUMENT_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
-  PROCESSING_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
-  GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
-  PDF_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
-  COVER_LETTER_GENERATION_FAILED: LAMBDA_PROCESSING_ERROR_MESSAGE,
-  AI_RESPONSE_INVALID: GEMINI_ENHANCEMENT_ERROR_MESSAGE,
-};
+const SERVICE_ERROR_FALLBACK_MESSAGES = buildServiceErrorFallbackMessages(
+  API_ERROR_CONTRACTS
+);
 
 function sendError(res, status, code, message, details) {
   const normalizedDetails = normalizeErrorDetails(details);
