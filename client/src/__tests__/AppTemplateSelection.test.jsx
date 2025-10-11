@@ -24,6 +24,9 @@ describe('TemplateSelector', () => {
     const handleSelect = jest.fn()
     render(<TemplateSelector options={options} selectedTemplate="modern" onSelect={handleSelect} />)
 
+    const previewCard = screen.getByTestId('template-selector-current-preview-card')
+    expect(within(previewCard).getByText(/Modern Minimal/i)).toBeInTheDocument()
+    expect(screen.getByTestId('template-selector-current-preview')).toBeInTheDocument()
     const group = screen.getByRole('radiogroup', { name: /Template Style/i })
     const modernOption = within(group).getByRole('radio', { name: /Modern Minimal/i })
     expect(modernOption).toHaveAttribute('aria-checked', 'true')
