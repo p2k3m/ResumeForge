@@ -81,6 +81,11 @@ const SERVICE_ERROR_STEP_BY_SOURCE = {
 const RETRYABLE_SERVICE_SOURCES = new Set(['s3', 'lambda', 'gemini'])
 const RETRYABLE_ERROR_CODE_PATTERNS = ['FAILED', 'UNAVAILABLE', 'ERROR', 'TIMEOUT']
 
+const DOWNLOAD_SESSION_RETENTION_MS = 60 * 60 * 1000
+const DOWNLOAD_SESSION_POLL_MS = 60 * 1000
+const DOWNLOAD_SESSION_EXPIRED_MESSAGE =
+  'Your download session expired. Regenerate the documents to get new links.'
+
 function normalizeServiceSource(value) {
   if (typeof value !== 'string') {
     return ''
@@ -3620,6 +3625,99 @@ function App() {
   useEffect(() => {
     setCoverLetterReviewState({})
   }, [outputFiles])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+    if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
+      return undefined
+    }
+
+    const parseTimestamp = (value) => {
+      if (!value) return 0
+      if (value instanceof Date) {
+        const ms = value.getTime()
+        return Number.isNaN(ms) ? 0 : ms
+      }
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value > 1e12 ? value : value * 1000
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (!trimmed) {
+          return 0
+        }
+        const numeric = Number(trimmed)
+        if (Number.isFinite(numeric)) {
+          return numeric > 1e12 ? numeric : numeric * 1000
+        }
+        const date = new Date(trimmed)
+        const ms = date.getTime()
+        return Number.isNaN(ms) ? 0 : ms
+      }
+      return 0
+    }
+
+    const pruneExpiredDownloads = () => {
+      let removedAny = false
+      let removedAll = false
+
+      setOutputFiles((current) => {
+        if (!Array.isArray(current) || current.length === 0) {
+          return current
+        }
+
+        const now = Date.now()
+        const filtered = current.filter((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return false
+          }
+          const expiresAtMs = parseTimestamp(entry.expiresAt)
+          if (expiresAtMs) {
+            return expiresAtMs > now
+          }
+          const generatedAtMs = parseTimestamp(entry.generatedAt)
+          if (generatedAtMs) {
+            return generatedAtMs + DOWNLOAD_SESSION_RETENTION_MS > now
+          }
+          return true
+        })
+
+        if (filtered.length === current.length) {
+          return current
+        }
+
+        removedAny = true
+        if (filtered.length === 0) {
+          removedAll = true
+        }
+
+        return filtered
+      })
+
+      if (removedAny && removedAll) {
+        setDownloadGeneratedAt('')
+        setPreviewFile(null)
+        setPendingDownloadFile(null)
+        setQueuedMessage(DOWNLOAD_SESSION_EXPIRED_MESSAGE)
+      }
+    }
+
+    pruneExpiredDownloads()
+    const intervalId = window.setInterval(pruneExpiredDownloads, DOWNLOAD_SESSION_POLL_MS)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [
+    outputFiles,
+    setDownloadGeneratedAt,
+    setPendingDownloadFile,
+    setPreviewFile,
+    setQueuedMessage,
+    setOutputFiles
+  ])
 
   const handleCoverLetterTextChange = useCallback(
     (type, value) => {
