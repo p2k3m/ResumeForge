@@ -164,6 +164,13 @@ function resolveApiError({ data, fallback, status }) {
     (typeof data?.message === 'string' && data.message.trim()) ||
     (typeof data?.error === 'string' && data.error.trim()) ||
     ''
+  const detailSummary =
+    typeof data?.error?.details?.summary === 'string'
+      ? data.error.details.summary.trim()
+      : ''
+  const serverMessages = extractServerMessages(data)
+  const fallbackSummary =
+    serverMessages.length > 0 ? serverMessages[serverMessages.length - 1] : ''
 
   let friendlyFromCode = ''
   let normalizedSource = errorSource
@@ -181,32 +188,59 @@ function resolveApiError({ data, fallback, status }) {
   } else if (normalizedSource === 'lambda') {
     friendlyFromCode = FRIENDLY_ERROR_MESSAGES.DOCUMENT_GENERATION_FAILED
   }
-  let message = friendlyFromCode || rawMessage
 
-  if (!message || /^internal server error$/i.test(message)) {
-    message = normalizedFallback
+  const summaryCandidate = detailSummary || fallbackSummary
+  let messageSource = 'raw'
+  let message = rawMessage
+
+  if (summaryCandidate) {
+    message = summaryCandidate
+    messageSource = 'summary'
+  } else if (message) {
+    messageSource = 'raw'
   }
 
-  if (!friendlyFromCode && status >= 500) {
+  if (!message) {
+    if (friendlyFromCode) {
+      message = friendlyFromCode
+      messageSource = 'friendly'
+    } else {
+      message = normalizedFallback
+      messageSource = 'fallback'
+    }
+  }
+
+  if (!friendlyFromCode && status >= 500 && messageSource !== 'summary') {
     if (/gemini/i.test(rawMessage)) {
       message = FRIENDLY_ERROR_MESSAGES.AI_RESPONSE_INVALID
+      messageSource = 'friendly'
       if (!normalizedSource) {
         normalizedSource = 'gemini'
       }
     } else if (/s3|bucket|accessdenied/i.test(rawMessage)) {
       message = FRIENDLY_ERROR_MESSAGES.STORAGE_UNAVAILABLE
+      messageSource = 'friendly'
       if (!normalizedSource) {
         normalizedSource = 's3'
       }
     } else if (/lambda|serverless|invocation|timeout/i.test(rawMessage)) {
       message = FRIENDLY_ERROR_MESSAGES.DOCUMENT_GENERATION_FAILED
+      messageSource = 'friendly'
       if (!normalizedSource) {
         normalizedSource = 'lambda'
       }
     }
   }
 
-  const isFriendly = Boolean(friendlyFromCode) || message !== rawMessage
+  if (!message || /^internal server error$/i.test(message)) {
+    message = normalizedFallback
+    messageSource = 'fallback'
+  }
+
+  const isFriendly =
+    messageSource === 'summary' ||
+    messageSource === 'friendly' ||
+    message !== rawMessage
 
   return { message, code: normalizedCode, isFriendly, source: normalizedSource }
 }
@@ -3940,6 +3974,11 @@ function App() {
         } catch (parseErr) {
           errPayload = null
         }
+        const errorMessages = extractServerMessages(errPayload)
+        const summaryMessage =
+          errorMessages.length > 0
+            ? errorMessages[errorMessages.length - 1]
+            : ''
         const { message, code, source } = resolveApiError({
           data: errPayload,
           fallback: 'Could not generate PDF, please try again.',
@@ -3951,6 +3990,12 @@ function App() {
         }
         if (source) {
           error.serviceError = source
+        }
+        if (summaryMessage) {
+          error.summary = summaryMessage
+        }
+        if (errorMessages.length > 0) {
+          error.messages = errorMessages
         }
         throw error
       }
@@ -3993,10 +4038,14 @@ function App() {
       resetUiAfterDownload()
     } catch (err) {
       console.error('Cover letter PDF generation failed', err)
+      const summary =
+        typeof err?.summary === 'string' && err.summary.trim()
+          ? err.summary.trim()
+          : ''
       const message =
-        typeof err?.message === 'string' && err.message.trim()
-          ? err.message.trim()
-          : 'Could not generate PDF, please try again'
+        summary ||
+        (typeof err?.message === 'string' && err.message.trim()) ||
+        'Could not generate PDF, please try again'
       setCoverLetterDownloadError(message)
     } finally {
       setIsCoverLetterDownloading(false)
