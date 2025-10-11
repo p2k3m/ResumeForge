@@ -3135,4 +3135,164 @@ describe('change log session visibility', () => {
     expect(persistedPayload.coverLetters.dismissedEntries[0].id).toBe('cover_letter1');
     expect(persistedPayload.coverLetters.dismissedEntries[0].rejected).toBe(true);
   });
+
+  test('persists activity logs from nested payloads into the session change log', async () => {
+    const putCommands = [];
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        const payload = {
+          version: 1,
+          entries: [],
+          sessionLogs: [
+            {
+              id: 'existing-session',
+              event: 'session_existing',
+              timestamp: '2024-05-01T00:00:00.000Z',
+              message: 'Existing entry',
+            },
+          ],
+          evaluationLogs: [],
+          enhancementLogs: [],
+          downloadLogs: [],
+        };
+        return Promise.resolve({ Body: Buffer.from(JSON.stringify(payload)) });
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command.input);
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-123' },
+              changeLog: { L: [] },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: 'cv/candidate/session/logs/change-log.json' },
+            },
+          });
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-123',
+        entry: {
+          id: 'entry-1',
+          detail: 'Updated responsibilities',
+          before: 'Old summary',
+          after: 'New summary',
+        },
+        logs: {
+          session: {
+            entries: [
+              {
+                id: 'session-1',
+                event: 'session_started',
+                timestamp: '2024-05-04T10:00:00.000Z',
+                message: '  Session began  ',
+              },
+              {
+                id: 'existing-session',
+                event: 'session_updated',
+                timestamp: '2024-05-01T00:00:00.000Z',
+                message: 'Updated entry',
+              },
+            ],
+          },
+          evaluation: {
+            entries: [
+              {
+                id: 'evaluation-1',
+                event: 'evaluation_completed',
+                timestamp: '2024-05-04T10:05:00.000Z',
+                status: 'success',
+                notes: '  Completed ',
+              },
+            ],
+          },
+          enhancement: {
+            entries: [
+              {
+                id: 'enhancement-1',
+                event: 'enhancement_applied',
+                timestamp: '2024-05-04T10:10:00.000Z',
+                stage: 'generation',
+              },
+            ],
+          },
+          download: {
+            entries: [
+              {
+                id: 'download-1',
+                event: 'download_ready',
+                timestamp: '2024-05-04T10:15:00.000Z',
+                status: 'issued',
+              },
+            ],
+          },
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.sessionLogs)).toBe(true);
+    expect(response.body.sessionLogs).toHaveLength(2);
+    expect(response.body.sessionLogs[0]).toEqual(
+      expect.objectContaining({
+        id: 'session-1',
+        event: 'session_started',
+        message: 'Session began',
+      })
+    );
+    const changeLogWrites = putCommands.filter(
+      (cmd) => typeof cmd?.Key === 'string' && cmd.Key.endsWith('logs/change-log.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    const persistedPayload = JSON.parse(changeLogWrites[0].Body);
+    expect(Array.isArray(persistedPayload.sessionLogs)).toBe(true);
+    expect(persistedPayload.sessionLogs).toHaveLength(2);
+    expect(persistedPayload.sessionLogs[0]).toEqual(
+      expect.objectContaining({
+        id: 'session-1',
+        event: 'session_started',
+        timestamp: '2024-05-04T10:00:00.000Z',
+        message: 'Session began',
+      })
+    );
+    const updatedEntry = persistedPayload.sessionLogs.find(
+      (entry) => entry.id === 'existing-session'
+    );
+    expect(updatedEntry).toBeTruthy();
+    expect(updatedEntry.event).toBe('session_updated');
+    expect(Array.isArray(persistedPayload.evaluationLogs)).toBe(true);
+    expect(persistedPayload.evaluationLogs).toHaveLength(1);
+    expect(persistedPayload.evaluationLogs[0]).toEqual(
+      expect.objectContaining({
+        id: 'evaluation-1',
+        notes: 'Completed',
+      })
+    );
+    expect(Array.isArray(persistedPayload.enhancementLogs)).toBe(true);
+    expect(persistedPayload.enhancementLogs).toHaveLength(1);
+    expect(persistedPayload.enhancementLogs[0]).toEqual(
+      expect.objectContaining({ id: 'enhancement-1', event: 'enhancement_applied' })
+    );
+    expect(Array.isArray(persistedPayload.downloadLogs)).toBe(true);
+    expect(persistedPayload.downloadLogs).toHaveLength(1);
+    expect(persistedPayload.downloadLogs[0]).toEqual(
+      expect.objectContaining({ id: 'download-1', event: 'download_ready' })
+    );
+  });
 });
