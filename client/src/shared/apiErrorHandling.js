@@ -120,6 +120,140 @@ export function extractServerMessages(data) {
   return normalized
 }
 
+function coerceString(value) {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function buildLogEntry(channel, value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const normalizedChannel = coerceString(channel) || 'log'
+
+  if (typeof value === 'string') {
+    const message = value.trim()
+    if (!message) {
+      return null
+    }
+    return {
+      channel: normalizedChannel,
+      message,
+    }
+  }
+
+  if (typeof value !== 'object') {
+    return null
+  }
+
+  const bucket = coerceString(value.bucket)
+  const key = coerceString(value.key)
+  const status = coerceString(value.status)
+  const url = coerceString(value.url)
+  const requestId = coerceString(value.requestId)
+  const region = coerceString(value.region)
+  const location = coerceString(value.location)
+  const message =
+    coerceString(value.message) ||
+    coerceString(value.description) ||
+    coerceString(value.note)
+  const hint = coerceString(value.hint)
+  const label = coerceString(value.label) || coerceString(value.name)
+  const timestamp = coerceString(value.timestamp)
+  const type = coerceString(value.type)
+
+  const entry = {
+    channel: normalizedChannel,
+  }
+
+  if (bucket) entry.bucket = bucket
+  if (key) entry.key = key
+  const resolvedLocation = location || (bucket && key ? `s3://${bucket}/${key}` : '')
+  if (resolvedLocation) entry.location = resolvedLocation
+  if (status) entry.status = status
+  if (url) entry.url = url
+  if (requestId) entry.requestId = requestId
+  if (region) entry.region = region
+  if (message) entry.message = message
+  if (hint) entry.hint = hint
+  if (label) entry.label = label
+  if (timestamp) entry.timestamp = timestamp
+  if (type) entry.type = type
+
+  return entry
+}
+
+export function normalizeLogReferences(raw) {
+  if (!raw) {
+    return []
+  }
+
+  const entries = []
+  const seen = new Set()
+  let counter = 0
+
+  const append = (entry) => {
+    if (!entry) return
+    const baseId = [
+      entry.channel,
+      entry.bucket,
+      entry.key,
+      entry.location,
+      entry.url,
+      entry.requestId,
+      entry.status,
+      entry.message,
+      entry.timestamp,
+    ]
+      .map((part) => (typeof part === 'string' ? part : ''))
+      .filter(Boolean)
+      .join('|') || `${entry.channel || 'log'}-${counter++}`
+
+    let id = baseId
+    let dedupeIndex = 1
+    while (seen.has(id)) {
+      id = `${baseId}-${dedupeIndex++}`
+    }
+    seen.add(id)
+
+    entries.push({ ...entry, id })
+  }
+
+  const handleValue = (channel, value) => {
+    const parsed = buildLogEntry(channel, value)
+    if (parsed) {
+      append(parsed)
+    }
+  }
+
+  if (Array.isArray(raw)) {
+    raw.forEach((value, index) => {
+      if (Array.isArray(value)) {
+        value.forEach((nested, nestedIndex) => {
+          handleValue(`${index}[${nestedIndex}]`, nested)
+        })
+      } else {
+        handleValue(`log[${index}]`, value)
+      }
+    })
+    return entries
+  }
+
+  if (typeof raw === 'object') {
+    Object.entries(raw).forEach(([channel, value]) => {
+      if (Array.isArray(value)) {
+        value.forEach((nested, nestedIndex) => {
+          handleValue(`${channel}[${nestedIndex}]`, nested)
+        })
+      } else {
+        handleValue(channel, value)
+      }
+    })
+  }
+
+  return entries
+}
+
 export function resolveApiError({ data, fallback, status }) {
   const normalizedFallback =
     typeof fallback === 'string' && fallback.trim()
@@ -141,6 +275,10 @@ export function resolveApiError({ data, fallback, status }) {
   const serverMessages = extractServerMessages(data)
   const fallbackSummary =
     serverMessages.length > 0 ? serverMessages[serverMessages.length - 1] : ''
+
+  const requestId =
+    typeof data?.error?.requestId === 'string' ? data.error.requestId.trim() : ''
+  const logReferences = normalizeLogReferences(data?.error?.details?.logs)
 
   let friendlyFromCode = ''
   let normalizedSource = errorSource
@@ -212,7 +350,14 @@ export function resolveApiError({ data, fallback, status }) {
     messageSource === 'friendly' ||
     message !== rawMessage
 
-  return { message, code: normalizedCode, isFriendly, source: normalizedSource }
+  return {
+    message,
+    code: normalizedCode,
+    isFriendly,
+    source: normalizedSource,
+    logs: logReferences,
+    requestId,
+  }
 }
 
 export {

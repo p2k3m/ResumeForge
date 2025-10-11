@@ -27,6 +27,7 @@ import { buildImprovementHintFromSegment } from './utils/actionableAdvice.js'
 import parseJobDescriptionText from './utils/parseJobDescriptionText.js'
 import { buildCategoryChangeLog } from './utils/changeLogCategorySummaries.js'
 import { buildAggregatedChangeLogSummary } from './utils/changeLogSummaryShared.js'
+import { extractErrorMetadata } from './utils/extractErrorMetadata.js'
 import { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
 import { BUILD_VERSION } from './buildInfo.js'
 import {
@@ -2183,7 +2184,8 @@ function App() {
   const [isBulkAccepting, setIsBulkAccepting] = useState(false)
   const [error, setErrorState] = useState('')
   const [errorRecovery, setErrorRecovery] = useState(null)
-  const [errorContext, setErrorContext] = useState({ source: '', code: '' })
+  const [errorContext, setErrorContext] = useState({ source: '', code: '', requestId: '' })
+  const [errorLogs, setErrorLogs] = useState([])
   const setError = useCallback((value, options = {}) => {
     const nextMessage =
       typeof value === 'string'
@@ -2205,6 +2207,12 @@ function App() {
     let normalizedRecoveryKey = rawRecoveryKey
       ? rawRecoveryKey.toLowerCase()
       : ''
+    const requestIdOption =
+      typeof options?.requestId === 'string' ? options.requestId.trim() : ''
+    const logsOption =
+      Array.isArray(options?.logs) && options.logs.length > 0
+        ? options.logs.filter((entry) => entry && typeof entry === 'object')
+        : []
     if (trimmedMessage) {
       const providedCode =
         typeof options?.errorCode === 'string'
@@ -2221,20 +2229,18 @@ function App() {
       if (!normalizedRecoveryKey && allowRetry) {
         normalizedRecoveryKey = 'generation'
       }
-      if (derivedSource || providedCode) {
-        setErrorContext({ source: derivedSource, code: providedCode })
-      } else {
-        setErrorContext({ source: '', code: '' })
-      }
+      setErrorContext({ source: derivedSource, code: providedCode, requestId: requestIdOption })
+      setErrorLogs(logsOption)
     } else {
-      setErrorContext({ source: '', code: '' })
+      setErrorContext({ source: '', code: '', requestId: '' })
+      setErrorLogs([])
     }
     if (trimmedMessage && normalizedRecoveryKey) {
       setErrorRecovery(normalizedRecoveryKey)
     } else {
       setErrorRecovery(null)
     }
-  }, [setErrorContext])
+  }, [setErrorContext, setErrorLogs])
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
@@ -3433,12 +3439,15 @@ function App() {
         errorCode: typeof errorContext?.code === 'string' ? errorContext.code : '',
         errorSource: normalizedSource || '',
         jobId: jobId || '',
+        requestId:
+          typeof errorContext?.requestId === 'string' ? errorContext.requestId : '',
         currentPhase,
         activeDashboardStage,
         isProcessing,
         hasCvFile,
         hasManualJobDescriptionInput,
         queuedMessage,
+        logs: errorLogs.length ? errorLogs : undefined,
         downloadStates: Object.keys(downloadStateSnapshot).length
           ? downloadStateSnapshot
           : undefined,
@@ -3470,6 +3479,7 @@ function App() {
     error,
     errorContext,
     errorRecovery,
+    errorLogs,
     flowSteps,
     hasCvFile,
     hasManualJobDescriptionInput,
@@ -3897,7 +3907,7 @@ function App() {
           errorMessages.length > 0
             ? errorMessages[errorMessages.length - 1]
             : ''
-        const { message, code, source } = resolveApiError({
+        const { message, code, source, logs, requestId } = resolveApiError({
           data: errPayload,
           fallback: 'Could not generate PDF, please try again.',
           status: response.status
@@ -3908,6 +3918,12 @@ function App() {
         }
         if (source) {
           error.serviceError = source
+        }
+        if (requestId) {
+          error.requestId = requestId
+        }
+        if (logs && logs.length) {
+          error.logs = logs
         }
         if (summaryMessage) {
           error.summary = summaryMessage
@@ -4122,7 +4138,9 @@ function App() {
       const {
         message: errorMessage,
         code: errorCode,
-        source: errorSource
+        source: errorSource,
+        logs: errorLogsValue,
+        requestId: errorRequestId
       } = resolveApiError({
         data,
         fallback: fallbackMessage,
@@ -4131,12 +4149,23 @@ function App() {
 
       if (!response.ok) {
         if (!silent) {
-          setError(errorMessage, { serviceError: errorSource, errorCode })
+          setError(errorMessage, {
+            serviceError: errorSource,
+            errorCode,
+            logs: errorLogsValue,
+            requestId: errorRequestId
+          })
         }
         const err = new Error(errorMessage)
         err.code = errorCode || 'DOWNLOAD_REFRESH_FAILED'
         if (errorSource) {
           err.serviceError = errorSource
+        }
+        if (errorRequestId) {
+          err.requestId = errorRequestId
+        }
+        if (Array.isArray(errorLogsValue) && errorLogsValue.length) {
+          err.logs = errorLogsValue
         }
         throw err
       }
@@ -5115,7 +5144,9 @@ function App() {
           message: resolvedMessage,
           code: errorCode,
           isFriendly,
-          source: errorSource
+          source: errorSource,
+          logs: errorLogsValue,
+          requestId: errorRequestId
         } = resolveApiError({
           data,
           fallback: fallbackMessage,
@@ -5145,6 +5176,12 @@ function App() {
         }
         if (errorSource) {
           error.serviceError = errorSource
+        }
+        if (errorRequestId) {
+          error.requestId = errorRequestId
+        }
+        if (Array.isArray(errorLogsValue) && errorLogsValue.length) {
+          error.logs = errorLogsValue
         }
         throw error
       }
@@ -5379,7 +5416,13 @@ function App() {
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
       const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
-      setError(errorMessage, { serviceError: serviceErrorSource, errorCode })
+      const { logs: errorLogsValue, requestId: errorRequestId } = extractErrorMetadata(err)
+      setError(errorMessage, {
+        serviceError: serviceErrorSource,
+        errorCode,
+        logs: errorLogsValue,
+        requestId: errorRequestId
+      })
       lastAutoScoreSignatureRef.current = ''
     } finally {
       setIsProcessing(false)
@@ -6300,11 +6343,14 @@ function App() {
                 console.error('Updating change log entry failed', persistErr)
                 const { source: serviceErrorSource, code: errorCode } =
                   deriveServiceContextFromError(persistErr)
+                const { logs: persistLogs, requestId: persistRequestId } = extractErrorMetadata(persistErr)
                 setError(
                   persistErr.message || 'Unable to update the change log entry.',
                   {
                     serviceError: serviceErrorSource,
-                    errorCode
+                    errorCode,
+                    logs: persistLogs,
+                    requestId: persistRequestId
                   }
                 )
               }
@@ -6329,9 +6375,12 @@ function App() {
           console.error('Improvement rescore failed', err)
           const { source: serviceErrorSource, code: errorCode } =
             deriveServiceContextFromError(err)
+          const { logs: improvementLogs, requestId: improvementRequestId } = extractErrorMetadata(err)
           setError(err.message || 'Unable to update scores after applying improvement.', {
             serviceError: serviceErrorSource,
-            errorCode
+            errorCode,
+            logs: improvementLogs,
+            requestId: improvementRequestId
           })
           setImprovementResults((prev) =>
             prev.map((item) =>
@@ -6384,7 +6433,7 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message, code, source } = resolveApiError({
+        const { message, code, source, logs, requestId } = resolveApiError({
           data: errPayload,
           fallback: 'Unable to store the change log entry.',
           status: response.status
@@ -6395,6 +6444,12 @@ function App() {
         }
         if (source) {
           error.serviceError = source
+        }
+        if (requestId) {
+          error.requestId = requestId
+        }
+        if (Array.isArray(logs) && logs.length) {
+          error.logs = logs
         }
         throw error
       }
@@ -6536,19 +6591,22 @@ function App() {
             return [entryPayload, ...prev]
           })
 
-          try {
-            await persistChangeLogEntry(entryPayload)
-          } catch (err) {
-            console.error('Persisting change log entry failed', err)
-            const { source: serviceErrorSource, code: errorCode } =
-              deriveServiceContextFromError(err)
-            setError(err.message || 'Unable to store the change log entry.', {
-              serviceError: serviceErrorSource,
-              errorCode
-            })
-            setChangeLog(previousChangeLog || [])
-          }
+        try {
+          await persistChangeLogEntry(entryPayload)
+        } catch (err) {
+          console.error('Persisting change log entry failed', err)
+          const { source: serviceErrorSource, code: errorCode } =
+            deriveServiceContextFromError(err)
+          const { logs: persistLogs, requestId: persistRequestId } = extractErrorMetadata(err)
+          setError(err.message || 'Unable to store the change log entry.', {
+            serviceError: serviceErrorSource,
+            errorCode,
+            logs: persistLogs,
+            requestId: persistRequestId
+          })
+          setChangeLog(previousChangeLog || [])
         }
+      }
 
         pendingImprovementRescoreRef.current = [
           ...pendingImprovementRescoreRef.current.filter((entry) => entry?.id !== id),
@@ -6819,7 +6877,7 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message, code, source } = resolveApiError({
+        const { message, code, source, logs, requestId } = resolveApiError({
           data: errPayload,
           fallback: 'Unable to remove the change log entry.',
           status: response.status
@@ -6830,6 +6888,12 @@ function App() {
         }
         if (source) {
           error.serviceError = source
+        }
+        if (requestId) {
+          error.requestId = requestId
+        }
+        if (Array.isArray(logs) && logs.length) {
+          error.logs = logs
         }
         throw error
       }
@@ -6921,7 +6985,7 @@ function App() {
         } else {
           setQueuedMessage('')
         }
-        const { message, code, isFriendly, source } = resolveApiError({
+        const { message, code, isFriendly, source, logs, requestId } = resolveApiError({
           data: errPayload,
           fallback: CV_GENERATION_ERROR_MESSAGE,
           status: response.status
@@ -6936,6 +7000,12 @@ function App() {
         }
         if (source) {
           error.serviceError = source
+        }
+        if (requestId) {
+          error.requestId = requestId
+        }
+        if (Array.isArray(logs) && logs.length) {
+          error.logs = logs
         }
         throw error
       }
@@ -7147,11 +7217,14 @@ function App() {
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
       const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
+      const { logs: errorLogsValue, requestId: errorRequestId } = extractErrorMetadata(err)
       setError(message, {
         allowRetry: true,
         recovery: 'generation',
         serviceError: serviceErrorSource,
-        errorCode
+        errorCode,
+        logs: errorLogsValue,
+        requestId: errorRequestId
       })
     } finally {
       setIsGeneratingDocs(false)
@@ -7319,7 +7392,7 @@ function App() {
 
       if (!response.ok) {
         const errPayload = await response.json().catch(() => ({}))
-        const { message, code, source } = resolveApiError({
+        const { message, code, source, logs, requestId } = resolveApiError({
           data: errPayload,
           fallback:
             response.status >= 500
@@ -7333,6 +7406,12 @@ function App() {
         }
         if (source) {
           error.serviceError = source
+        }
+        if (requestId) {
+          error.requestId = requestId
+        }
+        if (Array.isArray(logs) && logs.length) {
+          error.logs = logs
         }
         throw error
       }
@@ -7402,7 +7481,13 @@ function App() {
         (typeof err?.message === 'string' && err.message.trim()) ||
         CV_GENERATION_ERROR_MESSAGE
       const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
-      setError(errorMessage, { serviceError: serviceErrorSource, errorCode })
+      const { logs: improvementLogs, requestId: improvementRequestId } = extractErrorMetadata(err)
+      setError(errorMessage, {
+        serviceError: serviceErrorSource,
+        errorCode,
+        logs: improvementLogs,
+        requestId: improvementRequestId
+      })
       if (type === 'enhance-all') {
         setEnhanceAllSummaryText('')
       }
@@ -7569,9 +7654,12 @@ function App() {
         console.error('Removing change log entry failed', err)
         const { source: serviceErrorSource, code: errorCode } =
           deriveServiceContextFromError(err)
+        const { logs: removalLogs, requestId: removalRequestId } = extractErrorMetadata(err)
         setError(err.message || 'Unable to remove the change log entry.', {
           serviceError: serviceErrorSource,
-          errorCode
+          errorCode,
+          logs: removalLogs,
+          requestId: removalRequestId
         })
         setChangeLog(previousChangeLogState || [])
         setImprovementResults(previousImprovementResults || [])
@@ -7669,9 +7757,12 @@ function App() {
             : 'Unable to accept this improvement from the preview.'
         const { source: serviceErrorSource, code: errorCode } =
           deriveServiceContextFromError(err)
+        const { logs: previewLogs, requestId: previewRequestId } = extractErrorMetadata(err)
         setError(err?.message || fallbackMessage, {
           serviceError: serviceErrorSource,
-          errorCode
+          errorCode,
+          logs: previewLogs,
+          requestId: previewRequestId
         })
       } finally {
         setPreviewActionBusy(false)
@@ -7885,8 +7976,88 @@ function App() {
           </div>
         )}
         {error && (
-          <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex w-full flex-col items-center gap-4 text-center">
             <p className="text-red-600 text-sm font-semibold">{error}</p>
+            <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-slate-600">
+              {typeof errorContext?.code === 'string' && errorContext.code.trim() && (
+                <span className="rounded-full bg-red-50 px-3 py-1 font-semibold uppercase tracking-wide text-red-600">
+                  {errorContext.code}
+                </span>
+              )}
+              {normalizeServiceSource(errorContext?.source) && (
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-semibold uppercase tracking-wide text-slate-600">
+                  {normalizeServiceSource(errorContext.source)}
+                </span>
+              )}
+              {typeof errorContext?.requestId === 'string' && errorContext.requestId.trim() && (
+                <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] text-slate-600">
+                  Request: {errorContext.requestId}
+                </span>
+              )}
+            </div>
+            {errorLogs.length > 0 && (
+              <div className="w-full max-w-xl space-y-2 rounded-2xl border border-slate-200 bg-white/80 p-4 text-left shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Log references
+                </p>
+                <ul className="space-y-2">
+                  {errorLogs.map((log) => (
+                    <li key={log.id} className="rounded-xl bg-slate-50 px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+                        <span className="uppercase tracking-wide text-slate-500">{log.channel}</span>
+                        {typeof log.status === 'string' && log.status && (
+                          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                            {log.status}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 space-y-1 break-all text-xs text-slate-600">
+                        {log.location && (
+                          <div>
+                            <span className="font-medium text-slate-500">Location:</span> {log.location}
+                          </div>
+                        )}
+                        {!log.location && log.bucket && log.key && (
+                          <div>
+                            <span className="font-medium text-slate-500">Bucket:</span> {log.bucket}
+                            <span className="font-medium text-slate-500"> · Key:</span> {log.key}
+                          </div>
+                        )}
+                        {log.requestId && (
+                          <div>
+                            <span className="font-medium text-slate-500">Request:</span>{' '}
+                            <code className="font-mono">{log.requestId}</code>
+                          </div>
+                        )}
+                        {log.message && (
+                          <div>
+                            <span className="font-medium text-slate-500">Note:</span> {log.message}
+                          </div>
+                        )}
+                        {log.url && (
+                          <div>
+                            <span className="font-medium text-slate-500">URL:</span>{' '}
+                            <a
+                              href={log.url}
+                              className="text-blue-600 underline"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {log.url}
+                            </a>
+                          </div>
+                        )}
+                        {log.hint && (
+                          <div>
+                            <span className="font-medium text-slate-500">Hint:</span> {log.hint}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="flex flex-wrap items-center justify-center gap-2">
               {errorRecovery === 'generation' && (
                 <button
