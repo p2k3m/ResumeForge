@@ -59,6 +59,14 @@ import {
   parseTemplateParams as parseTemplateParamsConfig,
   resolveTemplateParams as resolveTemplateParamsConfig
 } from './lib/pdf/utils.js';
+import {
+  TECHNICAL_TERMS,
+  calculateMatchScore,
+  extractResumeSkills,
+  normalizeSkillListInput,
+} from './services/common/skills.js';
+import { evaluateJobDescription } from './services/jobEvaluation/service.js';
+import { scoreResumeAgainstJob } from './services/scoring/service.js';
 
 const WordExtractor = WordExtractorPackage?.default || WordExtractorPackage;
 
@@ -2447,42 +2455,6 @@ function uniqueValidCoverTemplates(list = []) {
   return result;
 }
 
-const TECHNICAL_TERMS = [
-  'javascript',
-  'typescript',
-  'python',
-  'java',
-  'c\\+\\+',
-  'c#',
-  'go',
-  'ruby',
-  'php',
-  'swift',
-  'kotlin',
-  'react',
-  'angular',
-  'vue',
-  'node',
-  'express',
-  'next.js',
-  'docker',
-  'kubernetes',
-  'aws',
-  'gcp',
-  'azure',
-  'sql',
-  'mysql',
-  'postgresql',
-  'mongodb',
-  'git',
-  'graphql',
-  'linux',
-  'bash',
-  'redis',
-  'jenkins',
-  'terraform',
-  'ansible'
-];
 function selectTemplates({
   defaultClTemplate = CL_TEMPLATES[0],
   template1,
@@ -4836,73 +4808,6 @@ function analyzeJobDescription(html) {
   }
 
   return { title, skills, text };
-}
-
-function extractResumeSkills(text = '') {
-  const lower = text.toLowerCase();
-  const skills = [];
-  for (const term of TECHNICAL_TERMS) {
-    const regex = new RegExp(`\\b${term}\\b`, 'g');
-    if (regex.test(lower)) {
-      skills.push(term.replace(/\\+\\+/g, '++'));
-    }
-  }
-  return skills;
-}
-
-function calculateMatchScore(jobSkills = [], resumeSkills = []) {
-  const table = jobSkills.map((skill) => {
-    const matched = resumeSkills.some(
-      (s) => s.toLowerCase() === skill.toLowerCase()
-    );
-    return { skill, matched };
-  });
-  const matchedCount = table.filter((r) => r.matched).length;
-  const score = jobSkills.length
-    ? Math.round((matchedCount / jobSkills.length) * 100)
-    : 0;
-  const newSkills = table.filter((r) => !r.matched).map((r) => r.skill);
-  return { score, table, newSkills };
-}
-
-function normalizeSkillListInput(value) {
-  const values = [];
-
-  const pushValues = (input) => {
-    if (input === null || input === undefined) {
-      return;
-    }
-    if (Array.isArray(input)) {
-      input.forEach((entry) => pushValues(entry));
-      return;
-    }
-    if (typeof input === 'object') {
-      Object.values(input).forEach((entry) => pushValues(entry));
-      return;
-    }
-    if (typeof input === 'string') {
-      input
-        .split(/[\n,]/)
-        .map((token) => token.trim())
-        .filter(Boolean)
-        .forEach((token) => values.push(token));
-    }
-  };
-
-  pushValues(value);
-
-  const seen = new Set();
-  const normalized = [];
-  for (const entry of values) {
-    const key = entry.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    normalized.push(entry);
-  }
-
-  return normalized;
 }
 
 function collectSectionText(resumeText = '', linkedinData = {}, credlyCertifications = []) {
@@ -16286,140 +16191,80 @@ app.get('/healthz', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/jd/evaluate', assignJobContext, async (req, res) => {
+app.post('/api/jd/evaluate', assignJobContext, (req, res) => {
   const payload = req.body || {};
   const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
-  if (!jobIdInput) {
-    return sendError(
-      res,
-      400,
-      'JOB_ID_REQUIRED',
-      'jobId is required to evaluate the job description fit.'
-    );
+
+  if (jobIdInput) {
+    req.jobId = jobIdInput;
+    res.locals.jobId = jobIdInput;
   }
 
-  const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
-  if (!resumeText.trim()) {
-    return sendError(
-      res,
-      400,
-      'RESUME_TEXT_REQUIRED',
-      'resumeText is required to evaluate the job description fit.'
-    );
-  }
-
-  const jobDescriptionText =
-    typeof payload.jobDescriptionText === 'string' ? payload.jobDescriptionText : '';
-
-  const skillCandidates = [
-    payload.jobSkills,
-    payload.prioritySkills,
-    payload.requiredSkills,
-    payload.jobKeywords,
-  ];
-
-  let jobSkills = [];
-  for (const candidate of skillCandidates) {
-    jobSkills = normalizeSkillListInput(candidate);
-    if (jobSkills.length) {
-      break;
-    }
-  }
-
-  if (!jobSkills.length) {
-    return sendError(
-      res,
-      400,
-      'JOB_SKILLS_REQUIRED',
-      'Provide jobSkills with at least one keyword to evaluate the fit.'
-    );
-  }
-
-  req.jobId = jobIdInput;
-  res.locals.jobId = jobIdInput;
   captureUserContext(req, res);
-  const requestId = res.locals.requestId;
 
-  const resumeSkills = extractResumeSkills(resumeText);
-  const match = calculateMatchScore(jobSkills, resumeSkills);
-  const breakdown = buildScoreBreakdown(resumeText, {
-    jobText: jobDescriptionText,
-    jobSkills,
-    resumeSkills,
-  });
-  const atsMetrics = scoreBreakdownToArray(breakdown);
+  const outcome = evaluateJobDescription(payload);
+  if (!outcome.ok) {
+    const { statusCode, code, message, details } = outcome.error || {};
+    return sendError(
+      res,
+      statusCode || 400,
+      code || 'VALIDATION_ERROR',
+      message || 'Unable to evaluate the job description fit.',
+      details
+    );
+  }
+
+  const requestId = res.locals.requestId;
+  const result = outcome.result;
 
   logStructured('info', 'jd_evaluation_completed', {
     requestId,
-    jobId: jobIdInput,
-    score: match.score,
-    missingSkillCount: match.newSkills.length,
+    jobId: result.jobId,
+    score: result.score,
+    missingSkillCount: Array.isArray(result.missingSkills)
+      ? result.missingSkills.length
+      : 0,
   });
 
-  return res.json({
-    success: true,
-    jobId: jobIdInput,
-    score: match.score,
-    missingSkills: match.newSkills,
-    matchedSkills: match.table.filter((entry) => entry.matched).map((entry) => entry.skill),
-    breakdown: atsMetrics,
-  });
+  return res.json(result);
 });
 
-app.post('/api/score-match', assignJobContext, async (req, res) => {
+app.post('/api/score-match', assignJobContext, (req, res) => {
   const payload = req.body || {};
   const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
-  if (!jobIdInput) {
-    return sendError(
-      res,
-      400,
-      'JOB_ID_REQUIRED',
-      'jobId is required to score the resume against the job description.'
-    );
+
+  if (jobIdInput) {
+    req.jobId = jobIdInput;
+    res.locals.jobId = jobIdInput;
   }
 
-  const resumeText = typeof payload.resumeText === 'string' ? payload.resumeText : '';
-  if (!resumeText.trim()) {
-    return sendError(
-      res,
-      400,
-      'RESUME_TEXT_REQUIRED',
-      'resumeText is required to score the resume against the job description.'
-    );
-  }
-
-  const jobSkills = normalizeSkillListInput(payload.jobSkills);
-  if (!jobSkills.length) {
-    return sendError(
-      res,
-      400,
-      'JOB_SKILLS_REQUIRED',
-      'Provide jobSkills with at least one keyword to calculate a score.'
-    );
-  }
-
-  req.jobId = jobIdInput;
-  res.locals.jobId = jobIdInput;
   captureUserContext(req, res);
-  const requestId = res.locals.requestId;
 
-  const resumeSkills = extractResumeSkills(resumeText);
-  const match = calculateMatchScore(jobSkills, resumeSkills);
+  const outcome = scoreResumeAgainstJob(payload);
+  if (!outcome.ok) {
+    const { statusCode, code, message, details } = outcome.error || {};
+    return sendError(
+      res,
+      statusCode || 400,
+      code || 'VALIDATION_ERROR',
+      message || 'Unable to score the resume against the job description.',
+      details
+    );
+  }
+
+  const requestId = res.locals.requestId;
+  const result = outcome.result;
 
   logStructured('info', 'match_score_calculated', {
     requestId,
-    jobId: jobIdInput,
-    score: match.score,
-    missingSkillCount: match.newSkills.length,
+    jobId: result.jobId,
+    score: result.score,
+    missingSkillCount: Array.isArray(result.missingSkills)
+      ? result.missingSkills.length
+      : 0,
   });
 
-  return res.json({
-    success: true,
-    jobId: jobIdInput,
-    score: match.score,
-    missingSkills: match.newSkills,
-    alignmentTable: match.table,
-  });
+  return res.json(result);
 });
 
 const improvementRoutes = [

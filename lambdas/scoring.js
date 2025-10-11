@@ -1,4 +1,2 @@
-import { createServiceHandler } from '../microservices/createServiceHandler.js';
-import { getServiceConfig } from '../microservices/services.js';
-
-export const handler = createServiceHandler(getServiceConfig('scoring'));
+export { handler } from '../services/scoring/handler.js';
+export { handler as default } from '../services/scoring/handler.js';
