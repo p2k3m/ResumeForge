@@ -3,7 +3,7 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'path';
 import os from 'os';
-import crypto, { createHash } from 'crypto';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
@@ -27,7 +27,6 @@ const {
 } = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logEvent, logErrorTrace } from './logger.js';
 import {
   executeWithRetry,
@@ -94,11 +93,13 @@ import { publishResumeWorkflowEvent } from './services/orchestration/eventBridge
 import {
   TECHNICAL_TERMS,
   calculateMatchScore,
+  computeSkillGap,
   extractResumeSkills,
   normalizeSkillListInput,
 } from './lib/resume/skills.js';
 import { evaluateJobDescription } from './lib/resume/jobEvaluation.js';
 import { scoreResumeAgainstJob } from './lib/resume/scoring.js';
+import { createTextDigest } from './lib/resume/utils.js';
 import { resolveServiceForRoute } from './microservices/services.js';
 
 const extractText = extractResumeText;
@@ -859,17 +860,6 @@ function createIdentifier() {
     return crypto.randomUUID();
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function createTextDigest(value) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (!normalized) {
-    return '';
-  }
-  return createHash('sha256').update(normalized).digest('hex');
 }
 
 function serializeError(err) {
@@ -2970,16 +2960,6 @@ function dedupeCertificates(certificates = []) {
     });
   });
   return result;
-}
-
-function computeSkillGap(jobSkills = [], resumeSkills = []) {
-  const resumeSet = new Set(
-    (resumeSkills || []).map((skill) => skill.toLowerCase())
-  );
-  return (jobSkills || [])
-    .map((skill) => String(skill || '').trim())
-    .filter(Boolean)
-    .filter((skill) => !resumeSet.has(skill.toLowerCase()));
 }
 
 const MONTH_LOOKUP = {
@@ -14911,8 +14891,10 @@ async function generateEnhancedDocumentsResponse({
 
   let generativeModel = null;
   if (enableGenerativeEnhancements) {
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    generativeModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    generativeModel = createGeminiGenerativeModel({
+      apiKey: geminiApiKey,
+      model: 'gemini-1.5-flash',
+    });
   }
   const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
   const resolvedJobDescriptionDigest =

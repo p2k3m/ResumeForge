@@ -1,4 +1,4 @@
-import { buildScoreBreakdown } from '../server.js';
+import { buildScoreBreakdown } from '../lib/scoring/atsMetrics.js';
 import { resumeSamples } from './utils/resumeSamples.js';
 
 const METRIC_KEYS = [
