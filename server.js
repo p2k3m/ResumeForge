@@ -8,7 +8,6 @@ import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
 import { Readable } from 'stream';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   S3Client,
   PutObjectCommand,
@@ -36,9 +35,6 @@ import {
   shouldRetryS3Error,
 } from './lib/retry.js';
 import Handlebars from './lib/handlebars.js';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-import mammoth from 'mammoth';
-import WordExtractorPackage from 'word-extractor';
 import JSON5 from 'json5';
 import mime from 'mime-types';
 import { buildAggregatedChangeLogSummary } from './client/src/utils/changeLogSummaryShared.js';
@@ -60,6 +56,16 @@ import {
   resolveTemplateParams as resolveTemplateParamsConfig
 } from './lib/pdf/utils.js';
 import { ENHANCEMENT_TYPES } from './lib/resume/enhancement.js';
+import {
+  extractResumeText,
+  classifyResumeDocument,
+  shouldRejectBasedOnClassification,
+} from './lib/resume/parsing.js';
+import {
+  createGeminiGenerativeModel,
+  generateContentWithRetry,
+  parseGeminiJsonResponse,
+} from './lib/llm/gemini.js';
 import { publishResumeWorkflowEvent } from './services/orchestration/eventBridgePublisher.js';
 import {
   TECHNICAL_TERMS,
@@ -71,7 +77,8 @@ import { evaluateJobDescription } from './lib/resume/jobEvaluation.js';
 import { scoreResumeAgainstJob } from './lib/resume/scoring.js';
 import { resolveServiceForRoute } from './microservices/services.js';
 
-const WordExtractor = WordExtractorPackage?.default || WordExtractorPackage;
+const extractText = extractResumeText;
+const classifyDocument = classifyResumeDocument;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -335,7 +342,6 @@ let chromiumLaunchAttempted = false;
 let customChromiumLauncher;
 
 let sharedGenerativeModelPromise;
-let sharedWordExtractor;
 
 const LEARNING_RESOURCE_LIMITS = Object.freeze({
   skills: 3,
@@ -542,11 +548,15 @@ async function generateLearningResources(skills, context = {}) {
     try {
       const model = await getSharedGenerativeModel();
       if (model?.generateContent) {
+        const learningLogger = createStructuredLogger({ skills: normalizedSkills });
         const response = await generateContentWithRetry(model, prompt, {
           retryLogEvent: 'learning_resource_generation',
           retryLogContext: { skills: normalizedSkills },
+          logger: learningLogger,
         });
-        const parsed = parseAiJson(response?.response?.text?.());
+        const parsed = parseGeminiJsonResponse(response?.response?.text?.(), {
+          logger: learningLogger,
+        });
         const sanitized = sanitizeLearningResourceEntries(parsed?.resources, {
           missingSkills: normalizedSkills,
         });
@@ -651,8 +661,7 @@ async function getSharedGenerativeModel() {
       if (!GEMINI_API_KEY) {
         throw new Error('GEMINI_API_KEY missing for generative model');
       }
-      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      return genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      return createGeminiGenerativeModel({ apiKey: GEMINI_API_KEY });
     } catch (err) {
       sharedGenerativeModelPromise = undefined;
       throw err;
@@ -860,44 +869,6 @@ function serializeError(err) {
     }
   }
   return { message: String(err) };
-}
-
-async function generateContentWithRetry(model, prompt, options = {}) {
-  if (!model?.generateContent) {
-    return null;
-  }
-
-  const {
-    maxAttempts = 3,
-    retryLogEvent,
-    retryLogContext = {},
-    baseDelayMs = 800,
-    maxDelayMs = 6000,
-    jitterMs = 400,
-  } = options;
-
-  return await executeWithRetry(
-    () => model.generateContent(prompt),
-    {
-      maxAttempts,
-      baseDelayMs,
-      maxDelayMs,
-      jitterMs,
-      shouldRetry: (err) => shouldRetryGeminiError(err),
-      onRetry: (err, attempt, delayMs) => {
-        if (!retryLogEvent) {
-          return;
-        }
-        logStructured('warn', `${retryLogEvent}_retry`, {
-          ...retryLogContext,
-          attempt,
-          delayMs,
-          status: getErrorStatus(err),
-          error: serializeError(err),
-        });
-      },
-    }
-  );
 }
 
 function toLoggable(value) {
@@ -1153,6 +1124,17 @@ function logStructured(level, message, context = {}) {
     console.error(JSON.stringify(fallback));
   }
 }
+
+function createStructuredLogger(baseContext = {}) {
+  return {
+    debug: (event, details = {}) => logStructured('debug', event, { ...baseContext, ...details }),
+    info: (event, details = {}) => logStructured('info', event, { ...baseContext, ...details }),
+    warn: (event, details = {}) => logStructured('warn', event, { ...baseContext, ...details }),
+    error: (event, details = {}) => logStructured('error', event, { ...baseContext, ...details }),
+  };
+}
+
+const structuredLogger = createStructuredLogger();
 
 let runtimeConfigFileCache;
 let runtimeConfigFileError;
@@ -4625,7 +4607,9 @@ async function runTargetedImprovement(type, context = {}) {
         retryLogEvent: 'targeted_improvement_ai',
         retryLogContext: { type },
       });
-      const parsed = parseAiJson(response?.response?.text?.());
+      const parsed = parseGeminiJsonResponse(response?.response?.text?.(), {
+        logger: structuredLogger,
+      });
       if (parsed && typeof parsed === 'object') {
         const updated = sanitizeGeneratedText(
           parsed.updatedResume || parsed.resume || resumeText,
@@ -5508,11 +5492,15 @@ async function rewriteSectionsWithGemini(
       resumeDigest: createTextDigest(name || baseResumeData?.name || ''),
       hasJobDescription: Boolean(jobDescription),
     };
+    const rewriteLogger = createStructuredLogger(retryContext);
     const result = await generateContentWithRetry(generativeModel, prompt, {
       retryLogEvent: 'generation_section_rewrite',
       retryLogContext: retryContext,
+      logger: rewriteLogger,
     });
-    const parsed = parseAiJson(result?.response?.text?.());
+    const parsed = parseGeminiJsonResponse(result?.response?.text?.(), {
+      logger: rewriteLogger,
+    });
     if (parsed) {
       const resumeData = buildResumeDataFromGeminiOutput(
         parsed,
@@ -9523,544 +9511,6 @@ function buildPdfGenerationErrorDetails(error, { source = 'lambda' } = {}) {
   return baseDetails;
 }
 
-function normalizeExtractedText(text = '') {
-  if (!text) return '';
-  return text
-    .replace(/\r\n?/g, '\n')
-    .replace(/[\u0000\u2028\u2029]/g, '\n')
-    .replace(/\n{3,}/g, '\n\n');
-}
-
-const RESUME_EXTRACTION_MESSAGES = {
-  pdf: {
-    intro: "We couldn't read your PDF resume.",
-    guidance:
-      'Please export a new PDF (make sure it is not password protected) and upload it again.'
-  },
-  docx: {
-    intro: "We couldn't read your DOCX resume.",
-    guidance:
-      'Please download a fresh DOCX copy (or export it to PDF) from your editor and try again.'
-  },
-  doc: {
-    intro: "We couldn't read your DOC resume.",
-    guidance:
-      'Please re-save it as a DOC file or export it to PDF before uploading again.'
-  },
-  default: {
-    intro: "We couldn't read your resume.",
-    guidance: 'Please upload a valid PDF or DOCX resume and try again.'
-  }
-};
-
-function createResumeExtractionError(type, reason, cause) {
-  const key = type && RESUME_EXTRACTION_MESSAGES[type] ? type : 'default';
-  const { intro, guidance } = RESUME_EXTRACTION_MESSAGES[key];
-  const message = `${intro} ${guidance}`.trim();
-  const error = new Error(message);
-  error.resumeType = type || 'unknown';
-  if (reason) {
-    error.reason = reason;
-  }
-  if (cause) {
-    error.cause = cause;
-  }
-  return error;
-}
-
-async function extractDocxText(buffer) {
-  if (!mammoth || typeof mammoth.extractRawText !== 'function') {
-    throw createResumeExtractionError('docx', 'dependency_missing');
-  }
-
-  try {
-    const result = await mammoth.extractRawText({ buffer });
-    const text = result?.value;
-    if (typeof text !== 'string' || !text.trim()) {
-      throw createResumeExtractionError('docx', 'empty_text');
-    }
-    return text;
-  } catch (err) {
-    if (err?.resumeType === 'docx') {
-      throw err;
-    }
-    throw createResumeExtractionError('docx', 'parse_failed', err);
-  }
-}
-
-async function extractDocText(buffer) {
-  if (!sharedWordExtractor) {
-    sharedWordExtractor = new WordExtractor();
-  }
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'resumeforge-'));
-  const tmpPath = path.join(tmpDir, `resume-${Date.now()}.doc`);
-  try {
-    await fs.writeFile(tmpPath, buffer);
-    const document = await sharedWordExtractor.extract(tmpPath);
-    if (!document) {
-      throw createResumeExtractionError('doc', 'missing_document');
-    }
-    const sections = [];
-    if (typeof document.getBody === 'function') {
-      sections.push(document.getBody());
-    }
-    if (typeof document.getHeaders === 'function') {
-      const headers = document.getHeaders();
-      if (Array.isArray(headers)) {
-        sections.push(headers.join('\n'));
-      }
-    }
-    if (typeof document.getFooters === 'function') {
-      const footers = document.getFooters();
-      if (Array.isArray(footers)) {
-        sections.push(footers.join('\n'));
-      }
-    }
-    if (typeof document.getText === 'function') {
-      sections.push(document.getText());
-    }
-    const combined = sections.filter(Boolean).join('\n\n');
-    if (!combined.trim()) {
-      throw createResumeExtractionError('doc', 'empty_text');
-    }
-    return combined;
-  } catch (err) {
-    if (err?.resumeType === 'doc') {
-      throw err;
-    }
-    throw createResumeExtractionError('doc', 'parse_failed', err);
-  } finally {
-    await fs.rm(tmpPath, { force: true }).catch(() => {});
-    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
-async function extractText(file) {
-  const ext = (path.extname(file.originalname) || '').toLowerCase();
-  const mimetype = (file.mimetype || '').toLowerCase();
-  const buffer = file.buffer;
-
-  if (!buffer) {
-    throw new Error('Resume file buffer is missing.');
-  }
-
-  const normalizedExt =
-    ext ||
-    (mimetype.includes('pdf')
-      ? '.pdf'
-      : mimetype.includes('wordprocessingml')
-        ? '.docx'
-        : mimetype.includes('msword')
-          ? '.doc'
-          : '');
-
-  if (normalizedExt === '.pdf') {
-    try {
-      const data = await pdfParse(buffer);
-      const text = data?.text;
-      if (typeof text !== 'string' || !text.trim()) {
-        throw createResumeExtractionError('pdf', 'empty_text');
-      }
-      return normalizeExtractedText(text);
-    } catch (err) {
-      if (err?.resumeType === 'pdf') {
-        throw err;
-      }
-      throw createResumeExtractionError('pdf', 'parse_failed', err);
-    }
-  }
-
-  if (normalizedExt === '.docx') {
-    const text = await extractDocxText(buffer);
-    return normalizeExtractedText(text);
-  }
-
-  if (normalizedExt === '.doc') {
-    const text = await extractDocText(buffer);
-    return normalizeExtractedText(text);
-  }
-
-  throw new Error('Unsupported resume format encountered. Only PDF, DOC, or DOCX files are processed.');
-}
-
-function stripLeadingArticle(text = '') {
-  if (!text) return '';
-  return text.replace(/^(?:an?|the)\s+/i, '').trim();
-}
-
-function formatQuotedList(items = []) {
-  const limited = items.filter(Boolean).slice(0, 3).map((item) => `"${item}"`);
-  if (!limited.length) {
-    return '';
-  }
-  if (limited.length === 1) {
-    return limited[0];
-  }
-  if (limited.length === 2) {
-    return `${limited[0]} and ${limited[1]}`;
-  }
-  return `${limited.slice(0, -1).join(', ')}, and ${limited[limited.length - 1]}`;
-}
-
-function buildClassifierReason(description = '', matches = []) {
-  const docType = stripLeadingArticle(description || 'non-resume document');
-  const quoted = formatQuotedList(matches);
-  if (/job description/i.test(docType)) {
-    if (quoted) {
-      return `Detected job-posting keywords such as ${quoted}.`;
-    }
-    return 'Detected patterns typical of a job-posting document.';
-  }
-  if (quoted) {
-    return `Detected ${docType} keywords such as ${quoted}.`;
-  }
-  return `Detected patterns typical of ${docType}.`;
-}
-
-const DOCUMENT_CLASSIFIERS = [
-  {
-    description: 'a job description document',
-    keywords: [
-      'responsibilities',
-      'qualifications',
-      'job description',
-      'what you will do',
-      'we are looking for',
-      'you will',
-      'apply now',
-      'employment type',
-    ],
-    threshold: 2,
-  },
-  {
-    description: 'a cover letter',
-    keywords: ['dear', 'sincerely', 'cover letter'],
-    threshold: 2,
-  },
-  {
-    description: 'an invoice document',
-    keywords: ['invoice', 'bill to', 'payment terms', 'invoice number'],
-    threshold: 2,
-  },
-  {
-    description: 'meeting notes',
-    keywords: ['meeting notes', 'action items', 'attendees'],
-    threshold: 2,
-  },
-  {
-    description: 'an academic paper',
-    keywords: ['abstract', 'introduction', 'references'],
-    threshold: 2,
-  },
-  {
-    description: 'a policy or compliance document',
-    keywords: ['policy', 'scope', 'compliance', 'procedures'],
-    threshold: 2,
-  },
-  {
-    description: 'a marketing brochure',
-    keywords: ['call to action', 'our services', 'clients', 'testimonials'],
-    threshold: 2,
-  },
-  {
-    description: 'a slide deck outline',
-    keywords: ['slide', 'agenda', 'speaker notes'],
-    threshold: 2,
-  },
-  {
-    description: 'a certificate or award notice',
-    keywords: ['certificate of', 'awarded to', 'this certifies'],
-    threshold: 1,
-  },
-];
-
-const JOB_POSTING_PHRASES = [
-  'we are looking for',
-  'you will',
-  'you must',
-  'we offer',
-  'apply now',
-  'how to apply',
-  'company overview',
-  'about the role',
-  'about the team',
-  'about the company',
-  'compensation',
-  'salary',
-  'benefits',
-  'job description',
-  'job summary',
-  'employment type',
-  'location:',
-  'equal opportunity employer',
-  'perks',
-];
-
-const JOB_POSTING_REQUIREMENT_KEYWORDS = [
-  'responsibilities',
-  'qualifications',
-  'requirements',
-  'desired skills',
-  'preferred qualifications',
-  'what you will do',
-  'what we are looking for',
-];
-
-function runDocumentClassifiers(normalized) {
-  for (const classifier of DOCUMENT_CLASSIFIERS) {
-    const matches = classifier.keywords.filter((keyword) => normalized.includes(keyword));
-    if (matches.length >= classifier.threshold) {
-      return {
-        isResume: false,
-        description: classifier.description,
-        confidence: 0.4,
-        reason: buildClassifierReason(classifier.description, matches),
-      };
-    }
-  }
-  return null;
-}
-
-function detectJobPostingDocument(normalized) {
-  const phraseMatches = JOB_POSTING_PHRASES.filter((phrase) => normalized.includes(phrase));
-
-  if (!phraseMatches.length) {
-    return null;
-  }
-
-  const requirementMatches = JOB_POSTING_REQUIREMENT_KEYWORDS.filter((keyword) =>
-    normalized.includes(keyword)
-  );
-
-  if (
-    phraseMatches.length >= 3 ||
-    (phraseMatches.length >= 2 && requirementMatches.length >= 2)
-  ) {
-    const clauses = [];
-    const phraseReason = formatQuotedList(phraseMatches);
-    if (phraseReason) {
-      clauses.push(`phrases like ${phraseReason}`);
-    }
-    const requirementReason = formatQuotedList(requirementMatches);
-    if (requirementReason) {
-      clauses.push(`sections such as ${requirementReason}`);
-    }
-    const joinedReason = clauses.length
-      ? `${clauses.slice(0, -1).join(', ')}${clauses.length > 1 ? ' and ' : ''}${clauses[clauses.length - 1]}`
-      : 'language typical of job postings';
-    return {
-      isResume: false,
-      description: 'a job description document',
-      confidence: 0.35,
-      reason: `Detected job-posting ${joinedReason}.`,
-    };
-  }
-
-  return null;
-}
-
-function getNonResumeClassification(normalized) {
-  return runDocumentClassifiers(normalized) ?? detectJobPostingDocument(normalized);
-}
-
-async function classifyDocument(text = '') {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return {
-      isResume: false,
-      description: 'an empty document',
-      confidence: 0,
-      reason: 'The uploaded file does not contain any text to evaluate.',
-    };
-  }
-
-  const normalized = trimmed.toLowerCase();
-  const nonResumeClassification = getNonResumeClassification(normalized);
-
-  if (/professional summary/i.test(trimmed) && /experience/i.test(trimmed)) {
-    if (nonResumeClassification) {
-      return nonResumeClassification;
-    }
-    return { isResume: true, description: 'a professional resume', confidence: 0.6 };
-  }
-
-  const excerpt = trimmed.slice(0, 3600);
-  try {
-    const model = await getSharedGenerativeModel();
-    if (model?.generateContent) {
-      const prompt =
-        'You are an AI document classifier. Determine whether the provided text is a curriculum vitae/resume. ' +
-        'Return ONLY valid JSON with keys: type ("resume" or "non_resume"), probableType (string describing the document if not a resume), ' +
-        'confidence (0-1), and reason (short explanation). Consider layout clues, section headings, and whether the text emphasises experience.\n\n' +
-        `Document excerpt:\n"""${excerpt}"""`;
-      const response = await generateContentWithRetry(model, prompt, {
-        retryLogEvent: 'document_classification_ai',
-      });
-      const parsed = parseAiJson(response?.response?.text?.());
-      if (parsed && typeof parsed === 'object' && typeof parsed.type === 'string') {
-        const type = typeof parsed.type === 'string' ? parsed.type.toLowerCase() : '';
-        const isResume = type === 'resume';
-        const confidence = Number.isFinite(parsed.confidence) ? clamp(parsed.confidence, 0, 1) : isResume ? 0.75 : 0.5;
-        const probableType = parsed.probableType || (isResume ? 'a professional resume' : 'a non-resume document');
-        const description = isResume ? 'a professional resume' : probableType;
-        if (isResume && nonResumeClassification) {
-          return nonResumeClassification;
-        }
-        const parsedReason =
-          typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
-        const fallbackReason = isResume
-          ? ''
-          : `The document content aligns with ${stripLeadingArticle(description)} rather than a CV.`;
-        return {
-          isResume,
-          description,
-          confidence,
-          reason: parsedReason || fallbackReason || undefined,
-        };
-      }
-    }
-  } catch (err) {
-    logStructured('warn', 'document_classification_ai_failed', {
-      error: serializeError(err),
-    });
-  }
-
-  const words = normalized.split(/\s+/).filter(Boolean);
-  const uniqueWords = new Set(words);
-  const resumeSignals = [
-    ['experience', 'education'],
-    ['skills', 'summary'],
-    ['projects', 'experience'],
-    ['professional summary'],
-  ];
-
-  let resumeScore = 0;
-  for (const signal of resumeSignals) {
-    if (signal.every((term) => normalized.includes(term))) {
-      resumeScore += 1;
-    }
-  }
-
-  const sectionHits = ['experience', 'education', 'skills', 'projects', 'certifications', 'languages', 'summary'].filter((term) =>
-    normalized.includes(term)
-  );
-  if (sectionHits.length >= 4) {
-    resumeScore += 2;
-  } else if (sectionHits.length >= 3) {
-    resumeScore += 1.5;
-  } else if (sectionHits.length >= 2) {
-    resumeScore += 1;
-  }
-
-  if (uniqueWords.has('resume') || uniqueWords.has('curriculum') || uniqueWords.has('vitae')) {
-    resumeScore += 1;
-  }
-
-  const headingMatches = (trimmed.match(/\n[A-Z][A-Z\s]{3,}\n/g) || []).length;
-  if (headingMatches >= 2) {
-    resumeScore += 1;
-  }
-
-  if (resumeScore >= 3) {
-    if (nonResumeClassification) {
-      return nonResumeClassification;
-    }
-    return { isResume: true, description: 'a professional resume', confidence: 0.6 };
-  }
-
-  if (nonResumeClassification) {
-    return nonResumeClassification;
-  }
-
-  const lines = trimmed
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (
-    /experience/i.test(trimmed) &&
-    /education/i.test(trimmed) &&
-    /skills/i.test(trimmed)
-  ) {
-    return { isResume: true, description: 'a professional resume', confidence: 0.55 };
-  }
-
-  const snippet = lines[0]?.slice(0, 60).trim() || '';
-  return {
-    isResume: false,
-    description: snippet
-      ? `a document starting with "${snippet}${lines[0].length > 60 ? '…' : ''}"`
-      : 'a non-resume document',
-    confidence: 0.3,
-    reason:
-      'The text lacks resume-defining sections such as Experience, Education, or Skills.',
-  };
-}
-
-async function isResume(text) {
-  const result = await classifyDocument(text);
-  return result.isResume;
-}
-
-const STRONG_NON_RESUME_KEYWORDS = [
-  'job description',
-  'job-posting',
-  'cover letter',
-  'invoice',
-  'meeting notes',
-  'academic paper',
-  'policy',
-  'compliance',
-  'marketing brochure',
-  'slide deck',
-  'certificate',
-  'does not contain any text',
-  'empty document',
-];
-
-function isStrongNonResumeSignal(description = '', reason = '') {
-  const normalizedDescription =
-    typeof description === 'string' ? description.toLowerCase() : '';
-  const normalizedReason = typeof reason === 'string' ? reason.toLowerCase() : '';
-
-  return STRONG_NON_RESUME_KEYWORDS.some((keyword) => {
-    const needle = keyword.toLowerCase();
-    return (
-      (normalizedDescription && normalizedDescription.includes(needle)) ||
-      (normalizedReason && normalizedReason.includes(needle))
-    );
-  });
-}
-
-function shouldRejectBasedOnClassification(result, context = {}) {
-  if (!result || typeof result !== 'object' || result.isResume) {
-    return false;
-  }
-
-  const { confidence = 0, description, reason } = result;
-
-  if (isStrongNonResumeSignal(description, reason)) {
-    return true;
-  }
-
-  if (confidence >= 0.4) {
-    return true;
-  }
-
-  const fileExtension =
-    typeof context.fileExtension === 'string' ? context.fileExtension.toLowerCase() : '';
-  const wordCount = Number.isFinite(context.wordCount) ? context.wordCount : 0;
-  const lacksResumeSections =
-    typeof reason === 'string' && /lacks resume-defining sections/i.test(reason);
-  const isWordDocument = fileExtension === '.doc' || fileExtension === '.docx';
-
-  if (isWordDocument && lacksResumeSections && confidence < 0.4 && wordCount <= 150) {
-    return false;
-  }
-
-  return true;
-}
-
 function scoreRatingLabel(score) {
   if (score >= 85) return 'EXCELLENT';
   if (score >= 70) return 'GOOD';
@@ -12681,46 +12131,6 @@ function extractCertifications(source) {
     }
   }
   return entries;
-}
-
-function extractJsonBlock(text) {
-  if (typeof text !== 'string') {
-    return null;
-  }
-  const fenced = text.match(/```json[\s\S]*?```/i);
-  if (fenced) {
-    text = fenced[0].replace(/```json|```/gi, '');
-  }
-  const start = text.indexOf('{');
-  if (start === -1) return null;
-  let depth = 0;
-  for (let i = start; i < text.length; i++) {
-    if (text[i] === '{') depth++;
-    else if (text[i] === '}') {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  return null;
-}
-
-function parseAiJson(text) {
-  const block = extractJsonBlock(text);
-  if (!block) {
-    logStructured('error', 'ai_response_missing_json', {
-      sample: typeof text === 'string' ? text.slice(0, 200) : undefined,
-    });
-    return null;
-  }
-  try {
-    return JSON5.parse(block);
-  } catch (e) {
-    logStructured('error', 'ai_json_parse_failed', {
-      sample: typeof text === 'string' ? text.slice(0, 200) : undefined,
-      error: serializeError(e),
-    });
-    return null;
-  }
 }
 
 function summarizeJobFocus(jobDescription = '') {
@@ -17312,6 +16722,7 @@ async function generateEnhancedDocumentsResponse({
 
   let coverData = {};
   if (canUseGenerativeModel) {
+    const coverLogger = createStructuredLogger(logContext);
     const maxAttempts = 2;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
@@ -17324,10 +16735,11 @@ async function generateEnhancedDocumentsResponse({
               ...logContext,
               outerAttempt: attempt,
             },
+            logger: coverLogger,
           }
         );
         const coverText = coverResult?.response?.text?.();
-        const parsed = parseAiJson(coverText);
+        const parsed = parseGeminiJsonResponse(coverText, { logger: coverLogger });
         if (parsed && typeof parsed === 'object') {
           coverData = parsed;
           break;
@@ -21399,7 +20811,7 @@ app.post(
 
   let text;
   try {
-    text = await extractText(req.file);
+    text = await extractResumeText(req.file);
   } catch (err) {
     logStructured('error', 'resume_text_extraction_failed', {
       ...logContext,
@@ -21417,7 +20829,11 @@ app.post(
     ...logContext,
     characters: text.length,
   });
-  const classification = await classifyDocument(text);
+  const classificationLogger = createStructuredLogger(logContext);
+  const classification = await classifyResumeDocument(text, {
+    logger: classificationLogger,
+    getGenerativeModel: () => getSharedGenerativeModel(),
+  });
   logStructured('info', 'resume_classified', {
     ...logContext,
     isResume: classification.isResume,
