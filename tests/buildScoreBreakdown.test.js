@@ -1,4 +1,4 @@
-import { buildScoreBreakdown } from '../server.js';
+import { buildScoreBreakdown } from '../lib/scoring/atsMetrics.js';
 
 const jobDescription = `We are hiring a senior software engineer to lead React and Node.js initiatives.
 You will optimize performance, mentor teammates, and deliver measurable outcomes.
