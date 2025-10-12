@@ -428,8 +428,10 @@ Resources:
       # ".fifo" suffix. Using the stack name keeps the value deterministic
       # across deployments while avoiding the intrinsic function complexity
       # that previously triggered an opaque "null" failure during queue
-      # creation in CloudFormation.
-      QueueName: !Sub '${AWS::StackName}-${StageName}-document-generation.fifo'
+      # creation in CloudFormation. The suffix is intentionally short to keep
+      # the name under the 80 character SQS limit even when the stack name is
+      # long (e.g., CI/CD-generated names).
+      QueueName: !Sub '${AWS::StackName}-${StageName}-dg.fifo'
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
