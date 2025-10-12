@@ -59,7 +59,7 @@ import {
   parseTemplateParams as parseTemplateParamsConfig,
   resolveTemplateParams as resolveTemplateParamsConfig
 } from './lib/pdf/utils.js';
-import { ENHANCEMENT_TYPES } from './services/enhancement/workflow.js';
+import { ENHANCEMENT_TYPES } from './lib/resume/enhancement.js';
 import { publishResumeWorkflowEvent } from './services/orchestration/eventBridgePublisher.js';
 import {
   TECHNICAL_TERMS,

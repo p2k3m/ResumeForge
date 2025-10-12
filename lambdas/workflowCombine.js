@@ -1,4 +1,4 @@
-import { applyPatch, normaliseFanOutTypes } from '../services/enhancement/workflow.js';
+import { applyPatch, normaliseFanOutTypes } from '../lib/resume/enhancement.js';
 
 const DEFAULT_ORDER = normaliseFanOutTypes();
 
