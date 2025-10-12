@@ -337,6 +337,7 @@ describe('/api/process-cv', () => {
     expect(putCall[0].input.Item.s3Url.S).toContain(`cv/${sanitized}/`);
     expect(putCall[0].input.Item.fileType.S).toMatch(/pdf/);
     expect(putCall[0].input.Item.status.S).toBe('uploaded');
+    expect(putCall[0].input.Item.environment.S).toBe('test');
     expect(putCall[0].input.Item.cv1Url.S).toBe('');
     expect(putCall[0].input.Item.cv2Url.S).toBe('');
 

@@ -1,7 +1,8 @@
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
+import '../../config/environment.js';
 import { normaliseFanOutTypes } from '../../lib/resume/enhancement.js';
 
-const client = new EventBridgeClient({});
+const client = new EventBridgeClient({ region: process.env.AWS_REGION });
 const busName = process.env.ORCHESTRATION_BUS_NAME || '';
 
 function isEnabled() {

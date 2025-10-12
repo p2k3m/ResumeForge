@@ -21,7 +21,7 @@ const multiPageResume =
     .join('\n') +
   '\n\nEDUCATION\nState University\n\nSKILLS\nReact, Node.js, TypeScript';
 
-const summaryNoKeywordsResume = `John Smith\n\nSUMMARY\nExperienced engineer delivering results for stakeholders.\n\nEXPERIENCE\nWorked on software stuff\nResponsible for various duties\n\nEDUCATION\nCollege\n\nSKILLS\nMicrosoft Office, Communication`;
+const summaryNoKeywordsResume = `John Smith\n\nSUMMARY\nExperienced professional delivering results for stakeholders.\n\nEXPERIENCE\nWorked on software stuff\nResponsible for various duties\n\nEDUCATION\nCollege\n\nSKILLS\nMicrosoft Office, Communication`;
 
 const summaryKeywordResume = `John Smith\n\nSUMMARY\nExperienced engineer leading React and Node.js optimization initiatives in the cloud.\n\nEXPERIENCE\nWorked on software stuff\nResponsible for various duties\n\nEDUCATION\nCollege\n\nSKILLS\nReact, Node.js, Communication`;
 

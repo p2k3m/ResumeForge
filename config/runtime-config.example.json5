@@ -6,6 +6,10 @@
   AWS_REGION: 'us-east-1',
   // Name of the S3 bucket that stores uploads and generated artefacts.
   S3_BUCKET: 'resume-forge-local',
+  // Deployment stage used for tagging infrastructure and generated artefacts.
+  STAGE_NAME: 'dev',
+  // Optional: override the environment label applied to records and S3 objects.
+  DEPLOYMENT_ENVIRONMENT: 'dev',
   // Gemini API key used to generate enhanced content.
   GEMINI_API_KEY: 'replace-me',
   // Optional: override the orchestration EventBridge bus name when running locally.
