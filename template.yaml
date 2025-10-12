@@ -415,9 +415,22 @@ Resources:
   DocumentGenerationQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub '${AWS::StackName}-${StageName}-document-generation.fifo'
+      # SQS FIFO queue names are limited to 80 characters. The previous
+      # implementation used the CloudFormation stack name as the prefix, which
+      # could easily exceed this limit when the stack name contained commit
+      # hashes or timestamps. That caused queue creation to fail during
+      # deployment with an "InternalFailure" error. Instead, derive a compact
+      # but unique prefix from the stack ID so the generated name always fits
+      # within the SQS constraints while remaining stable for the stack.
+      QueueName: !Join
+        - ''
+        - - !Select [2, !Split ['/', !Ref AWS::StackId]]
+          - '-'
+          - !Ref StageName
+          - '-doc-gen.fifo'
       FifoQueue: true
       ContentBasedDeduplication: true
+      SqsManagedSseEnabled: true
       VisibilityTimeout: 900
       Tags:
         Environment: !Ref StageName
