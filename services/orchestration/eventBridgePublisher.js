@@ -1,4 +1,5 @@
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
+import { normaliseFanOutTypes } from '../enhancement/workflow.js';
 
 const client = new EventBridgeClient({});
 const busName = process.env.ORCHESTRATION_BUS_NAME || '';
@@ -12,8 +13,10 @@ export async function publishResumeWorkflowEvent(detail) {
     return { skipped: true };
   }
   const safeDetail = detail && typeof detail === 'object' ? detail : {};
+  const enhancementTypes = normaliseFanOutTypes(safeDetail.enhancementTypes);
   const enrichedDetail = {
     ...safeDetail,
+    enhancementTypes,
     triggeredAt: new Date().toISOString(),
   };
   const command = new PutEventsCommand({
