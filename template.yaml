@@ -415,6 +415,7 @@ Resources:
   DocumentGenerationQueue:
     Type: AWS::SQS::Queue
     Properties:
+      QueueName: !Sub '${AWS::StackName}-${StageName}-document-generation.fifo'
       FifoQueue: true
       ContentBasedDeduplication: true
       VisibilityTimeout: 900
