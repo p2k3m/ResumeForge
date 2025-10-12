@@ -58,6 +58,9 @@ jobs:
       DATA_BUCKET: ${{ secrets.RESUMEFORGE_DATA_BUCKET }}
       TABLE_NAME: ${{ secrets.RESUMEFORGE_TABLE_NAME || 'ResumeForge' }}
       SECRET_NAME: ${{ secrets.RESUMEFORGE_SECRET_NAME || 'ResumeForge' }}
+      PRIMARY_REGION: ${{ secrets.RESUMEFORGE_PRIMARY_REGION || secrets.AWS_REGION || 'us-east-1' }}
+      SECONDARY_REGION: ${{ secrets.RESUMEFORGE_SECONDARY_REGION || 'us-west-2' }}
+      PROVISIONED_CONCURRENCY: ${{ secrets.RESUMEFORGE_PROVISIONED_CONCURRENCY || '0' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -373,6 +376,9 @@ jobs:
                 --no-fail-on-empty-changeset \
                 --force-upload \
                 --parameter-overrides \
+                  PrimaryRegion="$PRIMARY_REGION" \
+                  SecondaryRegion="$SECONDARY_REGION" \
+                  ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
                   StageName="$STAGE_NAME" \
                   DataBucketName="$DATA_BUCKET" \
                   ResumeTableName="$TABLE_NAME" \

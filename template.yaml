@@ -3,6 +3,10 @@ Transform: AWS::Serverless-2016-10-31
 Description: Serverless deployment for ResumeForge on AWS Lambda and API Gateway.
 
 Parameters:
+  PrimaryRegion:
+    Type: String
+    Default: us-east-1
+    Description: Primary AWS region for the deployment.
   StageName:
     Type: String
     Default: prod
@@ -222,7 +226,7 @@ Resources:
               - UseSecretName
               - !Sub '{{resolve:secretsmanager:${SecretName}:SecretString:GEMINI_API_KEY}}'
               - !Ref GeminiApiKey
-            PRIMARY_REGION: !Ref AWS::Region
+            PRIMARY_REGION: !Ref PrimaryRegion
             SECONDARY_REGION: !Ref SecondaryRegion
             STAGE_NAME: !Ref StageName
             DEPLOYMENT_ENVIRONMENT: !Ref StageName
@@ -834,7 +838,7 @@ Outputs:
     Value: !Sub https://${ResumeForgeDistribution.DomainName}
   PrimaryRegion:
     Description: Primary AWS region configured for the deployment.
-    Value: !Ref AWS::Region
+    Value: !Ref PrimaryRegion
   SecondaryRegion:
     Description: Secondary AWS region configured for the deployment.
     Value: !Ref SecondaryRegion
