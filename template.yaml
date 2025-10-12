@@ -422,22 +422,14 @@ Resources:
   DocumentGenerationQueue:
     Type: AWS::SQS::Queue
     Properties:
-      # Explicitly assign a FIFO-safe queue name. Without a QueueName SQS
+      # Explicitly assign a FIFO-safe queue name. Without a QueueName, SQS
       # defaults to the logical resource id ("DocumentGenerationQueue"), which
       # is invalid for FIFO queues because it does not end with the required
-      # ".fifo" suffix. A previous iteration tried to shorten the generated
-      # identifier by splicing parts of the stack GUID, but the deep nest of
-      # Fn::Select and Fn::Split calls triggered an opaque "null" failure from
-      # CloudFormation during stack creation. Using the full GUID segment keeps
-      # the name comfortably within the 80-character queue name limit while
-      # drastically simplifying the intrinsic functions.
-      QueueName: !Sub
-        - '${StageName}-${StackGuid}.fifo'
-        - StackGuid: !Select
-            - 2
-            - !Split
-              - '/'
-              - !Ref AWS::StackId
+      # ".fifo" suffix. Using the stack name keeps the value deterministic
+      # across deployments while avoiding the intrinsic function complexity
+      # that previously triggered an opaque "null" failure during queue
+      # creation in CloudFormation.
+      QueueName: !Sub '${AWS::StackName}-${StageName}-document-generation.fifo'
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
