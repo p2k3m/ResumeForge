@@ -1,4 +1,5 @@
-import { sanitizeGeneratedText, relocateProfileLinks, parseLine } from '../server.js';
+import { parseLine } from '../lib/resume/content.js';
+import { sanitizeGeneratedText, relocateProfileLinks } from '../server.js';
 
 describe('cover letter link relocation', () => {
   test('moves profile links to final paragraph without parentheses', () => {

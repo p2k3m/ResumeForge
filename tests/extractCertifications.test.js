@@ -1,4 +1,4 @@
-import { extractCertifications, ensureRequiredSections } from '../server.js';
+import { extractCertifications, ensureRequiredSections } from '../lib/resume/content.js';
 
 describe('extractCertifications', () => {
   test('parses certification line with provider and credly link', () => {

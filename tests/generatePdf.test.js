@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 import {
   generatePdf,
-  parseContent,
   CV_TEMPLATES,
   CL_TEMPLATES,
   selectTemplates,
@@ -10,6 +9,7 @@ import {
   setChromiumLauncher,
   setPlainPdfFallbackEngines
 } from '../server.js';
+import { parseContent } from '../lib/resume/content.js';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import zlib from 'zlib';
 import fs from 'fs/promises';

@@ -1,4 +1,4 @@
-import { parseLine } from '../server.js';
+import { parseLine } from '../lib/resume/content.js';
 
 describe('parseLine emphasis handling', () => {
   test('handles nested emphasis markers', () => {

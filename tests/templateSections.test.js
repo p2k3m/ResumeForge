@@ -1,5 +1,5 @@
+import { parseContent } from '../lib/resume/content.js';
 import {
-  parseContent,
   buildTemplateSectionContext,
   buildTemplateContactEntries
 } from '../server.js';

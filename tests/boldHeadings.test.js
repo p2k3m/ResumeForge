@@ -1,8 +1,8 @@
 import { jest } from '@jest/globals';
+import { parseContent } from '../lib/resume/content.js';
 import {
   buildTemplateSectionContext,
   generatePdf,
-  parseContent,
   setChromiumLauncher
 } from '../server.js';
 import fs from 'fs/promises';

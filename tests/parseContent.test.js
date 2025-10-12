@@ -1,4 +1,4 @@
-import { parseContent } from '../server.js';
+import { parseContent } from '../lib/resume/content.js';
 
 describe('parseContent placeholders', () => {
   test('inserts placeholder when Work Experience and Education missing in markdown', () => {
