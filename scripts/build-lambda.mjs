@@ -81,6 +81,7 @@ async function runEsbuild() {
     path.join(projectRoot, 'lambdas', 'scoring.js'),
     path.join(projectRoot, 'lambdas', 'enhancement.js'),
     path.join(projectRoot, 'lambdas', 'documentGeneration.js'),
+    path.join(projectRoot, 'lambdas', 'documentGenerationWorker.js'),
     path.join(projectRoot, 'lambdas', 'auditing.js'),
   ]
   const shouldGenerateSourceMap = process.env.GENERATE_SOURCEMAP === 'true'

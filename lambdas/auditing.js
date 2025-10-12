@@ -1,4 +1,2 @@
-import { createServiceHandler } from '../microservices/createServiceHandler.js';
-import { getServiceConfig } from '../microservices/services.js';
-
-export const handler = createServiceHandler(getServiceConfig('auditing'));
+export { auditingHttpHandler as handler } from '../services/auditing/httpHandler.js';
+export { auditingHttpHandler as default } from '../services/auditing/httpHandler.js';
