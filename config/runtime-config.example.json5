@@ -8,6 +8,8 @@
   S3_BUCKET: 'resume-forge-local',
   // Gemini API key used to generate enhanced content.
   GEMINI_API_KEY: 'replace-me',
+  // Optional: override the orchestration EventBridge bus name when running locally.
+  ORCHESTRATION_BUS_NAME: 'resume-forge-local-bus',
   // Optional: allow requests from these origins when running locally.
   CLOUDFRONT_ORIGINS: [
     'http://localhost:3000',
