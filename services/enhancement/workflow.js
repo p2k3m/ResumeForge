@@ -1,4 +1,4 @@
-import { normalizeSkillListInput } from '../common/skills.js';
+import { normalizeSkillListInput } from '../../lib/resume/skills.js';
 
 export const ENHANCEMENT_TYPES = [
   'improve-summary',

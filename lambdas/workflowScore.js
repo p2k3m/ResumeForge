@@ -1,5 +1,5 @@
-import { scoreResumeAgainstJob } from '../services/scoring/service.js';
-import { normalizeSkillListInput } from '../services/common/skills.js';
+import { scoreResumeAgainstJob } from '../lib/resume/scoring.js';
+import { normalizeSkillListInput } from '../lib/resume/skills.js';
 
 function normalizeJobSkills(value) {
   if (Array.isArray(value)) {

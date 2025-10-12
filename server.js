@@ -66,9 +66,9 @@ import {
   calculateMatchScore,
   extractResumeSkills,
   normalizeSkillListInput,
-} from './services/common/skills.js';
-import { evaluateJobDescription } from './services/jobEvaluation/service.js';
-import { scoreResumeAgainstJob } from './services/scoring/service.js';
+} from './lib/resume/skills.js';
+import { evaluateJobDescription } from './lib/resume/jobEvaluation.js';
+import { scoreResumeAgainstJob } from './lib/resume/scoring.js';
 import { resolveServiceForRoute } from './microservices/services.js';
 
 const WordExtractor = WordExtractorPackage?.default || WordExtractorPackage;
