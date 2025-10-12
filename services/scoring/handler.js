@@ -1,28 +1,14 @@
-import { scoreResumeAgainstJob, toHttpResponse } from './service.js';
-
-function parseBody(event = {}) {
-  if (event && typeof event.body === 'object') {
-    return event.body;
-  }
-  if (!event || event.body === undefined || event.body === null) {
-    return {};
-  }
-
-  try {
-    const decoded = event.isBase64Encoded
-      ? Buffer.from(event.body, 'base64').toString('utf8')
-      : event.body;
-    return JSON.parse(decoded);
-  } catch {
-    return {};
-  }
-}
+import { parseEventBody } from '../../lib/http/parseEventBody.js';
+import {
+  scoreResumeAgainstJob,
+  scoreResumeHttpResponse,
+} from '../../lib/resume/scoring.js';
 
 export async function handler(event, context) {
   void context;
-  const payload = parseBody(event);
+  const payload = parseEventBody(event);
   const outcome = scoreResumeAgainstJob(payload);
-  return toHttpResponse(outcome);
+  return scoreResumeHttpResponse(outcome);
 }
 
 export default handler;
