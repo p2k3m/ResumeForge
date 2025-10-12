@@ -1,5 +1,5 @@
 import { EventBridgeClient, PutEventsCommand } from '@aws-sdk/client-eventbridge';
-import { normaliseFanOutTypes } from '../enhancement/workflow.js';
+import { normaliseFanOutTypes } from '../../lib/resume/enhancement.js';
 
 const client = new EventBridgeClient({});
 const busName = process.env.ORCHESTRATION_BUS_NAME || '';
