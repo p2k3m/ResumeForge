@@ -562,13 +562,14 @@ Resources:
         States:
           ScoreResume:
             Type: Task
-            Resource: ${WorkflowScoreArn}
+            Resource: !GetAtt WorkflowScoreFunction.Arn
             ResultPath: $.scoring
             Parameters:
               jobId.$: $.jobId
               resumeText.$: $.resumeText
               jobSkills.$: $.jobSkills
               jobDescription.$: $.jobDescription
+            Next: FanOutEnhancements
           FanOutEnhancements:
             Type: Map
             ItemsPath: $.enhancementTypes
@@ -587,29 +588,26 @@ Resources:
               States:
                 InvokeEnhancementSection:
                   Type: Task
-                  Resource: ${WorkflowEnhancementSectionArn}
+                  Resource: !GetAtt WorkflowEnhancementSectionFunction.Arn
                   End: true
+            Next: CombineEnhancements
           CombineEnhancements:
             Type: Task
-            Resource: ${WorkflowCombineArn}
+            Resource: !GetAtt WorkflowCombineFunction.Arn
             ResultPath: $.combined
             Parameters:
               jobId.$: $.jobId
               resumeText.$: $.resumeText
               sectionResults.$: $.enhancementResults
+            Next: GenerateArtifacts
           GenerateArtifacts:
             Type: Task
-            Resource: ${WorkflowGenerateArn}
+            Resource: !GetAtt WorkflowGenerateFunction.Arn
             ResultPath: $.artifacts
             Parameters:
               jobId.$: $.jobId
               resumeText.$: $.combined.updatedResume
             End: true
-      DefinitionSubstitutions:
-        WorkflowScoreArn: !GetAtt WorkflowScoreFunction.Arn
-        WorkflowEnhancementSectionArn: !GetAtt WorkflowEnhancementSectionFunction.Arn
-        WorkflowCombineArn: !GetAtt WorkflowCombineFunction.Arn
-        WorkflowGenerateArn: !GetAtt WorkflowGenerateFunction.Arn
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref WorkflowScoreFunction
