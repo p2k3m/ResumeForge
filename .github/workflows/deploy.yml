@@ -403,7 +403,7 @@ jobs:
             )
 
             deploy_err_normalized=$(printf '%s\n' "$deploy_err_stripped" | tr '\r\n' '  ' | tr -s ' ')
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE|ROLLBACK)_IN_PROGRESS state (and[[:space:]]+)?can[[:space:]]*not be updated"; then
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE|ROLLBACK)_IN_PROGRESS state"; then
               if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
                 echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
                 exit 1
