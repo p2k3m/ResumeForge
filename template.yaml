@@ -426,20 +426,17 @@ Resources:
       # the 80-character queue name limit in environments that use long stack
       # names. When that occurred CloudFormation surfaced only a generic
       # "null" error and the stack rolled back. Instead, build a compact name
-      # from the deployment stage and a deterministic fragment of the stack ID,
-      # guaranteeing both uniqueness and compliance with the SQS length
-      # constraint.
+      # from the deployment stage and the full stack identifier. Using the
+      # complete GUID fragment from AWS::StackId avoids collisions between
+      # rapid successive deployments, while the StageName prefix keeps the
+      # resulting queue name short enough for the SQS constraint.
       QueueName: !Sub
-        - '${StageName}-${GuidSuffix}.fifo'
-        - GuidSuffix: !Select
-            - 0
+        - '${StageName}-${StackGuid}.fifo'
+        - StackGuid: !Select
+            - 2
             - !Split
-              - '-'
-              - !Select
-                - 2
-                - !Split
-                  - '/'
-                  - !Ref AWS::StackId
+              - '/'
+              - !Ref AWS::StackId
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
