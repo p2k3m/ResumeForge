@@ -34,6 +34,30 @@ build-DocumentGenerationWorkerFunction:
 clean-DocumentGenerationWorkerFunction:
 	rm -rf $(ARTIFACTS_DIR)
 
+build-WorkflowScoreFunction:
+	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR)
+
+clean-WorkflowScoreFunction:
+	rm -rf $(ARTIFACTS_DIR)
+
+build-WorkflowEnhancementSectionFunction:
+	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR)
+
+clean-WorkflowEnhancementSectionFunction:
+	rm -rf $(ARTIFACTS_DIR)
+
+build-WorkflowCombineFunction:
+	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR)
+
+clean-WorkflowCombineFunction:
+	rm -rf $(ARTIFACTS_DIR)
+
+build-WorkflowGenerateFunction:
+	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR)
+
+clean-WorkflowGenerateFunction:
+	rm -rf $(ARTIFACTS_DIR)
+
 build-AuditingFunction:
 	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR)
 
