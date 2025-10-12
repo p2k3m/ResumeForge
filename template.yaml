@@ -418,12 +418,29 @@ Resources:
   DocumentGenerationQueue:
     Type: AWS::SQS::Queue
     Properties:
-      # Allow CloudFormation to assign the physical queue name automatically.
-      # Explicitly constructing the name has proven brittle because SQS FIFO
-      # queues enforce an 80-character limit that is easy to exceed when stack
-      # names include timestamps or commit hashes. By omitting QueueName we
-      # guarantee the deployment never fails due to name length constraints
-      # while still referencing the queue via its logical resource.
+      # Explicitly assign a FIFO-safe queue name. Without a QueueName SQS
+      # defaults to the logical resource id ("DocumentGenerationQueue"), which
+      # is invalid for FIFO queues because it does not end with the required
+      # ".fifo" suffix. This resulted in a vague "null" CloudFormation error
+      # during deployment. Compose the name from the stack name, stage, and a
+      # short, stable suffix derived from the stack ID to stay well under the
+      # 80-character FIFO limit while guaranteeing uniqueness across deploys.
+      QueueName: !Sub
+        - '${StackPrefix}-${GuidSuffix}.fifo'
+        - StackPrefix: !Join
+            - '-'
+            - - !Ref AWS::StackName
+              - !Ref StageName
+              - dg
+          GuidSuffix: !Select
+            - 0
+            - !Split
+              - '-'
+              - !Select
+                - 2
+                - !Split
+                  - '/'
+                  - !Ref AWS::StackId
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
