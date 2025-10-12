@@ -1,3 +1,4 @@
+import '../config/environment.js';
 import documentGenerationHttpHandler from '../services/documentGeneration/httpHandler.js';
 
 function normalizePath(path) {

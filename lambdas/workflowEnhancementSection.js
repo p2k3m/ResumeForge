@@ -1,3 +1,4 @@
+import '../config/environment.js';
 import { generateEnhancementPatch } from '../lib/resume/enhancement.js';
 
 export const handler = async (event = {}) => {

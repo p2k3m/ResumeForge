@@ -1,3 +1,4 @@
+import '../config/environment.js';
 import { applyPatch, normaliseFanOutTypes } from '../lib/resume/enhancement.js';
 
 const DEFAULT_ORDER = normaliseFanOutTypes();

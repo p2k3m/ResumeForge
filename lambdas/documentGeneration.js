@@ -1,8 +1,9 @@
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { randomUUID } from 'crypto';
+import '../config/environment.js';
 import documentGenerationHttpHandler from '../services/documentGeneration/httpHandler.js';
 
-const sqsClient = new SQSClient({});
+const sqsClient = new SQSClient({ region: process.env.AWS_REGION });
 
 function parseBody(event = {}) {
   if (!event || event.body === undefined || event.body === null) {

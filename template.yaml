@@ -111,13 +111,19 @@ Resources:
   ResumeForgeOrchestrationBus:
     Type: AWS::Events::EventBus
     Properties:
-      Name: !Sub '${AWS::StackName}-resume-forge-orchestration'
+      Name: !Sub '${AWS::StackName}-${StageName}-resume-forge-orchestration'
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
 
   DataBucket:
     Type: AWS::S3::Bucket
     Condition: CreateDataBucketCondition
     Properties:
       BucketName: !Ref DataBucketName
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
 
@@ -178,11 +184,14 @@ Resources:
       KeySchema:
         - AttributeName: linkedinProfileUrl
           KeyType: HASH
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
 
   ResumeForgeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeResumeUpload
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-resume-upload'
       CodeUri: .
       Handler: lambdas/resumeUpload.handler
       Runtime: nodejs18.x
@@ -213,6 +222,7 @@ Resources:
             PRIMARY_REGION: !Ref AWS::Region
             SECONDARY_REGION: !Ref SecondaryRegion
             STAGE_NAME: !Ref StageName
+            DEPLOYMENT_ENVIRONMENT: !Ref StageName
             ORCHESTRATION_BUS_NAME: !Ref ResumeForgeOrchestrationBus
           ACTIVE_SERVICE: resumeUpload
       Policies: &ResumeForgeFunctionPolicies
@@ -250,13 +260,15 @@ Resources:
                   - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
           - !Ref AWS::NoValue
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   JobEvaluationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeJobEvaluation
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-job-evaluation'
       CodeUri: .
       Handler: lambdas/jobEvaluation.handler
       Runtime: nodejs18.x
@@ -281,13 +293,15 @@ Resources:
           ACTIVE_SERVICE: jobEvaluation
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   ScoringFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeScoring
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-scoring'
       CodeUri: .
       Handler: lambdas/scoring.handler
       Runtime: nodejs18.x
@@ -318,13 +332,15 @@ Resources:
           ACTIVE_SERVICE: scoring
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   EnhancementFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeEnhancement
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement'
       CodeUri: .
       Handler: lambdas/enhancement.handler
       Runtime: nodejs18.x
@@ -391,21 +407,25 @@ Resources:
           ACTIVE_SERVICE: enhancement
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   DocumentGenerationQueue:
     Type: AWS::SQS::Queue
     Properties:
-      QueueName: !Sub ResumeForgeDocumentGeneration-${AWS::StackName}.fifo
+      QueueName: !Sub '${AWS::StackName}-${StageName}-document-generation.fifo'
       FifoQueue: true
       ContentBasedDeduplication: true
       VisibilityTimeout: 900
+      Tags:
+        Environment: !Ref StageName
 
   DocumentGenerationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeDocumentGeneration
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-document-generation'
       CodeUri: .
       Handler: lambdas/documentGeneration.handler
       Runtime: nodejs18.x
@@ -437,13 +457,15 @@ Resources:
           DOCUMENT_GENERATION_QUEUE_URL: !GetAtt DocumentGenerationQueue.QueueUrl
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   DocumentGenerationWorkerFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeDocumentGenerationWorker
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-document-generation-worker'
       CodeUri: .
       Handler: lambdas/documentGenerationWorker.handler
       Runtime: nodejs18.x
@@ -461,13 +483,15 @@ Resources:
           ACTIVE_SERVICE: documentGeneration
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   WorkflowScoreFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeWorkflowScore
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-workflow-score'
       CodeUri: .
       Handler: lambdas/workflowScore.handler
       Runtime: nodejs18.x
@@ -478,13 +502,17 @@ Resources:
       Environment:
         Variables:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+          STAGE_NAME: !Ref StageName
+          DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   WorkflowEnhancementSectionFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeWorkflowEnhancementSection
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-workflow-enhancement-section'
       CodeUri: .
       Handler: lambdas/workflowEnhancementSection.handler
       Runtime: nodejs18.x
@@ -495,13 +523,17 @@ Resources:
       Environment:
         Variables:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+          STAGE_NAME: !Ref StageName
+          DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   WorkflowCombineFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeWorkflowCombine
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-workflow-combine'
       CodeUri: .
       Handler: lambdas/workflowCombine.handler
       Runtime: nodejs18.x
@@ -512,13 +544,17 @@ Resources:
       Environment:
         Variables:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+          STAGE_NAME: !Ref StageName
+          DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
   WorkflowGenerateFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeWorkflowGenerate
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-workflow-generate'
       CodeUri: .
       Handler: lambdas/workflowGeneratePdf.handler
       Runtime: nodejs18.x
@@ -535,6 +571,10 @@ Resources:
         Variables:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
           S3_BUCKET: !Ref DataBucketName
+          STAGE_NAME: !Ref StageName
+          DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
@@ -634,7 +674,7 @@ Resources:
   AuditingFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: ResumeForgeAuditing
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-auditing'
       CodeUri: .
       Handler: lambdas/auditing.handler
       Runtime: nodejs18.x
@@ -677,6 +717,8 @@ Resources:
           ACTIVE_SERVICE: auditing
       Policies: *ResumeForgeFunctionPolicies
       Layers: []
+      Tags:
+        Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
 
@@ -688,7 +730,7 @@ Resources:
         DefaultTTL: 0
         MaxTTL: 0
         MinTTL: 0
-        Name: !Sub ResumeForgeCachePolicy-${AWS::StackName}
+        Name: !Sub ResumeForgeCachePolicy-${AWS::StackName}-${StageName}
         ParametersInCacheKeyAndForwardedToOrigin:
           CookiesConfig:
             CookieBehavior: none
@@ -732,6 +774,9 @@ Resources:
           Compress: true
           CachePolicyId: !GetAtt ResumeForgeCachePolicy.Id
           OriginRequestPolicyId: !Ref OriginRequestPolicyId
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
 
 Outputs:
   ApiBaseUrl:

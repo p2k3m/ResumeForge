@@ -41,7 +41,7 @@ Each handler is created with `createServiceHandler`, which mounts the shared Exp
 ResumeForge is intentionally cyclical for regular users: upload a résumé, evaluate against the target job, accept or reject suggested edits, and immediately run the analysis again. Each evaluation pass uses the candidate's latest choices, so the updated ATS dashboard, probability of selection, and narrative insights always reflect their current draft. Because the candidate controls when to accept edits or trigger another analysis run, the improvement loop stays user-directed rather than automatic, making it easy to experiment with targeted changes before finalising downloads.
 
 ## Environment configuration
-ResumeForge now relies exclusively on environment variables for sensitive and deployment-specific configuration. The Express server validates the presence of required values at startup and fails fast if any are missing, ensuring secrets are not shipped inline with the source code. For local development you can alternatively provide a `runtime-config.json`/`runtime-config.json5` file (or set `RUNTIME_CONFIG_PATH` to point at one) in the project root or inside the `config/` directory. The loader understands JSON5, so comments and trailing commas are allowed. An example file lives at `config/runtime-config.example.json5`—copy it to `config/runtime-config.json5`, fill in the secrets, and the server will load them automatically.
+ResumeForge now relies exclusively on environment variables for sensitive and deployment-specific configuration. The Express server validates the presence of required values at startup and fails fast if any are missing, ensuring secrets are not shipped inline with the source code. During local development the server automatically loads variables from a `.env` file (when present) so personal credentials remain outside version control. For local development you can alternatively provide a `runtime-config.json`/`runtime-config.json5` file (or set `RUNTIME_CONFIG_PATH` to point at one) in the project root or inside the `config/` directory. The loader understands JSON5, so comments and trailing commas are allowed. An example file lives at `config/runtime-config.example.json5`—copy it to `config/runtime-config.json5`, fill in the secrets, and the server will load them automatically.
 
 ### Troubleshooting configuration errors
 
@@ -78,7 +78,10 @@ The runtime looks for the following keys:
 - `CLOUDFRONT_ORIGINS` – Optional, comma-separated list of CloudFront origins that are permitted through the server's CORS middleware. Include your distribution domain to restrict browser calls to trusted hosts.
 - `ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP` – Optional toggle that removes the session change log from S3 when a download session expires. Enable this flag when aggressively reclaiming storage for large-scale environments; leave it unset to retain audit history.
 - `ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP` – Optional toggle that deletes superseded generated artifacts once a session completes. Enable this flag when reclaiming storage aggressively at scale; leave it unset to retain prior versions for troubleshooting.
-- `AWS_REGION`, `PORT`, and `RESUME_TABLE_NAME` can continue to come from the environment. Reasonable defaults are provided for local development.
+- `AWS_REGION` – Region where AWS clients execute. It is required so Lambda functions and local development sessions resolve the correct endpoints.
+- `STAGE_NAME` – Deployment stage identifier. Defaults to `dev` locally, `test` under automated tests, and `prod` in production unless overridden.
+- `DEPLOYMENT_ENVIRONMENT` – Optional override for the environment tag applied to DynamoDB records and S3 object tags. Defaults to the resolved `STAGE_NAME`.
+- `PORT` and `RESUME_TABLE_NAME` can continue to come from the environment or runtime configuration file. Reasonable defaults are provided for local development.
 
 Because the configuration is loaded and cached once, the service reuses the same credentials across requests instead of recreating clients every time.
 

@@ -5,6 +5,7 @@ import {
   shouldRetryS3Error,
 } from './lib/retry.js';
 import { randomBytes, randomUUID } from 'crypto';
+import { withEnvironmentTagging } from './config/environment.js';
 
 async function streamToString(stream) {
   return await new Promise((resolve, reject) => {
@@ -50,12 +51,14 @@ export async function logEvent({
   await executeWithRetry(
     () =>
       s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: body,
-          ContentType: 'application/json',
-        })
+        new PutObjectCommand(
+          withEnvironmentTagging({
+            Bucket: bucket,
+            Key: key,
+            Body: body,
+            ContentType: 'application/json',
+          })
+        )
       ),
     {
       maxAttempts: 4,
@@ -135,12 +138,14 @@ export async function logErrorTrace({
   await executeWithRetry(
     () =>
       s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: objectKey,
-          Body: JSON.stringify(payload),
-          ContentType: 'application/json'
-        })
+        new PutObjectCommand(
+          withEnvironmentTagging({
+            Bucket: bucket,
+            Key: objectKey,
+            Body: JSON.stringify(payload),
+            ContentType: 'application/json'
+          })
+        )
       ),
     {
       maxAttempts: 4,

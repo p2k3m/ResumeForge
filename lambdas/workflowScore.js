@@ -1,3 +1,4 @@
+import '../config/environment.js';
 import { scoreResumeAgainstJob } from '../lib/resume/scoring.js';
 import { normalizeSkillListInput } from '../lib/resume/skills.js';
 

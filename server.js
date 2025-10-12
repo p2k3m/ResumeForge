@@ -39,6 +39,10 @@ import JSON5 from 'json5';
 import mime from 'mime-types';
 import { buildAggregatedChangeLogSummary } from './client/src/utils/changeLogSummaryShared.js';
 import {
+  getDeploymentEnvironment,
+  withEnvironmentTagging,
+} from './config/environment.js';
+import {
   API_ERROR_CONTRACTS,
   CV_GENERATION_ERROR_MESSAGE,
   DOWNLOAD_SESSION_EXPIRED_MESSAGE,
@@ -104,6 +108,7 @@ import { resolveServiceForRoute } from './microservices/services.js';
 
 const extractText = extractResumeText;
 const classifyDocument = classifyResumeDocument;
+const deploymentEnvironment = getDeploymentEnvironment();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10156,12 +10161,14 @@ async function updateStageMetadata({
     await sendS3CommandWithRetry(
       s3,
       () =>
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: metadataKey,
-          Body: JSON.stringify(nextPayload, null, 2),
-          ContentType: 'application/json',
-        }),
+        new PutObjectCommand(
+          withEnvironmentTagging({
+            Bucket: bucket,
+            Key: metadataKey,
+            Body: JSON.stringify(nextPayload, null, 2),
+            ContentType: 'application/json',
+          })
+        ),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
@@ -10418,12 +10425,14 @@ async function writeSessionChangeLog({
   await sendS3CommandWithRetry(
     s3,
     () =>
-      new PutObjectCommand({
-        Bucket: resolvedBucket,
-        Key: resolvedKey,
-        Body: JSON.stringify(payload, null, 2),
-        ContentType: 'application/json',
-      }),
+      new PutObjectCommand(
+        withEnvironmentTagging({
+          Bucket: resolvedBucket,
+          Key: resolvedKey,
+          Body: JSON.stringify(payload, null, 2),
+          ContentType: 'application/json',
+        })
+      ),
     {
       maxAttempts: 4,
       baseDelayMs: 500,
@@ -15787,12 +15796,14 @@ async function generateEnhancedDocumentsResponse({
           await sendS3CommandWithRetry(
             s3,
             () =>
-              new PutObjectCommand({
-                Bucket: bucket,
-                Key: originalPdfKey,
-                Body: originalPdfBuffer,
-                ContentType: 'application/pdf',
-              }),
+              new PutObjectCommand(
+                withEnvironmentTagging({
+                  Bucket: bucket,
+                  Key: originalPdfKey,
+                  Body: originalPdfBuffer,
+                  ContentType: 'application/pdf',
+                })
+              ),
             {
               maxAttempts: 4,
               baseDelayMs: 500,
@@ -16077,12 +16088,14 @@ async function generateEnhancedDocumentsResponse({
     await sendS3CommandWithRetry(
       s3,
       () =>
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: pdfBuffer,
-          ContentType: 'application/pdf',
-        }),
+        new PutObjectCommand(
+          withEnvironmentTagging({
+            Bucket: bucket,
+            Key: key,
+            Body: pdfBuffer,
+            ContentType: 'application/pdf',
+          })
+        ),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
@@ -16250,12 +16263,14 @@ async function generateEnhancedDocumentsResponse({
     await sendS3CommandWithRetry(
       s3,
       () =>
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: JSON.stringify(artifact.payload, null, 2),
-          ContentType: 'application/json',
-        }),
+        new PutObjectCommand(
+          withEnvironmentTagging({
+            Bucket: bucket,
+            Key: key,
+            Body: JSON.stringify(artifact.payload, null, 2),
+            ContentType: 'application/json',
+          })
+        ),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
@@ -19203,12 +19218,14 @@ app.post(
     await sendS3CommandWithRetry(
       s3,
       () =>
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: originalUploadKey,
-          Body: req.file.buffer,
-          ContentType: originalContentType,
-        }),
+        new PutObjectCommand(
+          withEnvironmentTagging({
+            Bucket: bucket,
+            Key: originalUploadKey,
+            Body: req.file.buffer,
+            ContentType: originalContentType,
+          })
+        ),
       {
         maxAttempts: 4,
         baseDelayMs: 500,
@@ -19533,6 +19550,7 @@ app.post(
         s3Url: { S: s3Location },
         fileType: { S: storedFileType },
         status: { S: 'uploaded' },
+        environment: { S: deploymentEnvironment },
         sessionChangeLogKey: { S: sessionChangeLogKey },
         jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
       }
