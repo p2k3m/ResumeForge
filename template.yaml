@@ -433,7 +433,7 @@ Resources:
       QueueName: !Sub
         - '${StageName}-${StackGuid}.fifo'
         - StackGuid: !Select
-            - 2
+            - 3
             - !Split
               - '/'
               - !Ref AWS::StackId
