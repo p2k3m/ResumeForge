@@ -1,4 +1,4 @@
-import { ensureRequiredSections, parseLine } from '../server.js';
+import { ensureRequiredSections, parseLine } from '../lib/resume/content.js';
 
 describe('ensureRequiredSections work experience merging', () => {
   test('appends missing roles and sorts chronologically', () => {

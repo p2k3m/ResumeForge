@@ -1,4 +1,4 @@
-import { splitSkills, parseLine } from '../server.js';
+import { splitSkills, parseLine } from '../lib/resume/content.js';
 
 const headings = [
   'Skills',

@@ -1,4 +1,4 @@
-import { parseContent } from '../server.js';
+import { parseContent } from '../lib/resume/content.js';
 
 describe('heading normalization removes duplicates', () => {
   test('normalizes to title case and merges sections', () => {

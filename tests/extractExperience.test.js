@@ -14,7 +14,9 @@ jest.unstable_mockModule('axios', () => ({
   default: { get: jest.fn().mockResolvedValue({ data: sampleHtml }) }
 }));
 
-const { extractExperience, fetchLinkedInProfile, ensureRequiredSections } = await import('../server.js');
+import { extractExperience, ensureRequiredSections } from '../lib/resume/content.js';
+
+const { fetchLinkedInProfile } = await import('../server.js');
 
 describe('extractExperience', () => {
   test('parses company, dates, and responsibilities from resume text', () => {

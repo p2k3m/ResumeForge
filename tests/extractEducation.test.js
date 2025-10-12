@@ -1,4 +1,4 @@
-import { extractEducation } from '../server.js';
+import { extractEducation } from '../lib/resume/content.js';
 
 describe('extractEducation', () => {
   test('extracts bullet items from resume text', () => {
