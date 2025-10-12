@@ -421,18 +421,17 @@ Resources:
       # Explicitly assign a FIFO-safe queue name. Without a QueueName SQS
       # defaults to the logical resource id ("DocumentGenerationQueue"), which
       # is invalid for FIFO queues because it does not end with the required
-      # ".fifo" suffix. This resulted in a vague "null" CloudFormation error
-      # during deployment. Compose the name from the stack name, stage, and a
-      # short, stable suffix derived from the stack ID to stay well under the
-      # 80-character FIFO limit while guaranteeing uniqueness across deploys.
+      # ".fifo" suffix. The previous implementation attempted to incorporate
+      # the stack name and a GUID-derived suffix, but that could still breach
+      # the 80-character queue name limit in environments that use long stack
+      # names. When that occurred CloudFormation surfaced only a generic
+      # "null" error and the stack rolled back. Instead, build a compact name
+      # from the deployment stage and a deterministic fragment of the stack ID,
+      # guaranteeing both uniqueness and compliance with the SQS length
+      # constraint.
       QueueName: !Sub
-        - '${StackPrefix}-${GuidSuffix}.fifo'
-        - StackPrefix: !Join
-            - '-'
-            - - !Ref AWS::StackName
-              - !Ref StageName
-              - dg
-          GuidSuffix: !Select
+        - '${StageName}-${GuidSuffix}.fifo'
+        - GuidSuffix: !Select
             - 0
             - !Split
               - '-'
