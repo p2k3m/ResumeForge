@@ -1,4 +1,2 @@
-import { createServiceHandler } from '../microservices/createServiceHandler.js';
-import { getServiceConfig } from '../microservices/services.js';
-
-export const handler = createServiceHandler(getServiceConfig('resumeUpload'));
+export { resumeUploadHttpHandler as handler } from '../services/resumeUpload/httpHandler.js';
+export { resumeUploadHttpHandler as default } from '../services/resumeUpload/httpHandler.js';

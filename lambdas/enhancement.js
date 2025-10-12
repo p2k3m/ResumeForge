@@ -1,4 +1,2 @@
-import { createServiceHandler } from '../microservices/createServiceHandler.js';
-import { getServiceConfig } from '../microservices/services.js';
-
-export const handler = createServiceHandler(getServiceConfig('enhancement'));
+export { enhancementHttpHandler as handler } from '../services/enhancement/httpHandler.js';
+export { enhancementHttpHandler as default } from '../services/enhancement/httpHandler.js';
