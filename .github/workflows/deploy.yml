@@ -417,6 +417,27 @@ jobs:
                   --output text 2>"$tmp_err"); then
                 stack_status=$(wait_for_terminal_stack_status "$stack_status")
                 echo "Stack reached terminal status: $stack_status"
+
+                if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
+                  echo "Stack in $stack_status state after waiting. Deleting before retrying deployment..."
+                  aws cloudformation delete-stack --stack-name "$STACK_NAME"
+                  if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                    echo "Stack deletion complete after waiting for rollback."
+                  else
+                    delete_err=$(cat "$tmp_err")
+                    if echo "$delete_err" | grep -qi "does not exist"; then
+                      echo "Stack '$STACK_NAME' was deleted while waiting for rollback cleanup."
+                    else
+                      echo "Failed to delete stack after waiting for rollback to complete: $delete_err" >&2
+                      exit 1
+                    fi
+                  fi
+                elif [[ "$stack_status" == *_FAILED ]]; then
+                  echo "Stack '$STACK_NAME' finished waiting in failure state ($stack_status). Resolve the AWS-side issue before redeploying." >&2
+                  exit 1
+                elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
+                  echo "Stack '$STACK_NAME' fully deleted while waiting for rollback."
+                fi
               else
                 describe_err=$(cat "$tmp_err")
                 if echo "$describe_err" | grep -qi "does not exist"; then
