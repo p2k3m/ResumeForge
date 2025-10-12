@@ -425,38 +425,19 @@ Resources:
       # Explicitly assign a FIFO-safe queue name. Without a QueueName SQS
       # defaults to the logical resource id ("DocumentGenerationQueue"), which
       # is invalid for FIFO queues because it does not end with the required
-      # ".fifo" suffix. The previous implementation attempted to incorporate
-      # the stack name and a GUID-derived suffix, but that could still breach
-      # the 80-character queue name limit in environments that use long stack
-      # names. When that occurred CloudFormation surfaced only a generic
-      # "null" error and the stack rolled back. Instead, build a compact name
-      # from the deployment stage and a trimmed stack identifier. Joining the
-      # first and last segments of the stack GUID supplies plenty of entropy
-      # to avoid collisions between rapid successive deployments, while the
-      # StageName prefix keeps the resulting queue name well within the SQS
-      # constraint even for the longest allowed stage names.
+      # ".fifo" suffix. A previous iteration tried to shorten the generated
+      # identifier by splicing parts of the stack GUID, but the deep nest of
+      # Fn::Select and Fn::Split calls triggered an opaque "null" failure from
+      # CloudFormation during stack creation. Using the full GUID segment keeps
+      # the name comfortably within the 80-character queue name limit while
+      # drastically simplifying the intrinsic functions.
       QueueName: !Sub
-        - '${StageName}-${ShortGuid}.fifo'
-        - ShortGuid: !Join
-            - '-'
-            - - !Select
-                - 0
-                - !Split
-                  - '-'
-                  - !Select
-                    - 2
-                    - !Split
-                      - '/'
-                      - !Ref AWS::StackId
-              - !Select
-                - 4
-                - !Split
-                  - '-'
-                  - !Select
-                    - 2
-                    - !Split
-                      - '/'
-                      - !Ref AWS::StackId
+        - '${StageName}-${StackGuid}.fifo'
+        - StackGuid: !Select
+            - 2
+            - !Split
+              - '/'
+              - !Ref AWS::StackId
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
