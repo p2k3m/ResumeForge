@@ -6,6 +6,9 @@ Parameters:
   StageName:
     Type: String
     Default: prod
+    MaxLength: 30
+    AllowedPattern: '^[A-Za-z0-9_-]+$'
+    ConstraintDescription: StageName may contain only letters, numbers, hyphens, and underscores and must be 30 characters or fewer.
     Description: Stage name for the API Gateway deployment.
   SecondaryRegion:
     Type: String

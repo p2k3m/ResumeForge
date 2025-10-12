@@ -160,6 +160,8 @@ During the guided deploy provide values for:
 - `DataBucketName` – globally unique bucket name for uploads and generated files
 - `GeminiApiKey` – Gemini API key used by the Lambda runtime
 - `ResumeTableName` – DynamoDB table name (defaults to `ResumeForge`)
+- `StageName` – API Gateway stage identifier (defaults to `prod`);
+  may include only letters, numbers, hyphens, and underscores and must be 30 characters or fewer
 - `CreateDataBucket` – answer `false` if the bucket already exists and should be reused
 - `CreateResumeTable` – answer `false` if the DynamoDB table already exists and should be reused
 
