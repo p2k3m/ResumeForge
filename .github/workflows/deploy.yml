@@ -500,48 +500,48 @@ jobs:
               continue
             fi
 
-    if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'ROLLBACK_IN_PROGRESS'; then
-      echo "Stack is currently rolling back. Waiting for rollback to finish before retrying..."
-      : >"$tmp_err"
-      if stack_status=$(aws cloudformation describe-stacks \
-          --stack-name "$STACK_NAME" \
-          --query "Stacks[0].StackStatus" \
-          --output text 2>"$tmp_err"); then
-        stack_status=$(wait_for_terminal_stack_status "$stack_status")
-        echo "Stack reached terminal status: $stack_status"
-      else
-        describe_err=$(cat "$tmp_err")
-        if echo "$describe_err" | grep -qi "does not exist"; then
-          echo "Stack '$STACK_NAME' was deleted during rollback. Proceeding with fresh deployment."
-          stack_status="DELETE_COMPLETE"
-        else
-          echo "$describe_err" >&2
-          exit 1
-        fi
-      fi
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'ROLLBACK_IN_PROGRESS'; then
+              echo "Stack is currently rolling back. Waiting for rollback to finish before retrying..."
+              : >"$tmp_err"
+              if stack_status=$(aws cloudformation describe-stacks \
+                  --stack-name "$STACK_NAME" \
+                  --query "Stacks[0].StackStatus" \
+                  --output text 2>"$tmp_err"); then
+                stack_status=$(wait_for_terminal_stack_status "$stack_status")
+                echo "Stack reached terminal status: $stack_status"
+              else
+                describe_err=$(cat "$tmp_err")
+                if echo "$describe_err" | grep -qi "does not exist"; then
+                  echo "Stack '$STACK_NAME' was deleted during rollback. Proceeding with fresh deployment."
+                  stack_status="DELETE_COMPLETE"
+                else
+                  echo "$describe_err" >&2
+                  exit 1
+                fi
+              fi
 
-      if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
-        echo "Stack in $stack_status state after rollback. Deleting before retrying deployment..."
-        aws cloudformation delete-stack --stack-name "$STACK_NAME"
-        if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-          echo "Stack deletion complete after rollback."
-        else
-          delete_err=$(cat "$tmp_err")
-          if echo "$delete_err" | grep -qi "does not exist"; then
-            echo "Stack '$STACK_NAME' already deleted."
-          else
-            echo "Failed to delete stack after rollback: $delete_err" >&2
-            exit 1
-          fi
-        fi
-      fi
+              if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
+                echo "Stack in $stack_status state after rollback. Deleting before retrying deployment..."
+                aws cloudformation delete-stack --stack-name "$STACK_NAME"
+                if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                  echo "Stack deletion complete after rollback."
+                else
+                  delete_err=$(cat "$tmp_err")
+                  if echo "$delete_err" | grep -qi "does not exist"; then
+                    echo "Stack '$STACK_NAME' already deleted."
+                  else
+                    echo "Failed to delete stack after rollback: $delete_err" >&2
+                    exit 1
+                  fi
+                fi
+              fi
 
-      deploy_attempt=$((deploy_attempt + 1))
-      sleep 15
-      continue
-    fi
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
 
-    if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
               echo "sam deploy failed because the stack entered a rollback-complete state. Deleting stack '$STACK_NAME' before retrying..."
               aws cloudformation delete-stack --stack-name "$STACK_NAME"
               if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
