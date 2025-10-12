@@ -31,3 +31,14 @@ export const handler = createServiceHandler(getServiceConfig('resumeUpload'));
 `template.yaml` registers each endpoint as an independent `AWS::Serverless::Function` wired to `ResumeForgeApi`. Provisioned concurrency, IAM policies, and environment configuration stay identical across microservices thanks to YAML anchors. Operations teams can dial up concurrency for AI-heavy services (enhancement, document generation) without touching lightweight auditing flows.
 
 Because every function mounts the same Express app, we still share validation, logging, and retry helpers. When a feature spans services—for example, resume enhancement writing audit entries consumed by the auditing Lambda—it does so through shared modules, not cross-service HTTP calls. This keeps latency low while retaining microservice isolation at the deployment level.
+
+## Orchestration state machine
+
+Large workflows—uploading a resume, scoring it, applying improvements, and emitting updated artefacts—are now coordinated by an AWS Step Functions state machine. The `ResumeForgeWorkflowStateMachine` listens to `resumeForge.workflow` events on the dedicated EventBridge bus and runs the pipeline below:
+
+1. **Score** – `WorkflowScoreFunction` reuses the scoring service to calculate ATS alignment and determine missing skills. The results feed downstream steps.
+2. **Enhancement fan-out** – Step Functions executes a `Map` state that invokes `WorkflowEnhancementSectionFunction` in parallel for each section (summary, skills, designation, experience, certifications, projects, highlights). Each invocation returns a deterministic patch describing the proposed change.
+3. **Combine** – `WorkflowCombineFunction` deterministically applies the patches to the base résumé so the final document captures every section-level change.
+4. **Generate PDF** – `WorkflowGenerateFunction` renders the refreshed résumé into a PDF and pushes it to S3. The object key is shared with downstream consumers through the state machine output.
+
+`services/orchestration/eventBridgePublisher.js` publishes the initial event from the synchronous upload path without blocking the user. Because the orchestration is asynchronous, slow enhancement or generation work never delays the API response while still guaranteeing the state machine receives the same payload the frontend used for the initial submission.

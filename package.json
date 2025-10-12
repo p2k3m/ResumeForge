@@ -20,6 +20,7 @@
     "@aws-sdk/client-cloudformation": "^3.432.0",
     "@aws-sdk/client-cloudfront": "^3.899.0",
     "@aws-sdk/client-dynamodb": "^3.432.0",
+    "@aws-sdk/client-eventbridge": "^3.908.0",
     "@aws-sdk/client-s3": "^3.432.0",
     "@aws-sdk/client-secrets-manager": "^3.432.0",
     "@aws-sdk/client-sqs": "^3.432.0",

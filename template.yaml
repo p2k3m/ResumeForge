@@ -108,6 +108,11 @@ Resources:
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
 
+  ResumeForgeOrchestrationBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub '${AWS::StackName}-resume-forge-orchestration'
+
   DataBucket:
     Type: AWS::S3::Bucket
     Condition: CreateDataBucketCondition
@@ -133,6 +138,7 @@ Resources:
                 - !GetAtt EnhancementFunctionRole.Arn
                 - !GetAtt DocumentGenerationFunctionRole.Arn
                 - !GetAtt AuditingFunctionRole.Arn
+                - !GetAtt WorkflowGenerateFunctionRole.Arn
             Action:
               - s3:GetObject
               - s3:PutObject
@@ -152,6 +158,7 @@ Resources:
                 - !GetAtt EnhancementFunctionRole.Arn
                 - !GetAtt DocumentGenerationFunctionRole.Arn
                 - !GetAtt AuditingFunctionRole.Arn
+                - !GetAtt WorkflowGenerateFunctionRole.Arn
             Action:
               - s3:ListBucket
             Resource: !If
@@ -206,6 +213,7 @@ Resources:
             PRIMARY_REGION: !Ref AWS::Region
             SECONDARY_REGION: !Ref SecondaryRegion
             STAGE_NAME: !Ref StageName
+            ORCHESTRATION_BUS_NAME: !Ref ResumeForgeOrchestrationBus
           ACTIVE_SERVICE: resumeUpload
       Policies: &ResumeForgeFunctionPolicies
         - AWSLambdaBasicExecutionRole
@@ -456,6 +464,80 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
+  WorkflowScoreFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeWorkflowScore
+      CodeUri: .
+      Handler: lambdas/workflowScore.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+    Metadata:
+      BuildMethod: makefile
+
+  WorkflowEnhancementSectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeWorkflowEnhancementSection
+      CodeUri: .
+      Handler: lambdas/workflowEnhancementSection.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+    Metadata:
+      BuildMethod: makefile
+
+  WorkflowCombineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeWorkflowCombine
+      CodeUri: .
+      Handler: lambdas/workflowCombine.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 60
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+    Metadata:
+      BuildMethod: makefile
+
+  WorkflowGenerateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ResumeForgeWorkflowGenerate
+      CodeUri: .
+      Handler: lambdas/workflowGeneratePdf.handler
+      Runtime: nodejs18.x
+      MemorySize: 1024
+      Timeout: 120
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            Effect: Allow
+            Action:
+              - s3:PutObject
+            Resource: !Sub arn:aws:s3:::${DataBucketName}/*
+      Environment:
+        Variables:
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+          S3_BUCKET: !Ref DataBucketName
+    Metadata:
+      BuildMethod: makefile
+
   DocumentGenerationSendPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -469,6 +551,87 @@ Resources:
             Action:
               - sqs:SendMessage
             Resource: !GetAtt DocumentGenerationQueue.Arn
+
+  ResumeForgeWorkflowStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Sub '${AWS::StackName}-resume-flow'
+      Definition:
+        Comment: ResumeForge orchestration pipeline
+        StartAt: ScoreResume
+        States:
+          ScoreResume:
+            Type: Task
+            Resource: ${WorkflowScoreArn}
+            ResultPath: $.scoring
+            Parameters:
+              jobId.$: $.jobId
+              resumeText.$: $.resumeText
+              jobSkills.$: $.jobSkills
+              jobDescription.$: $.jobDescription
+          FanOutEnhancements:
+            Type: Map
+            ItemsPath: $.enhancementTypes
+            MaxConcurrency: 7
+            ResultPath: $.enhancementResults
+            Parameters:
+              type.$: $$.Map.Item.Value
+              resumeText.$: $.resumeText
+              jobDescription.$: $.jobDescription
+              jobSkills.$: $.jobSkills
+              missingSkills.$: $.scoring.missingSkills
+              manualCertificates.$: $.manualCertificates
+              targetTitle.$: $.targetTitle
+            Iterator:
+              StartAt: InvokeEnhancementSection
+              States:
+                InvokeEnhancementSection:
+                  Type: Task
+                  Resource: ${WorkflowEnhancementSectionArn}
+                  End: true
+          CombineEnhancements:
+            Type: Task
+            Resource: ${WorkflowCombineArn}
+            ResultPath: $.combined
+            Parameters:
+              jobId.$: $.jobId
+              resumeText.$: $.resumeText
+              sectionResults.$: $.enhancementResults
+          GenerateArtifacts:
+            Type: Task
+            Resource: ${WorkflowGenerateArn}
+            ResultPath: $.artifacts
+            Parameters:
+              jobId.$: $.jobId
+              resumeText.$: $.combined.updatedResume
+            End: true
+      DefinitionSubstitutions:
+        WorkflowScoreArn: !GetAtt WorkflowScoreFunction.Arn
+        WorkflowEnhancementSectionArn: !GetAtt WorkflowEnhancementSectionFunction.Arn
+        WorkflowCombineArn: !GetAtt WorkflowCombineFunction.Arn
+        WorkflowGenerateArn: !GetAtt WorkflowGenerateFunction.Arn
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowScoreFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowEnhancementSectionFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowCombineFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref WorkflowGenerateFunction
+        - S3WritePolicy:
+            BucketName: !Ref DataBucketName
+      Events:
+        ResumeWorkflowEvent:
+          Type: EventBridgeRule
+          Properties:
+            EventBusName: !Ref ResumeForgeOrchestrationBus
+            InputPath: $.detail
+            Pattern:
+              source:
+                - resumeForge.workflow
+              detail-type:
+                - ResumeFlowRequested
 
   AuditingFunction:
     Type: AWS::Serverless::Function

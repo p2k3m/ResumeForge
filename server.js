@@ -59,6 +59,8 @@ import {
   parseTemplateParams as parseTemplateParamsConfig,
   resolveTemplateParams as resolveTemplateParamsConfig
 } from './lib/pdf/utils.js';
+import { ENHANCEMENT_TYPES } from './services/enhancement/workflow.js';
+import { publishResumeWorkflowEvent } from './services/orchestration/eventBridgePublisher.js';
 import {
   TECHNICAL_TERMS,
   calculateMatchScore,
@@ -22218,6 +22220,23 @@ app.post(
     }
 
     if (enhancedResponse) {
+      scheduleTask(() => {
+        publishResumeWorkflowEvent({
+          jobId,
+          resumeText: generationRequest?.resumeText || originalResumeText,
+          jobDescription,
+          jobSkills,
+          missingSkills,
+          manualCertificates,
+          targetTitle: jobTitle,
+          enhancementTypes: ENHANCEMENT_TYPES,
+        }).catch((eventErr) => {
+          logStructured('warn', 'process_cv_orchestration_event_failed', {
+            ...logContext,
+            error: serializeError(eventErr),
+          });
+        });
+      });
       return res.json(enhancedResponse);
     }
 
