@@ -27,6 +27,7 @@ const {
 } = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logEvent, logErrorTrace } from './logger.js';
 import {
   executeWithRetry,
