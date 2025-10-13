@@ -58,6 +58,22 @@ jobs:
         run: npm audit --omit=dev --audit-level=critical
         working-directory: client
 
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Cache SAM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .aws-sam/cache
+            ~/.cache/aws-sam
+          key: sam-${{ runner.os }}-${{ hashFiles('template.yaml', 'lambdas/**/*.js', 'lambda.js', 'lib/**/*.js') }}
+          restore-keys: |
+            sam-${{ runner.os }}-
+
+      - name: Build serverless application
+        run: sam build
+
       - name: Build client bundle
         run: npm run build
         working-directory: client
