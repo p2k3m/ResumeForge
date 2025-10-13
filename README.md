@@ -266,7 +266,8 @@ npm run build
 ```
 
 This command invokes Vite to emit the production client into `client/dist` and bundles the Lambda entry point with `esbuild`
-inside `dist/lambda`. Individual steps remain available through `npm run build:client` and `npm run build:lambda`.
+inside `dist/lambda`. Each artifact directory includes a `build-info.json` file that captures the Git SHA and build timestamp
+for traceability. Individual steps remain available through `npm run build:client` and `npm run build:lambda`.
 
 ### Post-deployment verification
 
