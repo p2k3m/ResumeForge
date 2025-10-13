@@ -295,33 +295,58 @@ jobs:
             fi
           }
 
-          : >"$tmp_err"
-          if stack_status=$(aws cloudformation describe-stacks \
-              --stack-name "$STACK_NAME" \
-              --query "Stacks[0].StackStatus" \
-              --output text 2>"$tmp_err"); then
-            echo "Found existing stack '$STACK_NAME' with status: $stack_status"
-            stack_status=$(wait_for_terminal_stack_status "$stack_status")
-            if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
-              echo "Stack in $stack_status state. Deleting before redeploy."
-              aws cloudformation delete-stack --stack-name "$STACK_NAME"
-              aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME"
-              echo "Stack deletion complete. Proceeding with deployment."
-            elif [[ "$stack_status" == *_FAILED ]]; then
-              echo "Stack '$STACK_NAME' is in failure state ($stack_status). Resolve the issue in AWS before redeploying." >&2
-              exit 1
-            elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
-              echo "Stack '$STACK_NAME' was deleted before deployment. Proceeding with fresh deployment."
-            fi
-          else
-            describe_err=$(cat "$tmp_err")
-            if echo "$describe_err" | grep -qi "does not exist"; then
-              echo "Stack '$STACK_NAME' does not exist. Proceeding with deployment."
+          ensure_stack_ready_for_deploy() {
+            local context="$1"
+
+            : >"$tmp_err"
+            if stack_status=$(aws cloudformation describe-stacks \
+                --stack-name "$STACK_NAME" \
+                --query "Stacks[0].StackStatus" \
+                --output text 2>"$tmp_err"); then
+              echo "Found existing stack '$STACK_NAME' with status: $stack_status ($context)"
+
+              if [[ "$stack_status" == *_IN_PROGRESS ]]; then
+                echo "Stack '$STACK_NAME' currently in progress ($stack_status) while $context. Waiting for completion..."
+                stack_status=$(wait_for_terminal_stack_status "$stack_status")
+                echo "Stack '$STACK_NAME' reached terminal status: $stack_status while $context."
+              fi
+
+              if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
+                echo "Stack in $stack_status state while $context. Deleting before continuing."
+                aws cloudformation delete-stack --stack-name "$STACK_NAME"
+                if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                  echo "Stack deletion complete while $context."
+                else
+                  local delete_err
+                  delete_err=$(cat "$tmp_err")
+                  if echo "$delete_err" | grep -qi "does not exist"; then
+                    echo "Stack '$STACK_NAME' was deleted while waiting during $context."
+                  else
+                    echo "Failed to delete stack '$STACK_NAME' while $context: $delete_err" >&2
+                    exit 1
+                  fi
+                fi
+                stack_status="DELETE_COMPLETE"
+              elif [[ "$stack_status" == *_FAILED ]]; then
+                echo "Stack '$STACK_NAME' is in failure state ($stack_status) while $context. Resolve the issue in AWS before redeploying." >&2
+                exit 1
+              elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
+                echo "Stack '$STACK_NAME' was deleted while $context. Proceeding with fresh deployment."
+              fi
             else
-              echo "$describe_err" >&2
-              exit 1
+              local describe_err
+              describe_err=$(cat "$tmp_err")
+              if echo "$describe_err" | grep -qi "does not exist"; then
+                echo "Stack '$STACK_NAME' does not exist while $context. Proceeding with deployment."
+                stack_status="DELETE_COMPLETE"
+              else
+                echo "$describe_err" >&2
+                exit 1
+              fi
             fi
-          fi
+          }
+
+          ensure_stack_ready_for_deploy "initial status check"
 
           : >"$tmp_err"
 
@@ -365,6 +390,7 @@ jobs:
           deploy_attempt=1
           deploy_succeeded=false
           while [ "$deploy_attempt" -le "$max_deploy_attempts" ]; do
+            ensure_stack_ready_for_deploy "preparing for sam deploy attempt $deploy_attempt"
             echo "Starting sam deploy attempt $deploy_attempt of $max_deploy_attempts"
             : >"$tmp_deploy_log"
 
