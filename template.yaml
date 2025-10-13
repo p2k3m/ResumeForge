@@ -456,7 +456,8 @@ Resources:
       SqsManagedSseEnabled: true
       VisibilityTimeout: 900
       Tags:
-        Environment: !Ref StageName
+        - Key: Environment
+          Value: !Ref StageName
 
   DocumentGenerationFunction:
     Type: AWS::Serverless::Function
