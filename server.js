@@ -916,11 +916,247 @@ function serializeError(err) {
   return { message: String(err) };
 }
 
-function toLoggable(value) {
+const LOG_REDACTED_VALUE = '[REDACTED]';
+const LOG_CIRCULAR_VALUE = '[Circular]';
+
+const SENSITIVE_KEY_TOKENS = new Set([
+  'password',
+  'passwd',
+  'pwd',
+  'secret',
+  'secrets',
+  'token',
+  'tokens',
+  'authorization',
+  'authorisation',
+  'auth',
+  'credential',
+  'credentials',
+  'cookie',
+  'csrf',
+  'bearer',
+  'jwt',
+  'oauth',
+  'apikey',
+  'accesskey',
+  'secretkey',
+  'privatekey',
+  'clientsecret',
+  'clientid',
+  'sessionid',
+  'sessiontoken',
+  'sessionsecret',
+  'sessionkey',
+  'authtoken',
+]);
+
+const SENSITIVE_KEY_COMBINATIONS = [
+  ['api', 'key'],
+  ['access', 'key'],
+  ['secret', 'key'],
+  ['private', 'key'],
+  ['client', 'secret'],
+  ['client', 'id'],
+  ['session', 'id'],
+  ['session', 'token'],
+  ['session', 'secret'],
+  ['session', 'key'],
+  ['auth', 'token'],
+  ['x', 'api', 'key'],
+];
+
+const SENSITIVE_VALUE_PATTERNS = [
+  /^\s*Bearer\s+\S+/i,
+  /^\s*Basic\s+\S+/i,
+  /-----BEGIN [A-Z ]+-----/, // PEM blocks
+  /\bAKIA[0-9A-Z]{16}\b/, // AWS access key id
+  /\bASIA[0-9A-Z]{16}\b/, // AWS temp access key id
+  /\bA3T[A-Z0-9]{16}\b/,
+  /\bAIza[0-9A-Za-z\-_]{35}\b/, // Google API key format
+  /\bya29\.[0-9A-Za-z\-_]+\b/, // Google OAuth tokens
+  /\b(?:eyJ[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]{10,})\b/, // JWTs
+];
+
+function isSensitiveLogKey(key = '') {
+  if (!key) {
+    return false;
+  }
+  const tokens = key
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[^a-z0-9]+/gi, '_')
+    .toLowerCase()
+    .split('_')
+    .filter(Boolean);
+  if (!tokens.length) {
+    return false;
+  }
+  const collapsed = tokens.join('');
+  if (SENSITIVE_KEY_TOKENS.has(collapsed)) {
+    return true;
+  }
+  if (tokens.some((token) => SENSITIVE_KEY_TOKENS.has(token))) {
+    return true;
+  }
+  for (const combo of SENSITIVE_KEY_COMBINATIONS) {
+    if (combo.every((needle) => tokens.includes(needle))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function looksLikeSensitiveValue(value = '') {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return SENSITIVE_VALUE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function describeFunction(value) {
+  const name = value && value.name ? `: ${value.name}` : '';
+  return `[Function${name}]`;
+}
+
+function sanitizeLogValue(value, { key = '', sensitive = false, seen = new WeakSet() } = {}) {
+  const nextSensitive = sensitive || isSensitiveLogKey(key);
+
+  if (value === null || value === undefined) {
+    return value;
+  }
+
   if (value instanceof Error) {
     return serializeError(value);
   }
-  return value;
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return `[Buffer length=${value.length}]`;
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return `[ArrayBuffer byteLength=${value.byteLength}]`;
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    const constructorName = value.constructor?.name || 'TypedArray';
+    const length = 'length' in value ? value.length : value.byteLength;
+    return `[${constructorName} length=${length}]`;
+  }
+
+  if (value instanceof URL) {
+    return value.toString();
+  }
+
+  if (value instanceof RegExp) {
+    return value.toString();
+  }
+
+  if (typeof value === 'string') {
+    if (nextSensitive || looksLikeSensitiveValue(value)) {
+      return LOG_REDACTED_VALUE;
+    }
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return String(value);
+    }
+    return nextSensitive ? LOG_REDACTED_VALUE : value;
+  }
+
+  if (typeof value === 'boolean') {
+    return nextSensitive ? LOG_REDACTED_VALUE : value;
+  }
+
+  if (typeof value === 'bigint') {
+    return nextSensitive ? LOG_REDACTED_VALUE : value.toString();
+  }
+
+  if (typeof value === 'symbol') {
+    return value.toString();
+  }
+
+  if (typeof value === 'function') {
+    return describeFunction(value);
+  }
+
+  if (value instanceof Promise) {
+    return '[Promise]';
+  }
+
+  if (typeof value !== 'object') {
+    return nextSensitive ? LOG_REDACTED_VALUE : value;
+  }
+
+  if (seen.has(value)) {
+    return LOG_CIRCULAR_VALUE;
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      sanitizeLogValue(item, { key: String(index), sensitive: nextSensitive, seen })
+    );
+  }
+
+  if (value instanceof Set) {
+    return Array.from(value).map((item, index) =>
+      sanitizeLogValue(item, { key: String(index), sensitive: nextSensitive, seen })
+    );
+  }
+
+  if (value instanceof Map) {
+    const mapped = {};
+    for (const [entryKey, entryValue] of value.entries()) {
+      let keyString;
+      if (typeof entryKey === 'string') {
+        keyString = entryKey;
+      } else {
+        try {
+          keyString = JSON.stringify(entryKey);
+        } catch {
+          keyString = String(entryKey);
+        }
+      }
+      mapped[keyString] = sanitizeLogValue(entryValue, {
+        key: keyString,
+        sensitive: nextSensitive,
+        seen,
+      });
+    }
+    return mapped;
+  }
+
+  if (value instanceof URLSearchParams) {
+    const params = {};
+    for (const [paramKey, paramValue] of value.entries()) {
+      params[paramKey] = sanitizeLogValue(paramValue, {
+        key: paramKey,
+        sensitive: nextSensitive,
+        seen,
+      });
+    }
+    return params;
+  }
+
+  const entries = Object.entries(value);
+  const result = {};
+  for (const [entryKey, entryValue] of entries) {
+    result[entryKey] = sanitizeLogValue(entryValue, {
+      key: entryKey,
+      sensitive: nextSensitive,
+      seen,
+    });
+  }
+  return result;
+}
+
+function sanitizeLogPayload(payload) {
+  return sanitizeLogValue(payload, { seen: new WeakSet() });
 }
 
 const requestContextStore = new Map();
@@ -1152,10 +1388,10 @@ function logStructured(level, message, context = {}) {
           }
         };
   try {
-    const serialised = JSON.stringify(payload, (_, value) => toLoggable(value));
+    const safePayload = sanitizeLogPayload(payload);
+    const serialised = JSON.stringify(safePayload);
     logFn(serialised);
     if (level === 'error') {
-      const safePayload = JSON.parse(serialised);
       scheduleErrorLog(safePayload);
     }
   } catch (err) {
@@ -20346,6 +20582,7 @@ export {
   selectTemplates,
   removeGuidanceLines,
   sanitizeGeneratedText,
+  sanitizeLogPayload,
   resolveEnhancementTokens,
   injectEnhancementTokens,
   relocateProfileLinks,
