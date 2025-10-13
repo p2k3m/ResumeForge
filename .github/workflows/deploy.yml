@@ -31,20 +31,43 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
 
       - name: Install server dependencies
         run: npm ci
 
-      - name: Run server tests
-        run: npm test -- --runInBand
+      - name: Lint codebase
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Security audit (server)
+        run: npm audit --omit=dev --audit-level=critical
 
       - name: Install client dependencies
         run: npm ci
         working-directory: client
 
+      - name: Security audit (client)
+        run: npm audit --omit=dev --audit-level=critical
+        working-directory: client
+
       - name: Build client bundle
         run: npm run build
         working-directory: client
+
+      - name: Upload client build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+          if-no-files-found: error
 
   deploy:
     name: Deploy to AWS
@@ -100,6 +123,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
 
       - name: Install server dependencies
         run: npm ci
@@ -114,6 +140,16 @@ jobs:
 
       - name: Set up AWS SAM CLI
         uses: aws-actions/setup-sam@v2
+
+      - name: Cache SAM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .aws-sam/cache
+            ~/.cache/aws-sam
+          key: sam-${{ runner.os }}-${{ hashFiles('template.yaml', 'lambdas/**/*.js', 'lambda.js', 'lib/**/*.js') }}
+          restore-keys: |
+            sam-${{ runner.os }}-
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
