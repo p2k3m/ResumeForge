@@ -146,6 +146,7 @@ Resources:
             Principal:
               AWS:
                 - !GetAtt ResumeForgeFunctionRole.Arn
+                - !GetAtt ClientAppFunctionRole.Arn
                 - !GetAtt JobEvaluationFunctionRole.Arn
                 - !GetAtt ScoringFunctionRole.Arn
                 - !GetAtt EnhancementFunctionRole.Arn
@@ -166,6 +167,7 @@ Resources:
             Principal:
               AWS:
                 - !GetAtt ResumeForgeFunctionRole.Arn
+                - !GetAtt ClientAppFunctionRole.Arn
                 - !GetAtt JobEvaluationFunctionRole.Arn
                 - !GetAtt ScoringFunctionRole.Arn
                 - !GetAtt EnhancementFunctionRole.Arn
@@ -266,6 +268,88 @@ Resources:
                   - !Ref SecretName
                   - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
           - !Ref AWS::NoValue
+      Layers: []
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  ClientAppFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-client-app'
+      CodeUri: .
+      Handler: lambdas/clientApp.handler
+      Runtime: nodejs18.x
+      MemorySize: 512
+      Timeout: 30
+      AutoPublishAlias: !Ref StageName
+      Events:
+        Root:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /
+            Method: ANY
+        IndexHtml:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /index.html
+            Method: ANY
+        Favicon:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /favicon.ico
+            Method: ANY
+        Manifest:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /manifest.webmanifest
+            Method: ANY
+        Robots:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /robots.txt
+            Method: ANY
+        ServiceWorker:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /service-worker.js
+            Method: ANY
+        Assets:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /assets/{proxy+}
+            Method: ANY
+        Fonts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /fonts/{proxy+}
+            Method: ANY
+        Images:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /images/{proxy+}
+            Method: ANY
+        CoverTemplates:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /cover-templates/{proxy+}
+            Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: clientApp
+      Policies: *ResumeForgeFunctionPolicies
       Layers: []
       Tags:
         Environment: !Ref StageName

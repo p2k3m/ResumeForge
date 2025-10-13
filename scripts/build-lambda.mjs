@@ -127,6 +127,7 @@ async function ensureCleanOutput() {
 
 async function runEsbuild() {
   const entryPoints = [
+    path.join(projectRoot, 'lambdas', 'clientApp.js'),
     path.join(projectRoot, 'lambdas', 'resumeUpload.js'),
     path.join(projectRoot, 'lambdas', 'jobEvaluation.js'),
     path.join(projectRoot, 'lambdas', 'scoring.js'),

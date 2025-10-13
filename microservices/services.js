@@ -7,6 +7,32 @@ import {
 } from './routing.js';
 
 export const services = {
+  clientApp: {
+    serviceName: 'client-app',
+    description: 'Serves the compiled client application and static assets.',
+    allowedRoutes: [
+      { method: 'GET', path: '/' },
+      { method: 'HEAD', path: '/' },
+      { method: 'GET', path: '/index.html' },
+      { method: 'HEAD', path: '/index.html' },
+      { method: 'GET', path: '/favicon.ico' },
+      { method: 'HEAD', path: '/favicon.ico' },
+      { method: 'GET', path: '/manifest.webmanifest' },
+      { method: 'HEAD', path: '/manifest.webmanifest' },
+      { method: 'GET', path: '/robots.txt' },
+      { method: 'HEAD', path: '/robots.txt' },
+      { method: 'GET', path: '/service-worker.js' },
+      { method: 'HEAD', path: '/service-worker.js' },
+      { method: 'GET', path: '/assets*' },
+      { method: 'HEAD', path: '/assets*' },
+      { method: 'GET', path: '/fonts*' },
+      { method: 'HEAD', path: '/fonts*' },
+      { method: 'GET', path: '/images*' },
+      { method: 'HEAD', path: '/images*' },
+      { method: 'GET', path: '/cover-templates*' },
+      { method: 'HEAD', path: '/cover-templates*' },
+    ],
+  },
   resumeUpload: {
     serviceName: 'resume-upload',
     description: 'Accepts resumes and uploads artifacts to S3/DynamoDB.',
