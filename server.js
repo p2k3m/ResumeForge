@@ -681,6 +681,32 @@ function setS3Client(client) {
   }
 }
 
+function resetTestState() {
+  runtimeConfigFileCache = undefined;
+  runtimeConfigFileError = undefined;
+  runtimeConfigFileLoaded = false;
+
+  runtimeConfigCache = undefined;
+  runtimeConfigError = undefined;
+  runtimeConfigLogged = false;
+  runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
+
+  configuredRegion =
+    runtimeConfigSnapshot?.AWS_REGION || readEnvValue('AWS_REGION') || DEFAULT_AWS_REGION;
+  process.env.AWS_REGION = configuredRegion;
+  region = configuredRegion;
+  s3Client = new S3Client({ region });
+  errorLogS3Client = s3Client;
+  errorLogBucket =
+    runtimeConfigSnapshot?.S3_BUCKET || process.env.S3_BUCKET || readEnvValue('S3_BUCKET');
+
+  sharedGenerativeModelPromise = undefined;
+  chromium = undefined;
+  puppeteerCore = undefined;
+  chromiumLaunchAttempted = false;
+  customChromiumLauncher = null;
+}
+
 async function getSharedGenerativeModel() {
   if (sharedGenerativeModelPromise) {
     return sharedGenerativeModelPromise;
@@ -1979,7 +2005,7 @@ function getRuntimeConfig() {
   throw runtimeConfigError || new Error('Runtime configuration unavailable');
 }
 
-const runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
+let runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
 
 function resolveCurrentAllowedOrigins() {
   const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
@@ -2682,11 +2708,11 @@ function selectTemplates({
   };
 }
 
-const configuredRegion =
+let configuredRegion =
   runtimeConfigSnapshot?.AWS_REGION || readEnvValue('AWS_REGION') || DEFAULT_AWS_REGION;
 process.env.AWS_REGION = configuredRegion;
 
-const region = configuredRegion;
+let region = configuredRegion;
 let s3Client = new S3Client({ region });
 errorLogS3Client = s3Client;
 errorLogBucket =
@@ -20338,4 +20364,5 @@ export {
   ensureOutputFileUrls,
   determineUploadContentType,
   setCoverLetterFallbackBuilder,
+  resetTestState,
 };
