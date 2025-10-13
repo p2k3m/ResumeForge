@@ -425,24 +425,32 @@ Resources:
       # Explicitly assign a FIFO-safe queue name. Without a QueueName, SQS
       # defaults to the logical resource id ("DocumentGenerationQueue"), which
       # is invalid for FIFO queues because it does not end with the required
-      # ".fifo" suffix. Use the stack ID's unique GUID portion but strip the
-      # hyphens to avoid intermittent AWS service errors that occur when SQS
-      # receives queue names with multiple consecutive hyphen groups during
-      # rapid stack recreations.
-      QueueName: !Join
-        - ''
-        - - !Ref StageName
-          - '-dg-'
-          - !Join
+      # ".fifo" suffix. Use the stack ID's GUID but truncate it to the first
+      # two segments so the name always stays below the 80 character limit and
+      # avoids the SQS "QueueDeletedRecently" throttle that happens when the
+      # same queue name is recreated immediately after a rollback.
+      QueueName: !Sub
+        - '${StageName}-dg-${UniqueSuffix}.fifo'
+        - UniqueSuffix: !Join
             - ''
-            - !Split
-              - '-'
+            - - !Select
+                  - 0
+                  - !Split
+                    - '-'
+                    - !Select
+                      - 2
+                      - !Split
+                        - '/'
+                        - !Ref AWS::StackId
               - !Select
-                - 2
-                - !Split
-                  - '/'
-                  - !Ref AWS::StackId
-          - '.fifo'
+                  - 1
+                  - !Split
+                    - '-'
+                    - !Select
+                      - 2
+                      - !Split
+                        - '/'
+                        - !Ref AWS::StackId
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
