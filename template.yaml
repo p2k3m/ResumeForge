@@ -426,20 +426,16 @@ Resources:
       # defaults to the logical resource id ("DocumentGenerationQueue"), which
       # is invalid for FIFO queues because it does not end with the required
       # ".fifo" suffix. To keep the queue name stable across deployments while
-      # staying well under the 80 character SQS limit (even for very long stack
-      # names), derive the name from the stage and the stack ID's deterministic
-      # prefix.
+      # still avoiding SQS's one-minute reuse restriction when stacks are
+      # recreated in quick succession, derive the name from the full stack ID
+      # segment that AWS guarantees is unique per stack.
       QueueName: !Sub
-        - '${StageName}-dg-${StackIdShort}.fifo'
-        - StackIdShort: !Select
-            - 0
+        - '${StageName}-dg-${StackIdGuid}.fifo'
+        - StackIdGuid: !Select
+            - 2
             - !Split
-              - '-'
-              - !Select
-                - 2
-                - !Split
-                  - '/'
-                  - !Ref AWS::StackId
+              - '/'
+              - !Ref AWS::StackId
       FifoQueue: true
       ContentBasedDeduplication: true
       SqsManagedSseEnabled: true
