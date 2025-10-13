@@ -268,10 +268,14 @@ describe('/api/process-cv', () => {
       type: command.__type,
       key: command.input?.Key,
       copySource: command.input?.CopySource,
+      tagging: command.input?.Tagging,
+      taggingDirective: command.input?.TaggingDirective,
     }));
 
     const relocationCommand = s3Commands.find((cmd) => cmd.type === 'CopyObjectCommand');
     expect(relocationCommand).toBeTruthy();
+    expect(relocationCommand.tagging).toContain('environment=test');
+    expect(relocationCommand.taggingDirective).toBe('REPLACE');
 
     const tempDelete = s3Commands.find((cmd) => cmd.type === 'DeleteObjectCommand');
     expect(tempDelete).toBeTruthy();
@@ -345,6 +349,14 @@ describe('/api/process-cv', () => {
       ([cmd]) => cmd.__type === 'UpdateItemCommand'
     );
     expect(updateCalls.length).toBeGreaterThan(0);
+
+    updateCalls.forEach(([cmd]) => {
+      const values = cmd.input?.ExpressionAttributeValues || {};
+      const environmentAttr = values[':environment'];
+      expect(environmentAttr).toBeTruthy();
+      expect(environmentAttr.S).toBe('test');
+      expect(cmd.input.UpdateExpression).toContain('environment');
+    });
 
     const scoringUpdate = updateCalls[0];
     expect(scoringUpdate[0].input.ConditionExpression).toBe(
