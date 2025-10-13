@@ -2,8 +2,8 @@
 import { build } from 'esbuild'
 import { fileURLToPath } from 'url'
 import path from 'path'
-import { mkdir, rm, cp } from 'fs/promises'
-import { spawn } from 'child_process'
+import { mkdir, rm, cp, writeFile } from 'fs/promises'
+import { spawn, execFile } from 'child_process'
 import { backstopPdfTemplates } from './pdf-template-backstop.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -49,6 +49,57 @@ function resolveOutDir() {
 }
 
 const outDir = resolveOutDir()
+
+function execFileAsync(command, args, options) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, options, (error, stdout, stderr) => {
+      if (error) {
+        error.stdout = stdout
+        error.stderr = stderr
+        reject(error)
+        return
+      }
+
+      resolve({ stdout, stderr })
+    })
+  })
+}
+
+async function resolveGitSha() {
+  try {
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: projectRoot })
+    return stdout.trim()
+  } catch (error) {
+    const message = error?.message || 'Unknown error'
+    console.warn(`Unable to determine git SHA for build metadata (${message}).`)
+    return 'unknown'
+  }
+}
+
+async function writeMetadataFile(destination, metadata) {
+  const payload = `${JSON.stringify(metadata, null, 2)}\n`
+  await writeFile(destination, payload)
+}
+
+async function writeClientMetadata(metadata) {
+  const clientDistDir = path.join(projectRoot, 'client', 'dist')
+  const clientMetadataPath = path.join(clientDistDir, 'build-info.json')
+
+  try {
+    await writeMetadataFile(clientMetadataPath, metadata)
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      console.warn('Client dist directory missing; skipping client build metadata generation.')
+      return
+    }
+    throw error
+  }
+}
+
+async function writeLambdaMetadata(metadata) {
+  const lambdaMetadataPath = path.join(outDir, 'build-info.json')
+  await writeMetadataFile(lambdaMetadataPath, metadata)
+}
 
 async function runClientBuild() {
   await new Promise((resolve, reject) => {
@@ -139,11 +190,20 @@ async function copyStaticAssets() {
 }
 
 async function main() {
+  const gitSha = await resolveGitSha()
+  const buildMetadata = {
+    gitSha,
+    gitShortSha: gitSha === 'unknown' ? 'unknown' : gitSha.slice(0, 7),
+    builtAt: new Date().toISOString(),
+  }
+
   await runClientBuild()
+  await writeClientMetadata(buildMetadata)
   await backstopPdfTemplates({ logger: console })
   await ensureCleanOutput()
   await runEsbuild()
   await copyStaticAssets()
+  await writeLambdaMetadata(buildMetadata)
   console.log(`Lambda bundle written to ${outDir}`)
 }
 
