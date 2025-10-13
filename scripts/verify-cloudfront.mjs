@@ -47,6 +47,7 @@ async function main() {
     console.error('Next steps:');
     console.error('- Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output.');
     console.error('- If the distribution was replaced or removed, redeploy the SAM stack and republish the CloudFront URL:');
+    console.error('    sam validate');
     console.error('    sam build --use-container');
     console.error('    sam deploy --guided');
     console.error('    npm run publish:cloudfront-url -- <stack-name>');
