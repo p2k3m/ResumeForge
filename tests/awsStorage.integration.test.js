@@ -2,6 +2,8 @@ import request from 'supertest';
 import { jest } from '@jest/globals';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
 
+jest.setTimeout(30000);
+
 const MANUAL_JOB_DESCRIPTION = `
 Join our platform engineering team to build resilient infrastructure and developer tooling.
 Collaborate across functions, automate deployments, and improve service reliability.

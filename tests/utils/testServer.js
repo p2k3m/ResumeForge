@@ -97,7 +97,6 @@ export async function setupTestServer({
   docText,
   allowedOrigins,
 } = {}) {
-  jest.resetModules();
   const mockState = getMockState();
   process.env.S3_BUCKET = 'integration-bucket';
   process.env.GEMINI_API_KEY = 'integration-key';
@@ -366,7 +365,9 @@ export async function setupTestServer({
 
   if (!mockState.registered) {
     jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
-      S3Client: jest.fn(() => ({ send: mockState.mockS3Send })),
+      S3Client: jest.fn(() => ({
+        send: (...args) => mockState.mockS3Send?.(...args),
+      })),
       PutObjectCommand: jest.fn((input) => ({ input, __type: 'PutObjectCommand' })),
       GetObjectCommand: jest.fn((input) => ({ input, __type: 'GetObjectCommand' })),
       ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
@@ -384,7 +385,9 @@ export async function setupTestServer({
     }));
 
     jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
-      DynamoDBClient: jest.fn(() => ({ send: mockState.mockDynamoSend })),
+      DynamoDBClient: jest.fn(() => ({
+        send: (...args) => mockState.mockDynamoSend?.(...args),
+      })),
       CreateTableCommand: jest.fn((input) => ({ input, __type: 'CreateTableCommand' })),
       DescribeTableCommand: jest.fn((input) => ({ input, __type: 'DescribeTableCommand' })),
       GetItemCommand: jest.fn((input) => ({ input, __type: 'GetItemCommand' })),
@@ -436,7 +439,16 @@ export async function setupTestServer({
     mammothExtractRawText,
   });
 
-  const serverModule = await import('../../server.js');
+  if (!mockState.serverModulePromise) {
+    mockState.serverModulePromise = import('../../server.js');
+  }
+  const serverModule = await mockState.serverModulePromise;
+  if (typeof serverModule.resetTestState === 'function') {
+    serverModule.resetTestState();
+  }
+  serverModule.setS3Client({
+    send: (...args) => mockS3Send(...args),
+  });
   if (typeof serverModule.setChromiumLauncher === 'function') {
     serverModule.setChromiumLauncher(() => null);
   }
