@@ -6,6 +6,7 @@ ResumeForge retains a single Express implementation but deploys it as discrete L
 
 | Key | Description | Endpoints |
 | --- | --- | --- |
+| `clientApp` | Serves the compiled React client and static assets (HTML, JS, fonts, icons). | `GET /`, `GET /index.html`, `GET /favicon.ico`, `GET /manifest.webmanifest`, `GET /robots.txt`, `GET /service-worker.js`, `GET /assets/*`, `GET /fonts/*`, `GET /images/*`, `GET /cover-templates/*` |
 | `resumeUpload` | Accepts résumé uploads, persists session metadata, and kicks off preprocessing. | `POST /api/process-cv` |
 | `jobEvaluation` | Consumes résumé text plus a job description and returns fit analysis. | `POST /api/jd/evaluate` |
 | `scoring` | Calculates match scores and supports re-scoring after enhancements. | `POST /api/score-match`, `POST /api/rescore-improvement` |

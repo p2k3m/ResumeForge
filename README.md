@@ -27,6 +27,7 @@ ResumeForge now deploys six discrete Lambda functions, each fronted by dedicated
 
 | Service | Lambda handler | API surface |
 | --- | --- | --- |
+| Client delivery | `lambdas/clientApp.handler` | `GET /`, `GET /index.html`, `GET /favicon.ico`, `GET /manifest.webmanifest`, `GET /robots.txt`, `GET /service-worker.js`, `GET /assets/*`, `GET /fonts/*`, `GET /images/*`, `GET /cover-templates/*` |
 | Resume upload | `lambdas/resumeUpload.handler` | `POST /api/process-cv` |
 | Job description evaluation | `lambdas/jobEvaluation.handler` | `POST /api/jd/evaluate` |
 | Scoring | `lambdas/scoring.handler` | `POST /api/score-match`, `POST /api/rescore-improvement` |
