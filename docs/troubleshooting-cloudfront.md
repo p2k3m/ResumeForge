@@ -22,6 +22,7 @@ Failed to reach https://dk892hgnzrcsl.cloudfront.net/healthz: fetch failed
 Next steps:
 - Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output.
 - If the distribution was replaced or removed, redeploy the SAM stack and republish the CloudFront URL:
+    sam validate
     sam build --use-container
     sam deploy --guided
     npm run publish:cloudfront-url -- <stack-name>
@@ -39,6 +40,7 @@ Open [`config/published-cloudfront.json`](../config/published-cloudfront.json) a
 If the CloudFront distribution was removed or replaced, redeploy the SAM stack and republish the fresh metadata:
 
 ```bash
+sam validate
 sam build --use-container
 sam deploy --guided
 npm run publish:cloudfront-url -- <stack-name>

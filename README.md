@@ -149,6 +149,7 @@ PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise 
 ### Deploy
 
 ```bash
+sam validate
 sam build --use-container
 sam deploy --guided
 ```
@@ -336,7 +337,7 @@ Automated testing and deployment run through the `CI and Deploy` workflow. It ex
 2. Installs dependencies and runs the Jest test suite for the Express server.
 3. Installs client dependencies and builds the Vite bundle to verify the frontend compiles cleanly.
 4. On pushes to `main`, validates that all required AWS credentials are present as GitHub repository secrets. Missing values cause the workflow to fail immediately with a descriptive error message.
-5. Configures the AWS CLI using the provided access key and secret key, builds the AWS SAM package, and deploys the CloudFormation stack using `sam deploy --resolve-s3`.
+5. Configures the AWS CLI using the provided access key and secret key, validates the template with `sam validate`, builds the AWS SAM package, and deploys the CloudFormation stack using `sam deploy --resolve-s3`.
 6. Before deployment, checks whether the configured S3 bucket and DynamoDB table already exist. If they do, the workflow automatically passes `CreateDataBucket=false` and/or `CreateResumeTable=false` so CloudFormation reuses the resources instead of failing with `AlreadyExists` errors.
 
 ### Required GitHub repository secrets
