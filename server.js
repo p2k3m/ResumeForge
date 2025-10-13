@@ -2457,12 +2457,13 @@ async function persistUserTemplatePreference({
         TableName: tableName,
         Key: { linkedinProfileUrl: { S: key } },
         UpdateExpression:
-          'SET itemType = :itemType, templatePreference = :template, updatedAt = :updatedAt, userIdValue = :userIdValue',
+          'SET itemType = :itemType, templatePreference = :template, updatedAt = :updatedAt, userIdValue = :userIdValue, environment = if_not_exists(environment, :environment)',
         ExpressionAttributeValues: {
           ':itemType': { S: USER_TEMPLATE_ITEM_TYPE },
           ':template': { S: canonical },
           ':updatedAt': { S: nowIso },
           ':userIdValue': { S: normalized },
+          ':environment': { S: deploymentEnvironment },
         },
       })
     );
@@ -14456,6 +14457,9 @@ async function handleExpiredDownloadSession({
         expressionAttributeValues[':jobId'] = { S: jobId };
       }
 
+      updateExpressionParts.push('environment = if_not_exists(environment, :environment)');
+      expressionAttributeValues[':environment'] = { S: deploymentEnvironment };
+
       await dynamo.send(
         new UpdateItemCommand({
           TableName: tableName,
@@ -16723,6 +16727,9 @@ async function generateEnhancedDocumentsResponse({
       expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
     }
 
+    updateExpressionParts.push('environment = if_not_exists(environment, :environment)');
+    expressionAttributeValues[':environment'] = { S: deploymentEnvironment };
+
     try {
       await dynamo.send(
         new UpdateItemCommand({
@@ -18599,13 +18606,18 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     ':jobId': { S: jobId },
     ':updatedAt': { S: nowIso },
   };
-  const setExpressions = ['changeLogUpdatedAt = :updatedAt'];
+  const setExpressions = [
+    'changeLogUpdatedAt = :updatedAt',
+    'environment = if_not_exists(environment, :environment)',
+  ];
   const removeExpressions = ['changeLog'];
 
   if (sessionChangeLogKey) {
     expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
     setExpressions.push('sessionChangeLogKey = :sessionChangeLogKey');
   }
+
+  expressionAttributeValues[':environment'] = { S: deploymentEnvironment };
 
   let updateExpression = `SET ${setExpressions.join(', ')}`;
   if (removeExpressions.length) {
@@ -19397,12 +19409,15 @@ app.post(
       await sendS3CommandWithRetry(
         s3,
         () =>
-          new CopyObjectCommand({
-            Bucket: bucket,
-            CopySource: buildCopySource(bucket, originalUploadKey),
-            Key: finalUploadKey,
-            MetadataDirective: 'COPY'
-          }),
+          new CopyObjectCommand(
+            withEnvironmentTagging({
+              Bucket: bucket,
+              CopySource: buildCopySource(bucket, originalUploadKey),
+              Key: finalUploadKey,
+              MetadataDirective: 'COPY',
+              TaggingDirective: 'REPLACE',
+            })
+          ),
         {
           maxAttempts: 4,
           baseDelayMs: 500,
@@ -19986,7 +20001,7 @@ app.post(
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
           UpdateExpression:
-            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score), jobDescriptionDigest = :jobDescriptionDigest',
+            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score), jobDescriptionDigest = :jobDescriptionDigest, environment = if_not_exists(environment, :environment)',
           ExpressionAttributeValues: {
             ':status': { S: 'scored' },
             ':completedAt': { S: scoringCompletedAt },
@@ -20004,6 +20019,7 @@ app.post(
             ':jobDescriptionDigest': { S: manualJobDescriptionDigest || '' },
             ':jobId': { S: jobId },
             ':statusUploaded': { S: 'uploaded' },
+            ':environment': { S: deploymentEnvironment },
           },
           ExpressionAttributeNames: { '#status': 'status' },
           ConditionExpression:
