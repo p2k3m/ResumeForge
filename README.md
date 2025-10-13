@@ -180,7 +180,7 @@ npm run print:cloudfront-url -- <stack-name>
 
 The script uses your configured AWS credentials/region to read the `CloudFrontUrl` output from the specified stack and prints the full distribution URL (for example, `https://d123456abcdef8.cloudfront.net`).
 
-> **Active CloudFront domain:** `https://dk892hgnzrcsl.cloudfront.net`
+> **Active CloudFront domain:** `https://d3p8c4n7s9f0ab.cloudfront.net`
 
 The canonical domain is tracked in `config/published-cloudfront.json` and mirrored here so anyone with repository access can retrieve the production URL without opening the app.
 
