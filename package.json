@@ -48,11 +48,11 @@
     "qrcode": "^1.5.4",
     "ua-parser-js": "^1.0.35",
     "whatwg-mimetype": "^3.0.0",
-    "word-extractor": "^1.0.4"
+    "word-extractor": "^1.0.4",
+    "@babel/preset-env": "^7.28.3"
   },
   "devDependencies": {
     "@babel/core": "^7.24.5",
-    "@babel/preset-env": "^7.28.3",
     "@babel/preset-react": "^7.27.1",
     "@testing-library/jest-dom": "^6.4.2",
     "@testing-library/react": "^14.2.1",
