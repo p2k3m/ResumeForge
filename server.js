@@ -104,6 +104,7 @@ import {
 import { evaluateJobDescription } from './lib/resume/jobEvaluation.js';
 import { scoreResumeAgainstJob } from './lib/resume/scoring.js';
 import { createTextDigest } from './lib/resume/utils.js';
+import { createVersionedPrompt, PROMPT_TEMPLATES } from './lib/llm/templates.js';
 import { resolveServiceForRoute } from './microservices/services.js';
 
 const extractText = extractResumeText;
@@ -557,18 +558,42 @@ async function generateLearningResources(skills, context = {}) {
   }
 
   const focusSummary = summarizeJobFocus(context.jobDescription || context.jobDescriptionText || '');
-  const prompt = [
-    'You are an interview coach helping a candidate close skill gaps before interviews.',
-    `Skills to target: ${normalizedSkills.join(', ')}`,
-    context.jobTitle ? `Target job title: ${context.jobTitle}` : '',
-    focusSummary ? `Job focus: ${focusSummary}` : '',
-    'Recommend 2-3 public learning resources per skill (YouTube playlists, documentation, hands-on labs, credible tutorials).',
-    'Prioritise reputable platforms such as YouTube, Coursera, or Udemy and provide the direct URL for each pick.',
-    'Respond with JSON in the format {"resources":[{"skill":"<skill>","resources":[{"title":"","url":"https://","description":""}]}]}.',
-    'Keep descriptions under 160 characters, reference only reputable sites, and ensure each URL is absolute.',
-  ]
-    .filter(Boolean)
-    .join('\n');
+  const templateMeta = PROMPT_TEMPLATES.learningResources;
+  const promptPackage = createVersionedPrompt({
+    ...templateMeta,
+    description: 'Recommend learning resources that close candidate skill gaps.',
+    metadata: { skill_count: normalizedSkills.length || 0 },
+    sections: [
+      {
+        title: 'TASK',
+        body: [
+          'You are an interview coach helping a candidate close skill gaps before interviews.',
+          'Recommend 2-3 public learning resources per skill (YouTube playlists, documentation, hands-on labs, credible tutorials).',
+          'Prioritise reputable platforms such as YouTube, Coursera, or Udemy and provide the direct URL for each pick.',
+        ].join('\n'),
+      },
+      {
+        title: 'SKILLS',
+        body: normalizedSkills.length ? normalizedSkills.join(', ') : 'None provided',
+      },
+      {
+        title: 'JOB CONTEXT',
+        body: [
+          context.jobTitle ? `Target job title: ${context.jobTitle}` : 'Target job title: Not provided',
+          focusSummary ? `Job focus: ${focusSummary}` : 'Job focus: Not provided',
+        ],
+      },
+      {
+        title: 'OUTPUT REQUIREMENTS',
+        body: [
+          'Respond with JSON in the format {"resources":[{"skill":"<skill>","resources":[{"title":"","url":"https://","description":""}]}]}.',
+          'Keep descriptions under 160 characters, reference only reputable sites, and ensure each URL is absolute.',
+        ],
+      },
+    ],
+  });
+  const prompt = promptPackage.text;
+  const promptDigest = createTextDigest(prompt);
 
   const disableGenerative =
     context.disableGenerative ||
@@ -578,12 +603,17 @@ async function generateLearningResources(skills, context = {}) {
     try {
       const model = await getSharedGenerativeModel();
       if (model?.generateContent) {
-        const learningLogger = createStructuredLogger({ skills: normalizedSkills });
+        const learningLogger = createStructuredLogger({
+          skills: normalizedSkills,
+          requestId: context.requestId,
+        });
+        const startedAt = Date.now();
         const response = await generateContentWithRetry(model, prompt, {
           retryLogEvent: 'learning_resource_generation',
           retryLogContext: { skills: normalizedSkills },
           logger: learningLogger,
         });
+        const latencyMs = Date.now() - startedAt;
         const parsed = parseGeminiJsonResponse(response?.response?.text?.(), {
           logger: learningLogger,
         });
@@ -591,6 +621,18 @@ async function generateLearningResources(skills, context = {}) {
           missingSkills: normalizedSkills,
         });
         if (sanitized.length) {
+          const outputDigest = createTextDigest(JSON.stringify(sanitized));
+          recordLlmTelemetry({
+            requestId: context.requestId,
+            operation: 'learning_resources',
+            templateId: promptPackage.templateId,
+            templateVersion: promptPackage.templateVersion,
+            promptDigest,
+            outputDigest,
+            latencyMs,
+            resourceCount: sanitized.length,
+            skillCount: normalizedSkills.length,
+          });
           return sanitized;
         }
       }
@@ -602,7 +644,18 @@ async function generateLearningResources(skills, context = {}) {
     }
   }
 
-  return buildFallbackLearningResources(normalizedSkills, context);
+  const fallback = buildFallbackLearningResources(normalizedSkills, context);
+  recordLlmTelemetry({
+    requestId: context.requestId,
+    operation: 'learning_resources',
+    templateId: PROMPT_TEMPLATES.learningResources.templateId,
+    templateVersion: PROMPT_TEMPLATES.learningResources.templateVersion,
+    outputDigest: createTextDigest(JSON.stringify(fallback)),
+    resourceCount: fallback.length,
+    skillCount: normalizedSkills.length,
+    outcome: 'fallback',
+  });
+  return fallback;
 }
 
 function isModuleNotFoundError(err, moduleName) {
@@ -1214,6 +1267,23 @@ function updateRequestContext(requestId, updates = {}) {
   Object.assign(context, updates);
 }
 
+function appendRequestLlmTrace(requestId, trace = {}) {
+  if (!requestId || !trace || typeof trace !== 'object') {
+    return;
+  }
+  const context = ensureRequestContext(requestId);
+  if (!context) {
+    return;
+  }
+  if (!Array.isArray(context.llmTraces)) {
+    context.llmTraces = [];
+  }
+  const sanitized = Object.fromEntries(
+    Object.entries(trace).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+  context.llmTraces.push({ ...sanitized });
+}
+
 function clearRequestContext(requestId) {
   if (!requestId) return;
   requestContextStore.delete(requestId);
@@ -1413,6 +1483,38 @@ function createStructuredLogger(baseContext = {}) {
     warn: (event, details = {}) => logStructured('warn', event, { ...baseContext, ...details }),
     error: (event, details = {}) => logStructured('error', event, { ...baseContext, ...details }),
   };
+}
+
+function recordLlmTelemetry({
+  requestId,
+  operation,
+  templateId,
+  templateVersion,
+  model = 'gemini-1.5-flash',
+  promptDigest,
+  outputDigest,
+  latencyMs,
+  ...additional
+} = {}) {
+  const payload = {
+    requestId,
+    operation,
+    templateId,
+    templateVersion,
+    model,
+    latencyMs: Number.isFinite(latencyMs) ? Math.round(latencyMs) : undefined,
+    promptDigest,
+    outputDigest,
+    ...additional,
+  };
+  const sanitized = Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+  if (Object.keys(sanitized).length) {
+    logStructured('info', 'llm_call_metrics', sanitized);
+    appendRequestLlmTrace(requestId, { ...sanitized, timestamp: new Date().toISOString() });
+  }
+  return sanitized;
 }
 
 const structuredLogger = createStructuredLogger();
@@ -4261,8 +4363,7 @@ function buildImprovementPrompt(type, context, instructions) {
   ];
   const candidateName = extractName(resumeText);
 
-  const candidateContextBlock = [
-    'Candidate context:',
+  const candidateContextLines = [
     formatPromptLine('Candidate name', candidateName, { fallback: 'Not listed' }),
     formatPromptLine('Summary snapshot', sections.summary, {
       fallback: 'Summary not detected',
@@ -4284,7 +4385,7 @@ function buildImprovementPrompt(type, context, instructions) {
       fallback: 'None mentioned',
       maxLength: 250,
     }),
-  ].join('\n');
+  ];
 
   const jobContextLines = [
     formatPromptLine('Target job title', context.jobTitle, { fallback: 'Not supplied' }),
@@ -4296,12 +4397,11 @@ function buildImprovementPrompt(type, context, instructions) {
       fallback: 'None detected',
       maxLength: 350,
     }),
+    formatPromptLine('JD excerpt', jobDescription, {
+      fallback: 'Not provided',
+      maxLength: 600,
+    }),
   ];
-
-  const jobContextBlock = ['Job context:', ...jobContextLines, formatPromptLine('JD excerpt', jobDescription, {
-    fallback: 'Not provided',
-    maxLength: 600,
-  })].join('\n');
 
   const actionBlock = requests.length
     ? `Action requests for ${IMPROVEMENT_CONFIG[type]?.title || 'this improvement'}:\n- ${requests.join('\n- ')}`
@@ -4319,33 +4419,30 @@ function buildImprovementPrompt(type, context, instructions) {
   if (type === 'improve-highlights') {
     ruleLines.push('Tie each highlight to a JD metric, KPI, or responsibility using resume-backed evidence.');
     ruleLines.push('Prefer quantified language (%, $, #, volume) already present in the resume when rewriting highlights.');
-    if (llmDescriptor) {
-      ruleLines.push(`Reference the JD-specified ${llmDescriptor} work when it reinforces alignment.`);
-    }
-  }
-
-  if (requests.length) {
-    ruleLines.push('In the explanation, reference the JD skill or responsibility you reinforced.');
   }
 
   const ruleBlock = `Rules:\n- ${ruleLines.join('\n- ')}`;
 
-  return [
-    'You are an elite ATS resume editor. Apply the requested transformation without fabricating experience.',
-    candidateContextBlock,
-    jobContextBlock,
-    actionBlock,
-    ruleBlock,
-    'Return ONLY valid JSON with keys: updatedResume (string), beforeExcerpt (string), afterExcerpt (string), explanation (string), confidence (0-1).',
-    'Resume text:\n"""',
-    resumeText,
-    '"""',
-    'Job description text:\n"""',
-    jobDescription || 'Not provided',
-    '"""',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  return createVersionedPrompt({
+    ...PROMPT_TEMPLATES.resumeImprovement,
+    description: `ResumeForge ${IMPROVEMENT_CONFIG[type]?.title || 'Resume improvement'}`,
+    metadata: { improvement_type: type },
+    sections: [
+      {
+        title: 'DIRECTIVES',
+        body: [
+          'You are an elite resume improvement assistant.',
+          actionBlock,
+          ruleBlock,
+          'Return ONLY valid JSON with keys: updatedResume (string), beforeExcerpt (string), afterExcerpt (string), explanation (string), confidence (0-1).',
+        ],
+      },
+      { title: 'CANDIDATE CONTEXT', body: candidateContextLines },
+      { title: 'JOB CONTEXT', body: jobContextLines },
+      { title: 'RESUME TEXT', body: `"""${resumeText}"""` },
+      { title: 'JOB DESCRIPTION', body: `"""${jobDescription || 'Not provided'}"""` },
+    ],
+  });
 }
 
 function fallbackImprovement(type, context) {
@@ -4874,11 +4971,15 @@ async function runTargetedImprovement(type, context = {}) {
   try {
     const model = await getSharedGenerativeModel();
     if (model?.generateContent) {
-      const prompt = buildImprovementPrompt(type, promptContext, config.focus);
-      const response = await generateContentWithRetry(model, prompt, {
+      const promptPackage = buildImprovementPrompt(type, promptContext, config.focus);
+      const promptText = promptPackage?.text || '';
+      const promptDigest = createTextDigest(promptText);
+      const startedAt = Date.now();
+      const response = await generateContentWithRetry(model, promptText, {
         retryLogEvent: 'targeted_improvement_ai',
         retryLogContext: { type },
       });
+      const latencyMs = Date.now() - startedAt;
       const parsed = parseGeminiJsonResponse(response?.response?.text?.(), {
         logger: structuredLogger,
       });
@@ -4896,7 +4997,7 @@ async function runTargetedImprovement(type, context = {}) {
         const changeDetails = Array.isArray(parsed.changeDetails)
           ? parsed.changeDetails
           : [];
-        return enforceTargetedUpdate(
+        const enforced = enforceTargetedUpdate(
           type,
           resumeText,
           {
@@ -4909,7 +5010,39 @@ async function runTargetedImprovement(type, context = {}) {
           },
           scopeContext
         );
+        const outputDigest = createTextDigest(enforced.updatedResume || '');
+        recordLlmTelemetry({
+          requestId: context.requestId,
+          operation: 'resume_improvement',
+          templateId: promptPackage?.templateId || PROMPT_TEMPLATES.resumeImprovement.templateId,
+          templateVersion: promptPackage?.templateVersion || PROMPT_TEMPLATES.resumeImprovement.templateVersion,
+          promptDigest,
+          outputDigest,
+          latencyMs,
+          confidence,
+          type,
+          changeDetailCount: changeDetails.length,
+        });
+        return {
+          ...enforced,
+          llmTrace: {
+            templateId: promptPackage?.templateId || PROMPT_TEMPLATES.resumeImprovement.templateId,
+            templateVersion: promptPackage?.templateVersion || PROMPT_TEMPLATES.resumeImprovement.templateVersion,
+            outputDigest,
+            source: 'generative',
+          },
+        };
       }
+      recordLlmTelemetry({
+        requestId: context.requestId,
+        operation: 'resume_improvement',
+        templateId: promptPackage?.templateId || PROMPT_TEMPLATES.resumeImprovement.templateId,
+        templateVersion: promptPackage?.templateVersion || PROMPT_TEMPLATES.resumeImprovement.templateVersion,
+        promptDigest,
+        latencyMs,
+        type,
+        outcome: 'no_parse',
+      });
     }
   } catch (err) {
     logStructured('warn', 'targeted_improvement_ai_failed', {
@@ -4924,7 +5057,26 @@ async function runTargetedImprovement(type, context = {}) {
     originalTitle: context.originalTitle,
   });
 
-  return enforceTargetedUpdate(type, resumeText, fallbackResult, scopeContext);
+  const enforcedFallback = enforceTargetedUpdate(type, resumeText, fallbackResult, scopeContext);
+  const fallbackDigest = createTextDigest(enforcedFallback.updatedResume || '');
+  recordLlmTelemetry({
+    requestId: context.requestId,
+    operation: 'resume_improvement',
+    templateId: PROMPT_TEMPLATES.resumeImprovement.templateId,
+    templateVersion: PROMPT_TEMPLATES.resumeImprovement.templateVersion,
+    outputDigest: fallbackDigest,
+    type,
+    outcome: 'fallback',
+  });
+  return {
+    ...enforcedFallback,
+    llmTrace: {
+      templateId: PROMPT_TEMPLATES.resumeImprovement.templateId,
+      templateVersion: PROMPT_TEMPLATES.resumeImprovement.templateVersion,
+      outputDigest: fallbackDigest,
+      source: 'fallback',
+    },
+  };
 }
 
 class JobDescriptionFetchBlockedError extends Error {
@@ -5682,12 +5834,16 @@ async function rewriteSectionsWithGemini(
   jobSkills = [],
   generativeModel,
   sanitizeOptions = {},
-  baseResumeText = ''
+  baseResumeText = '',
+  telemetry = {}
 ) {
   const normalizeOptions = sanitizeOptions && typeof sanitizeOptions === 'object'
     ? { ...sanitizeOptions }
     : {};
   const baseParseOptions = { ...normalizeOptions, skipRequiredSections: true };
+  const telemetryContext = telemetry && typeof telemetry === 'object' ? telemetry : {};
+  const telemetryRequestId = telemetryContext.requestId;
+  const telemetryOperation = telemetryContext.operation || 'resume_rewrite';
   let baseResumeData;
   try {
     baseResumeData = parseContent(baseResumeText || '', baseParseOptions);
@@ -5716,9 +5872,23 @@ async function rewriteSectionsWithGemini(
     addedSkills: [],
     sanitizedFallbackUsed: true,
     placeholders: basePlaceholderMap,
+    llmTrace: {
+      templateId: PROMPT_TEMPLATES.resumeRewrite.templateId,
+      templateVersion: PROMPT_TEMPLATES.resumeRewrite.templateVersion,
+      outputDigest: createTextDigest(fallbackResolved || sanitizedBaseText),
+      source: 'fallback',
+    },
   };
 
   if (!generativeModel?.generateContent) {
+    recordLlmTelemetry({
+      requestId: telemetryRequestId,
+      operation: telemetryOperation,
+      templateId: PROMPT_TEMPLATES.resumeRewrite.templateId,
+      templateVersion: PROMPT_TEMPLATES.resumeRewrite.templateVersion,
+      outputDigest: fallbackResult.llmTrace.outputDigest,
+      outcome: 'fallback_no_model',
+    });
     return fallbackResult;
   }
   try {
@@ -5744,7 +5914,7 @@ async function rewriteSectionsWithGemini(
         ? sections.structuredExperience
         : [],
     };
-    const prompt = [
+    const instructionLines = [
       'You are an elite resume architect optimizing for Gemini/OpenAI outputs.',
       'Follow these rules precisely:',
       '- Never degrade CV structure; respect existing headings, chronology, and polished tone.',
@@ -5753,23 +5923,35 @@ async function rewriteSectionsWithGemini(
       '- Blend JD-critical skills into the skills section only when the candidate context proves them—avoid isolated keyword stuffing.',
       '- Emphasise measurable impact and outcomes that demonstrate the candidate already performs what the JD requires; do not fabricate new roles or tools.',
       '- Respond using ONLY valid JSON conforming to the provided schema.',
-      '',
-      'OUTPUT_SCHEMA:',
-      JSON.stringify(outputSchema, null, 2),
-      '',
-      'INPUT_CONTEXT:',
-      JSON.stringify(inputPayload, null, 2),
-    ].join('\n');
+    ];
+    const promptPackage = createVersionedPrompt({
+      ...PROMPT_TEMPLATES.resumeRewrite,
+      description: 'Rewrite resume sections using structured experience context.',
+      metadata: {
+        structured_experience_rows: Array.isArray(sections?.structuredExperience)
+          ? sections.structuredExperience.length
+          : 0,
+      },
+      sections: [
+        { title: 'TASK', body: instructionLines },
+        { title: 'OUTPUT SCHEMA', body: JSON.stringify(outputSchema, null, 2) },
+        { title: 'INPUT CONTEXT', body: JSON.stringify(inputPayload, null, 2) },
+      ],
+    });
+    const promptText = promptPackage.text;
+    const promptDigest = createTextDigest(promptText);
     const retryContext = {
       resumeDigest: createTextDigest(name || baseResumeData?.name || ''),
       hasJobDescription: Boolean(jobDescription),
     };
-    const rewriteLogger = createStructuredLogger(retryContext);
-    const result = await generateContentWithRetry(generativeModel, prompt, {
+    const rewriteLogger = createStructuredLogger({ ...retryContext, requestId: telemetryRequestId });
+    const startedAt = Date.now();
+    const result = await generateContentWithRetry(generativeModel, promptText, {
       retryLogEvent: 'generation_section_rewrite',
       retryLogContext: retryContext,
       logger: rewriteLogger,
     });
+    const latencyMs = Date.now() - startedAt;
     const parsed = parseGeminiJsonResponse(result?.response?.text?.(), {
       logger: rewriteLogger,
     });
@@ -5788,6 +5970,17 @@ async function rewriteSectionsWithGemini(
       const addedSkills = Array.isArray(parsed.addedSkills)
         ? parsed.addedSkills.filter((skill) => typeof skill === 'string' && skill.trim())
         : [];
+      const outputDigest = createTextDigest(outputText);
+      recordLlmTelemetry({
+        requestId: telemetryRequestId,
+        operation: telemetryOperation,
+        templateId: promptPackage.templateId,
+        templateVersion: promptPackage.templateVersion,
+        promptDigest,
+        outputDigest,
+        latencyMs,
+        addedSkillCount: addedSkills.length,
+      });
       return {
         text: cleaned,
         resolvedText: outputText,
@@ -5797,11 +5990,34 @@ async function rewriteSectionsWithGemini(
         addedSkills,
         sanitizedFallbackUsed: false,
         placeholders,
+        llmTrace: {
+          templateId: promptPackage.templateId,
+          templateVersion: promptPackage.templateVersion,
+          outputDigest,
+          source: 'generative',
+        },
       };
     }
+    recordLlmTelemetry({
+      requestId: telemetryRequestId,
+      operation: telemetryOperation,
+      templateId: promptPackage.templateId,
+      templateVersion: promptPackage.templateVersion,
+      promptDigest,
+      latencyMs,
+      outcome: 'no_parse',
+    });
   } catch {
     /* ignore */
   }
+  recordLlmTelemetry({
+    requestId: telemetryRequestId,
+    operation: telemetryOperation,
+    templateId: PROMPT_TEMPLATES.resumeRewrite.templateId,
+    templateVersion: PROMPT_TEMPLATES.resumeRewrite.templateVersion,
+    outputDigest: fallbackResult.llmTrace.outputDigest,
+    outcome: 'fallback',
+  });
   return fallbackResult;
 }
 
@@ -5809,10 +6025,14 @@ async function generateProjectSummary(
   jobDescription = '',
   resumeSkills = [],
   jobSkills = [],
-  generativeModel
+  generativeModel,
+  telemetry = {}
 ) {
   const skills = resumeSkills.length ? resumeSkills : jobSkills;
   if (!jobDescription && !skills.length) return '';
+  const telemetryContext = telemetry && typeof telemetry === 'object' ? telemetry : {};
+  const telemetryRequestId = telemetryContext.requestId;
+  const telemetryOperation = telemetryContext.operation || 'project_summary';
   const skillList = skills.slice(0, 3).join(', ');
 
   // Strip code blocks, symbols, and parentheses/braces from the job description
@@ -5828,17 +6048,52 @@ async function generateProjectSummary(
 
   if (generativeModel?.generateContent) {
     try {
-      const prompt =
-        `You are a resume assistant. Using the job description and top skills, ` +
-        `write one concise sentence that begins with "Led a project" and ` +
-        `describes a project using those skills.\nJob Description: ${cleaned}\n` +
-        `Top Skills: ${skillList}`;
-      const result = await generateContentWithRetry(generativeModel, prompt);
+      const promptPackage = createVersionedPrompt({
+        ...PROMPT_TEMPLATES.projectSummary,
+        description: 'Generate a concise project summary line.',
+        metadata: { skill_count: skills.length },
+        sections: [
+          {
+            title: 'TASK',
+            body:
+              'You are a resume assistant. Using the job description and top skills, write one concise sentence that begins with "Led a project" and describes a project using those skills.',
+          },
+          { title: 'JOB DESCRIPTION', body: cleaned ? `"""${cleaned}"""` : 'Not provided' },
+          { title: 'TOP SKILLS', body: skills.length ? skills.join(', ') : 'Not provided' },
+        ],
+      });
+      const promptText = promptPackage.text;
+      const promptDigest = createTextDigest(promptText);
+      const startedAt = Date.now();
+      const result = await generateContentWithRetry(generativeModel, promptText);
+      const latencyMs = Date.now() - startedAt;
       const text = result?.response?.text?.().trim() || '';
       if (text) {
         const aiSummary = text.replace(/[(){}]/g, '');
-        return aiSummary.endsWith('.') ? aiSummary : `${aiSummary}.`;
+        const normalizedSummary = aiSummary.endsWith('.') ? aiSummary : `${aiSummary}.`;
+        const outputDigest = createTextDigest(normalizedSummary);
+        recordLlmTelemetry({
+          requestId: telemetryRequestId,
+          operation: telemetryOperation,
+          templateId: promptPackage.templateId,
+          templateVersion: promptPackage.templateVersion,
+          promptDigest,
+          outputDigest,
+          latencyMs,
+          skillCount: skills.length,
+        });
+        return normalizedSummary;
       }
+      recordLlmTelemetry({
+        requestId: telemetryRequestId,
+        operation: telemetryOperation,
+        templateId: promptPackage.templateId,
+        templateVersion: promptPackage.templateVersion,
+        promptDigest,
+        latencyMs,
+        skillCount: skills.length,
+        outcome: 'no_parse',
+      });
     } catch {
       // Fall back to manual generation
     }
@@ -5856,7 +6111,17 @@ async function generateProjectSummary(
   }
 
   summary = summary.replace(/[(){}]/g, '');
-  return `${summary}.`;
+  const fallbackSummary = `${summary}.`;
+  recordLlmTelemetry({
+    requestId: telemetryRequestId,
+    operation: telemetryOperation,
+    templateId: PROMPT_TEMPLATES.projectSummary.templateId,
+    templateVersion: PROMPT_TEMPLATES.projectSummary.templateVersion,
+    outputDigest: createTextDigest(fallbackSummary),
+    skillCount: skills.length,
+    outcome: 'fallback',
+  });
+  return fallbackSummary;
 }
 
 function mergeResumeWithLinkedIn(resumeText, profile, jobTitle) {
@@ -13875,6 +14140,7 @@ async function handleImprovementRequest(type, req, res) {
       missingSkills,
       knownCertificates,
       manualCertificates,
+      requestId,
     });
     const sectionPatterns = {
       'improve-summary': SUMMARY_SECTION_PATTERN,
@@ -13948,47 +14214,54 @@ async function handleImprovementRequest(type, req, res) {
           ? sectionContext.afterText
           : baselineDesignationTitle;
 
-    let learningResources = [];
-    if (afterMissingOverall.length) {
-      try {
-        learningResources = await generateLearningResources(afterMissingOverall, {
+    const learningResourcesPromise = afterMissingOverall.length
+      ? generateLearningResources(afterMissingOverall, {
           jobTitle: payload.jobTitle || payload.targetTitle || '',
           jobDescription: jobDescription,
+          requestId,
+        }).catch((err) => {
+          logStructured('warn', 'targeted_improvement_learning_resources_failed', {
+            ...logContext,
+            error: serializeError(err),
+            missingSkillCount: afterMissingOverall.length,
+          });
+          return [];
+        })
+      : Promise.resolve([]);
+
+    const selectionInsightsPromise = learningResourcesPromise.then((learningResources) => {
+      try {
+        return buildSelectionInsights({
+          jobTitle: payload.jobTitle || payload.targetTitle || '',
+          originalTitle: baselineDesignationTitle,
+          modifiedTitle: updatedDesignationTitle,
+          jobDescriptionText: jobDescription,
+          bestMatch: { ...overallAfterMatch },
+          originalMatch: { ...overallBeforeMatch },
+          missingSkills: afterMissingOverall,
+          addedSkills: coveredSkillsOverall,
+          scoreBreakdown: overallAfterBreakdown,
+          baselineScoreBreakdown: overallBeforeBreakdown,
+          resumeExperience: extractExperience(updatedResumeText),
+          linkedinExperience: [],
+          knownCertificates,
+          certificateSuggestions: manualCertificates.map((cert) => cert?.name).filter(Boolean),
+          manualCertificatesRequired: Boolean(payload.manualCertificatesRequired),
+          learningResources,
         });
       } catch (err) {
-        logStructured('warn', 'targeted_improvement_learning_resources_failed', {
+        logStructured('warn', 'targeted_improvement_rescore_failed', {
+          ...logContext,
           error: serializeError(err),
-          missingSkillCount: afterMissingOverall.length,
         });
+        return null;
       }
-    }
+    });
 
-    let selectionInsights;
-    try {
-      selectionInsights = buildSelectionInsights({
-        jobTitle: payload.jobTitle || payload.targetTitle || '',
-        originalTitle: baselineDesignationTitle,
-        modifiedTitle: updatedDesignationTitle,
-        jobDescriptionText: jobDescription,
-        bestMatch: { ...overallAfterMatch },
-        originalMatch: { ...overallBeforeMatch },
-        missingSkills: afterMissingOverall,
-        addedSkills: coveredSkillsOverall,
-        scoreBreakdown: overallAfterBreakdown,
-        baselineScoreBreakdown: overallBeforeBreakdown,
-        resumeExperience: extractExperience(updatedResumeText),
-        linkedinExperience: [],
-        knownCertificates,
-        certificateSuggestions: manualCertificates.map((cert) => cert?.name).filter(Boolean),
-        manualCertificatesRequired: Boolean(payload.manualCertificatesRequired),
-        learningResources,
-      });
-    } catch (err) {
-      logStructured('warn', 'targeted_improvement_rescore_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-    }
+    const [learningResources, selectionInsights] = await Promise.all([
+      learningResourcesPromise,
+      selectionInsightsPromise,
+    ]);
 
     const selectionProbabilityBefore =
       typeof selectionInsights?.before?.probability === 'number'
@@ -14281,6 +14554,10 @@ async function handleImprovementRequest(type, req, res) {
 
     if (templateContextOutput) {
       responsePayload.templateContext = templateContextOutput;
+    }
+
+    if (result.llmTrace) {
+      responsePayload.llmTrace = result.llmTrace;
     }
 
     await updateStageMetadata({
@@ -15208,7 +15485,8 @@ async function generateEnhancedDocumentsResponse({
           contactLines: contactDetails.contactLines,
           ...sectionPreservation,
         },
-        resumeText
+        resumeText,
+        { requestId, operation: logContext?.route || 'resume_rewrite' }
       );
       enhancementTokenMap =
         enhanced.placeholders && typeof enhanced.placeholders === 'object'
@@ -15270,7 +15548,8 @@ async function generateEnhancedDocumentsResponse({
       jobDescription,
       resumeSkillsList,
       jobSkills,
-      canUseGenerativeModel ? generativeModel : null
+      canUseGenerativeModel ? generativeModel : null,
+      { requestId, operation: 'project_summary' }
     );
   };
 
@@ -16868,6 +17147,7 @@ async function generateEnhancedDocumentsResponse({
         jobTitle: versionsContext.jobTitle,
         jobDescription,
         disableGenerative: sanitizedFallbackUsed || !canUseGenerativeModel,
+        requestId,
       });
     } catch (err) {
       logStructured('warn', 'generation_learning_resources_failed', {
@@ -20168,6 +20448,7 @@ app.post(
           jobTitle,
           jobDescription,
           disableGenerative: true,
+          requestId,
         });
       } catch (err) {
         logStructured('warn', 'initial_analysis_learning_resources_failed', {
