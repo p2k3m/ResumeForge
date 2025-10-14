@@ -9,46 +9,161 @@ import { backstopPdfTemplates } from './pdf-template-backstop.mjs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
-function resolveOutDir() {
+
+const FUNCTION_BUILD_CONFIG = {
+  ResumeForgeFunction: {
+    entryPoints: ['lambdas/resumeUpload.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  ClientAppFunction: {
+    entryPoints: ['lambdas/clientApp.js'],
+    copyClientAssets: true,
+    copyTemplates: true,
+  },
+  JobEvaluationFunction: {
+    entryPoints: ['lambdas/jobEvaluation.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  ScoringFunction: {
+    entryPoints: ['lambdas/scoring.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  DocumentGenerationFunction: {
+    entryPoints: ['lambdas/documentGeneration.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  DocumentGenerationWorkerFunction: {
+    entryPoints: ['lambdas/documentGenerationWorker.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  WorkflowScoreFunction: {
+    entryPoints: ['lambdas/workflowScore.js'],
+    copyClientAssets: false,
+    copyTemplates: false,
+  },
+  WorkflowEnhancementSectionFunction: {
+    entryPoints: ['lambdas/workflowEnhancementSection.js'],
+    copyClientAssets: false,
+    copyTemplates: false,
+  },
+  WorkflowCombineFunction: {
+    entryPoints: ['lambdas/workflowCombine.js'],
+    copyClientAssets: false,
+    copyTemplates: false,
+  },
+  WorkflowGenerateFunction: {
+    entryPoints: ['lambdas/workflowGeneratePdf.js'],
+    copyClientAssets: false,
+    copyTemplates: false,
+  },
+  AuditingFunction: {
+    entryPoints: ['lambdas/auditing.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+}
+
+function parseCliOptions() {
   const defaultOutDir = path.join(projectRoot, 'dist', 'lambda')
   const args = process.argv.slice(2)
 
-  if (args.length === 0) {
-    return defaultOutDir
-  }
+  let outDirCandidate = defaultOutDir
+  let functionNames
 
-  let outDirFromArgs
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index]
     if (token === '--outdir' || token === '-o') {
-      outDirFromArgs = args[index + 1]
+      const value = args[index + 1]
+      if (value === undefined) {
+        throw new Error('The --outdir option requires a path argument')
+      }
+      if (!String(value).trim()) {
+        throw new Error('The --outdir option requires a non-empty value')
+      }
+      outDirCandidate = path.isAbsolute(value)
+        ? value
+        : path.join(projectRoot, value)
       index += 1
       continue
     }
 
-    throw new Error(`Unknown argument: ${token}. Supported option: --outdir <path>`)
+    if (token === '--function' || token === '-f') {
+      const value = args[index + 1]
+      if (value === undefined) {
+        throw new Error('The --function option requires a function identifier')
+      }
+      const parsed = String(value)
+        .split(',')
+        .map((fn) => fn.trim())
+        .filter(Boolean)
+      if (parsed.length === 0) {
+        throw new Error('The --function option requires at least one identifier')
+      }
+      functionNames = parsed
+      index += 1
+      continue
+    }
+
+    throw new Error(
+      `Unknown argument: ${token}. Supported options: --outdir <path>, --function <logical id>`
+    )
   }
 
-  if (!outDirFromArgs) {
-    return defaultOutDir
-  }
-
-  if (outDirFromArgs === undefined) {
-    throw new Error('The --outdir option requires a path argument')
-  }
-
-  if (!outDirFromArgs.trim()) {
-    throw new Error('The --outdir option requires a non-empty value')
-  }
-
-  const resolved = path.isAbsolute(outDirFromArgs)
-    ? outDirFromArgs
-    : path.join(projectRoot, outDirFromArgs)
-
-  return resolved
+  return { outDir: outDirCandidate, functionNames }
 }
 
-const outDir = resolveOutDir()
+const { outDir, functionNames } = parseCliOptions()
+
+function resolveBuildTargets(names) {
+  const selectedNames = Array.isArray(names) && names.length > 0
+    ? names
+    : Object.keys(FUNCTION_BUILD_CONFIG)
+
+  const entryPointSet = new Set()
+  let copyClientAssets = false
+  let copyTemplates = false
+
+  for (const name of selectedNames) {
+    const config = FUNCTION_BUILD_CONFIG[name]
+    if (!config) {
+      throw new Error(`Unknown Lambda function target: ${name}`)
+    }
+    for (const relativeEntry of config.entryPoints) {
+      const absoluteEntry = path.join(projectRoot, relativeEntry)
+      entryPointSet.add(absoluteEntry)
+    }
+    copyClientAssets = copyClientAssets || Boolean(config.copyClientAssets)
+    copyTemplates = copyTemplates || Boolean(config.copyTemplates)
+  }
+
+  if (entryPointSet.size === 0) {
+    throw new Error('No entry points were resolved for the Lambda build')
+  }
+
+  return {
+    entryPoints: Array.from(entryPointSet),
+    copyClientAssets,
+    copyTemplates,
+  }
+}
+
+const buildTargets = resolveBuildTargets(functionNames)
+
+if (Array.isArray(functionNames) && functionNames.length > 0) {
+  console.log(`Building targeted Lambda function(s): ${functionNames.join(', ')}`)
+} else {
+  console.log('Building all Lambda entry points defined in FUNCTION_BUILD_CONFIG')
+}
 
 function execFileAsync(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -126,20 +241,10 @@ async function ensureCleanOutput() {
 }
 
 async function runEsbuild() {
-  const entryPoints = [
-    path.join(projectRoot, 'lambdas', 'clientApp.js'),
-    path.join(projectRoot, 'lambdas', 'resumeUpload.js'),
-    path.join(projectRoot, 'lambdas', 'jobEvaluation.js'),
-    path.join(projectRoot, 'lambdas', 'scoring.js'),
-    path.join(projectRoot, 'lambdas', 'enhancement.js'),
-    path.join(projectRoot, 'lambdas', 'documentGeneration.js'),
-    path.join(projectRoot, 'lambdas', 'documentGenerationWorker.js'),
-    path.join(projectRoot, 'lambdas', 'auditing.js'),
-  ]
   const shouldGenerateSourceMap = process.env.GENERATE_SOURCEMAP === 'true'
 
   await build({
-    entryPoints,
+    entryPoints: buildTargets.entryPoints,
     bundle: true,
     platform: 'node',
     target: 'node18',
@@ -171,12 +276,25 @@ async function runEsbuild() {
   })
 }
 
-async function copyStaticAssets() {
-  const copyPairs = [
-    [path.join(projectRoot, 'templates'), path.join(outDir, 'templates')],
-    [path.join(projectRoot, 'lib', 'pdf', 'templates'), path.join(outDir, 'lib', 'pdf', 'templates')],
-    [path.join(projectRoot, 'client', 'dist'), path.join(outDir, 'client', 'dist')],
-  ]
+async function copyStaticAssets({ copyTemplates, copyClientAssets }) {
+  const copyPairs = []
+
+  if (copyTemplates) {
+    copyPairs.push(
+      [path.join(projectRoot, 'templates'), path.join(outDir, 'templates')],
+      [
+        path.join(projectRoot, 'lib', 'pdf', 'templates'),
+        path.join(outDir, 'lib', 'pdf', 'templates'),
+      ],
+    )
+  }
+
+  if (copyClientAssets) {
+    copyPairs.push([
+      path.join(projectRoot, 'client', 'dist'),
+      path.join(outDir, 'client', 'dist'),
+    ])
+  }
 
   for (const [source, destination] of copyPairs) {
     try {
@@ -198,12 +316,25 @@ async function main() {
     builtAt: new Date().toISOString(),
   }
 
-  await runClientBuild()
-  await writeClientMetadata(buildMetadata)
-  await backstopPdfTemplates({ logger: console })
+  if (buildTargets.copyClientAssets) {
+    await runClientBuild()
+    await writeClientMetadata(buildMetadata)
+  } else {
+    console.log('Skipping client build; not required for targeted Lambda function(s).')
+  }
+
+  if (buildTargets.copyTemplates) {
+    await backstopPdfTemplates({ logger: console })
+  } else {
+    console.log('Skipping PDF template backstop; not required for targeted Lambda function(s).')
+  }
+
   await ensureCleanOutput()
   await runEsbuild()
-  await copyStaticAssets()
+  await copyStaticAssets({
+    copyTemplates: buildTargets.copyTemplates,
+    copyClientAssets: buildTargets.copyClientAssets,
+  })
   await writeLambdaMetadata(buildMetadata)
   console.log(`Lambda bundle written to ${outDir}`)
 }
