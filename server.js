@@ -5934,8 +5934,8 @@ async function rewriteSectionsWithGemini(
       },
       sections: [
         { title: 'TASK', body: instructionLines },
-        { title: 'OUTPUT SCHEMA', body: JSON.stringify(outputSchema, null, 2) },
-        { title: 'INPUT CONTEXT', body: JSON.stringify(inputPayload, null, 2) },
+        { title: 'OUTPUT_SCHEMA', body: JSON.stringify(outputSchema, null, 2) },
+        { title: 'INPUT_CONTEXT', body: JSON.stringify(inputPayload, null, 2) },
       ],
     });
     const promptText = promptPackage.text;
