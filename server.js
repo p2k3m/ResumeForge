@@ -27,6 +27,7 @@ const {
 } = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
+import { spawnSync } from 'node:child_process';
 import { logEvent, logErrorTrace } from './logger.js';
 import {
   executeWithRetry,
@@ -114,9 +115,11 @@ const deploymentEnvironment = getDeploymentEnvironment();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const clientDistDir = path.join(__dirname, 'client', 'dist');
+const clientDir = path.join(__dirname, 'client');
+const clientDistDir = path.join(clientDir, 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 let cachedClientIndexHtml;
+let clientAutoBuildAttempted = false;
 
 function ensureAxiosResponseInterceptor(client) {
   if (!client) return null;
@@ -795,8 +798,107 @@ async function parseUserAgent(ua) {
   }
 }
 
+function normalizeFlag(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase();
+}
+
+function flagEnabled(value) {
+  const normalized = normalizeFlag(value);
+  return normalized === '1' || normalized === 'true' || normalized === 'yes';
+}
+
+function flagDisabled(value) {
+  const normalized = normalizeFlag(value);
+  return normalized === '0' || normalized === 'false' || normalized === 'no';
+}
+
+function shouldAutoBuildClientAssets() {
+  if (flagDisabled(process.env.ENABLE_CLIENT_AUTO_BUILD)) {
+    return false;
+  }
+
+  if (flagEnabled(process.env.ENABLE_CLIENT_AUTO_BUILD)) {
+    return true;
+  }
+
+  const nodeEnv = normalizeFlag(process.env.NODE_ENV) || 'development';
+
+  if (nodeEnv === 'production' || nodeEnv === 'test') {
+    return false;
+  }
+
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return false;
+  }
+
+  if (flagEnabled(process.env.CI)) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildClientAssets() {
+  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(npmCommand, ['run', 'build:client'], {
+    cwd: __dirname,
+    env: { ...process.env },
+    stdio: 'inherit'
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (typeof result.status === 'number' && result.status !== 0) {
+    const error = new Error(`Client build exited with status ${result.status}`);
+    error.code = result.status;
+    throw error;
+  }
+}
+
+function attemptClientAutoBuild() {
+  if (clientAutoBuildAttempted) {
+    return false;
+  }
+
+  clientAutoBuildAttempted = true;
+
+  if (!shouldAutoBuildClientAssets()) {
+    return false;
+  }
+
+  try {
+    logStructured('info', 'client_build_auto_build_started', {
+      command: 'npm run build:client',
+      path: clientIndexPath,
+    });
+    buildClientAssets();
+    cachedClientIndexHtml = undefined;
+    logStructured('info', 'client_build_auto_build_succeeded', {
+      path: clientIndexPath,
+    });
+    return true;
+  } catch (error) {
+    logStructured('error', 'client_build_auto_build_failed', {
+      path: clientIndexPath,
+      error: serializeError(error),
+    });
+    return false;
+  }
+}
+
 function clientAssetsAvailable() {
-  return fsSync.existsSync(clientIndexPath);
+  if (fsSync.existsSync(clientIndexPath)) {
+    return true;
+  }
+
+  if (attemptClientAutoBuild() && fsSync.existsSync(clientIndexPath)) {
+    return true;
+  }
+
+  return false;
 }
 
 const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
