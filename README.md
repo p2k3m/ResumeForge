@@ -20,6 +20,8 @@ Every interaction is processed via the serverless Express Lambda/API Gateway sta
 > Onboarding a new teammate? Point them at [docs/onboarding.md](docs/onboarding.md) for a narrative walkthrough of the regular candidate flow.
 
 > Need the storage deep-dive? Share [docs/storage-model.md](docs/storage-model.md) with engineers and SystemOps to explain the S3 layout and download flow.
+>
+> Rolling out infrastructure or touching CI/CD? Review [docs/ci-cd-iac.md](docs/ci-cd-iac.md) for the authoritative guidance on pipelines, IaC, and local tooling expectations.
 
 ## Microservice layout
 
