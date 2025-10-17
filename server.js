@@ -19513,6 +19513,9 @@ app.post(
   const logContext = userId
     ? { requestId, jobId, userId }
     : { requestId, jobId };
+  const activeServiceKey =
+    typeof res.locals.activeService === 'string' ? res.locals.activeService : '';
+  const isUploadMicroservice = activeServiceKey === 'resumeUpload';
   const sessionSegment =
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
     sanitizeS3KeyComponent(`session-${createIdentifier()}`);
@@ -20422,6 +20425,55 @@ app.post(
           message: err.message
         });
       }
+    }
+
+    if (isUploadMicroservice) {
+      logStructured('info', 'resume_upload_async_enqueued', {
+        ...logContext,
+        jobTitle,
+        jobSkills: jobSkills.length,
+        manualCertificates: manualCertificates.length,
+        credlyAttempted: credlyStatus.attempted,
+      });
+
+      scheduleTask(() => {
+        publishResumeWorkflowEvent({
+          jobId,
+          resumeText: text,
+          jobDescription,
+          jobSkills,
+          manualCertificates,
+          targetTitle: jobTitle,
+          enhancementTypes: ENHANCEMENT_TYPES,
+        }).catch((eventErr) => {
+          logStructured('warn', 'process_cv_orchestration_event_failed', {
+            ...logContext,
+            error: serializeError(eventErr),
+          });
+        });
+      });
+
+      return res.status(202).json({
+        success: true,
+        queued: true,
+        message:
+          'Resume upload received. Processing will continue asynchronously.',
+        jobId,
+        jobTitle,
+        resumeText: text,
+        jobDescriptionText: jobDescription,
+        jobSkills,
+        manualCertificates,
+        credlyStatus,
+        classification,
+        upload: {
+          bucket,
+          key: originalUploadKey,
+          metadataKey,
+          logKey,
+          sessionChangeLogKey,
+        },
+      });
     }
 
     const aggregatedCertifications = [
