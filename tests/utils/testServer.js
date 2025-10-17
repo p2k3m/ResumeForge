@@ -408,7 +408,7 @@ export async function setupTestServer({
     }));
 
     jest.unstable_mockModule('pdf-parse/lib/pdf-parse.js', () => ({
-      default: mockState.pdfParseMock,
+      default: (...args) => mockState.pdfParseMock?.(...args),
     }));
 
     jest.unstable_mockModule('word-extractor', () => ({
@@ -421,7 +421,8 @@ export async function setupTestServer({
 
     jest.unstable_mockModule('mammoth', () => ({
       default: {
-        extractRawText: mockState.mammothExtractRawText,
+        extractRawText: (...args) =>
+          mockState.mammothExtractRawText?.(...args),
       },
     }));
 

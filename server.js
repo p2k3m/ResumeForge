@@ -5257,6 +5257,8 @@ async function sendS3CommandWithRetry(
       });
     },
   });
+}
+
 function analyzeJobDescription(html) {
   const strip = (s) =>
     s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
