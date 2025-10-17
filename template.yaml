@@ -14,6 +14,21 @@ Parameters:
     AllowedPattern: '^[A-Za-z0-9_-]+$'
     ConstraintDescription: StageName may contain only letters, numbers, hyphens, and underscores and must be 30 characters or fewer.
     Description: Stage name for the API Gateway deployment.
+  ApiThrottlingRateLimit:
+    Type: Number
+    Default: 100
+    MinValue: 1
+    Description: Steady-state requests per second allowed for the API stage.
+  ApiThrottlingBurstLimit:
+    Type: Number
+    Default: 50
+    MinValue: 1
+    Description: Burst requests per second allowed for the API stage.
+  IpRateLimit:
+    Type: Number
+    Default: 2000
+    MinValue: 100
+    Description: Five-minute request limit per IP enforced by the default WAF when no WebAclArn is provided.
   SecondaryRegion:
     Type: String
     Default: us-west-2
@@ -90,11 +105,13 @@ Conditions:
   CreateResumeTableCondition: !Equals [!Ref CreateResumeTable, 'true']
   CreateDataBucketCondition: !Equals [!Ref CreateDataBucket, 'true']
   EnableProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
-  AttachWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
   UseSecretName: !Not [!Equals [!Ref SecretName, '']]
   SecretIsArn: !And
     - !Condition UseSecretName
     - !Equals [!Select [0, !Split [":", !Ref SecretName]], 'arn']
+  UseProvidedWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
+  CreateDefaultWebAcl: !Not [!Condition UseProvidedWebAcl]
+  IsProductionStage: !Equals [!Ref StageName, 'prod']
 
 Rules:
   RequireGeminiConfiguration:
@@ -106,6 +123,16 @@ Rules:
           Provide either SecretName (pointing to a Secrets Manager secret with
           GEMINI_API_KEY) or GeminiApiKey so the Lambda function can access the
           Gemini API.
+  RequireExternalBucketName:
+    RuleCondition: !Equals [!Ref CreateDataBucket, 'false']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref DataBucketName, '']]
+        AssertDescription: Provide DataBucketName when CreateDataBucket is false.
+  RequireExternalTableName:
+    RuleCondition: !Equals [!Ref CreateResumeTable, 'false']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ResumeTableName, '']]
+        AssertDescription: Provide ResumeTableName when CreateResumeTable is false.
 
 Resources:
   ResumeForgeApi:
@@ -113,6 +140,11 @@ Resources:
     Properties:
       StageName: !Ref StageName
       EndpointConfiguration: REGIONAL
+      MethodSettings:
+        - HttpMethod: '*'
+          ResourcePath: '/*'
+          ThrottlingBurstLimit: !Ref ApiThrottlingBurstLimit
+          ThrottlingRateLimit: !Ref ApiThrottlingRateLimit
       BinaryMediaTypes:
         - multipart/form-data
         - application/pdf
@@ -188,6 +220,47 @@ Resources:
               - !Sub arn:aws:s3:::${DataBucket}
               - !Sub arn:aws:s3:::${DataBucketName}
 
+  ResumeForgeWebAcl:
+    Condition: CreateDefaultWebAcl
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub 'ResumeForge-${AWS::StackName}-${StageName}'
+      Description: Default rate-based Web ACL protecting the ResumeForge API Gateway stage.
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub 'resumeforge-${StageName}-waf'
+        SampledRequestsEnabled: true
+      Rules:
+        - Name: RateLimitPerIp
+          Priority: 1
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              Limit: !Ref IpRateLimit
+          Action:
+            Block: {}
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: !Sub 'resumeforge-${StageName}-rate-limit'
+            SampledRequestsEnabled: true
+
+  ResumeForgeApiDefaultWebAclAssociation:
+    Condition: CreateDefaultWebAcl
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub 'arn:aws:apigateway:${AWS::Region}::/restapis/${ResumeForgeApi}/stages/${StageName}'
+      WebACLArn: !GetAtt ResumeForgeWebAcl.Arn
+
+  ResumeForgeApiProvidedWebAclAssociation:
+    Condition: UseProvidedWebAcl
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Sub 'arn:aws:apigateway:${AWS::Region}::/restapis/${ResumeForgeApi}/stages/${StageName}'
+      WebACLArn: !Ref WebAclArn
+
   ResumeForgeTable:
     Type: AWS::DynamoDB::Table
     Condition: CreateResumeTableCondition
@@ -240,6 +313,8 @@ Resources:
             STAGE_NAME: !Ref StageName
             DEPLOYMENT_ENVIRONMENT: !Ref StageName
             ORCHESTRATION_BUS_NAME: !Ref ResumeForgeOrchestrationBus
+            LOG_LEVEL: !If [IsProductionStage, 'info', 'debug']
+            ENABLE_DEBUG_LOGGING: 'false'
           ACTIVE_SERVICE: resumeUpload
       Policies: &ResumeForgeFunctionPolicies
         - AWSLambdaBasicExecutionRole
@@ -254,13 +329,6 @@ Resources:
               Resource:
                 - !Sub arn:aws:s3:::${DataBucketName}
                 - !Sub arn:aws:s3:::${DataBucketName}/*
-            - Sid: AllowWafIntegration
-              Effect: Allow
-              Action:
-                - wafv2:AssociateWebACL
-                - wafv2:DisassociateWebACL
-                - wafv2:GetWebACL
-              Resource: '*'
         - DynamoDBCrudPolicy:
             TableName: !Ref ResumeTableName
         - !If
@@ -1556,7 +1624,7 @@ Resources:
       DistributionConfig:
         Enabled: true
         Comment: API Gateway distribution for ResumeForge
-        WebACLId: !If [AttachWebAcl, !Ref WebAclArn, !Ref AWS::NoValue]
+        WebACLId: !If [UseProvidedWebAcl, !Ref WebAclArn, !Ref AWS::NoValue]
         Origins:
           - Id: ResumeForgeApiOrigin
             DomainName: !Sub "${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com"
