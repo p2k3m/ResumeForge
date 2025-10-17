@@ -1,5 +1,6 @@
 import '../config/environment.js';
 import documentGenerationHttpHandler from '../services/documentGeneration/httpHandler.js';
+import { withLambdaObservability } from '../lib/observability/lambda.js';
 
 function normalizePath(path) {
   if (!path) {
@@ -69,7 +70,7 @@ function buildProxyContext(record, context) {
   };
 }
 
-export const handler = async (event, context) => {
+const baseHandler = async (event, context) => {
   const records = Array.isArray(event?.Records) ? event.Records : [];
   for (const record of records) {
     let payload = {};
@@ -108,5 +109,11 @@ export const handler = async (event, context) => {
     }
   }
 };
+
+export const handler = withLambdaObservability(baseHandler, {
+  name: 'document-generation-worker',
+  operationGroup: 'artifact-generation',
+  captureErrorTrace: true,
+});
 
 export default handler;

@@ -69,6 +69,13 @@ Parameters:
     Description: >-
       Number of provisioned concurrent executions reserved for the Lambda alias.
       Set to 0 to disable provisioned concurrency.
+  LambdaInsightsLayerVersion:
+    Type: Number
+    Default: 38
+    Description: >-
+      Version number for the Lambda Insights extension layer published by AWS
+      (account 580247275435). Update this parameter when AWS releases a new
+      Insights layer.
   CreateResumeTable:
     Type: String
     AllowedValues:
@@ -268,7 +275,8 @@ Resources:
                   - !Ref SecretName
                   - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
           - !Ref AWS::NoValue
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -350,7 +358,8 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: clientApp
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -383,7 +392,8 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: jobEvaluation
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -422,7 +432,8 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: scoring
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -497,7 +508,8 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: enhancement
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -577,7 +589,8 @@ Resources:
           ACTIVE_SERVICE: documentGeneration
           DOCUMENT_GENERATION_QUEUE_URL: !GetAtt DocumentGenerationQueue.QueueUrl
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -603,7 +616,8 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: documentGeneration
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -625,6 +639,8 @@ Resources:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
           STAGE_NAME: !Ref StageName
           DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -646,6 +662,8 @@ Resources:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
           STAGE_NAME: !Ref StageName
           DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -667,6 +685,8 @@ Resources:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
           STAGE_NAME: !Ref StageName
           DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -694,6 +714,8 @@ Resources:
           S3_BUCKET: !Ref DataBucketName
           STAGE_NAME: !Ref StageName
           DEPLOYMENT_ENVIRONMENT: !Ref StageName
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
@@ -837,11 +859,675 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: auditing
       Policies: *ResumeForgeFunctionPolicies
-      Layers: []
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
         Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
+
+  ObservabilityDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub '${AWS::StackName}-${StageName}-observability'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Lambda Invocations by Alias",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Sum",
+                "period": 300,
+                "stacked": false,
+                "metrics": [
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-resume-upload:${StageName}",
+                    {
+                      "label": "resume-upload"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-client-app:${StageName}",
+                    {
+                      "label": "client-app"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-job-evaluation:${StageName}",
+                    {
+                      "label": "job-evaluation"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-scoring:${StageName}",
+                    {
+                      "label": "scoring"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement:${StageName}",
+                    {
+                      "label": "enhancement"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-document-generation:${StageName}",
+                    {
+                      "label": "document-generation"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-document-generation-worker:${StageName}",
+                    {
+                      "label": "document-generation-worker"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-score:${StageName}",
+                    {
+                      "label": "workflow-score"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-enhancement-section:${StageName}",
+                    {
+                      "label": "workflow-enhancement-section"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-combine:${StageName}",
+                    {
+                      "label": "workflow-combine"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-generate:${StageName}",
+                    {
+                      "label": "workflow-generate"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-auditing:${StageName}",
+                    {
+                      "label": "auditing"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Lambda Errors by Alias",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Sum",
+                "period": 300,
+                "stacked": false,
+                "metrics": [
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-resume-upload:${StageName}",
+                    {
+                      "label": "resume-upload"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-client-app:${StageName}",
+                    {
+                      "label": "client-app"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-job-evaluation:${StageName}",
+                    {
+                      "label": "job-evaluation"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-scoring:${StageName}",
+                    {
+                      "label": "scoring"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement:${StageName}",
+                    {
+                      "label": "enhancement"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-document-generation:${StageName}",
+                    {
+                      "label": "document-generation"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-document-generation-worker:${StageName}",
+                    {
+                      "label": "document-generation-worker"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-score:${StageName}",
+                    {
+                      "label": "workflow-score"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-enhancement-section:${StageName}",
+                    {
+                      "label": "workflow-enhancement-section"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-combine:${StageName}",
+                    {
+                      "label": "workflow-combine"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-generate:${StageName}",
+                    {
+                      "label": "workflow-generate"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-auditing:${StageName}",
+                    {
+                      "label": "auditing"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Lambda p95 Duration (ms)",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Average",
+                "period": 300,
+                "stacked": false,
+                "metrics": [
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-resume-upload:${StageName}",
+                    {
+                      "label": "resume-upload",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-client-app:${StageName}",
+                    {
+                      "label": "client-app",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-job-evaluation:${StageName}",
+                    {
+                      "label": "job-evaluation",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-scoring:${StageName}",
+                    {
+                      "label": "scoring",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement:${StageName}",
+                    {
+                      "label": "enhancement",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-document-generation:${StageName}",
+                    {
+                      "label": "document-generation",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-document-generation-worker:${StageName}",
+                    {
+                      "label": "document-generation-worker",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-score:${StageName}",
+                    {
+                      "label": "workflow-score",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-enhancement-section:${StageName}",
+                    {
+                      "label": "workflow-enhancement-section",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-combine:${StageName}",
+                    {
+                      "label": "workflow-combine",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-workflow-generate:${StageName}",
+                    {
+                      "label": "workflow-generate",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-auditing:${StageName}",
+                    {
+                      "label": "auditing",
+                      "stat": "p95"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Cold Starts by Function",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Sum",
+                "period": 300,
+                "stacked": false,
+                "metrics": [
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-resume-upload",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "resume-upload"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-client-app",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "client-app"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-job-evaluation",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "job-evaluation"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-scoring",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "scoring"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-document-generation",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "document-generation"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-document-generation-worker",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "document-generation-worker"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-workflow-score",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "workflow-score"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-workflow-enhancement-section",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "workflow-enhancement-section"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-workflow-combine",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "workflow-combine"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-workflow-generate",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "workflow-generate"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-auditing",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "auditing"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "type": "metric",
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "title": "Artifact & API Outcomes",
+                "region": "${AWS::Region}",
+                "view": "timeSeries",
+                "stat": "Sum",
+                "period": 300,
+                "stacked": false,
+                "metrics": [
+                  [
+                    "ResumeForge/Artifacts",
+                    "artifactgenerationFailure",
+                    "Operation",
+                    "artifact-generation",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Generation Failures"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "artifactgenerationSuccess",
+                    "Operation",
+                    "artifact-generation",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Generation Success"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "artifactdownloadFailure",
+                    "Operation",
+                    "artifact-download",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Download Failures"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "artifactdownloadSuccess",
+                    "Operation",
+                    "artifact-download",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Download Success"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "enhancementFailure",
+                    "Operation",
+                    "enhancement",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Enhancement Failures"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "enhancementSuccess",
+                    "Operation",
+                    "enhancement",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Enhancement Success"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "scoringFailure",
+                    "Operation",
+                    "scoring",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Scoring Failures"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "scoringSuccess",
+                    "Operation",
+                    "scoring",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "Scoring Success"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "apiFailure",
+                    "Operation",
+                    "api",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "API Failures"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Artifacts",
+                    "apiSuccess",
+                    "Operation",
+                    "api",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "API Success"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
 
   ResumeForgeCachePolicy:
     Type: AWS::CloudFront::CachePolicy

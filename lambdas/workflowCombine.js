@@ -1,5 +1,6 @@
 import '../config/environment.js';
 import { applyPatch, normaliseFanOutTypes } from '../lib/resume/enhancement.js';
+import { withLambdaObservability } from '../lib/observability/lambda.js';
 
 const DEFAULT_ORDER = normaliseFanOutTypes();
 
@@ -12,7 +13,7 @@ function sortResults(results = []) {
   });
 }
 
-export const handler = async (event = {}) => {
+const baseHandler = async (event = {}) => {
   const resumeText = typeof event.resumeText === 'string' ? event.resumeText : '';
   const sectionResults = Array.isArray(event.sectionResults) ? event.sectionResults : [];
   const sortedResults = sortResults(sectionResults.filter(Boolean));
@@ -39,5 +40,11 @@ export const handler = async (event = {}) => {
     changeSummary,
   };
 };
+
+export const handler = withLambdaObservability(baseHandler, {
+  name: 'workflow-combine',
+  operationGroup: 'enhancement',
+  captureErrorTrace: true,
+});
 
 export default handler;
