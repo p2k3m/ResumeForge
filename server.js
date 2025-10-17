@@ -20030,7 +20030,8 @@ app.post(
       ? requestId.trim()
       : String(requestId || '');
   const requestScopedIdentifier = normalizePersonalData(safeRequestId);
-  let placeholderIdentifier = normalizePersonalData(profileIdentifier || jobId);
+  let placeholderIdentifier =
+    requestScopedIdentifier || normalizePersonalData(profileIdentifier || jobId);
   let placeholderRecordIdentifier = '';
   let shouldDeletePlaceholder = false;
   const initialTimestamp = new Date().toISOString();
@@ -20321,6 +20322,16 @@ app.post(
   try {
     await ensureTableExists();
 
+    if (
+      placeholderIdentifier &&
+      placeholderIdentifier !== storedLinkedIn &&
+      placeholderRecordIdentifier !== placeholderIdentifier
+    ) {
+      if (await writePlaceholderRecord(placeholderIdentifier)) {
+        placeholderRecordIdentifier = placeholderIdentifier;
+      }
+    }
+
     let previousSessionChangeLogKey = '';
     let previousChangeLogTextKey = '';
     let previousSessionChangeLogBucket = '';
@@ -20354,16 +20365,20 @@ app.post(
       });
     }
 
-    if (!tableCreatedThisRequest) {
-      const existingRecordKnown = Boolean(
-        hadPreviousRecord ||
-          (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn))
-      );
-      if (existingRecordKnown && requestScopedIdentifier) {
-        placeholderIdentifier = requestScopedIdentifier;
-      }
+    const existingRecordKnown = Boolean(
+      hadPreviousRecord ||
+        (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn))
+    );
+    if (existingRecordKnown && requestScopedIdentifier) {
+      placeholderIdentifier = requestScopedIdentifier;
+    }
 
-      if (existingRecordKnown && (await writePlaceholderRecord(placeholderIdentifier))) {
+    if (
+      placeholderIdentifier &&
+      placeholderIdentifier !== storedLinkedIn &&
+      placeholderRecordIdentifier !== placeholderIdentifier
+    ) {
+      if (await writePlaceholderRecord(placeholderIdentifier)) {
         placeholderRecordIdentifier = placeholderIdentifier;
       }
     }
