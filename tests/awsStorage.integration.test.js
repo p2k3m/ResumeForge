@@ -115,7 +115,8 @@ describe('AWS integrations for /api/process-cv', () => {
         command.type === 'PutObjectCommand' &&
         typeof command.key === 'string' &&
         command.key.endsWith('.pdf') &&
-        command.key.includes('cv/')
+        command.key.includes('cv/') &&
+        !command.key.endsWith('/original.pdf')
     );
     expect(generatedPdf).toBeTruthy();
     const pdfSegments = generatedPdf.key.split('/');
