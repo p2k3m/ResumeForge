@@ -19645,7 +19645,21 @@ app.post(
   async (req, res) => {
   const jobId = res.locals.jobId || req.jobId || createIdentifier();
   const requestId = res.locals.requestId;
-  const userId = res.locals.userId;
+  let userId = res.locals.userId;
+  if (!userId) {
+    userId = captureUserContext(req, res) || undefined;
+  }
+  if (userId) {
+    const existingLogContext = res.locals.uploadLogContext || {};
+    if (existingLogContext.userId !== userId) {
+      res.locals.uploadLogContext = {
+        requestId,
+        jobId,
+        ...existingLogContext,
+        userId,
+      };
+    }
+  }
   const logContext =
     res.locals.uploadLogContext ||
     (userId ? { requestId, jobId, userId } : { requestId, jobId });
