@@ -107,10 +107,42 @@ import { scoreResumeAgainstJob } from './lib/resume/scoring.js';
 import { createTextDigest } from './lib/resume/utils.js';
 import { createVersionedPrompt, PROMPT_TEMPLATES } from './lib/llm/templates.js';
 import { resolveServiceForRoute } from './microservices/services.js';
+import { stripUploadMetadata } from './lib/uploads/metadata.js';
 
 const extractText = extractResumeText;
 const classifyDocument = classifyResumeDocument;
 const deploymentEnvironment = getDeploymentEnvironment();
+const logLevelOrder = new Map([
+  ['debug', 10],
+  ['info', 20],
+  ['warn', 30],
+  ['error', 40],
+]);
+
+function resolveActiveLogLevel() {
+  const configured = (process.env.LOG_LEVEL || '').trim().toLowerCase();
+  const debugOverride = /^(1|true|yes|on)$/i.test(process.env.ENABLE_DEBUG_LOGGING || '');
+  if (debugOverride) {
+    return 'debug';
+  }
+  if (logLevelOrder.has(configured)) {
+    return configured;
+  }
+  const productionLabels = new Set(['prod', 'production']);
+  return productionLabels.has(deploymentEnvironment.trim().toLowerCase()) ? 'info' : 'debug';
+}
+
+const activeLogLevel = resolveActiveLogLevel();
+
+function shouldLog(level) {
+  const resolvedLevel = typeof level === 'string' ? level.trim().toLowerCase() : 'info';
+  const targetWeight = logLevelOrder.get(resolvedLevel);
+  if (typeof targetWeight !== 'number') {
+    return true;
+  }
+  const activeWeight = logLevelOrder.get(activeLogLevel) ?? logLevelOrder.get('info');
+  return targetWeight >= activeWeight;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1533,6 +1565,9 @@ function scheduleErrorLog(entry) {
 }
 
 function logStructured(level, message, context = {}) {
+  if (!shouldLog(level)) {
+    return;
+  }
   const payload = {
     timestamp: new Date().toISOString(),
     level,
@@ -19869,6 +19904,27 @@ app.post(
       normalizedContentType: originalContentType,
     });
   }
+
+  let sanitizedUploadBuffer = req.file.buffer;
+  try {
+    const strippedBuffer = await stripUploadMetadata({
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      originalName: req.file.originalname,
+    });
+    if (Buffer.isBuffer(strippedBuffer)) {
+      sanitizedUploadBuffer = strippedBuffer;
+      if (strippedBuffer !== req.file.buffer) {
+        logStructured('debug', 'upload_metadata_sanitized', logContext);
+      }
+    }
+  } catch (err) {
+    logStructured('warn', 'upload_metadata_sanitization_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+  }
+  req.file.buffer = sanitizedUploadBuffer;
 
   try {
     await sendS3CommandWithRetry(

@@ -78,6 +78,16 @@ The runtime looks for the following keys:
 
 - `GEMINI_API_KEY` – Google Gemini API key. This value must be supplied via the environment; the server verifies a non-empty value is present and never logs the secret.
 - `S3_BUCKET` – Destination bucket for uploads, logs, and generated PDFs. Provide the bucket name through the `S3_BUCKET` environment variable so artifacts are stored in the correct account and region.
+- `LOG_LEVEL` – Controls structured logging verbosity. The deployment template forces this to `info` in production; set `ENABLE_DEBUG_LOGGING=true` temporarily when debugging prod issues.
+- `RESUME_TABLE_NAME`, `AWS_REGION`, and other runtime values remain environment-driven so no secrets or stage-specific settings ship in source control.
+
+## Security, access, and compliance guardrails
+
+- **Environment-driven configuration only.** The application refuses to start (locally) or deploy (via CloudFormation rules) when required environment variables, IAM inputs, or secrets are missing. All sensitive values continue to flow through environment variables or AWS Secrets Manager.
+- **Automatic API protection.** The SAM template now enforces throttling at the API Gateway stage and provisions an AWS WAFv2 rate-based Web ACL when no external ARN is supplied, blocking abusive clients by IP without any Lambda-level permissions.
+- **Sanitised uploads.** Every incoming résumé (PDF/DOC/DOCX) is scrubbed of embedded metadata before it is persisted to S3, protecting applicant privacy even if the original file contains author details or document history.
+- **Scoped IAM policies.** Lambda execution roles are reduced to the minimal S3 (`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:ListBucket`) and DynamoDB permissions required per function; unused WAF permissions have been removed.
+- **Predictable production logging.** Production stages clamp the log level to `info` unless `ENABLE_DEBUG_LOGGING` is explicitly set, keeping CloudWatch noise low while allowing controlled escalation when troubleshooting.
 - `CLOUDFRONT_ORIGINS` – Optional, comma-separated list of CloudFront origins that are permitted through the server's CORS middleware. Include your distribution domain to restrict browser calls to trusted hosts.
 - `ENABLE_DOWNLOAD_SESSION_LOG_CLEANUP` – Optional toggle that removes the session change log from S3 when a download session expires. Enable this flag when aggressively reclaiming storage for large-scale environments; leave it unset to retain audit history.
 - `ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP` – Optional toggle that deletes superseded generated artifacts once a session completes. Enable this flag when reclaiming storage aggressively at scale; leave it unset to retain prior versions for troubleshooting.
@@ -128,14 +138,11 @@ Minimal permissions required by the server:
       "Action": ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
       "Resource": "arn:aws:dynamodb:REGION:ACCOUNT_ID:table/RESUME_TABLE_NAME"
     },
-    {
-      "Effect": "Allow",
-      "Action": ["wafv2:AssociateWebACL", "wafv2:DisassociateWebACL", "wafv2:GetWebACL"],
-      "Resource": "*"
-    }
   ]
 }
 ```
+
+The SAM template now owns all AWS WAF associations, so Lambda execution roles no longer require direct `wafv2:*` permissions.
 
 ## Serverless deployment on AWS
 
@@ -168,6 +175,9 @@ During the guided deploy provide values for:
   may include only letters, numbers, hyphens, and underscores and must be 30 characters or fewer
 - `CreateDataBucket` – answer `false` if the bucket already exists and should be reused
 - `CreateResumeTable` – answer `false` if the DynamoDB table already exists and should be reused
+- `ApiThrottlingRateLimit` – steady-state requests per second allowed on the stage (defaults to `100`)
+- `ApiThrottlingBurstLimit` – short burst requests per second allowed on the stage (defaults to `50`)
+- `IpRateLimit` – WAFv2 rate-based limit applied when no external Web ACL ARN is supplied (defaults to `2000` requests per five minutes)
 
 The deployment creates:
 
