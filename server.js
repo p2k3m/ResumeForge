@@ -112,6 +112,8 @@ import { stripUploadMetadata } from './lib/uploads/metadata.js';
 import createS3StreamingStorage from './lib/uploads/s3StreamingStorage.js';
 import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 
+const knownResumeIdentifiers = new Set();
+
 const extractText = extractResumeText;
 const classifyDocument = classifyResumeDocument;
 const deploymentEnvironment = getDeploymentEnvironment();
@@ -17323,6 +17325,7 @@ async function generateEnhancedDocumentsResponse({
         error: serializeError(err),
       });
     }
+
   }
 
   generationSucceeded = true;
@@ -19617,6 +19620,7 @@ app.post(
     Math.min(DYNAMO_TABLE_POLL_INTERVAL_MS, DYNAMO_TABLE_MAX_WAIT_MS)
   );
   let tableEnsured = false;
+  let tableCreatedThisRequest = false;
 
   const waitForTableActive = async (ignoreNotFound = false) => {
     const startedAt = Date.now();
@@ -19660,6 +19664,7 @@ app.post(
     }
 
     try {
+      tableCreatedThisRequest = true;
       await dynamo.send(
         new CreateTableCommand({
           TableName: tableName,
@@ -19968,48 +19973,89 @@ app.post(
     typeof requestId === 'string' && requestId.trim()
       ? requestId.trim()
       : String(requestId || '');
-  const initialIdentifier = normalizePersonalData(
-    profileIdentifier || requestId || jobId
-  );
+  const requestScopedIdentifier = normalizePersonalData(safeRequestId);
+  let placeholderIdentifier = normalizePersonalData(profileIdentifier || jobId);
+  let placeholderRecordIdentifier = '';
+  let shouldDeletePlaceholder = false;
   const initialTimestamp = new Date().toISOString();
   const initialS3Location = `s3://${bucket}/${originalUploadKey}`;
 
-  try {
-    await ensureTableExists();
-    await dynamo.send(
-      new PutItemCommand({
-        TableName: tableName,
-        Item: {
-          linkedinProfileUrl: { S: initialIdentifier },
-          timestamp: { S: initialTimestamp },
-          uploadedAt: { S: initialTimestamp },
-          requestId: { S: safeRequestId },
-          jobId: { S: jobId },
-          ipAddress: { S: normalizePersonalData(ipAddress) },
-          userAgent: { S: normalizePersonalData(userAgent) },
-          os: { S: os },
-          browser: { S: browser },
-          device: { S: device },
-          location: { S: locationMeta.label || 'Unknown' },
-          locationCity: { S: locationMeta.city || '' },
-          locationRegion: { S: locationMeta.region || '' },
-          locationCountry: { S: locationMeta.country || '' },
-          s3Bucket: { S: bucket },
-          s3Key: { S: originalUploadKey },
-          s3Url: { S: initialS3Location },
-        },
-      })
-    );
-    logStructured('info', 'dynamo_upload_metadata_written', {
-      ...logContext,
-      bucket,
-      key: originalUploadKey,
-    });
-  } catch (err) {
-    logStructured('warn', 'dynamo_upload_metadata_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
+  await ensureTableExists();
+
+  const writePlaceholderRecord = async (identifier) => {
+    if (!identifier) {
+      return false;
+    }
+    try {
+      await dynamo.send(
+        new PutItemCommand({
+          TableName: tableName,
+          Item: {
+            linkedinProfileUrl: { S: identifier },
+            timestamp: { S: initialTimestamp },
+            uploadedAt: { S: initialTimestamp },
+            requestId: { S: safeRequestId },
+            jobId: { S: jobId },
+            ipAddress: { S: normalizePersonalData(ipAddress) },
+            userAgent: { S: normalizePersonalData(userAgent) },
+            os: { S: os },
+            browser: { S: browser },
+            device: { S: device },
+            location: { S: locationMeta.label || 'Unknown' },
+            locationCity: { S: locationMeta.city || '' },
+            locationRegion: { S: locationMeta.region || '' },
+            locationCountry: { S: locationMeta.country || '' },
+            s3Bucket: { S: bucket },
+            s3Key: { S: originalUploadKey },
+            s3Url: { S: initialS3Location },
+          },
+        })
+      );
+      logStructured('info', 'dynamo_upload_metadata_written', {
+        ...logContext,
+        bucket,
+        key: originalUploadKey,
+      });
+      return true;
+    } catch (err) {
+      logStructured('warn', 'dynamo_upload_metadata_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+      return false;
+    }
+  };
+
+  const deletePlaceholderRecord = async (identifier) => {
+    if (!identifier) {
+      return false;
+    }
+    try {
+      await dynamo.send(
+        new DeleteItemCommand({
+          TableName: tableName,
+          Key: { linkedinProfileUrl: { S: identifier } },
+        })
+      );
+      logStructured('info', 'placeholder_record_deleted', {
+        ...logContext,
+        placeholderIdentifier: identifier,
+      });
+      return true;
+    } catch (err) {
+      logStructured('warn', 'placeholder_record_delete_failed', {
+        ...logContext,
+        placeholderIdentifier: identifier,
+        error: serializeError(err),
+      });
+      return false;
+    }
+  };
+
+  if (tableCreatedThisRequest) {
+    if (await writePlaceholderRecord(placeholderIdentifier)) {
+      placeholderRecordIdentifier = placeholderIdentifier;
+    }
   }
 
   let text;
@@ -20226,6 +20272,7 @@ app.post(
     let previousChangeLogTextKey = '';
     let previousSessionChangeLogBucket = '';
 
+    let hadPreviousRecord = false;
     try {
       const previousRecord = await dynamo.send(
         new GetItemCommand({
@@ -20235,6 +20282,9 @@ app.post(
         })
       );
       const previousItem = previousRecord.Item || {};
+      hadPreviousRecord = Boolean(
+        previousItem && typeof previousItem === 'object' && Object.keys(previousItem).length
+      );
       if (previousItem.sessionChangeLogKey?.S) {
         previousSessionChangeLogKey = previousItem.sessionChangeLogKey.S.trim();
       }
@@ -20249,6 +20299,21 @@ app.post(
         ...logContext,
         error: serializeError(lookupErr),
       });
+    }
+
+    if (!tableCreatedThisRequest) {
+      const existingRecordKnown = Boolean(
+        hadPreviousRecord ||
+          (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn)) ||
+          requestScopedIdentifier
+      );
+      if (existingRecordKnown) {
+        placeholderIdentifier = requestScopedIdentifier || placeholderIdentifier;
+      }
+
+      if (await writePlaceholderRecord(placeholderIdentifier)) {
+        placeholderRecordIdentifier = placeholderIdentifier;
+      }
     }
 
     const timestamp = new Date().toISOString();
@@ -20286,6 +20351,9 @@ app.post(
       }
     };
     await dynamo.send(new PutItemCommand(putItemPayload));
+    if (storedLinkedIn) {
+      knownResumeIdentifiers.add(storedLinkedIn);
+    }
     logStructured('info', 'dynamo_initial_record_written', {
       ...logContext,
       bucket,
@@ -20333,25 +20401,8 @@ app.post(
       });
     }
 
-    if (initialIdentifier && initialIdentifier !== storedLinkedIn) {
-      try {
-        await dynamo.send(
-          new DeleteItemCommand({
-            TableName: tableName,
-            Key: { linkedinProfileUrl: { S: initialIdentifier } },
-          })
-        );
-        logStructured('info', 'dynamo_initial_metadata_removed', {
-          ...logContext,
-          removedKey: initialIdentifier,
-        });
-      } catch (cleanupErr) {
-        logStructured('warn', 'dynamo_initial_metadata_remove_failed', {
-          ...logContext,
-          removedKey: initialIdentifier,
-          error: serializeError(cleanupErr),
-        });
-      }
+    if (placeholderIdentifier && placeholderIdentifier !== storedLinkedIn) {
+      shouldDeletePlaceholder = true;
     }
 
     const cleanupBucket = previousSessionChangeLogBucket || bucket;
@@ -20922,6 +20973,14 @@ app.post(
     }
 
     if (enhancedResponse) {
+      if (
+        shouldDeletePlaceholder &&
+        placeholderRecordIdentifier &&
+        placeholderRecordIdentifier !== storedLinkedIn
+      ) {
+        await deletePlaceholderRecord(placeholderRecordIdentifier);
+        shouldDeletePlaceholder = false;
+      }
       scheduleTask(() => {
         publishResumeWorkflowEvent({
           jobId,
