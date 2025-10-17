@@ -8,7 +8,7 @@ ResumeForge generates tailored cover letters and enhanced CV versions by combini
 | Step | User action | System response | Expected user outcome |
 | --- | --- | --- | --- |
 | 1. Upload résumé | Candidate drops a CV (PDF/DOC/DOCX) into the React portal. | File streams directly to S3 at `resume-forge-data/cv/<candidate>/<date>/<job-id>/original.pdf`; DynamoDB stores hashed personal data (IP, device, LinkedIn, Credly) and detected file type. Non-CV uploads trigger a validation error with remediation text. | The candidate immediately knows whether the résumé is valid and, if not, how to fix it before continuing. |
-| 2. Provide job description | Candidate enters the job post URL or pastes the full job description text into the portal. | The backend fetches the JD when the URL is accessible; if the site blocks automated access the flow stops instantly, displays the paste box, and requires the candidate to provide the text manually. | The user either sees the JD captured automatically or receives a clear prompt to paste it before continuing, guaranteeing the analysis always runs on the actual JD content. |
+| 2. Provide job description | Candidate pastes the full job description text into the portal (URLs are rejected). | The backend validates the pasted content, strips unsafe markup, and stores it alongside the session so every downstream service receives the authoritative text. | The user gets immediate feedback when the textbox is empty and can only continue once real job description text is supplied, guaranteeing the analysis always runs on the actual JD content. |
 | 3. Run ATS analysis | Candidate clicks **Evaluate me against the JD**. | Lambda analyses the CV + JD, generating ATS scores (Layout & Searchability, Readability, Impact, Crispness, Other Metrics) and alignment data (designation deltas, experience gaps, skill/task matches, certifications, highlights). | The dashboard surfaces quantified fit, missing elements, and probability of selection so the candidate understands current readiness. |
 | 4. Apply improvements | Candidate uses **Improve** on specific sections or **Improve All**. | AI suggestions rewrite summaries, add skills, realign designations, adjust experience narratives, and highlight certifications. Accept/reject toggles persist the chosen edits and instantly update the working draft. | The résumé content evolves in-app with an audit trail explaining each enhancement, keeping the candidate in control of every accepted change. |
 | 5. Re-evaluate and download deliverables | Candidate re-runs **Evaluate me against the JD** after accepting edits, then downloads regenerated assets. | The portal recalculates ATS scores on demand so candidates can see how each round of edits shifts readiness before exporting the enhanced ATS-ready CV PDFs (2025 design), tailored cover letter, and change log. Only the latest artefacts for the current session are retained so storage stays lean without background cleanup jobs. | Candidates iterate until satisfied, leave with ready-to-submit documents, and understand how the iterative improvements boosted hiring odds. |
@@ -282,6 +282,8 @@ This command invokes Vite to emit the production client into `client/dist` and b
 inside `dist/lambda`. Each artifact directory includes a `build-info.json` file that captures the Git SHA and build timestamp
 for traceability. Individual steps remain available through `npm run build:client` and `npm run build:lambda`.
 
+Use `npm run build:all` (or `make build-all`) to wipe previous artifacts via `npm run clean` before rebuilding. Running `npm run clean` on its own removes cached coverage reports, stale SAM builds, and old client bundles so subsequent builds start from a pristine workspace.
+
 ### Post-deployment verification
 
 1. Confirm that the CloudFormation outputs include `ApiBaseUrl`. This is the canonical URL for the deployed serverless API.
@@ -311,6 +313,21 @@ for traceability. Individual steps remain available through `npm run build:clien
    ```
 5. The client issues requests to `/api`. During development the Vite dev server proxies these paths to `http://localhost:3000`.
    If the backend runs elsewhere (e.g., in production), set `VITE_API_BASE_URL` to the server's base URL before starting the client.
+
+### Command quick reference
+
+| Flow | npm script | Makefile target |
+| --- | --- | --- |
+| Clean generated artifacts | `npm run clean` | `make clean` |
+| Lint only | `npm run lint` | `make lint` |
+| Auto-fix lint issues | `npm run fix` | `make lint-fix` |
+| Run unit + integration + e2e + template tests | `npm run verify` | `make verify` |
+| Execute only API/integration tests | `npm run test:api` | `make test-api` |
+| Execute end-to-end flows | `npm run test:e2e` | `make test-e2e` |
+| Run template regression suite | `npm run test:templates` | `make test-templates` |
+| Build Lambda + client bundles | `npm run build` | `make build` |
+| Build after cleaning | `npm run build:all` | `make build-all` |
+| Deploy with cached SAM layers | `npm run deploy:sam` | `make deploy` |
 
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
@@ -347,12 +364,15 @@ Automated testing and deployment run through the `CI and Deploy` workflow. It ex
 
 ### What the workflow does
 
-1. Checks out the repository and installs Node.js 18.
-2. Installs dependencies and runs the Jest test suite for the Express server.
-3. Installs client dependencies and builds the Vite bundle to verify the frontend compiles cleanly.
-4. On pushes to `main`, validates that all required AWS credentials are present as GitHub repository secrets. Missing values cause the workflow to fail immediately with a descriptive error message.
-5. Configures the AWS CLI using the provided access key and secret key, validates the template with `sam validate`, builds the AWS SAM package, and deploys the CloudFormation stack using `sam deploy --resolve-s3`.
-6. Before deployment, checks whether the configured S3 bucket and DynamoDB table already exist. If they do, the workflow automatically passes `CreateDataBucket=false` and/or `CreateResumeTable=false` so CloudFormation reuses the resources instead of failing with `AlreadyExists` errors.
+1. Checks out the repository, runs `npm run clean`, and installs Node.js 18 with npm caching enabled.
+2. Installs dependencies and runs `npm run verify`, which covers linting, unit, integration, end-to-end, and template regression suites.
+3. Installs client dependencies and performs security audits for both server and client packages.
+4. Builds the SAM application with `sam build --cached --parallel`, ensuring Lambda layers and dependencies reuse cached artifacts between runs.
+5. Removes local AWS credential files so the cache never persists secrets.
+6. Builds the Vite bundle to verify the frontend compiles cleanly and uploads the artifact for PR inspection.
+7. On pushes to `main`, validates that all required AWS credentials are present as GitHub repository secrets. Missing values cause the workflow to fail immediately with a descriptive error message.
+8. Configures the AWS CLI using the provided access key and secret key, validates the template with `sam validate`, builds the AWS SAM package, and deploys the CloudFormation stack using `sam deploy --resolve-s3`.
+9. Before deployment, checks whether the configured S3 bucket and DynamoDB table already exist. If they do, the workflow automatically passes `CreateDataBucket=false` and/or `CreateResumeTable=false` so CloudFormation reuses the resources instead of failing with `AlreadyExists` errors.
 
 ### Required GitHub repository secrets
 

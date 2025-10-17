@@ -1,71 +1,78 @@
-build-ClientAppFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function ClientAppFunction
+SHELL := /bin/bash
 
-clean-ClientAppFunction:
-	rm -rf $(ARTIFACTS_DIR)
+.PHONY: help install clean lint lint-fix test test-api test-e2e test-templates verify build build-all build-client build-lambda dev deploy sam-build sam-deploy coverage
 
-build-ResumeForgeFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function ResumeForgeFunction
+help:
+	@echo "Available targets:"
+	@echo "  install        Install root and client dependencies"
+	@echo "  clean          Remove generated build, coverage, and SAM artifacts"
+	@echo "  lint           Run eslint across the monorepo"
+	@echo "  lint-fix       Auto-fix lint violations where possible"
+	@echo "  test           Execute the full Jest suite"
+	@echo "  test-api       Run API/integration tests"
+	@echo "  test-e2e       Run end-to-end flows"
+	@echo "  test-templates Run regression coverage for document templates"
+	@echo "  verify         Run lint + unit/integration/e2e/template tests"
+	@echo "  build          Build client and lambda bundles"
+	@echo "  build-all      Clean and rebuild everything"
+	@echo "  build-client   Build the React client bundle"
+	@echo "  build-lambda   Build serverless functions"
+	@echo "  dev            Start the local API server"
+	@echo "  deploy         Build & deploy with SAM using cached layers"
+	@echo "  sam-build      Run 'sam build --cached --parallel'"
+	@echo "  sam-deploy     Run 'sam deploy' with current configuration"
+	@echo "  coverage       Run tests with coverage output"
 
-clean-ResumeForgeFunction:
-	rm -rf $(ARTIFACTS_DIR)
+install:
+	npm ci && cd client && npm ci
 
-build-JobEvaluationFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function JobEvaluationFunction
+clean:
+	npm run clean
 
-clean-JobEvaluationFunction:
-	rm -rf $(ARTIFACTS_DIR)
+lint:
+	npm run lint
 
-build-ScoringFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function ScoringFunction
+lint-fix:
+	npm run fix
 
-clean-ScoringFunction:
-	rm -rf $(ARTIFACTS_DIR)
+test:
+	npm run test
 
-build-EnhancementFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function EnhancementFunction
+test-api:
+	npm run test:api
 
-clean-EnhancementFunction:
-	rm -rf $(ARTIFACTS_DIR)
+test-e2e:
+	npm run test:e2e
 
-build-DocumentGenerationFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function DocumentGenerationFunction
+test-templates:
+	npm run test:templates
 
-clean-DocumentGenerationFunction:
-	rm -rf $(ARTIFACTS_DIR)
+verify:
+	npm run verify
 
-build-DocumentGenerationWorkerFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function DocumentGenerationWorkerFunction
+build:
+	npm run build
 
-clean-DocumentGenerationWorkerFunction:
-	rm -rf $(ARTIFACTS_DIR)
+build-all:
+	npm run build:all
 
-build-WorkflowScoreFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function WorkflowScoreFunction
+build-client:
+	npm run build:client
 
-clean-WorkflowScoreFunction:
-	rm -rf $(ARTIFACTS_DIR)
+build-lambda:
+	npm run build:lambda
 
-build-WorkflowEnhancementSectionFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function WorkflowEnhancementSectionFunction
+dev:
+	npm run dev
 
-clean-WorkflowEnhancementSectionFunction:
-	rm -rf $(ARTIFACTS_DIR)
+deploy:
+	npm run deploy:sam
 
-build-WorkflowCombineFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function WorkflowCombineFunction
+sam-build:
+	sam build --cached --parallel
 
-clean-WorkflowCombineFunction:
-	rm -rf $(ARTIFACTS_DIR)
+sam-deploy:
+	sam deploy
 
-build-WorkflowGenerateFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function WorkflowGenerateFunction
-
-clean-WorkflowGenerateFunction:
-	rm -rf $(ARTIFACTS_DIR)
-
-build-AuditingFunction:
-	node scripts/build-lambda.mjs --outdir $(ARTIFACTS_DIR) --function AuditingFunction
-
-clean-AuditingFunction:
-	rm -rf $(ARTIFACTS_DIR)
+coverage:
+	npm run test -- --coverage

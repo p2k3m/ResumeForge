@@ -5152,15 +5152,16 @@ function App() {
           fallback: fallbackMessage,
           status: response.status
         })
-        const manualRequired = data?.error?.details?.manualInputRequired === true
-        const fetchReason = typeof data?.error?.details?.reason === 'string' ? data.error.details.reason : ''
+        const detailField = typeof data?.error?.details?.field === 'string' ? data.error.details.field : ''
+        const manualRequired =
+          data?.error?.details?.manualInputRequired === true ||
+          errorCode === 'JOB_DESCRIPTION_REQUIRED' ||
+          detailField === 'manualJobDescription'
         let message = resolvedMessage
         if (manualRequired) {
           setManualJobDescriptionRequired(true)
           manualJobDescriptionRef.current?.focus?.()
-          if (fetchReason && fetchReason.toUpperCase() === 'FETCH_BLOCKED') {
-            message = 'Paste the full job description to continue.'
-          }
+          message = 'Paste the full job description to continue.'
         }
         if (!isFriendly && errorCode && errorCode !== 'PROCESSING_FAILED') {
           message = `${message} (${errorCode})`

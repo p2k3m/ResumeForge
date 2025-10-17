@@ -6,6 +6,10 @@ import {
 } from './lib/retry.js';
 import { randomBytes, randomUUID } from 'crypto';
 import { withEnvironmentTagging } from './config/environment.js';
+import {
+  withRequiredLogAttributes,
+  withRequiredLogMetadata,
+} from './lib/logging/attributes.js';
 
 async function streamToString(stream) {
   return await new Promise((resolve, reject) => {
@@ -25,17 +29,28 @@ export async function logEvent({
   level = 'info',
   message,
   metadata,
+  template,
+  session,
+  build,
+  artifactType,
 }) {
-  const entry = {
-    timestamp: new Date().toISOString(),
-    jobId,
-    event,
-    level
-  };
-  if (message) entry.message = message;
-  if (metadata && typeof metadata === 'object' && Object.keys(metadata).length) {
-    entry.metadata = metadata;
-  }
+  const contextHints = { jobId, template, session, build, artifactType };
+  const baseMetadata =
+    metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+      ? metadata
+      : {};
+  const resolvedMetadata = withRequiredLogMetadata(baseMetadata, contextHints);
+  const entry = withRequiredLogAttributes(
+    {
+      timestamp: new Date().toISOString(),
+      jobId,
+      event,
+      level,
+      ...(message ? { message } : {}),
+      metadata: resolvedMetadata,
+    },
+    contextHints
+  );
 
   let existing = '';
   try {
@@ -130,10 +145,20 @@ export async function logErrorTrace({
       ? key.trim()
       : `${safePrefix}${dateSegment}/${tsSegment}-${requestSegment}.json`;
 
-  const payload = {
-    ...entry,
-    timestamp: resolvedTimestamp,
-  };
+  const payload = withRequiredLogAttributes(
+    {
+      ...entry,
+      timestamp: resolvedTimestamp,
+    },
+    {
+      jobId: entry?.jobId,
+      template: entry?.template,
+      session: entry?.session,
+      build: entry?.build,
+      artifactType: entry?.artifactType,
+      metadata: entry?.metadata,
+    }
+  );
 
   await executeWithRetry(
     () =>
