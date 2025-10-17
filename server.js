@@ -20203,10 +20203,14 @@ app.post(
   const applicantName = extractName(text);
   const sanitizedName = sanitizeName(applicantName) || 'candidate';
   const storedApplicantName = normalizePersonalData(applicantName);
-  const storedLinkedIn = normalizePersonalData(
-    initialContactDetails.linkedin || profileIdentifier
+  const resumeLinkedIn = normalizePersonalData(initialContactDetails.linkedin);
+  const profileIdentifierNormalized = normalizePersonalData(profileIdentifier);
+  const storedLinkedIn = resumeLinkedIn || profileIdentifierNormalized;
+  const submittedLinkedInNormalized = normalizePersonalData(linkedinProfileUrlInput);
+  const hasExplicitLinkedInIdentifier = Boolean(
+    resumeLinkedIn || submittedLinkedInNormalized
   );
-  if (storedLinkedIn) {
+  if (hasExplicitLinkedInIdentifier && storedLinkedIn) {
     placeholderIdentifier = storedLinkedIn;
   }
   const storedIpAddress = normalizePersonalData(ipAddress);
