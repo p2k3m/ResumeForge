@@ -6806,24 +6806,23 @@ function determineUploadContentType(file) {
   const normalizedType = normalizeMimeTypeValue(mimetype);
   const extensionType = guessMimeTypeFromName(originalname);
 
+  const normalizedExtensionIsPdf = extensionType === 'application/pdf';
+  const normalizedMimeIsPdf = normalizedType === 'application/pdf';
+
   if (sniffPdfSignature(buffer)) {
     return 'application/pdf';
   }
 
-  if (normalizedType === 'application/pdf') {
-    return fallbackType;
+  if (normalizedMimeIsPdf || normalizedExtensionIsPdf) {
+    return 'application/pdf';
   }
 
   if (normalizedType && !GENERIC_MIME_TYPES.has(normalizedType)) {
     return normalizedType;
   }
 
-  if (extensionType && extensionType !== 'application/pdf') {
+  if (extensionType && !normalizedExtensionIsPdf) {
     return extensionType;
-  }
-
-  if (extensionType === 'application/pdf') {
-    return fallbackType;
   }
 
   if (normalizedType) {
@@ -19560,11 +19559,13 @@ app.post(
       sessionSegment,
     });
 
+    const incomingPrefix = `${ensureTrailingSlash(sessionPrefix)}incoming/`;
+
     req.resumeUploadContext = {
       bucket,
-      key: `${sessionPrefix}original.pdf`,
+      key: `${incomingPrefix}original.pdf`,
       contentType: 'application/octet-stream',
-      sessionPrefix,
+      sessionPrefix: incomingPrefix,
       finalSessionPrefix: sessionPrefix,
       ownerSegment,
       sessionSegment,
