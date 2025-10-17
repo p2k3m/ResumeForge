@@ -20556,7 +20556,7 @@ app.post(
         new GetItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey, sessionId',
+          ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey',
         })
       );
       const previousItem = previousRecord.Item || {};
