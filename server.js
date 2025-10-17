@@ -8572,14 +8572,44 @@ async function generatePdfWithFallback({
         ...baseFallbackLog,
         forcedFallback,
       });
-      const fallbackBuffer = await generatePlainPdfFallback(fallbackPayload);
+      const fallbackResult = await generatePlainPdfFallback(fallbackPayload);
+      const normalizedFallbackBuffer = (() => {
+        if (Buffer.isBuffer(fallbackResult)) {
+          return fallbackResult;
+        }
+        if (fallbackResult instanceof Uint8Array) {
+          return Buffer.from(fallbackResult);
+        }
+        return null;
+      })();
+      if (
+        !normalizedFallbackBuffer ||
+        normalizedFallbackBuffer.length === 0 ||
+        !sniffPdfSignature(normalizedFallbackBuffer)
+      ) {
+        const invalidFallbackError = new Error(
+          'Plain fallback produced an invalid PDF buffer.'
+        );
+        invalidFallbackError.code = 'INVALID_PLAIN_PDF_BUFFER';
+        invalidFallbackError.bufferType =
+          fallbackResult && typeof fallbackResult === 'object'
+            ? fallbackResult.constructor?.name
+            : typeof fallbackResult;
+        if (
+          Buffer.isBuffer(fallbackResult) ||
+          fallbackResult instanceof Uint8Array
+        ) {
+          invalidFallbackError.bufferLength = fallbackResult.length;
+        }
+        throw invalidFallbackError;
+      }
       logStructured('info', 'pdf_generation_plain_fallback_succeeded', {
         ...baseFallbackLog,
-        bytes: fallbackBuffer.length,
+        bytes: normalizedFallbackBuffer.length,
         forcedFallback,
       });
       return {
-        buffer: fallbackBuffer,
+        buffer: normalizedFallbackBuffer,
         template: fallbackTemplateId,
         messages,
       };
