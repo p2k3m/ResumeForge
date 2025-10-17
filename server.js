@@ -19548,28 +19548,33 @@ app.post(
     const sessionSegment =
       sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
       sanitizeS3KeyComponent(`session-${createIdentifier()}`);
-    const ownerSegment =
-      sanitizeS3KeyComponent(res.locals.userId, { fallback: 'candidate' }) ||
-      'candidate';
-    const sessionPrefix = `cv/${ownerSegment}/${sessionSegment}/`;
+    const ownerSegment = resolveDocumentOwnerSegment({
+      userId: res.locals.userId,
+    });
     const dateSegment = new Date().toISOString().slice(0, 10);
-    const incomingPrefix = `${jobId}/incoming/${dateSegment}/`;
+    const jobSegment = sanitizeJobSegment(jobId);
+    const sessionPrefix = buildDocumentSessionPrefix({
+      ownerSegment,
+      dateSegment,
+      jobSegment,
+      sessionSegment,
+    });
 
     req.resumeUploadContext = {
       bucket,
-      key: `${incomingPrefix}original.pdf`,
+      key: `${sessionPrefix}original.pdf`,
       contentType: 'application/octet-stream',
-      sessionPrefix: incomingPrefix,
-      incomingPrefix,
+      sessionPrefix,
       finalSessionPrefix: sessionPrefix,
       ownerSegment,
       sessionSegment,
       dateSegment,
     };
 
-    res.locals.initialSessionPrefix = incomingPrefix;
+    res.locals.initialSessionPrefix = sessionPrefix;
     res.locals.sessionPrefix = sessionPrefix;
     res.locals.sessionSegment = sessionSegment;
+    res.locals.resumeOwnerSegment = ownerSegment;
     res.locals.uploadBucket = bucket;
     res.locals.uploadLogContext = logContext;
     res.locals.secrets = secrets;
@@ -19611,7 +19616,7 @@ app.post(
 
       const bucketName = bucket;
       const sessionPrefixForLogs =
-        req.resumeUploadContext?.sessionPrefix || incomingPrefix;
+        req.resumeUploadContext?.sessionPrefix || sessionPrefix;
       const failureLogKey = `${sessionPrefixForLogs}logs/processing.jsonl`;
       const reason = err.message || 'initial S3 upload failed';
 
@@ -19903,11 +19908,21 @@ app.post(
   const storedFileType =
     req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
   const uploadContext = req.resumeUploadContext || {};
+  const fallbackOwnerSegment =
+    uploadContext.ownerSegment ||
+    res.locals.resumeOwnerSegment ||
+    resolveDocumentOwnerSegment({ userId });
+  const fallbackSessionPrefix = buildDocumentSessionPrefix({
+    ownerSegment: fallbackOwnerSegment,
+    dateSegment: date,
+    jobSegment: sanitizeJobSegment(jobId),
+    sessionSegment,
+  });
   const initialSessionPrefix =
     uploadContext.sessionPrefix ||
-    uploadContext.incomingPrefix ||
+    res.locals.sessionPrefix ||
     res.locals.initialSessionPrefix ||
-    `${jobId}/incoming/${date}/`;
+    fallbackSessionPrefix;
   let originalUploadKey =
     (typeof req.file?.key === 'string' && req.file.key) ||
     `${initialSessionPrefix}original.pdf`;
@@ -20124,6 +20139,12 @@ app.post(
       return false;
     }
   };
+
+  if (placeholderIdentifier && !placeholderRecordIdentifier) {
+    if (await writePlaceholderRecord(placeholderIdentifier)) {
+      placeholderRecordIdentifier = placeholderIdentifier;
+    }
+  }
 
   let text;
   try {
