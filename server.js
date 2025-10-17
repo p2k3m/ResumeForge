@@ -20206,7 +20206,7 @@ app.post(
   const storedLinkedIn = normalizePersonalData(
     initialContactDetails.linkedin || profileIdentifier
   );
-  if (storedLinkedIn && !placeholderIdentifier) {
+  if (storedLinkedIn) {
     placeholderIdentifier = storedLinkedIn;
   }
   const storedIpAddress = normalizePersonalData(ipAddress);
