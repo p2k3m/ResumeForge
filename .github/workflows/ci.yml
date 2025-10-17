@@ -29,6 +29,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Clean workspace artifacts
+        run: npm run clean || true
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -41,14 +44,8 @@ jobs:
       - name: Install server dependencies
         run: npm ci
 
-      - name: Lint codebase
-        run: npm run lint
-
-      - name: Run unit tests
-        run: npm run test:unit
-
-      - name: Run integration tests
-        run: npm run test:integration
+      - name: Verify code quality and tests
+        run: npm run verify
 
       - name: Security audit (server)
         run: npm audit --omit=dev --audit-level=critical
@@ -75,7 +72,10 @@ jobs:
             sam-${{ runner.os }}-
 
       - name: Build serverless application
-        run: sam build
+        run: sam build --cached --parallel
+
+      - name: Remove AWS credential cache artifacts
+        run: rm -rf ~/.aws/credentials ~/.aws/config || true
 
       - name: Build client bundle
         run: npm run build

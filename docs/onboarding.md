@@ -5,7 +5,7 @@ This primer helps new teammates explain ResumeForge to "regular" users — candi
 ## Quick narrative of the candidate loop
 
 1. **Upload a résumé** – Candidates drop a PDF/DOC/DOCX file into the portal. The app validates the file immediately so users either move forward with confidence or see a blocking message that explains how to fix the issue.
-2. **Provide the job description** – The system fetches the posting when a URL is supplied. If the scrape fails or automation is blocked, the candidate pastes the text manually. Either way, the flow pauses here until the full job description is available.
+2. **Paste the job description** – Candidates must paste the full vacancy text directly into the form. URLs are rejected so we never rely on brittle scraping or third-party authentication. The flow pauses here until non-empty text is supplied, guaranteeing the downstream analysis always has the authoritative job description.
 3. **Evaluate** – Clicking **Evaluate me against the JD** runs the ATS analysis on the uploaded résumé plus the captured job description, surfacing alignment scores, probability of selection, and highlighted gaps.
 4. **Accept or reject improvements** – Candidates choose which AI suggestions to apply section by section (or all at once). Every choice updates the working draft immediately while preserving a change log for transparency.
 5. **Re-run the analysis** – With each accepted edit, the candidate can trigger **Evaluate me against the JD** again to see how the scores shift. They repeat steps 4–5 until satisfied with the ATS outcome.
@@ -22,3 +22,13 @@ This primer helps new teammates explain ResumeForge to "regular" users — candi
 
 - **Candidate journey details:** [`docs/user-journey.md`](./user-journey.md) provides a step-by-step view with behind-the-scenes notes.
 - **System internals:** The main [README](../README.md) covers architecture, configuration, and deployment practices.
+
+## Key API touchpoints in the onboarding loop
+
+| Step | Endpoint | Purpose |
+| --- | --- | --- |
+| Upload résumé | `POST /api/process-cv` | Stores the résumé, manual job description, and session metadata. Kicks off scoring and orchestration events. |
+| Evaluate fit | `POST /api/score-match` | Runs ATS scoring against the pasted job description for the current session. |
+| Apply improvements | `POST /api/enhance-all` and section-specific `POST /api/improve-*` routes | Generates targeted rewrites that the candidate can accept or reject. |
+| Regenerate deliverables | `POST /api/generate-enhanced-docs` | Produces refreshed résumé variants and cover letters, tagging each artifact with template and session metadata. |
+| Download artifacts | `POST /api/refresh-download-link` | Issues signed URLs for the current session’s files so the candidate can download the final package. |

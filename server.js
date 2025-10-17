@@ -108,6 +108,7 @@ import { createTextDigest } from './lib/resume/utils.js';
 import { createVersionedPrompt, PROMPT_TEMPLATES } from './lib/llm/templates.js';
 import { resolveServiceForRoute } from './microservices/services.js';
 import { stripUploadMetadata } from './lib/uploads/metadata.js';
+import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 
 const extractText = extractResumeText;
 const classifyDocument = classifyResumeDocument;
@@ -1007,9 +1008,6 @@ const parsePositiveInt = (value) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 };
 
-const JOB_DESCRIPTION_WAIT_MS =
-  parsePositiveInt(process.env.JOB_DESCRIPTION_WAIT_MS) ?? (isTestEnvironment ? 0 : 1000);
-
 const DYNAMO_TABLE_POLL_INTERVAL_MS =
   parsePositiveInt(process.env.DYNAMO_TABLE_POLL_INTERVAL_MS) ?? (isTestEnvironment ? 25 : 1000);
 
@@ -1568,12 +1566,15 @@ function logStructured(level, message, context = {}) {
   if (!shouldLog(level)) {
     return;
   }
-  const payload = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    ...context,
-  };
+  const payload = withRequiredLogAttributes(
+    {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      ...context,
+    },
+    context
+  );
   if (payload.requestId && payload.userId === undefined) {
     const contextMatch = getRequestContext(payload.requestId);
     if (contextMatch?.userId) {
@@ -5216,28 +5217,6 @@ async function runTargetedImprovement(type, context = {}) {
   };
 }
 
-class JobDescriptionFetchBlockedError extends Error {
-  constructor(message = 'Job description fetch blocked', options = {}) {
-    super(message);
-    this.name = 'JobDescriptionFetchBlockedError';
-    this.code = 'FETCH_BLOCKED';
-    this.reason = 'FETCH_BLOCKED';
-    this.manualInputRequired = true;
-    if (options.status) {
-      this.status = options.status;
-    }
-    if (options.code) {
-      this.upstreamCode = options.code;
-    }
-    if (options.url) {
-      this.url = options.url;
-    }
-    if (options.cause) {
-      this.cause = options.cause;
-    }
-  }
-}
-
 async function sendS3CommandWithRetry(
   s3Client,
   commandFactory,
@@ -5278,124 +5257,6 @@ async function sendS3CommandWithRetry(
       });
     },
   });
-}
-
-function isJobDescriptionFetchBlocked(err = {}) {
-  if (err instanceof JobDescriptionFetchBlockedError) {
-    return true;
-  }
-
-  if (err && err.manualInputRequired) {
-    return true;
-  }
-
-  const code = typeof err.code === 'string' ? err.code.toUpperCase() : '';
-  if (code.includes('BLOCKED') || code === 'ERR_NETWORK' || code === 'ECONNREFUSED') {
-    return true;
-  }
-
-  const status = err?.response?.status ?? err?.statusCode;
-  if (typeof status === 'number' && [401, 403, 407, 429, 451].includes(status)) {
-    return true;
-  }
-
-  const message = typeof err?.message === 'string' ? err.message.toLowerCase() : '';
-  if (!message) {
-    return false;
-  }
-
-  return (
-    message.includes('forbidden') ||
-    message.includes('access denied') ||
-    message.includes('blocked') ||
-    message.includes('captcha') ||
-    message.includes('authorization')
-  );
-}
-
-function toJobDescriptionFetchError(err, context = {}) {
-  if (err instanceof JobDescriptionFetchBlockedError) {
-    return err;
-  }
-
-  if (isJobDescriptionFetchBlocked(err)) {
-    return new JobDescriptionFetchBlockedError('Job description fetch was blocked', {
-      status: err?.response?.status ?? err?.statusCode,
-      code: typeof err?.code === 'string' ? err.code : undefined,
-      url: context.url,
-      cause: err,
-    });
-  }
-
-  return err;
-}
-
-async function scrapeJobDescription(url, options = {}) {
-  if (!url) throw new Error('Job description URL is required');
-
-  const { maxAttempts = 3, timeout = 30000, waitUntil = 'networkidle2' } = options;
-  let lastError;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const browser = await getChromiumBrowser();
-      if (browser) {
-        const page = await browser.newPage();
-        try {
-          await page.goto(url, { waitUntil, timeout });
-          const waitMs = JOB_DESCRIPTION_WAIT_MS;
-          if (waitMs > 0) {
-            if (typeof page.waitForTimeout === 'function') {
-              await page.waitForTimeout(waitMs);
-            } else {
-              await sleep(waitMs);
-            }
-          }
-          const html = await page.content();
-          await page.close();
-          if (!html || !html.trim()) {
-            throw new Error('Job description page returned empty content');
-          }
-          return html;
-        } catch (err) {
-          const normalizedError = toJobDescriptionFetchError(err, { url });
-          try {
-            await page.close();
-          } catch {
-            /* ignore */
-          }
-          throw normalizedError;
-        }
-      }
-
-      const { data } = await axios.get(url, { timeout });
-      const html =
-        typeof data === 'string'
-          ? data
-          : typeof data?.toString === 'function'
-          ? data.toString()
-          : '';
-      if (!html.trim()) {
-        throw new Error('Job description response was empty');
-      }
-      return html;
-    } catch (err) {
-      const normalizedError = toJobDescriptionFetchError(err, { url });
-      if (normalizedError instanceof JobDescriptionFetchBlockedError) {
-        throw normalizedError;
-      }
-      lastError = normalizedError;
-      if (attempt < maxAttempts) {
-        const delay = 500 * 2 ** (attempt - 1);
-        await sleep(delay);
-        continue;
-      }
-    }
-  }
-
-  throw lastError || new Error('Failed to fetch job description');
-}
-
 function analyzeJobDescription(html) {
   const strip = (s) =>
     s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -21004,7 +20865,6 @@ export {
   mergeResumeWithLinkedIn,
   collectSectionText,
   rewriteSectionsWithGemini,
-  scrapeJobDescription,
   analyzeJobDescription,
   extractResumeSkills,
   generateProjectSummary,
@@ -21030,7 +20890,6 @@ export {
   classifyDocument,
   buildScoreBreakdown,
   enforceTargetedUpdate,
-  JobDescriptionFetchBlockedError,
   extractContactDetails,
   buildTemplateSectionContext,
   buildTemplateContactEntries,
