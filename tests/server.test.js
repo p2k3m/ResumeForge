@@ -218,8 +218,10 @@ describe('/api/process-cv', () => {
       'DescribeTableCommand',
       'GetItemCommand',
       'PutItemCommand',
+      'PutItemCommand',
       'UpdateItemCommand',
-      'UpdateItemCommand'
+      'UpdateItemCommand',
+      'DeleteItemCommand'
     ]);
 
     setupDefaultDynamoMock();
@@ -315,9 +317,9 @@ describe('/api/process-cv', () => {
       expect(cmd.key).toContain('/artifacts/');
     });
 
-    const putCall = mockDynamoSend.mock.calls.find(
-      ([cmd]) => cmd.__type === 'PutItemCommand'
-    );
+    const putCall = mockDynamoSend.mock.calls
+      .filter(([cmd]) => cmd.__type === 'PutItemCommand')
+      .find(([cmd]) => cmd.input?.Item?.candidateName);
     expect(putCall).toBeTruthy();
     expect(putCall[0].input.TableName).toBe('ResumeForge');
     expect(putCall[0].input.Item.linkedinProfileUrl.S).toBe(res2.body.jobId);
@@ -386,8 +388,10 @@ describe('/api/process-cv', () => {
       'DescribeTableCommand',
       'GetItemCommand',
       'PutItemCommand',
+      'PutItemCommand',
       'UpdateItemCommand',
-      'UpdateItemCommand'
+      'UpdateItemCommand',
+      'DeleteItemCommand'
     ]);
   });
 

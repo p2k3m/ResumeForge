@@ -24,6 +24,7 @@ const {
   GetItemCommand,
   PutItemCommand,
   UpdateItemCommand,
+  DeleteItemCommand,
 } = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -108,6 +109,7 @@ import { createTextDigest } from './lib/resume/utils.js';
 import { createVersionedPrompt, PROMPT_TEMPLATES } from './lib/llm/templates.js';
 import { resolveServiceForRoute } from './microservices/services.js';
 import { stripUploadMetadata } from './lib/uploads/metadata.js';
+import createS3StreamingStorage from './lib/uploads/s3StreamingStorage.js';
 import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 
 const extractText = extractResumeText;
@@ -153,6 +155,7 @@ const clientDistDir = path.join(clientDir, 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 let cachedClientIndexHtml;
 let clientAutoBuildAttempted = false;
+let s3Client;
 
 function ensureAxiosResponseInterceptor(client) {
   if (!client) return null;
@@ -2708,6 +2711,7 @@ if (clientAssetsAvailable()) {
 }
 
 const upload = multer({
+  storage: createS3StreamingStorage({ s3Client: () => s3Client }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const ext = (path.extname(file.originalname) || '').toLowerCase();
@@ -3189,7 +3193,7 @@ let configuredRegion =
 process.env.AWS_REGION = configuredRegion;
 
 let region = configuredRegion;
-let s3Client = new S3Client({ region });
+s3Client = new S3Client({ region });
 errorLogS3Client = s3Client;
 errorLogBucket =
   runtimeConfigSnapshot?.S3_BUCKET ||
@@ -10597,6 +10601,24 @@ async function streamToString(stream) {
     chunks.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
   }
   return chunks.join('');
+}
+
+async function streamToBuffer(stream) {
+  if (!stream) return Buffer.alloc(0);
+  if (Buffer.isBuffer(stream)) return stream;
+  if (typeof stream.arrayBuffer === 'function') {
+    const arrayBuffer = await stream.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+  const readable =
+    stream instanceof Readable || typeof stream[Symbol.asyncIterator] === 'function'
+      ? stream
+      : Readable.from(stream);
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
 
 function pruneStageMetadataValue(value) {
@@ -19482,7 +19504,67 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
 app.post(
   '/api/process-cv',
   assignJobContext,
-  (req, res, next) => {
+  async (req, res, next) => {
+    const jobId = req.jobId || createIdentifier();
+    res.locals.jobId = jobId;
+    captureUserContext(req, res);
+    const requestId = res.locals.requestId;
+    const userId = res.locals.userId;
+    const logContext = userId
+      ? { requestId, jobId, userId }
+      : { requestId, jobId };
+
+    let secrets;
+    let bucket;
+    try {
+      secrets = getSecrets();
+      bucket = secrets.S3_BUCKET;
+    } catch (err) {
+      const missing = extractMissingConfig(err);
+      logStructured('error', 'configuration_load_failed', {
+        ...logContext,
+        error: serializeError(err),
+        missing,
+      });
+      sendError(
+        res,
+        500,
+        'CONFIGURATION_ERROR',
+        describeConfigurationError(err),
+        missing.length ? { missing } : undefined
+      );
+      return;
+    }
+
+    if (!bucket) {
+      logStructured('error', 'upload_bucket_missing', logContext);
+      sendError(res, 500, 'STORAGE_UNAVAILABLE', S3_STORAGE_ERROR_MESSAGE);
+      return;
+    }
+
+    const sessionSegment =
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(`session-${createIdentifier()}`);
+    const ownerSegment =
+      sanitizeS3KeyComponent(res.locals.userId, { fallback: 'candidate' }) ||
+      'candidate';
+    const sessionPrefix = `cv/${ownerSegment}/${sessionSegment}/`;
+
+    req.resumeUploadContext = {
+      bucket,
+      key: `${sessionPrefix}original.pdf`,
+      contentType: 'application/octet-stream',
+      sessionPrefix,
+      ownerSegment,
+      sessionSegment,
+    };
+
+    res.locals.sessionPrefix = sessionPrefix;
+    res.locals.sessionSegment = sessionSegment;
+    res.locals.uploadBucket = bucket;
+    res.locals.uploadLogContext = logContext;
+    res.locals.secrets = secrets;
+
     uploadResume(req, res, (err) => {
       if (err) {
         logStructured('warn', 'resume_upload_failed', {
@@ -19490,7 +19572,7 @@ app.post(
           jobId: res.locals.jobId,
           error: serializeError(err),
         });
-        return sendError(
+        sendError(
           res,
           400,
           'UPLOAD_VALIDATION_FAILED',
@@ -19500,46 +19582,32 @@ app.post(
             originalName: req.file?.originalname,
           }
         );
+        return;
       }
       next();
     });
   },
   async (req, res) => {
-  const jobId = req.jobId || createIdentifier();
-  res.locals.jobId = jobId;
-  captureUserContext(req, res);
+  const jobId = res.locals.jobId || req.jobId || createIdentifier();
   const requestId = res.locals.requestId;
   const userId = res.locals.userId;
-  const logContext = userId
-    ? { requestId, jobId, userId }
-    : { requestId, jobId };
+  const logContext =
+    res.locals.uploadLogContext ||
+    (userId ? { requestId, jobId, userId } : { requestId, jobId });
   const activeServiceKey =
     typeof res.locals.activeService === 'string' ? res.locals.activeService : '';
   const isUploadMicroservice = activeServiceKey === 'resumeUpload';
   const sessionSegment =
+    res.locals.sessionSegment ||
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
-    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
+      sanitizeS3KeyComponent(`session-${createIdentifier()}`);
   const date = new Date().toISOString().slice(0, 10);
   const s3 = s3Client;
-  let bucket;
-  let secrets;
-  try {
-    secrets = getSecrets();
-    bucket = secrets.S3_BUCKET;
-  } catch (err) {
-    const missing = extractMissingConfig(err);
-    logStructured('error', 'configuration_load_failed', {
-      ...logContext,
-      error: serializeError(err),
-      missing,
-    });
-    return sendError(
-      res,
-      500,
-      'CONFIGURATION_ERROR',
-      describeConfigurationError(err),
-      missing.length ? { missing } : undefined
-    );
+  const bucket = res.locals.uploadBucket;
+  const secrets = res.locals.secrets || {};
+  if (!bucket) {
+    logStructured('error', 'upload_bucket_missing', logContext);
+    return sendError(res, 500, 'STORAGE_UNAVAILABLE', S3_STORAGE_ERROR_MESSAGE);
   }
 
   const dynamo = new DynamoDBClient({ region });
@@ -19758,10 +19826,16 @@ app.post(
   const normalizedExt = ext || '.pdf';
   const storedFileType =
     req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
-  const temporaryPrefix = `${jobId}/incoming/${date}/`;
-  let originalUploadKey = `${temporaryPrefix}original${normalizedExt}`;
+  const uploadContext = req.resumeUploadContext || {};
+  const initialSessionPrefix =
+    uploadContext.sessionPrefix ||
+    res.locals.sessionPrefix ||
+    `${jobId}/incoming/${date}/`;
+  let originalUploadKey =
+    (typeof req.file?.key === 'string' && req.file.key) ||
+    `${initialSessionPrefix}original.pdf`;
   const initialUploadKey = originalUploadKey;
-  let logKey = `${temporaryPrefix}logs/processing.jsonl`;
+  let logKey = `${initialSessionPrefix}logs/processing.jsonl`;
   const originalContentType = determineUploadContentType(req.file);
   if (originalContentType !== req.file.mimetype) {
     logStructured('warn', 'initial_upload_content_type_adjusted', {
@@ -19770,6 +19844,38 @@ app.post(
       normalizedContentType: originalContentType,
     });
   }
+
+  let uploadedFileBuffer;
+  try {
+    const downloadResponse = await sendS3CommandWithRetry(
+      s3,
+      () => new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+      {
+        maxAttempts: 3,
+        baseDelayMs: 300,
+        maxDelayMs: 2500,
+        retryLogEvent: 'initial_upload_download_retry',
+        retryLogContext: { ...logContext, bucket, key: originalUploadKey },
+      }
+    );
+    uploadedFileBuffer = await streamToBuffer(downloadResponse.Body);
+  } catch (err) {
+    logStructured('error', 'initial_upload_download_failed', {
+      ...logContext,
+      bucket,
+      key: originalUploadKey,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'INITIAL_UPLOAD_FAILED',
+      S3_STORAGE_ERROR_MESSAGE,
+      { bucket, reason: err?.message || 'Unable to read uploaded file.' }
+    );
+  }
+
+  req.file.buffer = uploadedFileBuffer;
 
   let sanitizedUploadBuffer = req.file.buffer;
   try {
@@ -19858,6 +19964,53 @@ app.post(
   const userAgent = req.headers['user-agent'] || '';
   const locationMeta = extractLocationMetadata(req);
   const { browser, os, device } = await parseUserAgent(userAgent);
+  const safeRequestId =
+    typeof requestId === 'string' && requestId.trim()
+      ? requestId.trim()
+      : String(requestId || '');
+  const initialIdentifier = normalizePersonalData(
+    profileIdentifier || requestId || jobId
+  );
+  const initialTimestamp = new Date().toISOString();
+  const initialS3Location = `s3://${bucket}/${originalUploadKey}`;
+
+  try {
+    await ensureTableExists();
+    await dynamo.send(
+      new PutItemCommand({
+        TableName: tableName,
+        Item: {
+          linkedinProfileUrl: { S: initialIdentifier },
+          timestamp: { S: initialTimestamp },
+          uploadedAt: { S: initialTimestamp },
+          requestId: { S: safeRequestId },
+          jobId: { S: jobId },
+          ipAddress: { S: normalizePersonalData(ipAddress) },
+          userAgent: { S: normalizePersonalData(userAgent) },
+          os: { S: os },
+          browser: { S: browser },
+          device: { S: device },
+          location: { S: locationMeta.label || 'Unknown' },
+          locationCity: { S: locationMeta.city || '' },
+          locationRegion: { S: locationMeta.region || '' },
+          locationCountry: { S: locationMeta.country || '' },
+          s3Bucket: { S: bucket },
+          s3Key: { S: originalUploadKey },
+          s3Url: { S: initialS3Location },
+        },
+      })
+    );
+    logStructured('info', 'dynamo_upload_metadata_written', {
+      ...logContext,
+      bucket,
+      key: originalUploadKey,
+    });
+  } catch (err) {
+    logStructured('warn', 'dynamo_upload_metadata_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+  }
 
   let text;
   try {
@@ -20066,10 +20219,6 @@ app.post(
   const s3Location = `s3://${bucket}/${originalUploadKey}`;
   const locationLabel = locationMeta.label || 'Unknown';
 
-  const safeRequestId =
-    typeof requestId === 'string' && requestId.trim()
-      ? requestId.trim()
-      : String(requestId || '');
   try {
     await ensureTableExists();
 
@@ -20182,6 +20331,27 @@ app.post(
         bucket,
         key: metadataKey,
       });
+    }
+
+    if (initialIdentifier && initialIdentifier !== storedLinkedIn) {
+      try {
+        await dynamo.send(
+          new DeleteItemCommand({
+            TableName: tableName,
+            Key: { linkedinProfileUrl: { S: initialIdentifier } },
+          })
+        );
+        logStructured('info', 'dynamo_initial_metadata_removed', {
+          ...logContext,
+          removedKey: initialIdentifier,
+        });
+      } catch (cleanupErr) {
+        logStructured('warn', 'dynamo_initial_metadata_remove_failed', {
+          ...logContext,
+          removedKey: initialIdentifier,
+          error: serializeError(cleanupErr),
+        });
+      }
     }
 
     const cleanupBucket = previousSessionChangeLogBucket || bucket;
