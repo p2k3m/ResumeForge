@@ -1,6 +1,20 @@
 SHELL := /bin/bash
 
-.PHONY: help install clean lint lint-fix test test-api test-e2e test-templates verify build build-all build-client build-lambda dev deploy sam-build sam-deploy coverage
+LAMBDA_FUNCTIONS := \
+	ResumeForgeFunction \
+	ClientAppFunction \
+	JobEvaluationFunction \
+	ScoringFunction \
+	EnhancementFunction \
+	DocumentGenerationFunction \
+	DocumentGenerationWorkerFunction \
+	WorkflowScoreFunction \
+	WorkflowEnhancementSectionFunction \
+	WorkflowCombineFunction \
+	WorkflowGenerateFunction \
+	AuditingFunction
+
+.PHONY: help install clean lint lint-fix test test-api test-e2e test-templates verify build build-all build-client build-lambda dev deploy sam-build sam-deploy coverage $(addprefix build-,$(LAMBDA_FUNCTIONS))
 
 help:
 	@echo "Available targets:"
@@ -76,3 +90,11 @@ sam-deploy:
 
 coverage:
 	npm run test -- --coverage
+
+define SAM_BUILD_TARGET
+build-$(1):
+	@echo "Building $(1) via SAM custom Makefile target"
+	node scripts/build-lambda.mjs --function $(1) --outdir $${ARTIFACTS_DIR:-dist/sam/$(1)}
+endef
+
+$(foreach fn,$(LAMBDA_FUNCTIONS),$(eval $(call SAM_BUILD_TARGET,$(fn))))
