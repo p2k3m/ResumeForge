@@ -19552,31 +19552,52 @@ app.post(
       sanitizeS3KeyComponent(res.locals.userId, { fallback: 'candidate' }) ||
       'candidate';
     const sessionPrefix = `cv/${ownerSegment}/${sessionSegment}/`;
+    const dateSegment = new Date().toISOString().slice(0, 10);
+    const incomingPrefix = `${jobId}/incoming/${dateSegment}/`;
 
     req.resumeUploadContext = {
       bucket,
-      key: `${sessionPrefix}original.pdf`,
+      key: `${incomingPrefix}original.pdf`,
       contentType: 'application/octet-stream',
-      sessionPrefix,
+      sessionPrefix: incomingPrefix,
+      incomingPrefix,
+      finalSessionPrefix: sessionPrefix,
       ownerSegment,
       sessionSegment,
+      dateSegment,
     };
 
+    res.locals.initialSessionPrefix = incomingPrefix;
     res.locals.sessionPrefix = sessionPrefix;
     res.locals.sessionSegment = sessionSegment;
     res.locals.uploadBucket = bucket;
     res.locals.uploadLogContext = logContext;
     res.locals.secrets = secrets;
+    res.locals.uploadDateSegment = dateSegment;
 
     uploadResume(req, res, (err) => {
-      if (err) {
-        logStructured('warn', 'resume_upload_failed', {
-          requestId: res.locals.requestId,
-          jobId: res.locals.jobId,
-          error: serializeError(err),
-        });
-        sendError(
-          res,
+      if (!err) {
+        next();
+        return;
+      }
+
+      const storageError = Boolean(
+        err && (err.isUploadStorageError || err.code === 'UPLOAD_STORAGE_FAILED')
+      );
+
+      logStructured('warn', 'resume_upload_failed', {
+        requestId: res.locals.requestId,
+        jobId: res.locals.jobId,
+        storageError,
+        error: serializeError(err),
+      });
+
+      const respond = (status, code, message, details) => {
+        sendError(res, status, code, message, details);
+      };
+
+      if (!storageError) {
+        respond(
           400,
           'UPLOAD_VALIDATION_FAILED',
           err.message || 'Upload validation failed.',
@@ -19587,7 +19608,38 @@ app.post(
         );
         return;
       }
-      next();
+
+      const bucketName = bucket;
+      const sessionPrefixForLogs =
+        req.resumeUploadContext?.sessionPrefix || incomingPrefix;
+      const failureLogKey = `${sessionPrefixForLogs}logs/processing.jsonl`;
+      const reason = err.message || 'initial S3 upload failed';
+
+      (async () => {
+        try {
+          await logEvent({
+            s3: s3Client,
+            bucket: bucketName,
+            key: failureLogKey,
+            jobId,
+            event: 'initial_upload_failed',
+            level: 'error',
+            message: `Failed to upload to bucket ${bucketName}: ${reason}`,
+          });
+        } catch (logErr) {
+          logStructured('error', 's3_log_failure', {
+            ...logContext,
+            error: serializeError(logErr),
+          });
+        }
+
+        respond(
+          500,
+          'INITIAL_UPLOAD_FAILED',
+          S3_STORAGE_ERROR_MESSAGE,
+          { bucket: bucketName, reason }
+        );
+      })();
     });
   },
   async (req, res) => {
@@ -19604,7 +19656,10 @@ app.post(
     res.locals.sessionSegment ||
     sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
       sanitizeS3KeyComponent(`session-${createIdentifier()}`);
-  const date = new Date().toISOString().slice(0, 10);
+  const date =
+    res.locals.uploadDateSegment ||
+    req.resumeUploadContext?.dateSegment ||
+    new Date().toISOString().slice(0, 10);
   const s3 = s3Client;
   const bucket = res.locals.uploadBucket;
   const secrets = res.locals.secrets || {};
@@ -19834,7 +19889,8 @@ app.post(
   const uploadContext = req.resumeUploadContext || {};
   const initialSessionPrefix =
     uploadContext.sessionPrefix ||
-    res.locals.sessionPrefix ||
+    uploadContext.incomingPrefix ||
+    res.locals.initialSessionPrefix ||
     `${jobId}/incoming/${date}/`;
   let originalUploadKey =
     (typeof req.file?.key === 'string' && req.file.key) ||
@@ -20052,12 +20108,6 @@ app.post(
     }
   };
 
-  if (tableCreatedThisRequest) {
-    if (await writePlaceholderRecord(placeholderIdentifier)) {
-      placeholderRecordIdentifier = placeholderIdentifier;
-    }
-  }
-
   let text;
   try {
     text = await extractResumeText(req.file);
@@ -20230,6 +20280,9 @@ app.post(
         toKey: finalUploadKey,
       });
       originalUploadKey = finalUploadKey;
+      if (req.file) {
+        req.file.key = finalUploadKey;
+      }
     } catch (err) {
       logStructured('error', 'raw_upload_relocation_failed', {
         ...logContext,
@@ -20304,14 +20357,13 @@ app.post(
     if (!tableCreatedThisRequest) {
       const existingRecordKnown = Boolean(
         hadPreviousRecord ||
-          (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn)) ||
-          requestScopedIdentifier
+          (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn))
       );
-      if (existingRecordKnown) {
-        placeholderIdentifier = requestScopedIdentifier || placeholderIdentifier;
+      if (existingRecordKnown && requestScopedIdentifier) {
+        placeholderIdentifier = requestScopedIdentifier;
       }
 
-      if (await writePlaceholderRecord(placeholderIdentifier)) {
+      if (existingRecordKnown && (await writePlaceholderRecord(placeholderIdentifier))) {
         placeholderRecordIdentifier = placeholderIdentifier;
       }
     }
