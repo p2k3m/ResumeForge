@@ -10616,6 +10616,93 @@ function deriveSessionChangeLogKey({ changeLogKey, originalUploadKey } = {}) {
   return `${prefix}logs/change-log.json`;
 }
 
+function extractSessionIdFromPrefix(prefix) {
+  if (typeof prefix !== 'string') {
+    return '';
+  }
+  const normalizedPrefix = ensureTrailingSlash(prefix).split('/').filter(Boolean);
+  if (normalizedPrefix.length >= 3) {
+    return sanitizeS3KeyComponent(normalizedPrefix[2]);
+  }
+  return '';
+}
+
+function resolveCanonicalSessionId({
+  sessionId,
+  sessionSegment,
+  requestId,
+  sessionPrefix,
+  originalUploadKey,
+  sessionChangeLogKey,
+} = {}) {
+  const normalizedSessionId = sanitizeS3KeyComponent(sessionId);
+  if (normalizedSessionId) {
+    return normalizedSessionId;
+  }
+
+  const normalizedPrefixCandidate =
+    sessionPrefix || extractSessionScopedPrefixFromKey(originalUploadKey) || extractSessionScopedPrefixFromKey(sessionChangeLogKey);
+  const derivedFromPrefix = extractSessionIdFromPrefix(normalizedPrefixCandidate);
+  if (derivedFromPrefix) {
+    return derivedFromPrefix;
+  }
+
+  const normalizedSegment = sanitizeS3KeyComponent(sessionSegment);
+  if (normalizedSegment) {
+    return normalizedSegment;
+  }
+
+  const normalizedRequest = sanitizeS3KeyComponent(requestId);
+  if (normalizedRequest) {
+    return normalizedRequest;
+  }
+
+  return '';
+}
+
+function buildCanonicalSessionPointer({
+  bucket,
+  prefix,
+  sessionId,
+  sessionChangeLogKey,
+  s3Location,
+} = {}) {
+  const pointer = {};
+
+  const normalizedSessionId = sanitizeS3KeyComponent(sessionId);
+  if (normalizedSessionId) {
+    pointer.sessionId = normalizedSessionId;
+  }
+
+  const normalizedBucket = typeof bucket === 'string' ? bucket.trim() : '';
+  if (normalizedBucket) {
+    pointer.bucket = normalizedBucket;
+  }
+
+  const normalizedPrefix = typeof prefix === 'string' ? prefix.trim() : '';
+  if (normalizedPrefix) {
+    pointer.prefix = normalizedPrefix;
+  }
+
+  const normalizedChangeLogKey =
+    typeof sessionChangeLogKey === 'string' ? sessionChangeLogKey.trim() : '';
+  if (normalizedChangeLogKey) {
+    pointer.changeLogKey = normalizedChangeLogKey;
+  }
+
+  const resolvedLocation =
+    typeof s3Location === 'string' && s3Location.trim()
+      ? s3Location.trim()
+      : normalizedBucket && normalizedPrefix
+        ? `s3://${normalizedBucket}/${normalizedPrefix}`
+        : '';
+  if (resolvedLocation) {
+    pointer.s3Location = resolvedLocation;
+  }
+
+  return pointer;
+}
+
 async function streamToString(stream) {
   if (!stream) return '';
   if (typeof stream === 'string') return stream;
@@ -14012,8 +14099,8 @@ async function handleImprovementRequest(type, req, res) {
         new GetItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          ProjectionExpression:
-            'jobId, status, s3Bucket, s3Key, changeLog, sessionChangeLogKey',
+        ProjectionExpression:
+          'jobId, status, s3Bucket, s3Key, changeLog, sessionChangeLogKey, sessionId',
         })
       );
       const item = record.Item || {};
@@ -14528,6 +14615,7 @@ async function handleImprovementRequest(type, req, res) {
         evaluationLogs: evaluationActivityLogs,
         enhancementLogs: enhancementActivityLogs,
         downloadLogs: downloadActivityLogs,
+        sessionId: existingRecordItem?.sessionId?.S || '',
       });
 
       if (!enhancedDocs) {
@@ -15121,6 +15209,8 @@ async function generateEnhancedDocumentsResponse({
   evaluationLogs = [],
   enhancementLogs = [],
   downloadLogs = [],
+  sessionId: sessionIdInput = '',
+  sessionPointer: sessionPointerInput = {},
 }) {
   const isTestEnvironment = process.env.NODE_ENV === 'test';
   if (!bucket) {
@@ -16126,6 +16216,31 @@ async function generateEnhancedDocumentsResponse({
     jobId,
     jobSegment: jobSegmentForKeys,
   });
+  const existingRecordSessionId =
+    typeof existingRecord?.sessionId?.S === 'string'
+      ? existingRecord.sessionId.S.trim()
+      : '';
+  const canonicalSessionId = resolveCanonicalSessionId({
+    sessionId: existingRecordSessionId || sessionIdInput,
+    sessionSegment: generationRunSegment,
+    requestId,
+    sessionPrefix,
+    originalUploadKey,
+    sessionChangeLogKey,
+  });
+  const pointerFromInput =
+    sessionPointerInput && typeof sessionPointerInput === 'object'
+      ? buildCanonicalSessionPointer(sessionPointerInput)
+      : {};
+  const canonicalSessionPointer = {
+    ...pointerFromInput,
+    ...buildCanonicalSessionPointer({
+      bucket,
+      prefix: sessionPrefix,
+      sessionId: canonicalSessionId,
+      sessionChangeLogKey,
+    }),
+  };
   stageMetadataKey = sessionPrefix ? `${sessionPrefix}logs/log.json` : '';
   const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
     letterIndex: 1,
@@ -17322,6 +17437,13 @@ async function generateEnhancedDocumentsResponse({
       expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
     }
 
+    if (canonicalSessionId) {
+      updateExpressionParts.push(
+        'sessionId = if_not_exists(sessionId, :sessionId)'
+      );
+      expressionAttributeValues[':sessionId'] = { S: canonicalSessionId };
+    }
+
     updateExpressionParts.push('environment = if_not_exists(environment, :environment)');
     expressionAttributeValues[':environment'] = { S: deploymentEnvironment };
 
@@ -17468,6 +17590,7 @@ async function generateEnhancedDocumentsResponse({
     jobId,
     urlExpiresInSeconds: normalizedUrls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
     urls: normalizedUrls,
+    sessionPointer: canonicalSessionPointer,
     applicantName,
     originalScore: originalSkillCoverage,
     enhancedScore: enhancedSkillCoverage,
@@ -18674,7 +18797,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
         TableName: tableName,
         Key: { linkedinProfileUrl: { S: storedLinkedIn } },
         ProjectionExpression:
-          'jobId, changeLog, s3Bucket, s3Key, sessionChangeLogKey',
+          'jobId, changeLog, s3Bucket, s3Key, sessionChangeLogKey, sessionId',
       })
     );
     const item = record.Item || {};
@@ -18687,7 +18810,11 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       );
     }
     existingSessionId =
-      typeof item.requestId?.S === 'string' ? item.requestId.S.trim() : '';
+      typeof item.sessionId?.S === 'string'
+        ? item.sessionId.S.trim()
+        : typeof item.requestId?.S === 'string'
+          ? item.requestId.S.trim()
+          : '';
     existingCandidateName =
       typeof item.candidateName?.S === 'string' ? item.candidateName.S.trim() : '';
     storedUserId =
@@ -19338,7 +19465,7 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
         TableName: tableName,
         Key: { linkedinProfileUrl: { S: storedLinkedIn } },
         ProjectionExpression:
-          'jobId, s3Bucket, s3Key, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url, originalTextKey, enhancedVersion1Key, enhancedVersion2Key, changeLogKey, sessionChangeLogKey',
+          'jobId, s3Bucket, s3Key, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url, originalTextKey, enhancedVersion1Key, enhancedVersion2Key, changeLogKey, sessionChangeLogKey, sessionId',
       })
     );
 
@@ -20388,6 +20515,23 @@ app.post(
   const s3Location = `s3://${bucket}/${originalUploadKey}`;
   const locationLabel = locationMeta.label || 'Unknown';
 
+  const canonicalSessionId = resolveCanonicalSessionId({
+    sessionId: res.locals.sessionId,
+    sessionSegment,
+    requestId,
+    sessionPrefix: prefix,
+    originalUploadKey,
+    sessionChangeLogKey,
+  });
+  res.locals.sessionId = canonicalSessionId;
+  const canonicalSessionPointer = buildCanonicalSessionPointer({
+    bucket,
+    prefix,
+    sessionId: canonicalSessionId,
+    sessionChangeLogKey,
+  });
+  res.locals.sessionPointer = canonicalSessionPointer;
+
   try {
     await ensureTableExists();
 
@@ -20412,7 +20556,7 @@ app.post(
         new GetItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey',
+          ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey, sessionId',
         })
       );
       const previousItem = previousRecord.Item || {};
@@ -20491,6 +20635,9 @@ app.post(
         jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
       }
     };
+    if (canonicalSessionId) {
+      putItemPayload.Item.sessionId = { S: canonicalSessionId };
+    }
     await dynamo.send(new PutItemCommand(putItemPayload));
     if (storedLinkedIn) {
       knownResumeIdentifiers.add(storedLinkedIn);
@@ -20828,6 +20975,7 @@ app.post(
         manualCertificates,
         credlyStatus,
         classification,
+        sessionPointer: canonicalSessionPointer,
         upload: {
           bucket,
           key: originalUploadKey,
@@ -20974,31 +21122,47 @@ app.post(
     const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
 
     try {
+      const scoringExpressionValues = {
+        ':status': { S: 'scored' },
+        ':completedAt': { S: scoringCompletedAt },
+        ':missing': {
+          L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
+            S: skill,
+          })),
+        },
+        ':added': {
+          L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
+            S: skill,
+          })),
+        },
+        ':score': { N: String(scoringUpdate.normalizedScore) },
+        ':jobDescriptionDigest': { S: manualJobDescriptionDigest || '' },
+        ':jobId': { S: jobId },
+        ':statusUploaded': { S: 'uploaded' },
+        ':environment': { S: deploymentEnvironment },
+      };
+      const scoringExpressionParts = [
+        '#status = :status',
+        'analysisCompletedAt = :completedAt',
+        'missingSkills = :missing',
+        'addedSkills = :added',
+        'enhancedScore = :score',
+        'originalScore = if_not_exists(originalScore, :score)',
+        'jobDescriptionDigest = :jobDescriptionDigest',
+        'environment = if_not_exists(environment, :environment)',
+      ];
+      if (canonicalSessionId) {
+        scoringExpressionValues[':sessionId'] = { S: canonicalSessionId };
+        scoringExpressionParts.push(
+          'sessionId = if_not_exists(sessionId, :sessionId)'
+        );
+      }
       await dynamo.send(
         new UpdateItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          UpdateExpression:
-            'SET #status = :status, analysisCompletedAt = :completedAt, missingSkills = :missing, addedSkills = :added, enhancedScore = :score, originalScore = if_not_exists(originalScore, :score), jobDescriptionDigest = :jobDescriptionDigest, environment = if_not_exists(environment, :environment)',
-          ExpressionAttributeValues: {
-            ':status': { S: 'scored' },
-            ':completedAt': { S: scoringCompletedAt },
-            ':missing': {
-              L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
-                S: skill,
-              })),
-            },
-            ':added': {
-              L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
-                S: skill,
-              })),
-            },
-            ':score': { N: String(scoringUpdate.normalizedScore) },
-            ':jobDescriptionDigest': { S: manualJobDescriptionDigest || '' },
-            ':jobId': { S: jobId },
-            ':statusUploaded': { S: 'uploaded' },
-            ':environment': { S: deploymentEnvironment },
-          },
+          UpdateExpression: `SET ${scoringExpressionParts.join(', ')}`,
+          ExpressionAttributeValues: scoringExpressionValues,
           ExpressionAttributeNames: { '#status': 'status' },
           ConditionExpression:
             'jobId = :jobId AND (#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status))',
@@ -21082,6 +21246,8 @@ app.post(
       },
       userId: res.locals.userId,
       plainPdfFallbackEnabled: Boolean(secrets.ENABLE_PLAIN_PDF_FALLBACK),
+      sessionId: canonicalSessionId,
+      sessionPointer: canonicalSessionPointer,
     };
 
     try {
