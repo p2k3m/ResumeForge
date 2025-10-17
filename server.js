@@ -20140,12 +20140,6 @@ app.post(
     }
   };
 
-  if (placeholderIdentifier && !placeholderRecordIdentifier) {
-    if (await writePlaceholderRecord(placeholderIdentifier)) {
-      placeholderRecordIdentifier = placeholderIdentifier;
-    }
-  }
-
   let text;
   try {
     text = await extractResumeText(req.file);
