@@ -35,7 +35,7 @@ describe('AWS integrations for /api/process-cv', () => {
     );
     expect(initialUpload).toBeTruthy();
     expect(initialUpload.key).toContain('/original.pdf');
-    expect(initialUpload.key).not.toContain('/incoming/');
+    expect(initialUpload.key).toContain('/incoming/');
 
     const relocatedUpload = commandSummaries.find(
       (command) =>
