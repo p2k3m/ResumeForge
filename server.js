@@ -20206,7 +20206,7 @@ app.post(
   const storedLinkedIn = normalizePersonalData(
     initialContactDetails.linkedin || profileIdentifier
   );
-  if (!placeholderIdentifier && storedLinkedIn) {
+  if (storedLinkedIn) {
     placeholderIdentifier = storedLinkedIn;
   }
   const storedIpAddress = normalizePersonalData(ipAddress);
@@ -20375,7 +20375,11 @@ app.post(
       hadPreviousRecord ||
         (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn))
     );
-    if (existingRecordKnown && requestScopedIdentifier) {
+    if (
+      existingRecordKnown &&
+      requestScopedIdentifier &&
+      placeholderIdentifier !== storedLinkedIn
+    ) {
       placeholderIdentifier = requestScopedIdentifier;
     }
 
