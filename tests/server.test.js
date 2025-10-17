@@ -216,12 +216,11 @@ describe('/api/process-cv', () => {
       'DescribeTableCommand',
       'CreateTableCommand',
       'DescribeTableCommand',
+      'PutItemCommand',
       'GetItemCommand',
       'PutItemCommand',
-      'PutItemCommand',
       'UpdateItemCommand',
-      'UpdateItemCommand',
-      'DeleteItemCommand'
+      'UpdateItemCommand'
     ]);
 
     setupDefaultDynamoMock();
