@@ -19770,8 +19770,10 @@ app.post(
     typeof req.query?.linkedinProfileUrl === 'string'
       ? req.query.linkedinProfileUrl.trim()
       : '';
-  const linkedinProfileUrlInput = '';
-  const linkedinProfileUrl = '';
+  const submittedLinkedInInput = rawLinkedInBody || rawLinkedInQuery;
+  const normalizedLinkedInInput = normalizeUrl(submittedLinkedInInput);
+  const linkedinProfileUrlInput = normalizedLinkedInInput || normalizePersonalData(submittedLinkedInInput);
+  const linkedinProfileUrl = normalizedLinkedInInput;
   const manualJobDescriptionInput =
     typeof req.body.manualJobDescription === 'string'
       ? req.body.manualJobDescription
@@ -20204,6 +20206,9 @@ app.post(
   const storedLinkedIn = normalizePersonalData(
     initialContactDetails.linkedin || profileIdentifier
   );
+  if (storedLinkedIn) {
+    placeholderIdentifier = storedLinkedIn;
+  }
   const storedIpAddress = normalizePersonalData(ipAddress);
   const storedUserAgent = normalizePersonalData(userAgent);
   const storedCredlyProfile = normalizePersonalData(submittedCredly);
