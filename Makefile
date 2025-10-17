@@ -94,7 +94,7 @@ coverage:
 define SAM_BUILD_TARGET
 build-$(1):
 	@echo "Building $(1) via SAM custom Makefile target"
-	node scripts/build-lambda.mjs --function $(1) --outdir $${ARTIFACTS_DIR:-dist/sam/$(1)}
+	node scripts/build-lambda.mjs --function $(1) --outdir "$(if $(ARTIFACTS_DIR),$(ARTIFACTS_DIR),dist/sam/$(1))"
 endef
 
 $(foreach fn,$(LAMBDA_FUNCTIONS),$(eval $(call SAM_BUILD_TARGET,$(fn))))
