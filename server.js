@@ -6814,7 +6814,7 @@ function determineUploadContentType(file) {
   }
 
   if (normalizedMimeIsPdf || normalizedExtensionIsPdf) {
-    return 'application/pdf';
+    return fallbackType;
   }
 
   if (normalizedType && !GENERIC_MIME_TYPES.has(normalizedType)) {
