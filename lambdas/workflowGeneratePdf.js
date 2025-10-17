@@ -1,10 +1,11 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { renderResumePdfBuffer } from '../lib/pdf/resume.js';
 import { withEnvironmentTagging } from '../config/environment.js';
+import { withLambdaObservability } from '../lib/observability/lambda.js';
 
 const s3Client = new S3Client({ region: process.env.AWS_REGION });
 
-export const handler = async (event = {}) => {
+const baseHandler = async (event = {}) => {
   const resumeText = typeof event.resumeText === 'string' ? event.resumeText : '';
   const jobId = typeof event.jobId === 'string' ? event.jobId : 'session';
   const bucket = process.env.S3_BUCKET;
@@ -29,5 +30,11 @@ export const handler = async (event = {}) => {
     key,
   };
 };
+
+export const handler = withLambdaObservability(baseHandler, {
+  name: 'workflow-generate-pdf',
+  operationGroup: 'artifact-generation',
+  captureErrorTrace: true,
+});
 
 export default handler;

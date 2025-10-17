@@ -2,6 +2,7 @@ import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { randomUUID } from 'crypto';
 import '../config/environment.js';
 import documentGenerationHttpHandler from '../services/documentGeneration/httpHandler.js';
+import { withLambdaObservability } from '../lib/observability/lambda.js';
 
 const sqsClient = new SQSClient({ region: process.env.AWS_REGION });
 
@@ -187,7 +188,7 @@ async function enqueueGeneration(queueUrl, payload, requestId) {
   return null;
 }
 
-export const handler = async (event, context) => {
+const baseHandler = async (event, context) => {
   const payload = parseBody(event);
   const route = resolveRouteFromEvent(event);
   const queueUrl = process.env.DOCUMENT_GENERATION_QUEUE_URL || '';
@@ -202,5 +203,11 @@ export const handler = async (event, context) => {
   const response = await invokeDocumentGeneration(event, context, payload, route);
   return response;
 };
+
+export const handler = withLambdaObservability(baseHandler, {
+  name: 'document-generation',
+  operationGroup: 'artifact-generation',
+  captureErrorTrace: true,
+});
 
 export default handler;

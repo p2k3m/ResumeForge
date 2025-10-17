@@ -1,6 +1,7 @@
 import '../config/environment.js';
 import { scoreResumeAgainstJob } from '../lib/resume/scoring.js';
 import { normalizeSkillListInput } from '../lib/resume/skills.js';
+import { withLambdaObservability } from '../lib/observability/lambda.js';
 
 function normalizeJobSkills(value) {
   if (Array.isArray(value)) {
@@ -9,7 +10,7 @@ function normalizeJobSkills(value) {
   return normalizeSkillListInput(value);
 }
 
-export const handler = async (event = {}) => {
+const baseHandler = async (event = {}) => {
   const jobId = typeof event.jobId === 'string' ? event.jobId.trim() : '';
   const resumeText = typeof event.resumeText === 'string' ? event.resumeText : '';
   const jobSkills = normalizeJobSkills(event.jobSkills);
@@ -30,5 +31,11 @@ export const handler = async (event = {}) => {
     alignmentTable: outcome.result.alignmentTable || [],
   };
 };
+
+export const handler = withLambdaObservability(baseHandler, {
+  name: 'workflow-score',
+  operationGroup: 'scoring',
+  captureErrorTrace: true,
+});
 
 export default handler;

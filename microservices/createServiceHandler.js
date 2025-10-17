@@ -6,6 +6,7 @@ import {
   matchesPath,
 } from './routing.js';
 import { getNormalizedRoutesForService } from './services.js';
+import { withLambdaObservability } from '../lib/observability/lambda.js';
 
 function normalizeIncomingPath(event) {
   const rawPath =
@@ -47,7 +48,7 @@ export function createServiceHandler({
 
   let serverlessExpressInstance;
 
-  return async function serviceHandler(event, context) {
+  const serviceHandler = async function serviceHandler(event, context) {
     context.callbackWaitsForEmptyEventLoop = false;
     const method = normalizeMethod(event?.httpMethod || event?.requestContext?.http?.method);
     const path = normalizeIncomingPath(event);
@@ -92,6 +93,26 @@ export function createServiceHandler({
 
     return serverlessExpressInstance(event, context);
   };
+
+  const operationGroup = (() => {
+    switch (serviceKey) {
+      case 'documentGeneration':
+        return 'artifact-generation';
+      case 'enhancement':
+        return 'enhancement';
+      case 'clientApp':
+      case 'auditing':
+        return 'artifact-download';
+      default:
+        return undefined;
+    }
+  })();
+
+  return withLambdaObservability(serviceHandler, {
+    name: serviceName,
+    operationGroup,
+    captureErrorTrace: Boolean(operationGroup),
+  });
 }
 
 export default createServiceHandler;
