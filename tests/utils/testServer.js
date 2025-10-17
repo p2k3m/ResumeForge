@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { Readable } from 'stream';
 
 const MOCK_STATE_KEY = Symbol.for('ResumeForgeTestServerMockState');
 
@@ -106,15 +107,43 @@ export async function setupTestServer({
 
   const s3Store = new Map();
 
+  const toBuffer = async (body) => {
+    if (body === undefined || body === null) {
+      return Buffer.alloc(0);
+    }
+    if (Buffer.isBuffer(body)) {
+      return Buffer.from(body);
+    }
+    if (typeof body === 'string') {
+      return Buffer.from(body);
+    }
+    if (body instanceof Uint8Array) {
+      return Buffer.from(body);
+    }
+    if (body && typeof body.pipe === 'function') {
+      const chunks = [];
+      for await (const chunk of body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks);
+    }
+    if (body instanceof Readable || (body && typeof body[Symbol.asyncIterator] === 'function')) {
+      const iterable = body instanceof Readable ? body : Readable.from(body);
+      const chunks = [];
+      for await (const chunk of iterable) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      return Buffer.concat(chunks);
+    }
+    return Buffer.from(JSON.stringify(body ?? {}));
+  };
+
   const defaultS3Impl = async (command = {}) => {
     const { __type, input = {} } = command;
     switch (__type) {
       case 'PutObjectCommand': {
         const key = `${input.Bucket}/${input.Key}`;
-        const body =
-          typeof input.Body === 'string' || Buffer.isBuffer(input.Body)
-            ? Buffer.from(input.Body)
-            : Buffer.from(JSON.stringify(input.Body ?? {}));
+        const body = await toBuffer(input.Body);
         s3Store.set(key, {
           Body: body,
           ContentType: input.ContentType,
