@@ -20323,6 +20323,7 @@ app.post(
     await ensureTableExists();
 
     if (
+      tableCreatedThisRequest &&
       placeholderIdentifier &&
       placeholderIdentifier !== storedLinkedIn &&
       placeholderRecordIdentifier !== placeholderIdentifier
