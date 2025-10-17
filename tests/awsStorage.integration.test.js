@@ -31,9 +31,11 @@ describe('AWS integrations for /api/process-cv', () => {
       (command) =>
         command.type === 'PutObjectCommand' &&
         typeof command.key === 'string' &&
-        command.key.includes('/incoming/')
+        command.key.endsWith('original.pdf')
     );
     expect(initialUpload).toBeTruthy();
+    expect(initialUpload.key).toContain('/original.pdf');
+    expect(initialUpload.key).not.toContain('/incoming/');
 
     const relocatedUpload = commandSummaries.find(
       (command) =>
@@ -42,6 +44,7 @@ describe('AWS integrations for /api/process-cv', () => {
         command.key.includes('cv/')
     );
     expect(relocatedUpload).toBeTruthy();
+    expect(relocatedUpload.key).not.toBe(initialUpload.key);
 
     const tempDelete = commandSummaries.find(
       (command) =>
