@@ -220,7 +220,8 @@ describe('/api/process-cv', () => {
       'GetItemCommand',
       'PutItemCommand',
       'UpdateItemCommand',
-      'UpdateItemCommand'
+      'UpdateItemCommand',
+      'DeleteItemCommand'
     ]);
 
     setupDefaultDynamoMock();
