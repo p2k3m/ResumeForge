@@ -11227,6 +11227,9 @@ function sanitizeManualJobDescription(input = '') {
 
   let sanitized = input.replace(/\u0000/g, '').replace(/\r\n/g, '\n');
 
+  sanitized = sanitized.replace(/<!DOCTYPE[^>]*>/gi, '');
+  sanitized = sanitized.replace(/<\?xml[^>]*>/gi, '');
+
   const blockedTags = [
     'script',
     'style',
@@ -11259,6 +11262,71 @@ function sanitizeManualJobDescription(input = '') {
     ''
   );
   sanitized = sanitized.replace(/\s+style\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+  const blockLevelTags = [
+    'address',
+    'article',
+    'aside',
+    'body',
+    'center',
+    'dd',
+    'details',
+    'div',
+    'dl',
+    'dt',
+    'figcaption',
+    'figure',
+    'footer',
+    'form',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'header',
+    'hr',
+    'li',
+    'main',
+    'nav',
+    'ol',
+    'p',
+    'section',
+    'summary',
+    'table',
+    'tbody',
+    'td',
+    'tfoot',
+    'th',
+    'thead',
+    'tr',
+    'ul',
+  ];
+
+  for (const tag of blockLevelTags) {
+    const pattern = new RegExp(`<\\/?${tag}[^>]*>`, 'gi');
+    sanitized = sanitized.replace(pattern, '\n');
+  }
+
+  sanitized = sanitized.replace(/<\\s*br\\s*\\/?\\s*>/gi, '\n');
+  sanitized = sanitized.replace(/<[^>]+>/g, ' ');
+
+  sanitized = sanitized.replace(/&nbsp;/gi, ' ');
+  sanitized = sanitized.replace(/&amp;/gi, '&');
+  sanitized = sanitized.replace(/&quot;/gi, '"');
+  sanitized = sanitized.replace(/&#39;/gi, "'");
+  sanitized = sanitized.replace(/&rsquo;/gi, "'");
+  sanitized = sanitized.replace(/&ldquo;/gi, '"');
+  sanitized = sanitized.replace(/&rdquo;/gi, '"');
+  sanitized = sanitized.replace(/&lsquo;/gi, "'");
+  sanitized = sanitized.replace(/&mdash;/gi, '—');
+  sanitized = sanitized.replace(/&ndash;/gi, '–');
+
+  sanitized = sanitized.replace(/[ \t]+\n/g, '\n');
+  sanitized = sanitized.replace(/\n{3,}/g, '\n\n');
+  sanitized = sanitized.replace(/[ \t]{2,}/g, ' ');
+  sanitized = sanitized.replace(/ +/g, ' ');
+  sanitized = sanitized.replace(/\n +/g, '\n');
 
   return sanitized.trim();
 }
