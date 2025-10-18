@@ -32,6 +32,11 @@ without reverse-engineering `server.js`.
    `<prefix>/logs/processing.jsonl`, `<prefix>/logs/log.json`, and the session
    change log `<prefix>/logs/change-log.json` to capture the full processing
    trail without storing verbose change history in DynamoDB.
+4. **Failure relocation** – When validation rejects a document or downstream
+   processing fails, the service copies the raw upload into an
+   `invalid/<owner>/<date>/<session>/` prefix and deletes the canonical object.
+   This keeps broken or non-resume uploads isolated from the `cv/` tree while
+   preserving the artefact for investigations.
 
 ## Key structure
 
