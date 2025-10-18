@@ -5993,8 +5993,16 @@ async function rewriteSectionsWithGemini(
       latencyMs,
       outcome: 'no_parse',
     });
-  } catch {
-    /* ignore */
+  } catch (err) {
+    const generationError = err instanceof Error ? err : new Error('Gemini section rewrite failed.');
+    if (
+      generationError &&
+      typeof generationError === 'object' &&
+      generationError.allowPlainFallback === undefined
+    ) {
+      generationError.allowPlainFallback = false;
+    }
+    throw generationError;
   }
   recordLlmTelemetry({
     requestId: telemetryRequestId,
@@ -15779,6 +15787,7 @@ async function generateEnhancedDocumentsResponse({
         ...logContext,
         error: serializeError(err),
       });
+      throw err;
     }
   }
 
@@ -21761,6 +21770,7 @@ app.post(
 
     let enhancedResponse = null;
     let lastGenerationError = null;
+    let allowPlainFallbackRetry = false;
     const generationRequest = {
       res,
       s3,
@@ -21814,13 +21824,14 @@ app.post(
       enhancedResponse = await generateEnhancedDocumentsResponse(generationRequest);
     } catch (generationErr) {
       lastGenerationError = generationErr;
+      allowPlainFallbackRetry = Boolean(generationErr?.allowPlainFallback);
       logStructured('warn', 'process_cv_generation_failed', {
         ...logContext,
         error: serializeError(generationErr),
       });
     }
 
-    if (!enhancedResponse && !res.headersSent) {
+    if (!enhancedResponse && !res.headersSent && allowPlainFallbackRetry) {
       logStructured('info', 'process_cv_generation_retry', {
         ...logContext,
         strategy: 'disable_generative_enhancements',
@@ -21832,6 +21843,7 @@ app.post(
         });
       } catch (retryErr) {
         lastGenerationError = retryErr;
+        allowPlainFallbackRetry = Boolean(retryErr?.allowPlainFallback);
         logStructured('error', 'process_cv_generation_retry_failed', {
           ...logContext,
           error: serializeError(retryErr),
