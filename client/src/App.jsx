@@ -2410,7 +2410,9 @@ function App() {
   const hasAnalysisData =
     scoreMetricCount > 0 || hasMatch || improvementCount > 0 || downloadCount > 0 || changeCount > 0
   const uploadReady = hasCvFile && hasManualJobDescriptionInput
-  const uploadComplete = uploadReady || hasAnalysisData || Boolean(queuedText)
+  const uploadComplete =
+    uploadReady ||
+    (hasManualJobDescriptionInput && (hasAnalysisData || Boolean(queuedText)))
   const scoreComplete = scoreMetricCount > 0
   const jdValidationComplete = Boolean(jobDescriptionText && jobDescriptionText.trim())
   const improvementsUnlocked = uploadComplete && scoreComplete && jdValidationComplete
