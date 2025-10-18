@@ -944,43 +944,21 @@ function clientAssetsAvailable() {
 const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ResumeForge Portal</title>
-    <style>
-      :root {
-        color-scheme: light;
-      }
-      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 2rem; background: #f7fafc; color: #1a202c; }
-      main { max-width: 720px; margin: 0 auto; background: white; border-radius: 12px; padding: 2.25rem; box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08); }
-      h1 { margin-top: 0; font-size: 2rem; }
-      p { line-height: 1.6; }
-      form { margin-top: 2rem; display: grid; gap: 1rem; }
-      label { font-weight: 600; }
-      select, button { font: inherit; padding: 0.75rem 1rem; border-radius: 10px; border: 1px solid #cbd5f5; }
-      button { cursor: pointer; background: #2563eb; color: white; border: none; font-weight: 600; }
-      .cta { margin-top: 1.5rem; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: #2563eb; color: white; border-radius: 9999px; text-decoration: none; font-weight: 600; }
-    </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="resumeforge-api-base" content="" />
+    <title>ResumeForge</title>
+    <script type="module" crossorigin src="/assets/index-fallback000.js"></script>
+    <link rel="stylesheet" href="/assets/index-fallback000.css" />
   </head>
   <body>
-    <main id="portal-form">
-      <h1>ResumeForge Portal</h1>
-      <p>The client application build assets are currently unavailable. This is a lightweight fallback view to keep the service responsive while the full interface is rebuilt.</p>
-      <p>You can regenerate the production UI by running <code>npm run build:client</code>. Until then, API endpoints remain available.</p>
-      <form aria-label="Template selection">
-        <label for="templateId">Choose a resume template</label>
-        <select id="templateId" name="templateId">
-          <option value="modern">Modern</option>
-          <option value="professional">Professional</option>
-          <option value="classic">Classic</option>
-          <option value="ats">ATS</option>
-          <option value="2025">2025</option>
-        </select>
-        <p style="margin: 0; font-size: 0.95rem; color: #4a5568;">Template downloads are temporarily disabled in fallback mode.</p>
-        <button type="button" disabled title="Build the client app to enable downloads">Download preview (unavailable)</button>
-      </form>
-      <a class="cta" href="https://github.com/" rel="noreferrer">Return to dashboard</a>
-    </main>
+    <div id="root"></div>
+    <noscript>
+      <main style="padding: 1.5rem; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
+        <h1 style="margin-top: 0;">ResumeForge</h1>
+        <p>The client application assets are currently rebuilding. Run <code>npm run build:client</code> to restore the interactive portal.</p>
+      </main>
+    </noscript>
   </body>
 </html>`;
 
