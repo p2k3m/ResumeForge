@@ -10466,6 +10466,38 @@ function deriveDocumentClassificationLabel(description = '') {
   return label.toLowerCase();
 }
 
+function captureClassificationSnapshot(result, { accepted } = {}) {
+  if (!result || typeof result !== 'object') {
+    return null;
+  }
+  const snapshot = {
+    isResume: Boolean(result.isResume),
+    evaluatedAt: new Date().toISOString(),
+  };
+  if (typeof result.description === 'string') {
+    const description = result.description.trim();
+    if (description) {
+      snapshot.description = description;
+    }
+  }
+  if (Number.isFinite(result.confidence)) {
+    snapshot.confidence = Number(result.confidence);
+  }
+  if (typeof result.reason === 'string') {
+    const reason = result.reason.trim();
+    if (reason) {
+      snapshot.reason = reason;
+    }
+  }
+  if (accepted !== undefined) {
+    snapshot.accepted = Boolean(accepted);
+    if (!snapshot.isResume && snapshot.accepted) {
+      snapshot.overridden = true;
+    }
+  }
+  return snapshot;
+}
+
 function sanitizeS3KeyComponent(value, { fallback = '', maxLength = 96 } = {}) {
   const normalise = (input) => {
     if (input === undefined || input === null) {
@@ -20425,12 +20457,6 @@ app.post(
     logger: classificationLogger,
     getGenerativeModel: () => getSharedGenerativeModel(),
   });
-  logStructured('info', 'resume_classified', {
-    ...logContext,
-    isResume: classification.isResume,
-    description: classification.description,
-    confidence: classification.confidence,
-  });
   const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
   const classificationShouldReject =
     !classification.isResume &&
@@ -20439,6 +20465,20 @@ app.post(
       wordCount,
     });
 
+  const classificationAccepted = !classificationShouldReject;
+  const classificationSnapshot = classificationAccepted
+    ? captureClassificationSnapshot(classification, { accepted: true })
+    : null;
+
+  logStructured('info', 'resume_classified', {
+    ...logContext,
+    isResume: classification.isResume,
+    description: classification.description,
+    confidence: classification.confidence,
+    accepted: classificationAccepted,
+    overridden: !classification.isResume && classificationAccepted,
+  });
+
   if (!classification.isResume && !classificationShouldReject) {
     logStructured('info', 'resume_classification_overridden', {
       ...logContext,
@@ -20446,6 +20486,7 @@ app.post(
       confidence: classification.confidence,
       wordCount,
       fileExtension: normalizedExt,
+      classification: classificationSnapshot,
     });
   }
 
@@ -20886,6 +20927,32 @@ app.post(
         jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
       }
     };
+    if (classificationSnapshot) {
+      const classificationAttributes = {
+        isResume: { BOOL: Boolean(classificationSnapshot.isResume) },
+        accepted: { BOOL: Boolean(classificationSnapshot.accepted) },
+      };
+      if (typeof classificationSnapshot.description === 'string') {
+        classificationAttributes.description = {
+          S: classificationSnapshot.description,
+        };
+      }
+      if (Number.isFinite(classificationSnapshot.confidence)) {
+        classificationAttributes.confidence = {
+          N: String(classificationSnapshot.confidence),
+        };
+      }
+      if (classificationSnapshot.overridden) {
+        classificationAttributes.overridden = { BOOL: true };
+      }
+      if (typeof classificationSnapshot.reason === 'string') {
+        classificationAttributes.reason = { S: classificationSnapshot.reason };
+      }
+      if (typeof classificationSnapshot.evaluatedAt === 'string') {
+        classificationAttributes.evaluatedAt = { S: classificationSnapshot.evaluatedAt };
+      }
+      putItemPayload.Item.documentClassification = { M: classificationAttributes };
+    }
     if (normalizedManualJobDescription) {
       const sessionInputsMap = {
         jobDescription: { S: normalizedManualJobDescription },
@@ -20919,6 +20986,9 @@ app.post(
       uploadedAt: timestamp,
       fileType: storedFileType,
     };
+    if (classificationSnapshot) {
+      uploadStageMetadata.classification = classificationSnapshot;
+    }
     if (normalizedManualJobDescription) {
       const sessionInputs = { jobDescription: normalizedManualJobDescription };
       if (manualJobDescriptionDigest) {
@@ -21214,22 +21284,36 @@ app.post(
         credlyAttempted: credlyStatus.attempted,
       });
 
+      const workflowEventDetail = {
+        jobId,
+        resumeText: text,
+        jobDescription,
+        jobSkills,
+        manualCertificates,
+        targetTitle: jobTitle,
+        enhancementTypes: ENHANCEMENT_TYPES,
+      };
+      if (classificationSnapshot) {
+        workflowEventDetail.classification = classificationSnapshot;
+      }
+
       scheduleTask(() => {
-        publishResumeWorkflowEvent({
-          jobId,
-          resumeText: text,
-          jobDescription,
-          jobSkills,
-          manualCertificates,
-          targetTitle: jobTitle,
-          enhancementTypes: ENHANCEMENT_TYPES,
-        }).catch((eventErr) => {
+        publishResumeWorkflowEvent(workflowEventDetail).catch((eventErr) => {
           logStructured('warn', 'process_cv_orchestration_event_failed', {
             ...logContext,
             error: serializeError(eventErr),
           });
         });
       });
+
+      const classificationResponse = classificationSnapshot
+        ? {
+            ...classification,
+            accepted: true,
+            evaluatedAt: classificationSnapshot.evaluatedAt,
+            ...(classificationSnapshot.overridden ? { overridden: true } : {}),
+          }
+        : classification;
 
       return res.status(202).json({
         success: true,
@@ -21243,7 +21327,7 @@ app.post(
         jobSkills,
         manualCertificates,
         credlyStatus,
-        classification,
+        classification: classificationResponse,
         sessionPointer: canonicalSessionPointer,
         upload: {
           bucket,
@@ -21557,17 +21641,25 @@ app.post(
         await deletePlaceholderRecord(placeholderRecordIdentifier);
         shouldDeletePlaceholder = false;
       }
+      if (classificationSnapshot && enhancedResponse && !enhancedResponse.classification) {
+        enhancedResponse.classification = classificationSnapshot;
+      }
+      const generationWorkflowDetail = {
+        jobId,
+        resumeText: generationRequest?.resumeText || originalResumeText,
+        jobDescription,
+        jobSkills,
+        missingSkills,
+        manualCertificates,
+        targetTitle: jobTitle,
+        enhancementTypes: ENHANCEMENT_TYPES,
+      };
+      if (classificationSnapshot) {
+        generationWorkflowDetail.classification = classificationSnapshot;
+      }
+
       scheduleTask(() => {
-        publishResumeWorkflowEvent({
-          jobId,
-          resumeText: generationRequest?.resumeText || originalResumeText,
-          jobDescription,
-          jobSkills,
-          missingSkills,
-          manualCertificates,
-          targetTitle: jobTitle,
-          enhancementTypes: ENHANCEMENT_TYPES,
-        }).catch((eventErr) => {
+        publishResumeWorkflowEvent(generationWorkflowDetail).catch((eventErr) => {
           logStructured('warn', 'process_cv_orchestration_event_failed', {
             ...logContext,
             error: serializeError(eventErr),

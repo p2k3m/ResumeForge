@@ -77,6 +77,13 @@ describe('AWS integrations for /api/process-cv', () => {
           upload: expect.objectContaining({
             uploadedAt: expect.any(String),
             fileType: expect.any(String),
+            classification: expect.objectContaining({
+              isResume: true,
+              accepted: true,
+              description: 'a professional resume',
+              confidence: expect.any(Number),
+              evaluatedAt: expect.any(String),
+            }),
           }),
           scoring: expect.objectContaining({
             completedAt: expect.any(String),
@@ -91,6 +98,8 @@ describe('AWS integrations for /api/process-cv', () => {
     );
 
     expect(metadataPayload.stages.upload).not.toHaveProperty('storage');
+    expect(metadataPayload.stages.upload.classification.overridden).toBeUndefined();
+    expect(metadataPayload.stages.upload.classification.reason).toBeUndefined();
     expect(metadataPayload.stages.scoring).not.toHaveProperty('missingSkillsCount');
     expect(metadataPayload.stages.scoring).not.toHaveProperty('addedSkillsCount');
     expect(metadataPayload.stages.download).not.toHaveProperty('textArtifactCount');
@@ -133,6 +142,17 @@ describe('AWS integrations for /api/process-cv', () => {
       'https://linkedin.com/in/example'
     );
     expect(dynamoPut[0].input.Item.status.S).toBe('uploaded');
+    const classificationAttr = dynamoPut[0].input.Item.documentClassification;
+    expect(classificationAttr).toEqual({
+      M: expect.objectContaining({
+        isResume: { BOOL: true },
+        accepted: { BOOL: true },
+        description: { S: 'a professional resume' },
+        confidence: { N: expect.any(String) },
+        evaluatedAt: { S: expect.any(String) },
+      }),
+    });
+    expect(Number(classificationAttr.M.confidence.N)).toBeGreaterThan(0.5);
 
     const dynamoUpdates = mocks.mockDynamoSend.mock.calls.filter(
       ([command]) => command.__type === 'UpdateItemCommand'
