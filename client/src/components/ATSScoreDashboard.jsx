@@ -41,6 +41,12 @@ function ensureAtsCategoryCoverage(metrics) {
 
   const trackedCategories = ATS_CATEGORY_ORDER.filter((category) => categoryMap.has(category))
 
+  const uniqueMetricCount = categoryMap.size
+
+  if (uniqueMetricCount >= ATS_CATEGORY_ORDER.length) {
+    return list
+  }
+
   if (!trackedCategories.length) {
     if (extras.length) {
       return extras
