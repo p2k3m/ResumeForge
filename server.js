@@ -30,6 +30,8 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { spawnSync } from 'node:child_process';
 import { logEvent, logErrorTrace } from './logger.js';
+
+const stageMetadataCache = new Map();
 import {
   executeWithRetry,
   getErrorStatus,
@@ -10781,27 +10783,30 @@ async function updateStageMetadata({
   const context = { ...logContext, stage, metadataKey };
 
   try {
-    let existingPayload = {};
-    try {
-      const existing = await sendS3CommandWithRetry(
-        s3,
-        () => new GetObjectCommand({ Bucket: bucket, Key: metadataKey }),
-        {
-          maxAttempts: 3,
-          baseDelayMs: 300,
-          maxDelayMs: 2500,
+    let existingPayload = stageMetadataCache.get(metadataKey) || {};
+    if (!Object.keys(existingPayload).length) {
+      try {
+        const existing = await sendS3CommandWithRetry(
+          s3,
+          () => new GetObjectCommand({ Bucket: bucket, Key: metadataKey }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 2500,
+          }
+        );
+        const raw = await streamToString(existing.Body);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            existingPayload = parsed;
+            stageMetadataCache.set(metadataKey, existingPayload);
+          }
         }
-      );
-      const raw = await streamToString(existing.Body);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object') {
-          existingPayload = parsed;
+      } catch (err) {
+        if (err?.name !== 'NoSuchKey' && err?.$metadata?.httpStatusCode !== 404) {
+          throw err;
         }
-      }
-    } catch (err) {
-      if (err?.name !== 'NoSuchKey' && err?.$metadata?.httpStatusCode !== 404) {
-        throw err;
       }
     }
 
@@ -10846,6 +10851,8 @@ async function updateStageMetadata({
         retryLogContext: context,
       }
     );
+
+    stageMetadataCache.set(metadataKey, nextPayload);
 
     return true;
   } catch (err) {
@@ -20026,8 +20033,11 @@ app.post(
         ? req.body.jobDescriptionText
         : '';
   const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
-  const manualJobDescriptionDigest = createTextDigest(manualJobDescription);
-  const hasManualJobDescription = Boolean(manualJobDescription);
+  const normalizedManualJobDescription = manualJobDescription
+    ? manualJobDescription.replace(/\s+/g, ' ').trim()
+    : '';
+  const manualJobDescriptionDigest = createTextDigest(normalizedManualJobDescription);
+  const hasManualJobDescription = Boolean(normalizedManualJobDescription);
   const submittedCredly = '';
   const profileIdentifier =
     resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId }) || jobId;
@@ -20322,6 +20332,19 @@ app.post(
             s3Bucket: { S: bucket },
             s3Key: { S: originalUploadKey },
             s3Url: { S: initialS3Location },
+            jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
+            ...(normalizedManualJobDescription
+              ? {
+                  sessionInputs: {
+                    M: {
+                      jobDescription: { S: normalizedManualJobDescription },
+                      ...(manualJobDescriptionDigest
+                        ? { jobDescriptionDigest: { S: manualJobDescriptionDigest } }
+                        : {}),
+                    },
+                  },
+                }
+              : {}),
           },
         })
       );
@@ -20703,9 +20726,9 @@ app.post(
         jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
       }
     };
-    if (manualJobDescription) {
+    if (normalizedManualJobDescription) {
       const sessionInputsMap = {
-        jobDescription: { S: manualJobDescription },
+        jobDescription: { S: normalizedManualJobDescription },
       };
       if (manualJobDescriptionDigest) {
         sessionInputsMap.jobDescriptionDigest = { S: manualJobDescriptionDigest };
@@ -20736,8 +20759,8 @@ app.post(
       uploadedAt: timestamp,
       fileType: storedFileType,
     };
-    if (manualJobDescription) {
-      const sessionInputs = { jobDescription: manualJobDescription };
+    if (normalizedManualJobDescription) {
+      const sessionInputs = { jobDescription: normalizedManualJobDescription };
       if (manualJobDescriptionDigest) {
         sessionInputs.jobDescriptionDigest = manualJobDescriptionDigest;
       }
