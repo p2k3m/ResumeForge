@@ -20439,32 +20439,42 @@ app.post(
           },
         }
       );
-      try {
-        await sendS3CommandWithRetry(
-          s3,
-          () => new DeleteObjectCommand({ Bucket: bucket, Key: normalizedOriginalKey }),
-          {
-            maxAttempts: 3,
-            baseDelayMs: 300,
-            maxDelayMs: 3000,
-            retryLogEvent: 'invalid_upload_relocation_retry',
-            retryLogContext: {
-              ...logContext,
-              bucket,
-              fromKey: normalizedOriginalKey,
-              toKey: invalidUploadKey,
-              operation: 'delete_source',
-            },
-          }
-        );
-      } catch (deleteErr) {
-        logStructured('warn', 'failed_upload_source_cleanup_failed', {
-          ...logContext,
-          bucket,
-          fromKey: normalizedOriginalKey,
-          toKey: invalidUploadKey,
-          error: serializeError(deleteErr),
-        });
+      const deleteCandidates = new Set([normalizedOriginalKey]);
+      if (
+        typeof normalizedOriginalKey === 'string' &&
+        normalizedOriginalKey.startsWith('cv/') &&
+        !normalizedOriginalKey.includes('/cv/')
+      ) {
+        deleteCandidates.add(`cv/${normalizedOriginalKey}`);
+      }
+      for (const candidateKey of deleteCandidates) {
+        try {
+          await sendS3CommandWithRetry(
+            s3,
+            () => new DeleteObjectCommand({ Bucket: bucket, Key: candidateKey }),
+            {
+              maxAttempts: 3,
+              baseDelayMs: 300,
+              maxDelayMs: 3000,
+              retryLogEvent: 'invalid_upload_relocation_retry',
+              retryLogContext: {
+                ...logContext,
+                bucket,
+                fromKey: candidateKey,
+                toKey: invalidUploadKey,
+                operation: 'delete_source',
+              },
+            }
+          );
+        } catch (deleteErr) {
+          logStructured('warn', 'failed_upload_source_cleanup_failed', {
+            ...logContext,
+            bucket,
+            fromKey: candidateKey,
+            toKey: invalidUploadKey,
+            error: serializeError(deleteErr),
+          });
+        }
       }
       logStructured('warn', 'failed_upload_relocated_to_invalid', {
         ...logContext,
@@ -20730,32 +20740,42 @@ app.post(
       );
       invalidRelocationSucceeded = true;
       recordedInvalidKey = invalidUploadKey;
-      try {
-        await sendS3CommandWithRetry(
-          s3,
-          () => new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
-          {
-            maxAttempts: 3,
-            baseDelayMs: 300,
-            maxDelayMs: 3000,
-            retryLogEvent: 'invalid_upload_relocation_retry',
-            retryLogContext: {
-              ...logContext,
-              bucket,
-              fromKey: originalUploadKey,
-              toKey: invalidUploadKey,
-              operation: 'delete_source',
-            },
-          }
-        );
-      } catch (deleteErr) {
-        logStructured('warn', 'invalid_upload_source_cleanup_failed', {
-          ...logContext,
-          bucket,
-          fromKey: originalUploadKey,
-          toKey: invalidUploadKey,
-          error: serializeError(deleteErr),
-        });
+      const deleteCandidates = new Set([originalUploadKey]);
+      if (
+        typeof originalUploadKey === 'string' &&
+        originalUploadKey.startsWith('cv/') &&
+        !originalUploadKey.includes('/cv/')
+      ) {
+        deleteCandidates.add(`cv/${originalUploadKey}`);
+      }
+      for (const candidateKey of deleteCandidates) {
+        try {
+          await sendS3CommandWithRetry(
+            s3,
+            () => new DeleteObjectCommand({ Bucket: bucket, Key: candidateKey }),
+            {
+              maxAttempts: 3,
+              baseDelayMs: 300,
+              maxDelayMs: 3000,
+              retryLogEvent: 'invalid_upload_relocation_retry',
+              retryLogContext: {
+                ...logContext,
+                bucket,
+                fromKey: candidateKey,
+                toKey: invalidUploadKey,
+                operation: 'delete_source',
+              },
+            }
+          );
+        } catch (deleteErr) {
+          logStructured('warn', 'invalid_upload_source_cleanup_failed', {
+            ...logContext,
+            bucket,
+            fromKey: candidateKey,
+            toKey: invalidUploadKey,
+            error: serializeError(deleteErr),
+          });
+        }
       }
       logStructured('warn', 'resume_validation_failed', {
         ...logContext,
