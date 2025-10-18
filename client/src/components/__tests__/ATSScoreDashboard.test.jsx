@@ -89,6 +89,33 @@ describe('ATSScoreDashboard', () => {
     )
   })
 
+  it('fills in missing ATS categories with placeholders', () => {
+    const partialMetrics = [
+      { category: 'Readability', score: 64, ratingLabel: 'Good', tips: ['Tighten paragraphs.'] },
+      { category: 'Crispness', score: 52, ratingLabel: 'Needs Improvement', tips: ['Trim filler language.'] }
+    ]
+
+    render(<ATSScoreDashboard metrics={partialMetrics} baselineMetrics={[]} />)
+
+    const expectedCategories = [
+      'Layout & Searchability',
+      'Readability',
+      'Impact',
+      'Crispness',
+      'Other'
+    ]
+
+    expectedCategories.forEach((category) => {
+      expect(screen.getByRole('heading', { name: category })).toBeInTheDocument()
+    })
+
+    const layoutCard = screen.getByRole('heading', { name: 'Layout & Searchability' }).closest('article')
+    expect(layoutCard).not.toBeNull()
+    if (layoutCard) {
+      expect(within(layoutCard).getByText(/layout & searchability score yet/i)).toBeInTheDocument()
+    }
+  })
+
   it('updates to reflect new scores immediately when data changes', () => {
     const match = {
       ...baseMatch,
