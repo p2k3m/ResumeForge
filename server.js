@@ -14615,7 +14615,7 @@ async function handleImprovementRequest(type, req, res) {
         evaluationLogs: evaluationActivityLogs,
         enhancementLogs: enhancementActivityLogs,
         downloadLogs: downloadActivityLogs,
-        sessionId: existingRecordItem?.sessionId?.S || '',
+        sessionId: existingRecord?.sessionId?.S || '',
       });
 
       if (!enhancedDocs) {
