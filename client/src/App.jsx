@@ -696,6 +696,25 @@ function canonicalizeProfileIdentifier(profileUrl) {
   }
 }
 
+function looksLikeJobDescriptionUrl(text) {
+  if (typeof text !== 'string') {
+    return false
+  }
+  const trimmed = text.trim()
+  if (!trimmed) {
+    return false
+  }
+  if (/\s/.test(trimmed)) {
+    return false
+  }
+  const urlPattern = /^(?:https?:\/\/|ftp:\/\/|www\.)\S+$/i
+  if (urlPattern.test(trimmed)) {
+    return true
+  }
+  const domainPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\/\S*)?$/i
+  return domainPattern.test(trimmed)
+}
+
 function deriveUserIdentifier({ profileUrl, userId } = {}) {
   const explicitId = typeof userId === 'string' ? userId.trim() : ''
   if (explicitId) {
@@ -2106,6 +2125,13 @@ function App() {
   const [baselineScoreBreakdown, setBaselineScoreBreakdown] = useState([])
   const [resumeText, setResumeText] = useState('')
   const [jobDescriptionText, setJobDescriptionText] = useState('')
+  const manualJobDescriptionValue = useMemo(() => {
+    return typeof manualJobDescription === 'string' ? manualJobDescription.trim() : ''
+  }, [manualJobDescription])
+  const manualJobDescriptionLooksLikeUrl = useMemo(
+    () => looksLikeJobDescriptionUrl(manualJobDescriptionValue),
+    [manualJobDescriptionValue]
+  )
   const parsedJobDescription = useMemo(
     () => parseJobDescriptionText(jobDescriptionText),
     [jobDescriptionText]
@@ -2253,6 +2279,13 @@ function App() {
   const [templateContext, setTemplateContext] = useState(null)
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
+  const manualJobDescriptionHasError =
+    manualJobDescriptionRequired || manualJobDescriptionLooksLikeUrl
+  const manualJobDescriptionHelperText = manualJobDescriptionLooksLikeUrl
+    ? 'Paste the full job description text instead of a link.'
+    : manualJobDescriptionRequired
+      ? 'Paste the full job description to continue.'
+      : 'Paste the full JD so we analyse the exact role requirements.'
   const [enhanceAllSummaryText, setEnhanceAllSummaryText] = useState('')
   const [coverLetterDrafts, setCoverLetterDrafts] = useState({})
   const [coverLetterOriginals, setCoverLetterOriginals] = useState({})
@@ -2357,16 +2390,17 @@ function App() {
   }, [cvFile])
 
   const currentJobSignature = useMemo(() => {
-    const manualText = typeof manualJobDescription === 'string' ? manualJobDescription.trim() : ''
-    if (manualText) {
-      return `manual:${manualText}`
+    if (manualJobDescriptionValue && !manualJobDescriptionLooksLikeUrl) {
+      return `manual:${manualJobDescriptionValue}`
     }
     return ''
-  }, [manualJobDescription])
+  }, [manualJobDescriptionLooksLikeUrl, manualJobDescriptionValue])
 
   const hasMatch = Boolean(match)
   const hasCvFile = Boolean(cvFile)
-  const hasManualJobDescriptionInput = Boolean(manualJobDescription && manualJobDescription.trim())
+  const hasManualJobDescriptionInput = Boolean(
+    manualJobDescriptionValue && !manualJobDescriptionLooksLikeUrl
+  )
   const improvementCount = improvementResults.length
   const downloadCount = outputFiles.length
   const changeCount = changeLog.length
@@ -2653,7 +2687,7 @@ function App() {
     if (!cvFile) {
       return
     }
-    if (manualJobDescription.trim()) {
+    if (manualJobDescriptionValue && !manualJobDescriptionLooksLikeUrl) {
       return
     }
     setManualJobDescriptionRequired((prev) => {
@@ -2662,13 +2696,21 @@ function App() {
       }
       return true
     })
-  }, [cvFile, manualJobDescription])
+  }, [cvFile, manualJobDescriptionLooksLikeUrl, manualJobDescriptionValue])
 
   useEffect(() => {
-    if (manualJobDescriptionRequired && manualJobDescription.trim()) {
+    if (
+      manualJobDescriptionRequired &&
+      manualJobDescriptionValue &&
+      !manualJobDescriptionLooksLikeUrl
+    ) {
       setManualJobDescriptionRequired(false)
     }
-  }, [manualJobDescription, manualJobDescriptionRequired])
+  }, [
+    manualJobDescriptionLooksLikeUrl,
+    manualJobDescriptionRequired,
+    manualJobDescriptionValue
+  ])
 
   const resumeHistoryMap = useMemo(() => {
     const map = new Map()
@@ -5062,7 +5104,7 @@ function App() {
       return
     }
 
-    const manualText = manualJobDescription.trim()
+    const manualText = manualJobDescriptionValue
     const fileSignature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
     const jobSignature = manualText ? `manual:${manualText}` : ''
 
@@ -5073,6 +5115,12 @@ function App() {
     if (!manualText) {
       setManualJobDescriptionRequired(true)
       setError('Please paste the full job description before continuing.')
+      manualJobDescriptionRef.current?.focus?.()
+      return
+    }
+    if (manualJobDescriptionLooksLikeUrl) {
+      setManualJobDescriptionRequired(true)
+      setError('Paste the full job description text instead of a link.')
       manualJobDescriptionRef.current?.focus?.()
       return
     }
@@ -5433,8 +5481,8 @@ function App() {
     API_BASE_URL,
     cvFile,
     manualCertificatesInput,
-    manualJobDescription,
-    manualJobDescriptionRequired,
+    manualJobDescriptionLooksLikeUrl,
+    manualJobDescriptionValue,
     resetAnalysisState,
     updateOutputFiles,
     selectedTemplate,
@@ -5446,8 +5494,7 @@ function App() {
     if (!cvFile || isProcessing) {
       return
     }
-    const manualText = manualJobDescription.trim()
-    if (!manualText) {
+    if (!manualJobDescriptionValue || manualJobDescriptionLooksLikeUrl) {
       return
     }
     const signature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
@@ -5458,7 +5505,14 @@ function App() {
       return
     }
     handleScoreSubmit()
-  }, [cvFile, handleScoreSubmit, isProcessing, manualJobDescription, scoreComplete])
+  }, [
+    cvFile,
+    handleScoreSubmit,
+    isProcessing,
+    manualJobDescriptionLooksLikeUrl,
+    manualJobDescriptionValue,
+    scoreComplete
+  ])
 
   const hasAcceptedImprovements = useMemo(
     () => improvementResults.some((item) => item.accepted === true),
@@ -8157,27 +8211,28 @@ function App() {
             <div className="md:col-span-2 space-y-2">
               <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
                 Paste Full Job Description{' '}
-                <span className={manualJobDescriptionRequired ? 'text-rose-600' : 'text-purple-500'}>*</span>
+                <span className={manualJobDescriptionHasError ? 'text-rose-600' : 'text-purple-500'}>*</span>
               </label>
               <textarea
                 id="manual-job-description"
                 value={manualJobDescription}
                 onChange={(e) => setManualJobDescription(e.target.value)}
                 placeholder="Paste the entire job post here."
-                className="w-full h-32 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className={`w-full h-32 p-3 rounded-xl border focus:outline-none focus:ring-2 ${manualJobDescriptionHasError
+                  ? 'border-rose-300 focus:ring-rose-400'
+                  : 'border-purple-200 focus:ring-purple-400'
+                }`}
                 required
                 ref={manualJobDescriptionRef}
               />
               <p
                 className={`text-xs ${
-                  manualJobDescriptionRequired
+                  manualJobDescriptionHasError
                     ? 'text-rose-600 font-semibold'
                     : 'text-purple-500'
                 }`}
               >
-                {manualJobDescriptionRequired
-                  ? 'Paste the full job description to continue.'
-                  : 'Paste the full JD so we analyse the exact role requirements.'}
+                {manualJobDescriptionHelperText}
               </p>
               {hasManualJobDescriptionInput && (
                 <JobDescriptionPreview text={manualJobDescription} />
