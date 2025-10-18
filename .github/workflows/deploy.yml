@@ -481,7 +481,49 @@ jobs:
             )
 
             deploy_err_normalized=$(printf '%s\n' "$deploy_err_stripped" | tr '\r\n' '  ' | tr -s ' ')
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE|ROLLBACK)_IN_PROGRESS state"; then
+            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "AlreadyExistsException" && \
+               printf '%s\n' "$deploy_err_normalized" | grep -Eqi "mismatch with existing attribute description"; then
+              echo "sam deploy reported a change set description mismatch. Attempting to remove the conflicting change set before retrying..."
+
+              change_set_name=$(printf '%s\n' "$deploy_err_stripped" |
+                python -c "import re, sys; data=sys.stdin.read(); match=re.search(r'ChangeSet\\s+([^\\s]+)', data, re.IGNORECASE); print(match.group(1) if match else '')")
+
+              if [ -n "$change_set_name" ]; then
+                if wait_for_change_set_ready "$change_set_name" "handling description mismatch"; then
+                  : >"$tmp_err"
+                  if aws cloudformation delete-change-set \
+                      --stack-name "$STACK_NAME" \
+                      --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
+                    echo "Deleted conflicting change set '$change_set_name'."
+                  else
+                    delete_change_set_err=$(cat "$tmp_err")
+                    if echo "$delete_change_set_err" | grep -qi 'does not exist'; then
+                      echo "Conflicting change set '$change_set_name' no longer exists."
+                    else
+                      echo "Failed to delete change set '$change_set_name': $delete_change_set_err" >&2
+                      exit 1
+                    fi
+                  fi
+                else
+                  echo "Conflicting change set '$change_set_name' disappeared before it could be deleted."
+                fi
+              else
+                echo "Unable to determine the conflicting change set name from sam deploy output. Running cleanup routine..."
+              fi
+
+              cleanup_description_conflicts "after handling change set description mismatch"
+              ensure_stack_ready_for_deploy "after cleaning change set description mismatch"
+
+              if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
+                echo "Unable to resolve change set description mismatch after $max_deploy_attempts attempts." >&2
+                exit 1
+              fi
+
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+
+            elif printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE|ROLLBACK)_IN_PROGRESS state"; then
               if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
                 echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
                 exit 1
