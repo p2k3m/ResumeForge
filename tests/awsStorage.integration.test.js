@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
 import { setupTestServer, primeSuccessfulAi } from './utils/testServer.js';
+import { generateContentMock } from './mocks/generateContentMock.js';
 
 jest.setTimeout(30000);
 
@@ -206,6 +207,52 @@ describe('AWS integrations for /api/process-cv', () => {
     expect(mocks.logEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'initial_upload_failed', level: 'error' })
     );
+  });
+
+  test('relocates failed uploads to the invalid prefix when generation fails', async () => {
+    const { app, mocks } = await setupTestServer();
+    generateContentMock.mockReset();
+    generateContentMock.mockImplementation(() =>
+      Promise.reject(new Error('Model unavailable'))
+    );
+
+    const response = await request(app)
+      .post('/api/process-cv')
+      .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(response.status).toBe(500);
+    expect(response.body.error.code).toBe('DOCUMENT_GENERATION_FAILED');
+    expect(response.body.error.details).toEqual(
+      expect.objectContaining({
+        reason: 'Model unavailable',
+        storageKey: expect.stringMatching(/^invalid\//),
+        invalidStorageKey: expect.stringMatching(/^invalid\//),
+      })
+    );
+
+    const commandSummaries = mocks.mockS3Send.mock.calls.map(([command]) => ({
+      type: command.__type,
+      key: command.input?.Key,
+    }));
+
+    const invalidCopy = commandSummaries.find(
+      (command) =>
+        command.type === 'CopyObjectCommand' &&
+        typeof command.key === 'string' &&
+        command.key.startsWith('invalid/')
+    );
+    expect(invalidCopy).toBeTruthy();
+
+    const canonicalDelete = commandSummaries.find(
+      (command) =>
+        command.type === 'DeleteObjectCommand' &&
+        typeof command.key === 'string' &&
+        command.key.includes('/cv/') &&
+        !command.key.includes('/incoming/') &&
+        command.key.endsWith('/original.pdf')
+    );
+    expect(canonicalDelete).toBeTruthy();
   });
 
   test('creates DynamoDB table when missing', async () => {

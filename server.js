@@ -20357,6 +20357,139 @@ app.post(
   const initialTimestamp = new Date().toISOString();
   const initialS3Location = `s3://${bucket}/${originalUploadKey}`;
 
+  const relocateFailedUploadToInvalid = async ({
+    descriptor = 'processing-failed',
+    reason = '',
+  } = {}) => {
+    const normalizedOriginalKey =
+      typeof originalUploadKey === 'string' ? originalUploadKey.trim() : '';
+    if (!bucket || !normalizedOriginalKey) {
+      return { storageKey: normalizedOriginalKey, invalidStorageKey: '' };
+    }
+    if (normalizedOriginalKey.startsWith('invalid/')) {
+      return {
+        storageKey: normalizedOriginalKey,
+        invalidStorageKey: normalizedOriginalKey,
+      };
+    }
+
+    const invalidOwnerSegment =
+      sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: '' }) ||
+      sanitizeS3KeyComponent(fallbackOwnerSegment, { fallback: '' }) ||
+      'candidate';
+    const invalidDateSegment = sanitizeS3KeyComponent(date);
+    const invalidSessionSegment =
+      sanitizeS3KeyComponent(sessionSegment, { fallback: '' }) ||
+      sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(createIdentifier());
+    const invalidPrefixParts = ['invalid', invalidOwnerSegment];
+    if (invalidDateSegment) {
+      invalidPrefixParts.push(invalidDateSegment);
+    }
+    if (invalidSessionSegment) {
+      invalidPrefixParts.push(invalidSessionSegment);
+    }
+    const invalidPrefix = `${invalidPrefixParts.join('/')}/`;
+    const descriptorSegment =
+      sanitizeS3KeyComponent(descriptor, { fallback: '' }) ||
+      sanitizeS3KeyComponent(reason, { fallback: 'processing-failed' }) ||
+      'processing-failed';
+    const identifierSegment =
+      sanitizeS3KeyComponent(createIdentifier(), { fallback: '' });
+    const invalidFileName = identifierSegment
+      ? `${descriptorSegment}-${identifierSegment}${normalizedExt}`
+      : `${descriptorSegment}${normalizedExt}`;
+    const invalidUploadKey = `${invalidPrefix}${invalidFileName}`;
+
+    try {
+      await sendS3CommandWithRetry(
+        s3,
+        () =>
+          new CopyObjectCommand(
+            withEnvironmentTagging({
+              Bucket: bucket,
+              CopySource: buildCopySource(bucket, normalizedOriginalKey),
+              Key: invalidUploadKey,
+              MetadataDirective: 'COPY',
+              TaggingDirective: 'REPLACE',
+            })
+          ),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 500,
+          maxDelayMs: 5000,
+          jitterMs: 300,
+          retryLogEvent: 'invalid_upload_relocation_retry',
+          retryLogContext: {
+            ...logContext,
+            bucket,
+            fromKey: normalizedOriginalKey,
+            toKey: invalidUploadKey,
+            failure: descriptorSegment,
+          },
+        }
+      );
+      try {
+        await sendS3CommandWithRetry(
+          s3,
+          () => new DeleteObjectCommand({ Bucket: bucket, Key: normalizedOriginalKey }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 3000,
+            retryLogEvent: 'invalid_upload_relocation_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket,
+              fromKey: normalizedOriginalKey,
+              toKey: invalidUploadKey,
+              operation: 'delete_source',
+            },
+          }
+        );
+      } catch (deleteErr) {
+        logStructured('warn', 'failed_upload_source_cleanup_failed', {
+          ...logContext,
+          bucket,
+          fromKey: normalizedOriginalKey,
+          toKey: invalidUploadKey,
+          error: serializeError(deleteErr),
+        });
+      }
+      logStructured('warn', 'failed_upload_relocated_to_invalid', {
+        ...logContext,
+        bucket,
+        fromKey: normalizedOriginalKey,
+        toKey: invalidUploadKey,
+        descriptor: descriptorSegment,
+        reason,
+      });
+      originalUploadKey = invalidUploadKey;
+      if (req.file) {
+        req.file.key = invalidUploadKey;
+      }
+      return {
+        storageKey: invalidUploadKey,
+        invalidStorageKey: invalidUploadKey,
+      };
+    } catch (relocationErr) {
+      logStructured('error', 'failed_upload_relocation_failed', {
+        ...logContext,
+        bucket,
+        fromKey: normalizedOriginalKey,
+        toKey: invalidUploadKey,
+        descriptor: descriptorSegment,
+        reason,
+        error: serializeError(relocationErr),
+      });
+      return {
+        storageKey: normalizedOriginalKey,
+        invalidStorageKey: '',
+      };
+    }
+  };
+
   await ensureTableExists();
 
   const writePlaceholderRecord = async (identifier) => {
@@ -20798,7 +20931,22 @@ app.post(
         bucket,
         error: serializeError(err),
       });
+      const relocationReason =
+        typeof err?.message === 'string' && err.message.trim()
+          ? err.message
+          : 'Failed to relocate raw upload to final key';
+      const relocationResult = await relocateFailedUploadToInvalid({
+        descriptor: err?.code || 'raw-upload-relocation',
+        reason: relocationReason,
+      });
       try {
+        const relocationMetadata = {};
+        if (relocationResult.storageKey) {
+          relocationMetadata.storageKey = relocationResult.storageKey;
+        }
+        if (relocationResult.invalidStorageKey) {
+          relocationMetadata.invalidStorageKey = relocationResult.invalidStorageKey;
+        }
         await logEvent({
           s3,
           bucket,
@@ -20806,7 +20954,10 @@ app.post(
           jobId,
           event: 'raw_upload_relocation_failed',
           level: 'error',
-          message: err.message || 'Failed to relocate raw upload to final key',
+          message: relocationReason,
+          ...(Object.keys(relocationMetadata).length
+            ? { metadata: relocationMetadata }
+            : {}),
         });
       } catch (logErr) {
         logStructured('error', 's3_log_failure', {
@@ -20814,11 +20965,19 @@ app.post(
           error: serializeError(logErr),
         });
       }
+      const relocationDetails = {};
+      if (relocationResult.storageKey) {
+        relocationDetails.storageKey = relocationResult.storageKey;
+      }
+      if (relocationResult.invalidStorageKey) {
+        relocationDetails.invalidStorageKey = relocationResult.invalidStorageKey;
+      }
       return sendError(
         res,
         500,
         'RAW_UPLOAD_RELOCATION_FAILED',
-        'Uploaded file could not be prepared for processing. Please try again later.'
+        'Uploaded file could not be prepared for processing. Please try again later.',
+        Object.keys(relocationDetails).length ? relocationDetails : undefined
       );
     }
   }
@@ -21158,6 +21317,14 @@ app.post(
       ...logContext,
       error: serializeError(err),
     });
+    const metadataFailureReason =
+      typeof err?.message === 'string' && err.message.trim()
+        ? err.message
+        : 'Failed to write initial DynamoDB record';
+    const metadataRelocation = await relocateFailedUploadToInvalid({
+      descriptor: err?.code || 'metadata-write',
+      reason: metadataFailureReason,
+    });
     try {
       await logEvent({
         s3,
@@ -21166,7 +21333,17 @@ app.post(
         jobId,
         event: 'dynamodb_initial_record_failed',
         level: 'error',
-        message: err.message || 'Failed to write initial DynamoDB record'
+        message: metadataFailureReason,
+        ...(metadataRelocation.storageKey
+          ? {
+              metadata: {
+                storageKey: metadataRelocation.storageKey,
+                ...(metadataRelocation.invalidStorageKey
+                  ? { invalidStorageKey: metadataRelocation.invalidStorageKey }
+                  : {}),
+              },
+            }
+          : {}),
       });
     } catch (logErr) {
       logStructured('error', 'dynamo_initial_record_log_failed', {
@@ -21174,11 +21351,21 @@ app.post(
         error: serializeError(logErr),
       });
     }
+    const metadataFailureDetails = {};
+    if (metadataRelocation.storageKey) {
+      metadataFailureDetails.storageKey = metadataRelocation.storageKey;
+    }
+    if (metadataRelocation.invalidStorageKey) {
+      metadataFailureDetails.invalidStorageKey = metadataRelocation.invalidStorageKey;
+    }
     return sendError(
       res,
       500,
       'INITIAL_METADATA_WRITE_FAILED',
-      'Failed to record upload metadata. Please try again later.'
+      'Failed to record upload metadata. Please try again later.',
+      Object.keys(metadataFailureDetails).length
+        ? metadataFailureDetails
+        : undefined
     );
   }
 
@@ -21698,11 +21885,31 @@ app.post(
       error: lastGenerationError ? serializeError(lastGenerationError) : undefined,
     });
 
-    const errorDetails =
-      lastGenerationError && lastGenerationError.message &&
-      lastGenerationError.message !== CV_GENERATION_ERROR_MESSAGE
-        ? { reason: lastGenerationError.message }
+    const generationFailureReason =
+      lastGenerationError &&
+      typeof lastGenerationError.message === 'string' &&
+      lastGenerationError.message.trim()
+        ? lastGenerationError.message
+        : '';
+    const generationRelocation = await relocateFailedUploadToInvalid({
+      descriptor: lastGenerationError?.code || 'document-generation',
+      reason: generationFailureReason || 'Document generation failed',
+    });
+
+    let errorDetails =
+      lastGenerationError && generationFailureReason &&
+      generationFailureReason !== CV_GENERATION_ERROR_MESSAGE
+        ? { reason: generationFailureReason }
         : undefined;
+    if (generationRelocation.storageKey) {
+      errorDetails = {
+        ...(errorDetails || {}),
+        storageKey: generationRelocation.storageKey,
+        ...(generationRelocation.invalidStorageKey
+          ? { invalidStorageKey: generationRelocation.invalidStorageKey }
+          : {}),
+      };
+    }
 
     return sendError(
       res,
@@ -21720,8 +21927,19 @@ app.post(
       error: serializeError(err),
       failureMessage,
     });
+    const failureRelocation = await relocateFailedUploadToInvalid({
+      descriptor: err?.code || 'processing-failed',
+      reason: failureMessage,
+    });
     if (bucket) {
       try {
+        const failureMetadata = {};
+        if (failureRelocation.storageKey) {
+          failureMetadata.storageKey = failureRelocation.storageKey;
+        }
+        if (failureRelocation.invalidStorageKey) {
+          failureMetadata.invalidStorageKey = failureRelocation.invalidStorageKey;
+        }
         await logEvent({
           s3,
           bucket,
@@ -21730,6 +21948,9 @@ app.post(
           event: 'error',
           level: 'error',
           message: failureMessage,
+          ...(Object.keys(failureMetadata).length
+            ? { metadata: failureMetadata }
+            : {}),
         });
       } catch (e) {
         logStructured('error', 's3_log_failure', {
@@ -21742,6 +21963,12 @@ app.post(
     if (err?.code) details.code = err.code;
     if (err?.message && err.message !== failureMessage) {
       details.reason = err.message;
+    }
+    if (failureRelocation.storageKey) {
+      details.storageKey = failureRelocation.storageKey;
+    }
+    if (failureRelocation.invalidStorageKey) {
+      details.invalidStorageKey = failureRelocation.invalidStorageKey;
     }
     return sendError(
       res,
