@@ -39,11 +39,13 @@ function ensureAtsCategoryCoverage(metrics) {
     return category && !ATS_CATEGORY_ORDER.includes(category)
   })
 
-  const hasTrackedCategory = ATS_CATEGORY_ORDER.some((category) => categoryMap.has(category))
+  const trackedCategories = ATS_CATEGORY_ORDER.filter((category) => categoryMap.has(category))
 
-  if (!hasTrackedCategory) {
-    const placeholders = ATS_CATEGORY_ORDER.map((category) => buildMissingAtsMetric(category))
-    return extras.length ? [...placeholders, ...extras] : placeholders
+  if (!trackedCategories.length) {
+    if (extras.length) {
+      return extras
+    }
+    return ATS_CATEGORY_ORDER.map((category) => buildMissingAtsMetric(category))
   }
 
   const ensured = ATS_CATEGORY_ORDER.map((category) => categoryMap.get(category) || buildMissingAtsMetric(category))
