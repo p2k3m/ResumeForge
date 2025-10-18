@@ -154,8 +154,32 @@ function shouldLog(level) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const clientDir = path.join(__dirname, 'client');
-const clientDistDir = path.join(clientDir, 'dist');
+function resolveClientDistDir() {
+  const lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
+    ? path.resolve(process.env.LAMBDA_TASK_ROOT)
+    : null;
+
+  const candidatePaths = [
+    lambdaTaskRoot ? path.join(lambdaTaskRoot, 'client', 'dist') : null,
+    path.join(__dirname, 'client', 'dist'),
+    path.join(__dirname, '..', 'client', 'dist'),
+    path.join(process.cwd(), 'client', 'dist'),
+  ].filter(Boolean);
+
+  const seen = new Set();
+  for (const candidate of candidatePaths) {
+    const normalized = path.resolve(candidate);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    if (fsSync.existsSync(normalized)) {
+      return normalized;
+    }
+  }
+
+  return path.resolve(candidatePaths[0] || path.join(__dirname, 'client', 'dist'));
+}
+
+const clientDistDir = resolveClientDistDir();
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 let cachedClientIndexHtml;
 let clientAutoBuildAttempted = false;
@@ -948,17 +972,48 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="resumeforge-api-base" content="" />
     <title>ResumeForge</title>
-    <script type="module" crossorigin src="/assets/index-fallback000.js"></script>
-    <link rel="stylesheet" href="/assets/index-fallback000.css" />
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 2.5rem 1.5rem;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        line-height: 1.6;
+        background: #f8f9fa;
+        color: #111;
+      }
+      main {
+        max-width: 40rem;
+        margin: 0 auto;
+        background: #fff;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 1.75rem;
+      }
+      code {
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        background: rgba(15, 23, 42, 0.08);
+        padding: 0.15rem 0.4rem;
+        border-radius: 6px;
+        font-size: 0.95rem;
+      }
+      p:last-of-type {
+        margin-bottom: 0;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
-    <noscript>
-      <main style="padding: 1.5rem; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-        <h1 style="margin-top: 0;">ResumeForge</h1>
-        <p>The client application assets are currently rebuilding. Run <code>npm run build:client</code> to restore the interactive portal.</p>
-      </main>
-    </noscript>
+    <main>
+      <h1>ResumeForge client rebuilding</h1>
+      <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
+      <p>To fix this in development, run <code>npm run build:client</code>. For deployed environments, ensure the <code>client/dist</code> directory is bundled alongside the Lambda function.</p>
+    </main>
   </body>
 </html>`;
 
