@@ -578,7 +578,7 @@ describe('/api/process-cv', () => {
       .set('X-Forwarded-For', '198.51.100.5')
       .field(
         'manualJobDescription',
-        'Senior Engineer<script>alert("x")</script><div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a>'
+        'Senior Engineer<script>alert("x")</script><div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a><svg onload="alert(1)">Hire</svg><img src="x" onerror="bad()">'
       )
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -588,10 +588,13 @@ describe('/api/process-cv', () => {
     expect(jobText).toContain('senior engineer');
     expect(jobText).toContain('focus');
     expect(jobText).toContain('apply');
+    expect(jobText).toContain('hire');
     expect(jobText).not.toContain('alert');
     expect(jobText).not.toContain('steal');
     expect(jobText).not.toContain('javascript');
     expect(jobText).not.toContain('onclick');
+    expect(jobText).not.toContain('<');
+    expect(jobText).not.toContain('>');
 
   });
 
