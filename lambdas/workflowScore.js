@@ -1,5 +1,5 @@
 import '../config/environment.js';
-import { scoreResumeAgainstJob } from '../lib/resume/scoring.js';
+import { scoreResumeAgainstJob } from '../services/scoring/service.js';
 import { normalizeSkillListInput } from '../lib/resume/skills.js';
 import { withLambdaObservability } from '../lib/observability/lambda.js';
 
@@ -16,7 +16,7 @@ const baseHandler = async (event = {}) => {
   const jobSkills = normalizeJobSkills(event.jobSkills);
   const jobDescription = typeof event.jobDescription === 'string' ? event.jobDescription : '';
 
-  const outcome = scoreResumeAgainstJob({ jobId, resumeText, jobSkills, jobDescription });
+  const outcome = await scoreResumeAgainstJob({ jobId, resumeText, jobSkills, jobDescription });
   if (!outcome.ok) {
     const error = new Error(outcome.error?.message || 'Unable to score resume');
     error.code = outcome.error?.code || 'SCORING_FAILED';
