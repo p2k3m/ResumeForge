@@ -116,6 +116,40 @@ describe('ATSScoreDashboard', () => {
     }
   })
 
+  it('preserves unknown categories while ensuring ATS coverage', () => {
+    const extendedMetrics = [
+      { category: 'Readability', score: 70, ratingLabel: 'Good', tips: ['Tighten paragraphs.'] },
+      { category: 'Custom Insight', score: 88, ratingLabel: 'Excellent', tips: ['Keep highlighting this edge.'] }
+    ]
+
+    render(<ATSScoreDashboard metrics={extendedMetrics} baselineMetrics={[]} />)
+
+    const expectedCategories = [
+      'Layout & Searchability',
+      'Readability',
+      'Impact',
+      'Crispness',
+      'Other',
+      'Custom Insight'
+    ]
+
+    expectedCategories.forEach((category) => {
+      expect(screen.getByRole('heading', { name: category })).toBeInTheDocument()
+    })
+
+    const customCard = screen.getByRole('heading', { name: 'Custom Insight' }).closest('article')
+    expect(customCard).not.toBeNull()
+    if (customCard) {
+      expect(within(customCard).getByText(/keep highlighting this edge/i)).toBeInTheDocument()
+    }
+
+    const layoutCard = screen.getByRole('heading', { name: 'Layout & Searchability' }).closest('article')
+    expect(layoutCard).not.toBeNull()
+    if (layoutCard) {
+      expect(within(layoutCard).getByText(/layout & searchability score yet/i)).toBeInTheDocument()
+    }
+  })
+
   it('updates to reflect new scores immediately when data changes', () => {
     const match = {
       ...baseMatch,
