@@ -1512,7 +1512,7 @@ describe('/api/process-cv', () => {
             tips: expect.any(Array),
           }),
           atsReadability: expect.objectContaining({
-            category: 'ATS Readability',
+            category: 'Readability',
             score: expect.any(Number),
             rating: expect.any(String),
             ratingLabel: expect.any(String),
@@ -1533,7 +1533,7 @@ describe('/api/process-cv', () => {
             tips: expect.any(Array),
           }),
           otherQuality: expect.objectContaining({
-            category: 'Other Quality Metrics',
+            category: 'Other',
             score: expect.any(Number),
             rating: expect.any(String),
             ratingLabel: expect.any(String),
@@ -1543,10 +1543,10 @@ describe('/api/process-cv', () => {
       );
       expect(res.body.atsSubScores).toEqual([
         expect.objectContaining({ category: 'Layout & Searchability', score: expect.any(Number) }),
-        expect.objectContaining({ category: 'ATS Readability', score: expect.any(Number) }),
+        expect.objectContaining({ category: 'Readability', score: expect.any(Number) }),
         expect.objectContaining({ category: 'Impact', score: expect.any(Number) }),
         expect.objectContaining({ category: 'Crispness', score: expect.any(Number) }),
-        expect.objectContaining({ category: 'Other Quality Metrics', score: expect.any(Number) }),
+        expect.objectContaining({ category: 'Other', score: expect.any(Number) }),
       ]);
       expect(typeof res.body.selectionProbability).toBe('number');
       expect(typeof res.body.selectionProbabilityBefore).toBe('number');

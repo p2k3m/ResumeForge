@@ -115,9 +115,9 @@ const METRIC_IMPROVEMENT_PRESETS = [
     helper: 'Streamline structure and sections so ATS bots read your resume without errors.'
   },
   {
-    category: 'ATS Readability',
+    category: 'Readability',
     actionKey: 'enhance-all',
-    label: 'Boost ATS Readability',
+    label: 'Boost Readability',
     helper: 'Tighten headings and formatting so automated scanners instantly grasp your experience.'
   },
   {
@@ -133,7 +133,7 @@ const METRIC_IMPROVEMENT_PRESETS = [
     helper: 'Sharpen your intro so recruiters see a confident, concise story.'
   },
   {
-    category: 'Other Quality Metrics',
+    category: 'Other',
     actionKey: 'improve-highlights',
     label: 'Improve Highlights',
     helper: 'Polish standout wins so they pop during quick ATS and recruiter scans.'
@@ -1322,10 +1322,10 @@ const resolveCoverTemplateSelection = ({
 
 const ATS_SUB_SCORE_ORDER = [
   'Layout & Searchability',
-  'ATS Readability',
+  'Readability',
   'Impact',
   'Crispness',
-  'Other Quality Metrics'
+  'Other'
 ]
 
 const CHANGE_TYPE_LABELS = {

@@ -11,10 +11,10 @@ const METRIC_KEYS = [
 
 const expectedCategories = {
   layoutSearchability: 'Layout & Searchability',
-  atsReadability: 'ATS Readability',
+  atsReadability: 'Readability',
   impact: 'Impact',
   crispness: 'Crispness',
-  otherQuality: 'Other Quality Metrics',
+  otherQuality: 'Other',
 };
 
 describe('buildScoreBreakdown with real-world resume samples', () => {

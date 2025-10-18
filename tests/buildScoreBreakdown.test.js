@@ -43,7 +43,7 @@ describe('buildScoreBreakdown', () => {
           tips: expect.arrayContaining([expect.any(String)]),
         }),
         atsReadability: expect.objectContaining({
-          category: 'ATS Readability',
+          category: 'Readability',
           score: expect.any(Number),
           rating: expect.any(String),
           ratingLabel: expect.any(String),
@@ -64,7 +64,7 @@ describe('buildScoreBreakdown', () => {
           tips: expect.arrayContaining([expect.any(String)]),
         }),
         otherQuality: expect.objectContaining({
-          category: 'Other Quality Metrics',
+          category: 'Other',
           score: expect.any(Number),
           rating: expect.any(String),
           ratingLabel: expect.any(String),
@@ -139,10 +139,10 @@ describe('buildScoreBreakdown', () => {
     expect(breakdown).toEqual(
       expect.objectContaining({
         layoutSearchability: expect.objectContaining({ category: 'Layout & Searchability', score: 0 }),
-        atsReadability: expect.objectContaining({ category: 'ATS Readability', score: 0 }),
+        atsReadability: expect.objectContaining({ category: 'Readability', score: 0 }),
         impact: expect.objectContaining({ category: 'Impact', score: 0 }),
         crispness: expect.objectContaining({ category: 'Crispness', score: 0 }),
-        otherQuality: expect.objectContaining({ category: 'Other Quality Metrics', score: 0 }),
+        otherQuality: expect.objectContaining({ category: 'Other', score: 0 }),
       })
     );
     Object.values(breakdown).forEach((metric) => {
