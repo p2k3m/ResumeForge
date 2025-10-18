@@ -67,6 +67,7 @@ import { ENHANCEMENT_TYPES } from './lib/resume/enhancement.js';
 import {
   extractResumeText,
   classifyResumeDocument,
+  shouldRejectBasedOnClassification,
 } from './lib/resume/parsing.js';
 import {
   createGeminiGenerativeModel,
@@ -20431,7 +20432,24 @@ app.post(
     confidence: classification.confidence,
   });
   const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
-  if (!classification.isResume) {
+  const classificationShouldReject =
+    !classification.isResume &&
+    shouldRejectBasedOnClassification(classification, {
+      fileExtension: normalizedExt,
+      wordCount,
+    });
+
+  if (!classification.isResume && !classificationShouldReject) {
+    logStructured('info', 'resume_classification_overridden', {
+      ...logContext,
+      description: classification.description,
+      confidence: classification.confidence,
+      wordCount,
+      fileExtension: normalizedExt,
+    });
+  }
+
+  if (classificationShouldReject) {
     const rawDescription =
       typeof classification.description === 'string'
         ? classification.description.trim()
@@ -20453,7 +20471,7 @@ app.post(
     const reasonSentence = detailReason.endsWith('.')
       ? detailReason
       : `${detailReason}.`;
-    const validationMessage = `You uploaded ${descriptorWithArticle}. ${reasonSentence} Upload a CV or resume to continue.`;
+    const validationMessage = `You have uploaded ${descriptorWithArticle}. ${reasonSentence} Please upload a correct CV or resume to continue.`;
     const classificationLabel = deriveDocumentClassificationLabel(shortDescriptor);
     const invalidOwnerSegment =
       sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: 'candidate' }) ||
