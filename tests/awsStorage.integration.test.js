@@ -81,6 +81,7 @@ describe('AWS integrations for /api/process-cv', () => {
               isResume: true,
               accepted: true,
               description: 'a professional resume',
+              className: 'resume',
               confidence: expect.any(Number),
               evaluatedAt: expect.any(String),
             }),

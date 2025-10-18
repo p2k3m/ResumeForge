@@ -100,6 +100,7 @@ describe('end-to-end CV processing', () => {
     expect(response.status).toBe(400);
     expect(response.body?.error?.code).toBe('INVALID_RESUME_CONTENT');
     expect(response.body?.error?.details?.description).toContain('job description');
+    expect(response.body?.error?.details?.className).toBe('job_description');
     expect(response.body?.error?.message).toMatch(/Please upload a correct CV/i);
   });
 

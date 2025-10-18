@@ -10452,7 +10452,11 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
-function deriveDocumentClassificationLabel(description = '') {
+function deriveDocumentClassificationLabel(description = '', className = '') {
+  const normalizedClassName = typeof className === 'string' ? className.trim() : '';
+  if (normalizedClassName) {
+    return normalizedClassName.toLowerCase();
+  }
   if (typeof description !== 'string') {
     return 'non-resume';
   }
@@ -10487,6 +10491,12 @@ function captureClassificationSnapshot(result, { accepted } = {}) {
     const reason = result.reason.trim();
     if (reason) {
       snapshot.reason = reason;
+    }
+  }
+  if (typeof result.className === 'string') {
+    const className = result.className.trim();
+    if (className) {
+      snapshot.className = className;
     }
   }
   if (accepted !== undefined) {
@@ -20512,8 +20522,15 @@ app.post(
     const reasonSentence = detailReason.endsWith('.')
       ? detailReason
       : `${detailReason}.`;
-    const validationMessage = `You have uploaded ${descriptorWithArticle}. ${reasonSentence} Please upload a correct CV or resume to continue.`;
-    const classificationLabel = deriveDocumentClassificationLabel(shortDescriptor);
+    const classificationLabel = deriveDocumentClassificationLabel(
+      shortDescriptor,
+      classification.className
+    );
+    const detectedClassName = classification.className || classificationLabel;
+    const descriptorWithClass = detectedClassName
+      ? `${descriptorWithArticle} (classified as "${detectedClassName}")`
+      : descriptorWithArticle;
+    const validationMessage = `You have uploaded ${descriptorWithClass}. ${reasonSentence} Please upload a correct CV or resume to continue.`;
     const invalidOwnerSegment =
       sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: 'candidate' }) ||
       'candidate';
@@ -20619,6 +20636,7 @@ app.post(
             description: classification.description,
             confidence: classification.confidence,
             classification: classificationLabel,
+            className: classification.className || classificationLabel,
             storageKey: invalidUploadKey,
           },
         });
@@ -20649,6 +20667,7 @@ app.post(
             description: classification.description,
             confidence: classification.confidence,
             classification: classificationLabel,
+            className: classification.className || classificationLabel,
             storageKey: invalidUploadKey,
           },
         });
@@ -20665,6 +20684,7 @@ app.post(
       confidence: classification.confidence,
       reason: detailReason,
       classification: classificationLabel,
+      className: classification.className || classificationLabel,
       storageKey: recordedInvalidKey,
     };
     if (invalidRelocationSucceeded) {
