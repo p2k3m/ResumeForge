@@ -11207,6 +11207,31 @@ function sanitizeJobSegment(jobId) {
   return normalized.slice(0, 48);
 }
 
+const PROHIBITED_JOB_DESCRIPTION_TAGS = Object.freeze([
+  'script',
+  'style',
+  'iframe',
+  'object',
+  'embed',
+  'applet',
+  'meta',
+  'link',
+  'base',
+  'form',
+  'input',
+  'button',
+  'textarea',
+]);
+
+function manualJobDescriptionContainsProhibitedHtml(input = '') {
+  if (typeof input !== 'string') return false;
+  const normalized = input.replace(/\u0000/g, '');
+  return PROHIBITED_JOB_DESCRIPTION_TAGS.some((tag) => {
+    const pattern = new RegExp(`<\\/?${tag}(?=\b|[\s>/])`, 'i');
+    return pattern.test(normalized);
+  });
+}
+
 function sanitizeManualJobDescription(input = '') {
   if (typeof input !== 'string') return '';
 
@@ -11215,23 +11240,7 @@ function sanitizeManualJobDescription(input = '') {
   sanitized = sanitized.replace(/<!DOCTYPE[^>]*>/gi, '');
   sanitized = sanitized.replace(/<\?xml[^>]*>/gi, '');
 
-  const blockedTags = [
-    'script',
-    'style',
-    'iframe',
-    'object',
-    'embed',
-    'applet',
-    'meta',
-    'link',
-    'base',
-    'form',
-    'input',
-    'button',
-    'textarea',
-  ];
-
-  for (const tag of blockedTags) {
+  for (const tag of PROHIBITED_JOB_DESCRIPTION_TAGS) {
     const paired = new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, 'gi');
     const single = new RegExp(`<${tag}[^>]*\\/>`, 'gi');
     const opening = new RegExp(`<${tag}[^>]*>`, 'gi');
@@ -20010,6 +20019,16 @@ app.post(
       : typeof req.body.jobDescriptionText === 'string'
         ? req.body.jobDescriptionText
         : '';
+  if (manualJobDescriptionContainsProhibitedHtml(manualJobDescriptionInput)) {
+    logStructured('warn', 'job_description_prohibited_html_detected', logContext);
+    return sendError(
+      res,
+      400,
+      'JOB_DESCRIPTION_PROHIBITED_TAGS',
+      'Remove HTML tags like <script> before continuing.',
+      { field: 'manualJobDescription' }
+    );
+  }
   const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
   const normalizedManualJobDescription = manualJobDescription
     ? manualJobDescription.replace(/\s+/g, ' ').trim()
