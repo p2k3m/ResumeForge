@@ -1721,6 +1721,53 @@ describe('/api/process-cv', () => {
     expect(res.body.error.message).toMatch(/please upload a correct CV/i);
   });
 
+  test('requires re-upload when classification does not identify a CV', async () => {
+    generateContentMock.mockReset();
+    try {
+      generateContentMock.mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              type: 'non_resume',
+              probableType: 'a short memo',
+              confidence: 0.2,
+              reason: 'Missing resume structure.',
+              className: 'short_memo',
+            }),
+        },
+      });
+
+      mammothMock.extractRawText.mockResolvedValueOnce({
+        value: 'Quick note about the meeting agenda. Follow up soon.',
+      });
+
+      const res = await request(app)
+        .post('/api/process-cv')
+        .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
+        .attach('resume', Buffer.from('dummy'), {
+          filename: 'notes.docx',
+          contentType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: 'INVALID_RESUME_CONTENT',
+          message: expect.stringMatching(/Please upload a correct CV or resume to continue\./i),
+          details: expect.objectContaining({
+            classification: 'a short memo',
+            className: 'short_memo',
+            reason: expect.stringMatching(/Missing resume structure/i),
+          }),
+        }),
+      });
+    } finally {
+      primeDefaultGeminiResponses();
+    }
+  });
+
   test('missing job description text', async () => {
     const res = await request(app)
       .post('/api/process-cv')
