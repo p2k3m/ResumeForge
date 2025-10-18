@@ -1706,13 +1706,14 @@ describe('/api/process-cv', () => {
       success: false,
       error: expect.objectContaining({
         code: 'INVALID_RESUME_CONTENT',
-        message: expect.stringContaining('You have uploaded an invoice document.'),
+        message: expect.stringContaining('You have uploaded an invoice document (classified as "invoice").'),
         requestId: expect.any(String),
         jobId: expect.any(String),
         details: expect.objectContaining({
           description: 'an invoice document',
           confidence: expect.any(Number),
           reason: expect.stringMatching(/invoice/i),
+          className: 'invoice',
         }),
       }),
     });
@@ -2662,6 +2663,7 @@ describe('generatePdfWithFallback', () => {
     const result = await classifyDocument('PROFESSIONAL SUMMARY\nExperience\nEducation\nSkills');
     expect(result.isResume).toBe(true);
     expect(result.description).toBe('a professional resume');
+    expect(result.className).toBe('resume');
     expect(result.confidence).toBeGreaterThan(0);
   });
 
@@ -2669,6 +2671,7 @@ describe('generatePdfWithFallback', () => {
     const result = await classifyDocument('Dear Hiring Manager,\nI am excited...\nSincerely, Candidate');
     expect(result.isResume).toBe(false);
     expect(result.description).toContain('cover');
+    expect(result.className).toBe('cover_letter');
     expect(result.confidence).toBeGreaterThanOrEqual(0);
     expect(result.reason).toMatch(/cover letter/i);
   });
@@ -2692,6 +2695,7 @@ describe('generatePdfWithFallback', () => {
     const result = await classifyDocument(text);
     expect(result.isResume).toBe(false);
     expect(result.description).toContain('job description');
+    expect(result.className).toBe('job_description');
     expect(result.reason).toMatch(/job-posting/i);
   });
 });
