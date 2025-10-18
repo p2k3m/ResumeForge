@@ -67,7 +67,6 @@ import { ENHANCEMENT_TYPES } from './lib/resume/enhancement.js';
 import {
   extractResumeText,
   classifyResumeDocument,
-  shouldRejectBasedOnClassification,
 } from './lib/resume/parsing.js';
 import {
   createGeminiGenerativeModel,
@@ -10452,6 +10451,20 @@ function sanitizeName(name) {
   return name.trim().split(/\s+/).slice(0, 2).join('_').toLowerCase();
 }
 
+function deriveDocumentClassificationLabel(description = '') {
+  if (typeof description !== 'string') {
+    return 'non-resume';
+  }
+  const normalized = description.trim();
+  if (!normalized) {
+    return 'non-resume';
+  }
+  const withoutArticle = normalized.replace(/^(?:an?|the)\s+/i, '').trim();
+  const withoutDocument = withoutArticle.replace(/\s*document$/i, '').trim();
+  const label = withoutDocument || withoutArticle || normalized;
+  return label.toLowerCase();
+}
+
 function sanitizeS3KeyComponent(value, { fallback = '', maxLength = 96 } = {}) {
   const normalise = (input) => {
     if (input === undefined || input === null) {
@@ -20418,22 +20431,11 @@ app.post(
     confidence: classification.confidence,
   });
   const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
-  const classificationShouldReject = shouldRejectBasedOnClassification(classification, {
-    fileExtension: normalizedExt,
-    wordCount,
-  });
-  if (!classification.isResume && classificationShouldReject) {
-    logStructured('warn', 'resume_validation_failed', {
-      ...logContext,
-      reason: 'not_identified_as_resume',
-      description: classification.description,
-      confidence: classification.confidence,
-      wordCount,
-    });
+  if (!classification.isResume) {
     const rawDescription =
       typeof classification.description === 'string'
         ? classification.description.trim()
-        : 'non-resume';
+        : 'non-resume document';
     const includesDocument = /document/i.test(rawDescription);
     const shortDescriptor = includesDocument
       ? rawDescription
@@ -20451,28 +20453,171 @@ app.post(
     const reasonSentence = detailReason.endsWith('.')
       ? detailReason
       : `${detailReason}.`;
-    const validationMessage = `You have uploaded ${descriptorWithArticle}. ${reasonSentence} Please upload a correct CV.`;
+    const validationMessage = `You uploaded ${descriptorWithArticle}. ${reasonSentence} Upload a CV or resume to continue.`;
+    const classificationLabel = deriveDocumentClassificationLabel(shortDescriptor);
+    const invalidOwnerSegment =
+      sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: 'candidate' }) ||
+      'candidate';
+    const invalidDateSegment = sanitizeS3KeyComponent(date);
+    const invalidSessionSegment =
+      sanitizeS3KeyComponent(sessionSegment) ||
+      sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(createIdentifier());
+    const invalidPrefixParts = ['invalid', invalidOwnerSegment];
+    if (invalidDateSegment) {
+      invalidPrefixParts.push(invalidDateSegment);
+    }
+    if (invalidSessionSegment) {
+      invalidPrefixParts.push(invalidSessionSegment);
+    }
+    const invalidPrefix = `${invalidPrefixParts.join('/')}/`;
+    const invalidDescriptorSegment =
+      sanitizeS3KeyComponent(classificationLabel, { fallback: 'non-resume' }) || 'non-resume';
+    const invalidIdentifierSegment =
+      sanitizeS3KeyComponent(createIdentifier(), { fallback: '' });
+    const invalidFileName = invalidIdentifierSegment
+      ? `${invalidDescriptorSegment}-${invalidIdentifierSegment}${normalizedExt}`
+      : `${invalidDescriptorSegment}${normalizedExt}`;
+    const invalidUploadKey = `${invalidPrefix}${invalidFileName}`;
+    let recordedInvalidKey = '';
+    let invalidRelocationSucceeded = false;
+    try {
+      await sendS3CommandWithRetry(
+        s3,
+        () =>
+          new CopyObjectCommand(
+            withEnvironmentTagging({
+              Bucket: bucket,
+              CopySource: buildCopySource(bucket, originalUploadKey),
+              Key: invalidUploadKey,
+              MetadataDirective: 'COPY',
+              TaggingDirective: 'REPLACE',
+            })
+          ),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 500,
+          maxDelayMs: 5000,
+          jitterMs: 300,
+          retryLogEvent: 'invalid_upload_relocation_retry',
+          retryLogContext: {
+            ...logContext,
+            bucket,
+            fromKey: originalUploadKey,
+            toKey: invalidUploadKey,
+            classification: classificationLabel,
+          },
+        }
+      );
+      invalidRelocationSucceeded = true;
+      recordedInvalidKey = invalidUploadKey;
+      try {
+        await sendS3CommandWithRetry(
+          s3,
+          () => new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 3000,
+            retryLogEvent: 'invalid_upload_relocation_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket,
+              fromKey: originalUploadKey,
+              toKey: invalidUploadKey,
+              operation: 'delete_source',
+            },
+          }
+        );
+      } catch (deleteErr) {
+        logStructured('warn', 'invalid_upload_source_cleanup_failed', {
+          ...logContext,
+          bucket,
+          fromKey: originalUploadKey,
+          toKey: invalidUploadKey,
+          error: serializeError(deleteErr),
+        });
+      }
+      logStructured('warn', 'resume_validation_failed', {
+        ...logContext,
+        reason: 'not_identified_as_resume',
+        description: classification.description,
+        confidence: classification.confidence,
+        wordCount,
+        invalidKey: invalidUploadKey,
+        classification: classificationLabel,
+      });
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'resume_marked_invalid',
+          level: 'warn',
+          metadata: {
+            description: classification.description,
+            confidence: classification.confidence,
+            classification: classificationLabel,
+            storageKey: invalidUploadKey,
+          },
+        });
+      } catch (logErr) {
+        logStructured('error', 's3_log_failure', {
+          ...logContext,
+          error: serializeError(logErr),
+        });
+      }
+    } catch (storageErr) {
+      recordedInvalidKey = originalUploadKey;
+      logStructured('error', 'invalid_upload_relocation_failed', {
+        ...logContext,
+        bucket,
+        fromKey: originalUploadKey,
+        toKey: invalidUploadKey,
+        error: serializeError(storageErr),
+      });
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'resume_marked_invalid_failed',
+          level: 'error',
+          metadata: {
+            description: classification.description,
+            confidence: classification.confidence,
+            classification: classificationLabel,
+            storageKey: invalidUploadKey,
+          },
+        });
+      } catch (logErr) {
+        logStructured('error', 's3_log_failure', {
+          ...logContext,
+          error: serializeError(logErr),
+        });
+      }
+    }
+
+    const errorDetails = {
+      description: classification.description,
+      confidence: classification.confidence,
+      reason: detailReason,
+      classification: classificationLabel,
+      storageKey: recordedInvalidKey,
+    };
+    if (invalidRelocationSucceeded) {
+      errorDetails.invalidStorageKey = invalidUploadKey;
+    }
     return sendError(
       res,
       400,
       'INVALID_RESUME_CONTENT',
       validationMessage,
-      {
-        description: classification.description,
-        confidence: classification.confidence,
-        reason: detailReason,
-      }
+      errorDetails
     );
-  }
-  if (!classification.isResume) {
-    logStructured('info', 'resume_validation_soft_pass', {
-      ...logContext,
-      description: classification.description,
-      confidence: classification.confidence,
-      reason: classification.reason,
-      wordCount,
-      fileExtension: normalizedExt,
-    });
   }
   const initialContactDetails = extractContactDetails(text, linkedinProfileUrl);
   const applicantName = extractName(text);
