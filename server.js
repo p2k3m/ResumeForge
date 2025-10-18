@@ -20620,12 +20620,7 @@ app.post(
     getGenerativeModel: () => getSharedGenerativeModel(),
   });
   const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
-  const classificationShouldReject =
-    !classification.isResume &&
-    shouldRejectBasedOnClassification(classification, {
-      fileExtension: normalizedExt,
-      wordCount,
-    });
+  const classificationShouldReject = shouldRejectBasedOnClassification(classification);
 
   const classificationAccepted = !classificationShouldReject;
   const classificationSnapshot = classificationAccepted
@@ -20640,17 +20635,6 @@ app.post(
     accepted: classificationAccepted,
     overridden: !classification.isResume && classificationAccepted,
   });
-
-  if (!classification.isResume && !classificationShouldReject) {
-    logStructured('info', 'resume_classification_overridden', {
-      ...logContext,
-      description: classification.description,
-      confidence: classification.confidence,
-      wordCount,
-      fileExtension: normalizedExt,
-      classification: classificationSnapshot,
-    });
-  }
 
   if (classificationShouldReject) {
     const rawDescription =
