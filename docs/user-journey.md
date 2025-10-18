@@ -16,7 +16,7 @@ This guide walks a candidate through ResumeForge end to end so every action has 
 
 ## 3. Launch the ATS analysis
 - **What to do:** Press **Evaluate me against the JD**.
-- **Behind the scenes:** Lambda analyses the résumé and job description, runs ATS heuristics, and scores the submission across Layout & Searchability, Readability, Impact, Crispness, and Other Quality Metrics. It also compares the CV against the JD to detect gaps in designations, skills, experience, certifications, and highlights.
+- **Behind the scenes:** Lambda analyses the résumé and job description, runs ATS heuristics, and scores the submission across Layout & Searchability, Readability, Impact, Crispness, and Other. It also compares the CV against the JD to detect gaps in designations, skills, experience, certifications, and highlights.
 - **Expected result:** The dashboard populates with a total ATS score, probability of selection, and contextual insights (e.g., “Add Kubernetes to align with JD requirements”). Errors surface inline with instructions to retry or adjust inputs.
 
 ## 4. Iterate on improvements

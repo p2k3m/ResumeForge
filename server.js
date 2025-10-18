@@ -9606,10 +9606,10 @@ const STOP_WORDS = new Set(
 
 const ATS_METRIC_DEFINITIONS = [
   { key: 'layoutSearchability', category: 'Layout & Searchability' },
-  { key: 'atsReadability', category: 'ATS Readability' },
+  { key: 'atsReadability', category: 'Readability' },
   { key: 'impact', category: 'Impact' },
   { key: 'crispness', category: 'Crispness' },
-  { key: 'otherQuality', category: 'Other Quality Metrics' },
+  { key: 'otherQuality', category: 'Other' },
 ];
 
 const ATS_METRIC_WEIGHTS = {
@@ -10127,7 +10127,7 @@ function evaluateAtsMetric(analysis) {
     nonAsciiCharacters,
   };
 
-  return createMetric('ATS Readability', atsScore, atsTips, { details: atsDetails });
+  return createMetric('Readability', atsScore, atsTips, { details: atsDetails });
 }
 
 function evaluateImpactMetric(analysis) {
@@ -10445,7 +10445,7 @@ function evaluateOtherMetric(analysis) {
     bulletKeywordUniqueCount,
   };
 
-  return createMetric('Other Quality Metrics', otherScore, otherTips, {
+  return createMetric('Other', otherScore, otherTips, {
     details: otherDetails,
   });
 }
