@@ -34,23 +34,16 @@ function ensureAtsCategoryCoverage(metrics) {
     }
   })
 
-  const trackedMetrics = list.filter((metric) => {
-    const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
-    return category && ATS_CATEGORY_ORDER.includes(category)
-  })
-
-  if (trackedMetrics.length === 0) {
-    return list
-  }
-
   const extras = list.filter((metric) => {
     const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
     return category && !ATS_CATEGORY_ORDER.includes(category)
   })
 
-  if (trackedMetrics.length !== list.length) {
-    const orderedTracked = ATS_CATEGORY_ORDER.map((category) => categoryMap.get(category)).filter(Boolean)
-    return orderedTracked.length ? [...orderedTracked, ...extras] : extras
+  const hasTrackedCategory = ATS_CATEGORY_ORDER.some((category) => categoryMap.has(category))
+
+  if (!hasTrackedCategory) {
+    const placeholders = ATS_CATEGORY_ORDER.map((category) => buildMissingAtsMetric(category))
+    return extras.length ? [...placeholders, ...extras] : placeholders
   }
 
   const ensured = ATS_CATEGORY_ORDER.map((category) => categoryMap.get(category) || buildMissingAtsMetric(category))
