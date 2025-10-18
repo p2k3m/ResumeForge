@@ -9340,7 +9340,7 @@ function buildSelectionInsights(context = {}) {
       ? 'partial'
       : 'match';
 
-  const selectionMetricKeys = ['designation', 'skills', 'experience', 'tasks', 'highlights'];
+  const selectionMetricKeys = ['designation', 'skills', 'experience', 'tasks', 'highlights', 'certifications'];
   const PROBABILITY_MIN = 8;
   const PROBABILITY_MAX = 97;
 
@@ -9386,6 +9386,7 @@ function buildSelectionInsights(context = {}) {
     experience: normalizeFitScore(experienceScore),
     tasks: normalizeFitScore(computeTaskAlignmentScore(baselineImpactScore)),
     highlights: normalizeFitScore(baselineHighlightScore),
+    certifications: normalizeFitScore(certificationScore),
   };
 
   const selectionProbabilityInput = jobFitScores

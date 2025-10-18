@@ -128,7 +128,7 @@ describe('buildSelectionInsights', () => {
       manualCertificatesRequired: false,
     })
 
-    const selectionMetrics = ['designation', 'skills', 'experience', 'tasks', 'highlights']
+    const selectionMetrics = ['designation', 'skills', 'experience', 'tasks', 'highlights', 'certifications']
     const expectedAverage = Math.round(
       insights.jobFitScores
         .filter((metric) => selectionMetrics.includes(metric.key))
