@@ -1006,14 +1006,23 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
       p:last-of-type {
         margin-bottom: 0;
       }
+      .fallback {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
     </style>
   </head>
   <body>
-    <main>
-      <h1>ResumeForge client rebuilding</h1>
-      <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
-      <p>To fix this in development, run <code>npm run build:client</code>. For deployed environments, ensure the <code>client/dist</code> directory is bundled alongside the Lambda function.</p>
-    </main>
+    <div id="root" data-status="client-assets-missing"></div>
+    <noscript>
+      <main class="fallback">
+        <h1>ResumeForge client rebuilding</h1>
+        <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
+        <p>To fix this in development, run <code>npm run build:client</code>. For deployed environments, ensure the <code>client/dist</code> directory is bundled alongside the Lambda function.</p>
+      </main>
+    </noscript>
+    <script type="module" src="/assets/index-fallback.js" data-fallback="true"></script>
   </body>
 </html>`;
 
