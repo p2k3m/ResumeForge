@@ -2,6 +2,47 @@ import ATSScoreCard from './ATSScoreCard.jsx'
 import InfoTooltip from './InfoTooltip.jsx'
 import { buildMetricTip } from '../utils/actionableAdvice.js'
 
+const ATS_CATEGORY_ORDER = [
+  'Layout & Searchability',
+  'Readability',
+  'Impact',
+  'Crispness',
+  'Other'
+]
+
+function buildMissingAtsMetric(category) {
+  const placeholderTip = `ATS analysis has not produced a ${category.toLowerCase()} score yet. Run "Evaluate me against the JD" to populate this metric.`
+  return {
+    category,
+    score: null,
+    rating: 'PENDING',
+    ratingLabel: 'PENDING',
+    tip: placeholderTip,
+    tips: [placeholderTip]
+  }
+}
+
+function ensureAtsCategoryCoverage(metrics) {
+  const list = Array.isArray(metrics) ? metrics.filter(Boolean) : []
+  const categoryMap = new Map()
+
+  list.forEach((metric) => {
+    const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
+    if (!category) return
+    if (!categoryMap.has(category)) {
+      categoryMap.set(category, metric)
+    }
+  })
+
+  const ensured = ATS_CATEGORY_ORDER.map((category) => categoryMap.get(category) || buildMissingAtsMetric(category))
+  const extras = list.filter((metric) => {
+    const category = typeof metric?.category === 'string' ? metric.category.trim() : ''
+    return category && !ATS_CATEGORY_ORDER.includes(category)
+  })
+
+  return extras.length ? [...ensured, ...extras] : ensured
+}
+
 function clampScore(score) {
   if (typeof score !== 'number' || !Number.isFinite(score)) {
     return null
@@ -102,9 +143,10 @@ function ATSScoreDashboard({
   onImproveMetric,
   improvementState = {}
 }) {
-  const metricList = Array.isArray(metrics)
-    ? metrics
-    : Object.values(metrics || {})
+  const metricCandidates = Array.isArray(metrics)
+    ? metrics.filter(Boolean)
+    : Object.values(metrics || {}).filter(Boolean)
+  const metricList = ensureAtsCategoryCoverage(metricCandidates)
   const baselineList = Array.isArray(baselineMetrics)
     ? baselineMetrics
     : Object.values(baselineMetrics || {})
