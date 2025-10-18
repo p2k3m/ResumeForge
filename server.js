@@ -11308,7 +11308,7 @@ function sanitizeManualJobDescription(input = '') {
     sanitized = sanitized.replace(pattern, '\n');
   }
 
-  sanitized = sanitized.replace(/<\\s*br\\s*\\/?\\s*>/gi, '\n');
+  sanitized = sanitized.replace(/<\s*br\s*\/?\s*>/gi, '\n');
   sanitized = sanitized.replace(/<[^>]+>/g, ' ');
 
   sanitized = sanitized.replace(/&nbsp;/gi, ' ');
