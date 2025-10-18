@@ -10461,21 +10461,18 @@ function sanitizeName(name) {
 }
 
 function deriveDocumentClassificationLabel(description = '', className = '') {
+  const normalizedDescription =
+    typeof description === 'string' ? description.trim() : '';
+  if (normalizedDescription) {
+    const withoutDocument = normalizedDescription.replace(/\s*document$/i, '').trim();
+    const label = withoutDocument || normalizedDescription;
+    return label.toLowerCase();
+  }
   const normalizedClassName = typeof className === 'string' ? className.trim() : '';
   if (normalizedClassName) {
     return normalizedClassName.toLowerCase();
   }
-  if (typeof description !== 'string') {
-    return 'non-resume';
-  }
-  const normalized = description.trim();
-  if (!normalized) {
-    return 'non-resume';
-  }
-  const withoutArticle = normalized.replace(/^(?:an?|the)\s+/i, '').trim();
-  const withoutDocument = withoutArticle.replace(/\s*document$/i, '').trim();
-  const label = withoutDocument || withoutArticle || normalized;
-  return label.toLowerCase();
+  return 'non-resume';
 }
 
 function captureClassificationSnapshot(result, { accepted } = {}) {
