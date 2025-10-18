@@ -643,6 +643,7 @@ describe('/api/process-cv', () => {
       .map(([command]) => command)
       .find((command) => command.__type === 'PutItemCommand');
 
+
     expect(putCall).toBeTruthy();
     expect(putCall.input.Item.sessionInputs).toEqual({
       M: expect.objectContaining({
