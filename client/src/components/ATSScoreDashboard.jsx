@@ -367,7 +367,7 @@ function ATSScoreDashboard({
   const scoreComparisonDescription =
     'Shows the weighted ATS composite before and after improvements so you can see how structural and keyword fixes closed gaps.'
   const selectionProbabilityDescription =
-    'Estimates shortlist odds before and after using designation match, JD keyword coverage, experience alignment, task impact, and highlight strength.'
+    'Estimates shortlist odds before and after using designation match, JD keyword coverage, experience alignment, task impact, highlight strength, and certification coverage.'
 
   const snapshotSegments = (() => {
     const segments = []
