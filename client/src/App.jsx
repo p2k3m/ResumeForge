@@ -696,6 +696,22 @@ function canonicalizeProfileIdentifier(profileUrl) {
   }
 }
 
+const PROHIBITED_JOB_DESCRIPTION_TAGS = Object.freeze([
+  'script',
+  'style',
+  'iframe',
+  'object',
+  'embed',
+  'applet',
+  'meta',
+  'link',
+  'base',
+  'form',
+  'input',
+  'button',
+  'textarea'
+])
+
 function looksLikeJobDescriptionUrl(text) {
   if (typeof text !== 'string') {
     return false
@@ -713,6 +729,17 @@ function looksLikeJobDescriptionUrl(text) {
   }
   const domainPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+(?:\/\S*)?$/i
   return domainPattern.test(trimmed)
+}
+
+function containsProhibitedJobDescriptionHtml(text) {
+  if (typeof text !== 'string') {
+    return false
+  }
+  const normalized = text.replace(/\u0000/g, '')
+  return PROHIBITED_JOB_DESCRIPTION_TAGS.some((tag) => {
+    const pattern = new RegExp(`<\\/?${tag}(?=\b|[\s>\/])`, 'i')
+    return pattern.test(normalized)
+  })
 }
 
 function deriveUserIdentifier({ profileUrl, userId } = {}) {
@@ -2128,6 +2155,10 @@ function App() {
   const manualJobDescriptionValue = useMemo(() => {
     return typeof manualJobDescription === 'string' ? manualJobDescription.trim() : ''
   }, [manualJobDescription])
+  const manualJobDescriptionHasProhibitedHtml = useMemo(
+    () => containsProhibitedJobDescriptionHtml(manualJobDescription),
+    [manualJobDescription]
+  )
   const manualJobDescriptionLooksLikeUrl = useMemo(
     () => looksLikeJobDescriptionUrl(manualJobDescriptionValue),
     [manualJobDescriptionValue]
@@ -2280,12 +2311,16 @@ function App() {
   const [isGeneratingDocs, setIsGeneratingDocs] = useState(false)
   const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = useState(false)
   const manualJobDescriptionHasError =
-    manualJobDescriptionRequired || manualJobDescriptionLooksLikeUrl
-  const manualJobDescriptionHelperText = manualJobDescriptionLooksLikeUrl
-    ? 'Paste the full job description text instead of a link.'
-    : manualJobDescriptionRequired
-      ? 'Paste the full job description to continue.'
-      : 'Paste the full JD so we analyse the exact role requirements.'
+    manualJobDescriptionRequired ||
+    manualJobDescriptionLooksLikeUrl ||
+    manualJobDescriptionHasProhibitedHtml
+  const manualJobDescriptionHelperText = manualJobDescriptionHasProhibitedHtml
+    ? 'Remove HTML tags like <script> before continuing.'
+    : manualJobDescriptionLooksLikeUrl
+      ? 'Paste the full job description text instead of a link.'
+      : manualJobDescriptionRequired
+        ? 'Paste the full job description to continue.'
+        : 'Paste the full JD so we analyse the exact role requirements.'
   const [enhanceAllSummaryText, setEnhanceAllSummaryText] = useState('')
   const [coverLetterDrafts, setCoverLetterDrafts] = useState({})
   const [coverLetterOriginals, setCoverLetterOriginals] = useState({})
@@ -2704,14 +2739,16 @@ function App() {
     if (
       manualJobDescriptionRequired &&
       manualJobDescriptionValue &&
-      !manualJobDescriptionLooksLikeUrl
+      !manualJobDescriptionLooksLikeUrl &&
+      !manualJobDescriptionHasProhibitedHtml
     ) {
       setManualJobDescriptionRequired(false)
     }
   }, [
     manualJobDescriptionLooksLikeUrl,
     manualJobDescriptionRequired,
-    manualJobDescriptionValue
+    manualJobDescriptionValue,
+    manualJobDescriptionHasProhibitedHtml
   ])
 
   const resumeHistoryMap = useMemo(() => {
@@ -5120,6 +5157,11 @@ function App() {
       manualJobDescriptionRef.current?.focus?.()
       return
     }
+    if (manualJobDescriptionHasProhibitedHtml) {
+      setError('Remove HTML tags like <script> before continuing.')
+      manualJobDescriptionRef.current?.focus?.()
+      return
+    }
     if (manualJobDescriptionLooksLikeUrl) {
       setManualJobDescriptionRequired(true)
       setError('Paste the full job description text instead of a link.')
@@ -5207,11 +5249,16 @@ function App() {
           data?.error?.details?.manualInputRequired === true ||
           errorCode === 'JOB_DESCRIPTION_REQUIRED' ||
           detailField === 'manualJobDescription'
+        const prohibitedHtmlError = errorCode === 'JOB_DESCRIPTION_PROHIBITED_TAGS'
         let message = resolvedMessage
         if (manualRequired) {
           setManualJobDescriptionRequired(true)
           manualJobDescriptionRef.current?.focus?.()
           message = 'Paste the full job description to continue.'
+        }
+        if (prohibitedHtmlError) {
+          manualJobDescriptionRef.current?.focus?.()
+          message = 'Remove HTML tags like <script> before continuing.'
         }
         if (!isFriendly && errorCode && errorCode !== 'PROCESSING_FAILED') {
           message = `${message} (${errorCode})`
@@ -5483,6 +5530,7 @@ function App() {
     API_BASE_URL,
     cvFile,
     manualCertificatesInput,
+    manualJobDescriptionHasProhibitedHtml,
     manualJobDescriptionLooksLikeUrl,
     manualJobDescriptionValue,
     resetAnalysisState,
@@ -5496,7 +5544,11 @@ function App() {
     if (!cvFile || isProcessing) {
       return
     }
-    if (!manualJobDescriptionValue || manualJobDescriptionLooksLikeUrl) {
+    if (
+      !manualJobDescriptionValue ||
+      manualJobDescriptionLooksLikeUrl ||
+      manualJobDescriptionHasProhibitedHtml
+    ) {
       return
     }
     const signature = cvFile ? `${cvFile.name}|${cvFile.lastModified}` : ''
@@ -5511,6 +5563,7 @@ function App() {
     cvFile,
     handleScoreSubmit,
     isProcessing,
+    manualJobDescriptionHasProhibitedHtml,
     manualJobDescriptionLooksLikeUrl,
     manualJobDescriptionValue,
     scoreComplete

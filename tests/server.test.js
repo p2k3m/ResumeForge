@@ -579,7 +579,7 @@ describe('/api/process-cv', () => {
       .set('X-Forwarded-For', '198.51.100.5')
       .field(
         'manualJobDescription',
-        'Senior Engineer<script>alert("x")</script><div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a><svg onload="alert(1)">Hire</svg><img src="x" onerror="bad()">'
+        'Senior Engineer<div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a><svg onload="alert(1)">Hire</svg><img src="x" onerror="bad()">'
       )
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
@@ -599,6 +599,28 @@ describe('/api/process-cv', () => {
 
   });
 
+  test('rejects manual job description input containing prohibited HTML tags', async () => {
+    const manual = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field(
+        'manualJobDescription',
+        'Senior Engineer<script>alert("x")</script>Focus on delivery'
+      )
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(manual.status).toBe(400);
+    expect(manual.body.success).toBe(false);
+    expect(manual.body.error.code).toBe('JOB_DESCRIPTION_PROHIBITED_TAGS');
+    expect(manual.body.error.message).toBe(
+      'Remove HTML tags like <script> before continuing.'
+    );
+    expect(manual.body.error.details).toEqual({
+      field: 'manualJobDescription'
+    });
+  });
+
   test('stores sanitized job description as session input metadata', async () => {
     mockS3Send.mockClear();
 
@@ -608,7 +630,7 @@ describe('/api/process-cv', () => {
       .set('X-Forwarded-For', '198.51.100.5')
       .field(
         'manualJobDescription',
-        'Lead Engineer<script>alert(1)</script><div>Focus on delivery</div>'
+        'Lead Engineer<div>Focus on delivery</div>'
       )
       .attach('resume', Buffer.from('dummy'), 'resume.pdf');
 
