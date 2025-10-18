@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
 import crypto from 'crypto';
+import { createTextDigest } from '../lib/resume/utils.js';
 
 process.env.S3_BUCKET = 'test-bucket';
 process.env.GEMINI_API_KEY = 'test-key';
@@ -596,6 +597,59 @@ describe('/api/process-cv', () => {
     expect(jobText).not.toContain('<');
     expect(jobText).not.toContain('>');
 
+  });
+
+  test('stores sanitized job description as session input metadata', async () => {
+    mockS3Send.mockClear();
+
+    const manual = await request(app)
+      .post('/api/process-cv')
+      .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
+      .set('X-Forwarded-For', '198.51.100.5')
+      .field(
+        'manualJobDescription',
+        'Lead Engineer<script>alert(1)</script><div>Focus on delivery</div>'
+      )
+      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+
+    expect(manual.status).toBe(200);
+    expect(manual.body.success).toBe(true);
+
+    const sanitizedDescription = String(manual.body.jobDescriptionText || '');
+    const expectedDigest = createTextDigest(sanitizedDescription);
+
+    const metadataWrites = mockS3Send.mock.calls
+      .map(([command]) => command)
+      .filter(
+        (command) =>
+          command.__type === 'PutObjectCommand' &&
+          typeof command.input?.Key === 'string' &&
+          command.input.Key.endsWith('logs/log.json')
+      );
+
+    expect(metadataWrites.length).toBeGreaterThan(0);
+    const latestMetadataCall = metadataWrites[metadataWrites.length - 1];
+    const metadataBody = latestMetadataCall.input.Body;
+    const metadataString = Buffer.isBuffer(metadataBody)
+      ? metadataBody.toString()
+      : metadataBody;
+    const metadataPayload = JSON.parse(metadataString);
+    const uploadStage = metadataPayload?.stages?.upload;
+
+    expect(uploadStage?.sessionInputs?.jobDescription).toBe(sanitizedDescription);
+    expect(uploadStage?.sessionInputs?.jobDescriptionDigest).toBe(expectedDigest);
+
+    const putCall = mockDynamoSend.mock.calls
+      .map(([command]) => command)
+      .find((command) => command.__type === 'PutItemCommand');
+
+    expect(putCall).toBeTruthy();
+    expect(putCall.input.Item.sessionInputs).toEqual({
+      M: expect.objectContaining({
+        jobDescription: { S: sanitizedDescription },
+        jobDescriptionDigest: { S: expectedDigest },
+      }),
+    });
   });
 
   test('accepts uploads without a LinkedIn profile URL', async () => {

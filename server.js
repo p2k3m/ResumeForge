@@ -20703,6 +20703,15 @@ app.post(
         jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
       }
     };
+    if (manualJobDescription) {
+      const sessionInputsMap = {
+        jobDescription: { S: manualJobDescription },
+      };
+      if (manualJobDescriptionDigest) {
+        sessionInputsMap.jobDescriptionDigest = { S: manualJobDescriptionDigest };
+      }
+      putItemPayload.Item.sessionInputs = { M: sessionInputsMap };
+    }
     if (canonicalSessionId) {
       putItemPayload.Item.sessionId = { S: canonicalSessionId };
     }
@@ -20723,16 +20732,25 @@ app.post(
       event: 'dynamodb_initial_record_written'
     });
 
+    const uploadStageMetadata = {
+      uploadedAt: timestamp,
+      fileType: storedFileType,
+    };
+    if (manualJobDescription) {
+      const sessionInputs = { jobDescription: manualJobDescription };
+      if (manualJobDescriptionDigest) {
+        sessionInputs.jobDescriptionDigest = manualJobDescriptionDigest;
+      }
+      uploadStageMetadata.sessionInputs = sessionInputs;
+    }
+
     const stageMetadataUpdated = await updateStageMetadata({
       s3,
       bucket,
       metadataKey,
       jobId,
       stage: 'upload',
-      data: {
-        uploadedAt: timestamp,
-        fileType: storedFileType,
-      },
+      data: uploadStageMetadata,
       logContext,
     });
 
