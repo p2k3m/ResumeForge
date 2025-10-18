@@ -106,7 +106,7 @@ import {
   normalizeSkillListInput,
 } from './lib/resume/skills.js';
 import { evaluateJobDescription } from './lib/resume/jobEvaluation.js';
-import { scoreResumeAgainstJob } from './lib/resume/scoring.js';
+import { scoreResumeAgainstJob } from './services/scoring/service.js';
 import { createTextDigest } from './lib/resume/utils.js';
 import { createVersionedPrompt, PROMPT_TEMPLATES } from './lib/llm/templates.js';
 import { resolveServiceForRoute } from './microservices/services.js';
@@ -15059,7 +15059,7 @@ app.post('/api/jd/evaluate', assignJobContext, (req, res) => {
   return res.json(result);
 });
 
-app.post('/api/score-match', assignJobContext, (req, res) => {
+app.post('/api/score-match', assignJobContext, async (req, res) => {
   const payload = req.body || {};
   const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
 
@@ -15070,31 +15070,45 @@ app.post('/api/score-match', assignJobContext, (req, res) => {
 
   captureUserContext(req, res);
 
-  const outcome = scoreResumeAgainstJob(payload);
-  if (!outcome.ok) {
-    const { statusCode, code, message, details } = outcome.error || {};
+  try {
+    const outcome = await scoreResumeAgainstJob(payload);
+    if (!outcome.ok) {
+      const { statusCode, code, message, details } = outcome.error || {};
+      return sendError(
+        res,
+        statusCode || 400,
+        code || 'VALIDATION_ERROR',
+        message || 'Unable to score the resume against the job description.',
+        details
+      );
+    }
+
+    const requestId = res.locals.requestId;
+    const result = outcome.result;
+
+    logStructured('info', 'match_score_calculated', {
+      requestId,
+      jobId: result.jobId,
+      score: result.score,
+      missingSkillCount: Array.isArray(result.missingSkills)
+        ? result.missingSkills.length
+        : 0,
+    });
+
+    return res.json(result);
+  } catch (error) {
+    logStructured('error', 'match_score_failed', {
+      requestId: res.locals.requestId,
+      error: error?.message,
+    });
     return sendError(
       res,
-      statusCode || 400,
-      code || 'VALIDATION_ERROR',
-      message || 'Unable to score the resume against the job description.',
-      details
+      500,
+      'SCORING_HANDLER_ERROR',
+      'Unable to score the resume against the job description.',
+      process.env.NODE_ENV === 'development' ? error : undefined
     );
   }
-
-  const requestId = res.locals.requestId;
-  const result = outcome.result;
-
-  logStructured('info', 'match_score_calculated', {
-    requestId,
-    jobId: result.jobId,
-    score: result.score,
-    missingSkillCount: Array.isArray(result.missingSkills)
-      ? result.missingSkills.length
-      : 0,
-  });
-
-  return res.json(result);
 });
 
 const improvementRoutes = [
