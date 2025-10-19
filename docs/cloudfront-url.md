@@ -1,6 +1,6 @@
 # CloudFront distribution reference
 
-The **canonical production CloudFront domain** for ResumeForge lives in [`config/published-cloudfront.json`](../config/published-cloudfront.json). Treat that JSON file as the single source of truth for downstream docs, announcements, and redirects.
+The **canonical production CloudFront domain** for ResumeForge lives in [`config/published-cloudfront.json`](../config/published-cloudfront.json). Treat that JSON file as the single source of truth for downstream docs, announcements, and redirects. Every publish run issues CloudFront invalidations with the `/*` path so post-deploy caches are flushed immediately, even when the distribution id stays the same across releases.
 
 ```json
 {
