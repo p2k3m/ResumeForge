@@ -4730,6 +4730,7 @@ function fallbackImprovement(type, context) {
 
   if (type === 'improve-summary') {
     const section = extractSectionContent(resumeText, SUMMARY_SECTION_PATTERN);
+    const headingLabel = deriveHeadingLabel(section.heading, 'Summary');
     const before = section.content.join('\n').trim();
     const summaryLine = `Forward-looking ${jobTitle || 'professional'} with strengths in ${
       fallbackSkillText || 'delivering measurable outcomes'
@@ -4738,12 +4739,46 @@ function fallbackImprovement(type, context) {
       headingLabel: 'Summary',
       insertIndex: 1,
     });
+    const explanation = 'Refreshed the summary using job-aligned language.';
+    const beforeLines = extractDiffLines(before, {
+      sectionTokens: [headingLabel || 'Summary', 'summary'],
+    });
+    const afterLines = extractDiffLines(summaryLine, {
+      sectionTokens: [headingLabel || 'Summary', 'summary'],
+    });
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const reasons = [explanation];
+    const changeDetails = [
+      {
+        key: 'summary',
+        section: headingLabel || 'Summary',
+        label: headingLabel || 'Summary',
+        before,
+        after: summaryLine,
+        reasons,
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: headingLabel || 'Summary',
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons,
+            reasons,
+          },
+        ],
+      },
+    ];
     return {
       updatedResume,
       beforeExcerpt: before,
       afterExcerpt: summaryLine,
-      explanation: 'Refreshed the summary using job-aligned language.',
+      explanation,
       confidence: 0.35,
+      changeDetails,
     };
   }
 
@@ -4844,12 +4879,46 @@ function fallbackImprovement(type, context) {
         updatedResume = lines.join('\n');
       }
     }
+    const explanation = 'Aligned the visible designation with the target job title.';
+    const beforeLines = extractDiffLines(before || '', {
+      sectionTokens: ['Headline', 'designation'],
+    });
+    const afterLines = extractDiffLines(jobTitle || '', {
+      sectionTokens: ['Headline', 'designation'],
+    });
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const reasons = [explanation];
+    const changeDetails = [
+      {
+        key: 'designation',
+        section: 'Headline',
+        label: 'Headline',
+        before,
+        after: jobTitle,
+        reasons,
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: 'Headline',
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons,
+            reasons,
+          },
+        ],
+      },
+    ];
     return {
       updatedResume,
       beforeExcerpt: before,
       afterExcerpt: jobTitle,
-      explanation: 'Aligned the visible designation with the target job title.',
+      explanation,
       confidence: 0.3,
+      changeDetails,
     };
   }
 
@@ -5061,14 +5130,50 @@ function fallbackImprovement(type, context) {
       sanitizedContent.length ? sanitizedContent : [addition],
       { headingLabel, insertIndex: 3 }
     );
+    const explanation = alreadyPresent
+      ? 'Projects section already emphasises the job-aligned initiatives.'
+      : 'Elevated project bullets to mirror the job description priorities.';
+    const afterText = sanitizedContent.length ? sanitizedContent.join('\n').trim() : addition;
+    const beforeLines = extractDiffLines(before, {
+      sectionTokens: [headingLabel || 'Projects', 'projects'],
+    });
+    const afterLines = extractDiffLines(afterText, {
+      sectionTokens: [headingLabel || 'Projects', 'projects'],
+    });
+    const beforeSet = new Set(beforeLines.map((line) => line.toLowerCase()));
+    const afterSet = new Set(afterLines.map((line) => line.toLowerCase()));
+    const addedItems = afterLines.filter((line) => !beforeSet.has(line.toLowerCase()));
+    const removedItems = beforeLines.filter((line) => !afterSet.has(line.toLowerCase()));
+    const reasons = [explanation];
+    const changeDetails = [
+      {
+        key: 'projects',
+        section: headingLabel || 'Projects',
+        label: headingLabel || 'Projects',
+        before,
+        after: afterText,
+        reasons,
+        addedItems,
+        removedItems,
+        summarySegments: [
+          {
+            section: headingLabel || 'Projects',
+            added: addedItems,
+            removed: removedItems,
+            reason: reasons,
+            reasons,
+          },
+        ],
+      },
+    ];
+    const afterExcerpt = alreadyPresent ? before : addition;
     return {
       updatedResume,
       beforeExcerpt: before,
-      afterExcerpt: alreadyPresent ? before : addition,
-      explanation: alreadyPresent
-        ? 'Projects section already emphasises the job-aligned initiatives.'
-        : 'Elevated project bullets to mirror the job description priorities.',
+      afterExcerpt,
+      explanation,
       confidence: alreadyPresent ? 0.25 : 0.31,
+      changeDetails,
     };
   }
 
