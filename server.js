@@ -3847,17 +3847,17 @@ function replaceSectionContent(
     }
   }
 
-  const sanitizedContent = newContentLines.map((line) => line.replace(/\s+$/, ''));
+  const sanitizedContent = newContentLines
+    .map((line) => (line === null || line === undefined ? '' : String(line)))
+    .map((line) => line.replace(/\s+$/, ''));
 
   if (start === -1) {
     const headingLine = `# ${headingLabel || 'Summary'}`;
     const before = lines.slice(0, Math.min(insertIndex, lines.length));
     const after = lines.slice(Math.min(insertIndex, lines.length));
     const block = [headingLine, ...sanitizedContent];
-    const merged = [...before, ...block, ...after]
-      .join('\n')
-      .replace(/\n{3,}/g, '\n\n');
-    return merged.trim();
+    const mergedLines = [...before, ...block, ...after];
+    return mergedLines.join('\n');
   }
 
   let end = lines.length;
@@ -3869,10 +3869,8 @@ function replaceSectionContent(
   }
   const before = lines.slice(0, start + 1);
   const after = lines.slice(end);
-  const merged = [...before, ...sanitizedContent, ...after]
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n');
-  return merged.trim();
+  const mergedLines = [...before, ...sanitizedContent, ...after];
+  return mergedLines.join('\n');
 }
 
 function sanitizeSectionLines(lines = []) {
