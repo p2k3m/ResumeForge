@@ -53,6 +53,19 @@ describe.each(headings)(
       expect(texts.join(' ')).not.toMatch(/Java/);
     });
 
+    test('trims whitespace when matching job relevant skills', () => {
+      const sections = [
+        { heading, items: [parseLine('Python, Java, AWS')] }
+      ];
+      splitSkills(sections, ['  python  ', '\tAWS\n']);
+      const texts = sections[0].items.map((tokens) =>
+        tokens.filter((t) => t.text).map((t) => t.text).join('')
+      );
+      expect(texts.join(' ')).toMatch(/Python/);
+      expect(texts.join(' ')).toMatch(/AWS/);
+      expect(texts.join(' ')).not.toMatch(/Java/);
+    });
+
     test('retains every job-relevant skill bullet', () => {
       const skills =
         'Python, Java, AWS, Docker, Kubernetes, Terraform, React, Node, HTML, CSS';
