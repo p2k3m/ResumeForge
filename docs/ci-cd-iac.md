@@ -18,7 +18,7 @@ This document outlines the shared expectations for automating ResumeForge deploy
 
 * **Staged deployments** – Deployments flow through sandbox and staging environments before production. Each stage uses the same SAM/CDK stack definitions to guarantee parity.
 * **Post-deploy verification** – After a stack update completes, the pipeline invokes `/healthz` and `/api/process-cv` endpoints to confirm application readiness. Failures trigger an automatic rollback or raise an incident before traffic is shifted.
-* **CloudFront cache management** – Every production deployment issues a CloudFront invalidation (`/*`) to flush cached assets and API responses. Automate this as part of the release pipeline so new code and configuration are visible immediately.
+* **CloudFront cache management** – Every production deployment issues a CloudFront invalidation (`/*`) to flush cached assets and API responses. Automate this as part of the release pipeline so new code and configuration are visible immediately. All post-deploy cache is invalidated with a `/*` path after each deployment to guarantee the CDN stops serving stale artifacts before traffic returns to the site.
 
 ## Operational Guardrails
 
