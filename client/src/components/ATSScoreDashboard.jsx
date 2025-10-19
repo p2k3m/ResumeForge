@@ -302,8 +302,6 @@ function ATSScoreDashboard({
     (selectionProbabilityAfterMeaning && typeof selectionProbabilityAfterValue === 'number'
       ? `Projected ${selectionProbabilityAfterMeaning.toLowerCase()} probability (${selectionProbabilityAfterValue}%) that this resume will be shortlisted for the JD.`
       : null)
-  const hasSelectionProbability =
-    typeof selectionProbabilityBeforeValue === 'number' || typeof selectionProbabilityAfterValue === 'number'
   const selectionProbabilityDelta =
     typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
       ? formatDelta(selectionProbabilityBeforeValue, selectionProbabilityAfterValue)
@@ -351,7 +349,7 @@ function ATSScoreDashboard({
     if (typeof selectionProbabilityAfterValue === 'number') {
       return `Selection chance after enhancements: ${selectionProbabilityAfterValue}%.`
     }
-    return null
+    return 'Selection chance will appear once we evaluate your resume against the job description.'
   })()
   const hasComparableScores =
     typeof originalScoreValue === 'number' && typeof enhancedScoreValue === 'number'
@@ -416,37 +414,35 @@ function ATSScoreDashboard({
       })
     }
 
-    if (hasSelectionProbability) {
-      const hasBeforeSelection = typeof selectionProbabilityBeforeValue === 'number'
-      const hasAfterSelection = typeof selectionProbabilityAfterValue === 'number'
-      segments.push({
-        id: 'selection',
-        label: 'Selection Chance',
-        beforeValue: selectionProbabilityBeforeValue,
-        afterValue: selectionProbabilityAfterValue,
-        beforeLabel: 'Before',
-        afterLabel: 'After',
-        delta:
-          typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
-            ? selectionProbabilityDelta
-            : null,
-        beforeMeaning: selectionProbabilityBeforeMeaning ? `${selectionProbabilityBeforeMeaning} Outlook` : null,
-        afterMeaning: selectionProbabilityAfterMeaning ? `${selectionProbabilityAfterMeaning} Outlook` : null,
-        beforeTone: 'text-indigo-700',
-        afterTone: 'text-emerald-700',
-        beforeBadgeClass: 'border border-indigo-200 bg-indigo-50 text-indigo-700',
-        afterBadgeClass: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
-        beforeLabelClass: hasBeforeSelection ? 'text-indigo-600' : 'text-slate-500',
-        afterLabelClass: hasAfterSelection ? 'text-emerald-600' : 'text-slate-500',
-        beforeAccentClass: hasBeforeSelection
-          ? 'border border-indigo-200 bg-indigo-50'
-          : 'border border-slate-200 bg-slate-50',
-        afterAccentClass: hasAfterSelection
-          ? 'border border-emerald-200 bg-emerald-50'
-          : 'border border-slate-200 bg-slate-50',
-        format: formatPercent
-      })
-    }
+    const hasBeforeSelection = typeof selectionProbabilityBeforeValue === 'number'
+    const hasAfterSelection = typeof selectionProbabilityAfterValue === 'number'
+    segments.push({
+      id: 'selection',
+      label: 'Selection Chance',
+      beforeValue: selectionProbabilityBeforeValue,
+      afterValue: selectionProbabilityAfterValue,
+      beforeLabel: 'Before',
+      afterLabel: 'After',
+      delta:
+        typeof selectionProbabilityBeforeValue === 'number' && typeof selectionProbabilityAfterValue === 'number'
+          ? selectionProbabilityDelta
+          : null,
+      beforeMeaning: selectionProbabilityBeforeMeaning ? `${selectionProbabilityBeforeMeaning} Outlook` : null,
+      afterMeaning: selectionProbabilityAfterMeaning ? `${selectionProbabilityAfterMeaning} Outlook` : null,
+      beforeTone: 'text-indigo-700',
+      afterTone: 'text-emerald-700',
+      beforeBadgeClass: 'border border-indigo-200 bg-indigo-50 text-indigo-700',
+      afterBadgeClass: 'border border-emerald-200 bg-emerald-50 text-emerald-700',
+      beforeLabelClass: hasBeforeSelection ? 'text-indigo-600' : 'text-slate-500',
+      afterLabelClass: hasAfterSelection ? 'text-emerald-600' : 'text-slate-500',
+      beforeAccentClass: hasBeforeSelection
+        ? 'border border-indigo-200 bg-indigo-50'
+        : 'border border-slate-200 bg-slate-50',
+      afterAccentClass: hasAfterSelection
+        ? 'border border-emerald-200 bg-emerald-50'
+        : 'border border-slate-200 bg-slate-50',
+      format: formatPercent
+    })
 
     return segments
   })()
@@ -599,7 +595,7 @@ function ATSScoreDashboard({
 
       {match && (
         <div
-          className={`grid grid-cols-1 gap-4 ${hasSelectionProbability ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
+          className={`grid grid-cols-1 gap-4 ${hasComparableScores ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
           aria-label="match comparison"
         >
           {(atsScoreSummary || selectionProbabilitySummary) && (
@@ -821,13 +817,12 @@ function ATSScoreDashboard({
               </p>
             </div>
           )}
-          {hasSelectionProbability && (
-            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection Probability</p>
-                <InfoTooltip
-                  variant="light"
-                  align="right"
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Selection Probability</p>
+              <InfoTooltip
+                variant="light"
+                align="right"
                   label="How is the selection probability estimated?"
                   content={selectionProbabilityDescription}
                 />
@@ -913,7 +908,7 @@ function ATSScoreDashboard({
                 )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
       {match && improvementDetails.length > 0 && (
