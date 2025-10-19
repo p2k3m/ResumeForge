@@ -67,6 +67,9 @@ describe('ATSScoreDashboard', () => {
     expect(screen.getByTestId('ats-score-summary')).toHaveTextContent(
       'ATS score moved from 48% to 76% (+28 pts).'
     )
+    expect(screen.getByTestId('selection-summary')).toHaveTextContent(
+      'Selection chance will appear once we evaluate your resume against the job description.'
+    )
     const snapshotMetrics = screen.getByTestId('score-summary-metrics')
     const atsSnapshot = within(snapshotMetrics).getByTestId('ats-summary-card')
     expect(within(atsSnapshot).getByTestId('ats-summary-before')).toHaveTextContent('48%')
@@ -114,6 +117,29 @@ describe('ATSScoreDashboard', () => {
     if (layoutCard) {
       expect(within(layoutCard).getByText(/layout & searchability score yet/i)).toBeInTheDocument()
     }
+  })
+
+  it('shows selection probability placeholders before evaluation data is available', () => {
+    const match = { ...baseMatch }
+
+    render(<ATSScoreDashboard metrics={metrics} baselineMetrics={baselineMetrics} match={match} />)
+
+    const selectionHeading = screen.getByText('Selection Probability')
+    const selectionCard = selectionHeading.closest('div.rounded-xl')
+    expect(selectionCard).not.toBeNull()
+    if (!selectionCard) {
+      throw new Error('Selection Probability card not found')
+    }
+    const cardQueries = within(selectionCard)
+    expect(cardQueries.getByText('Selection % Before')).toBeInTheDocument()
+    expect(cardQueries.getByText('Selection % After')).toBeInTheDocument()
+    expect(cardQueries.getAllByText('—').length).toBeGreaterThan(0)
+    expect(
+      cardQueries.getByText('Baseline estimate will appear once we parse your original resume.')
+    ).toBeInTheDocument()
+    expect(
+      cardQueries.getByText('Enhanced estimate will populate after you apply at least one improvement.')
+    ).toBeInTheDocument()
   })
 
   it('preserves unknown categories while ensuring ATS coverage', () => {
