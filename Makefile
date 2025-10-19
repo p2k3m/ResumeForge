@@ -13,6 +13,7 @@ LAMBDA_FUNCTIONS := \
         EnhancementImproveProjectsFunction \
         EnhancementImproveHighlightsFunction \
         EnhancementImproveAtsFunction \
+        EnhancementImproveAllFunction \
         DocumentGenerationFunction \
 	DocumentGenerationWorkerFunction \
 	WorkflowScoreFunction \
