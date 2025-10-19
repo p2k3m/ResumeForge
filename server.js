@@ -3774,6 +3774,22 @@ const IMPROVEMENT_SECTION_CONFIG = {
   'enhance-all': { key: 'resume', label: 'Entire Resume' },
 };
 
+const CHANGE_LOG_SECTION_KEY_OVERRIDES = Object.freeze({
+  summary: 'Summary',
+  skills: 'Skills',
+  experience: 'Work Experience',
+  certifications: 'Certifications',
+  projects: 'Projects',
+  highlights: 'Highlights',
+  designation: 'Designation',
+  education: 'Education',
+  resume: 'Entire Resume',
+});
+
+const CHANGE_LOG_KNOWN_SECTION_KEYS = new Set(
+  Object.keys(CHANGE_LOG_SECTION_KEY_OVERRIDES)
+);
+
 function resolveImprovementSectionContext(type, resumeText, updatedResume) {
   const config = IMPROVEMENT_SECTION_CONFIG[type] || IMPROVEMENT_SECTION_CONFIG['enhance-all'];
 
@@ -14467,6 +14483,268 @@ function normalizeChangeLogSegment(segment = {}) {
   };
 }
 
+function canonicalizeChangeLogSectionKey(keyCandidate, labelCandidate = '') {
+  const rawKey = normalizeChangeLogString(keyCandidate);
+  if (rawKey) {
+    const normalized = rawKey.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (normalized) {
+      return normalized;
+    }
+  }
+  const fallbackLabel = normalizeChangeLogString(labelCandidate);
+  if (fallbackLabel) {
+    const normalized = fallbackLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return '';
+}
+
+function resolveChangeLogSectionLabel(keyCandidate, labelCandidate = '') {
+  const directLabel = normalizeChangeLogString(labelCandidate);
+  if (directLabel) {
+    return directLabel;
+  }
+
+  const normalizedKey = normalizeChangeLogString(keyCandidate).toLowerCase();
+  if (normalizedKey && CHANGE_LOG_SECTION_KEY_OVERRIDES[normalizedKey]) {
+    return CHANGE_LOG_SECTION_KEY_OVERRIDES[normalizedKey];
+  }
+
+  const fallbackKey = normalizeChangeLogString(keyCandidate);
+  if (fallbackKey) {
+    const cleaned = fallbackKey
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+    if (cleaned) {
+      return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+  }
+
+  return '';
+}
+
+function registerSectionChangeEntry(
+  registry,
+  keyCandidate,
+  labelCandidate,
+  weight = 1,
+  { enforceKnown = false } = {}
+) {
+  if (!registry) {
+    return;
+  }
+
+  const resolvedLabel = resolveChangeLogSectionLabel(keyCandidate, labelCandidate);
+  const candidateKey = canonicalizeChangeLogSectionKey(keyCandidate, resolvedLabel);
+  const fallbackKey = canonicalizeChangeLogSectionKey(resolvedLabel, resolvedLabel);
+  const finalKey = candidateKey || fallbackKey;
+  const fallbackLabel =
+    resolvedLabel ||
+    (finalKey && CHANGE_LOG_SECTION_KEY_OVERRIDES[finalKey]) ||
+    resolveChangeLogSectionLabel(finalKey);
+
+  if (!finalKey && !fallbackLabel) {
+    return;
+  }
+
+  if (enforceKnown && finalKey && !CHANGE_LOG_KNOWN_SECTION_KEYS.has(finalKey)) {
+    return;
+  }
+
+  const entryKey = finalKey || fallbackKey;
+  if (!entryKey) {
+    return;
+  }
+
+  const existing = registry.get(entryKey) || {
+    key: entryKey,
+    label: fallbackLabel || '',
+    count: 0,
+  };
+
+  if (fallbackLabel && !existing.label) {
+    existing.label = fallbackLabel;
+  }
+
+  let increment = Number(weight);
+  if (!Number.isFinite(increment) || increment <= 0) {
+    increment = 1;
+  }
+  existing.count += increment;
+
+  if (!existing.label) {
+    const overrideLabel =
+      CHANGE_LOG_SECTION_KEY_OVERRIDES[entryKey] || resolveChangeLogSectionLabel(entryKey);
+    if (overrideLabel) {
+      existing.label = overrideLabel;
+    }
+  }
+
+  registry.set(entryKey, existing);
+}
+
+function normalizeChangeLogSectionChange(change = {}) {
+  if (!change || typeof change !== 'object') {
+    return null;
+  }
+
+  const resolvedLabel = resolveChangeLogSectionLabel(change.key, change.label || change.section);
+  const candidateKey = canonicalizeChangeLogSectionKey(change.key, resolvedLabel || change.label);
+  const fallbackKey = canonicalizeChangeLogSectionKey(resolvedLabel, resolvedLabel);
+  const key = candidateKey || fallbackKey;
+  const label =
+    resolvedLabel ||
+    (key && CHANGE_LOG_SECTION_KEY_OVERRIDES[key]) ||
+    resolveChangeLogSectionLabel(key);
+
+  if (!key && !label) {
+    return null;
+  }
+
+  let count = Number(change.count);
+  if (!Number.isFinite(count) || count <= 0) {
+    count = 1;
+  } else {
+    count = Math.round(count);
+    if (count <= 0) {
+      count = 1;
+    }
+  }
+
+  return {
+    key: key || fallbackKey,
+    label: label || CHANGE_LOG_SECTION_KEY_OVERRIDES[key] || '',
+    count,
+  };
+}
+
+function normalizeChangeLogSectionChangeArray(entries = []) {
+  if (!Array.isArray(entries)) {
+    return [];
+  }
+
+  const aggregated = new Map();
+  entries.forEach((entry) => {
+    const normalized = normalizeChangeLogSectionChange(entry);
+    if (!normalized) {
+      return;
+    }
+    const existing = aggregated.get(normalized.key);
+    if (existing) {
+      existing.count += normalized.count;
+      if (!existing.label && normalized.label) {
+        existing.label = normalized.label;
+      }
+    } else {
+      aggregated.set(normalized.key, { ...normalized });
+    }
+  });
+
+  return Array.from(aggregated.values()).sort((a, b) => {
+    if (b.count !== a.count) {
+      return b.count - a.count;
+    }
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function deriveSectionHintFromEntryType(type) {
+  const normalizedType = normalizeChangeLogString(type).toLowerCase();
+  if (!normalizedType) {
+    return null;
+  }
+
+  const config = IMPROVEMENT_SECTION_CONFIG[normalizedType];
+  if (config && (config.key || config.label)) {
+    return {
+      key: config.key || '',
+      label:
+        config.label ||
+        (config.key && CHANGE_LOG_SECTION_KEY_OVERRIDES[config.key]) ||
+        resolveChangeLogSectionLabel(config.key),
+    };
+  }
+
+  if (CHANGE_LOG_KNOWN_SECTION_KEYS.has(normalizedType)) {
+    return {
+      key: normalizedType,
+      label:
+        CHANGE_LOG_SECTION_KEY_OVERRIDES[normalizedType] ||
+        resolveChangeLogSectionLabel(normalizedType),
+    };
+  }
+
+  return null;
+}
+
+function buildSectionChangeEntries({
+  entry = {},
+  summarySegments = [],
+  categoryChangelog = [],
+} = {}) {
+  const registry = new Map();
+
+  if (Array.isArray(entry.sectionChanges)) {
+    entry.sectionChanges.forEach((section) => {
+      if (!section) {
+        return;
+      }
+      const weight = Number(section.count);
+      registerSectionChangeEntry(
+        registry,
+        section.key || section.section || section.label,
+        section.label || section.section || section.key,
+        Number.isFinite(weight) && weight > 0 ? weight : 1
+      );
+    });
+  }
+
+  if (Array.isArray(summarySegments)) {
+    summarySegments.forEach((segment) => {
+      if (!segment) {
+        return;
+      }
+      registerSectionChangeEntry(registry, segment.section, segment.section);
+    });
+  }
+
+  const rescoreSection = entry?.rescoreSummary?.section;
+  if (rescoreSection) {
+    registerSectionChangeEntry(
+      registry,
+      rescoreSection.key || rescoreSection.label,
+      rescoreSection.label || rescoreSection.key
+    );
+  }
+
+  if (Array.isArray(categoryChangelog)) {
+    categoryChangelog.forEach((category) => {
+      if (!category) {
+        return;
+      }
+      registerSectionChangeEntry(
+        registry,
+        category.key || category.label,
+        category.label || category.key,
+        1,
+        { enforceKnown: true }
+      );
+    });
+  }
+
+  if (!registry.size) {
+    const fallback = deriveSectionHintFromEntryType(entry?.type);
+    if (fallback) {
+      registerSectionChangeEntry(registry, fallback.key, fallback.label);
+    }
+  }
+
+  return normalizeChangeLogSectionChangeArray(Array.from(registry.values()));
+}
+
 function normalizeChangeLogItemizedChange(change = {}) {
   if (!change || typeof change !== 'object') {
     return null;
@@ -14714,6 +14992,11 @@ function normalizeChangeLogEntryInput(entry) {
         .map((category) => normalizeChangeLogCategoryEntry(category))
         .filter(Boolean)
     : [];
+  const sectionChanges = buildSectionChangeEntries({
+    entry,
+    summarySegments,
+    categoryChangelog,
+  });
   const acceptedAt = normalizeChangeLogString(entry.acceptedAt);
   const historyContext = normalizeChangeLogHistoryContext(
     entry.historyContext || entry.resumeHistoryContext || entry.historySnapshot
@@ -14757,6 +15040,7 @@ function normalizeChangeLogEntryInput(entry) {
     removedItems,
     itemizedChanges,
     categoryChangelog,
+    sectionChanges,
     scoreDelta,
     acceptedAt,
     historyContext,
@@ -14800,6 +15084,37 @@ function parseDynamoSummarySegments(attribute) {
       removed,
       reason,
     };
+  }).filter(Boolean);
+}
+
+function parseDynamoSectionChanges(attribute) {
+  if (!attribute || !Array.isArray(attribute.L)) {
+    return [];
+  }
+
+  return attribute.L.map((item) => {
+    if (!item || !item.M) {
+      return null;
+    }
+
+    const map = item.M;
+    const key = normalizeChangeLogString(map.key?.S);
+    const label = normalizeChangeLogString(map.label?.S);
+    let count = 1;
+
+    if (map.count?.N) {
+      const parsed = Number.parseInt(map.count.N, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        count = parsed;
+      }
+    } else if (map.count?.S) {
+      const parsed = Number.parseInt(map.count.S, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        count = parsed;
+      }
+    }
+
+    return normalizeChangeLogSectionChange({ key, label, count });
   }).filter(Boolean);
 }
 
@@ -14883,6 +15198,7 @@ function parseDynamoChangeLog(attribute) {
     const addedItems = parseDynamoStringList(map.addedItems);
     const removedItems = parseDynamoStringList(map.removedItems);
     const summarySegments = parseDynamoSummarySegments(map.summarySegments);
+    const sectionChanges = parseDynamoSectionChanges(map.sectionChanges);
     const itemizedChanges = parseDynamoItemizedChanges(map.itemizedChanges);
     const categoryChangelog = parseDynamoCategoryChangelog(map.categoryChangelog);
     const acceptedAt = normalizeChangeLogString(map.acceptedAt?.S);
@@ -14907,6 +15223,7 @@ function parseDynamoChangeLog(attribute) {
       resumeBeforeText,
       resumeAfterText,
       summarySegments,
+      sectionChanges,
       addedItems,
       removedItems,
       itemizedChanges,
@@ -15035,7 +15352,9 @@ function normalizeChangeLogSummaryPayload(summary) {
     summary.interviewPrepAdvice || summary.postEnhancementAdvice
   );
 
-  return { categories, highlights, totals, interviewPrepAdvice };
+  const sections = normalizeChangeLogSectionChangeArray(summary.sections);
+
+  return { categories, highlights, totals, interviewPrepAdvice, sections };
 }
 
 

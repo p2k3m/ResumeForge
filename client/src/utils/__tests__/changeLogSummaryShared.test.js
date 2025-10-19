@@ -53,6 +53,12 @@ describe('buildAggregatedChangeLogSummary', () => {
     )
 
     expect(summary.interviewPrepAdvice).toBe('We added Kubernetes and AWS; prepare for questions.')
+    expect(summary.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'skills', label: 'Skills', count: expect.any(Number) }),
+        expect.objectContaining({ key: 'designation', label: 'Designation' })
+      ])
+    )
   })
 
   it('derives categories when categoryChangelog is missing', () => {
@@ -77,6 +83,11 @@ describe('buildAggregatedChangeLogSummary', () => {
     const skillsCategory = summary.categories.find((category) => category.key === 'skills')
     expect(skillsCategory).toBeDefined()
     expect(skillsCategory.added).toEqual(expect.arrayContaining(['Docker']))
+    expect(summary.sections).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'skills_matrix', label: 'Skills Matrix', count: expect.any(Number) })
+      ])
+    )
   })
 
   it('ignores reverted entries', () => {
@@ -97,5 +108,6 @@ describe('buildAggregatedChangeLogSummary', () => {
     expect(summary.categories).toHaveLength(0)
     expect(summary.highlights).toHaveLength(0)
     expect(summary.totals.entries).toBe(0)
+    expect(summary.sections).toHaveLength(0)
   })
 })

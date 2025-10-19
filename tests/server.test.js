@@ -2966,6 +2966,11 @@ describe('change log persistence safeguards', () => {
         reasons: ['Score impact: +4 pts versus the baseline upload.'],
       },
     ]);
+    expect(responseEntry.sectionChanges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'skills', label: 'Skills', count: expect.any(Number) }),
+      ])
+    );
 
     expect(response.body.changeLogSummary).toEqual(
       expect.objectContaining({
@@ -2981,6 +2986,9 @@ describe('change log persistence safeguards', () => {
             items: expect.arrayContaining(['Kubernetes']),
           }),
         ]),
+        sections: expect.arrayContaining([
+          expect.objectContaining({ key: 'skills', label: 'Skills', count: expect.any(Number) }),
+        ]),
       })
     );
 
@@ -2993,6 +3001,7 @@ describe('change log persistence safeguards', () => {
     expect(storedPayload.entries).toHaveLength(1);
     const persistedEntry = storedPayload.entries[0];
     expect(persistedEntry.categoryChangelog).toEqual(responseEntry.categoryChangelog);
+    expect(persistedEntry.sectionChanges).toEqual(responseEntry.sectionChanges);
     expect(storedPayload.summary).toEqual(
       expect.objectContaining({
         highlights: expect.arrayContaining([
@@ -3000,6 +3009,9 @@ describe('change log persistence safeguards', () => {
             key: 'skills:added',
             items: expect.arrayContaining(['Kubernetes']),
           }),
+        ]),
+        sections: expect.arrayContaining([
+          expect.objectContaining({ key: 'skills', label: 'Skills', count: expect.any(Number) }),
         ]),
       })
     );

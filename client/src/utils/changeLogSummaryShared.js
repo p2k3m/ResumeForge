@@ -9,6 +9,18 @@ const HIGHLIGHT_LABEL_OVERRIDES = {
   }
 }
 
+const SECTION_LABEL_OVERRIDES = {
+  summary: 'Summary',
+  skills: 'Skills',
+  experience: 'Work Experience',
+  certifications: 'Certifications',
+  projects: 'Projects',
+  highlights: 'Highlights',
+  designation: 'Designation',
+  education: 'Education',
+  resume: 'Entire Resume'
+}
+
 function normaliseSummaryString(value) {
   if (typeof value === 'string') {
     const trimmed = value.trim()
@@ -313,6 +325,87 @@ function buildHighlights(categories = []) {
   return highlights
 }
 
+function canonicaliseSectionKey(value) {
+  const text = normaliseSummaryString(value)
+  if (!text) return ''
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+}
+
+function isKnownSectionKey(key) {
+  const canonical = canonicaliseSectionKey(key)
+  if (!canonical) return false
+  return Boolean(SECTION_LABEL_OVERRIDES[canonical])
+}
+
+function resolveSectionLabel(key, label) {
+  const direct = normaliseSummaryString(label)
+  if (direct) {
+    return direct
+  }
+  const keyCandidate = canonicaliseSectionKey(key)
+  if (keyCandidate && SECTION_LABEL_OVERRIDES[keyCandidate]) {
+    return SECTION_LABEL_OVERRIDES[keyCandidate]
+  }
+  if (keyCandidate) {
+    return keyCandidate.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+  return ''
+}
+
+function mergeSectionChange(sectionMap, section, weight = 1) {
+  if (!sectionMap) return
+  const label = resolveSectionLabel(section.key, section.label || section.section)
+  const key = canonicaliseSectionKey(section.key) || canonicaliseSectionKey(label)
+  if (!key && !label) {
+    return
+  }
+  const existing = sectionMap.get(key) || { key, label, count: 0 }
+  if (label && !existing.label) {
+    existing.label = label
+  }
+  const increment = Number.isFinite(weight) && weight > 0 ? weight : 1
+  existing.count += increment
+  if (!existing.label) {
+    existing.label = resolveSectionLabel(key)
+  }
+  sectionMap.set(key, existing)
+}
+
+function buildSectionChanges(entries = []) {
+  const sectionMap = new Map()
+  const safeEntries = Array.isArray(entries) ? entries : []
+  safeEntries.forEach((entry) => {
+    if (!entry || entry.reverted) {
+      return
+    }
+    const sections = Array.isArray(entry.sectionChanges) ? entry.sectionChanges : []
+    if (sections.length === 0 && Array.isArray(entry.summarySegments)) {
+      entry.summarySegments.forEach((segment) => {
+        if (!segment) return
+        mergeSectionChange(sectionMap, { key: segment.section, label: segment.section })
+      })
+      return
+    }
+    sections.forEach((section) => {
+      if (!section) return
+      const weight = Number.isFinite(section.count) ? Number(section.count) : 1
+      mergeSectionChange(sectionMap, section, weight)
+    })
+    const categories = Array.isArray(entry.categoryChangelog) ? entry.categoryChangelog : []
+    categories.forEach((category) => {
+      if (!category) return
+      if (!isKnownSectionKey(category.key)) return
+      mergeSectionChange(sectionMap, { key: category.key, label: category.label })
+    })
+  })
+  return Array.from(sectionMap.values()).sort((a, b) => {
+    if (b.count !== a.count) {
+      return b.count - a.count
+    }
+    return a.label.localeCompare(b.label)
+  })
+}
+
 function buildTotals(entries, categories, highlights) {
   const activeEntries = Array.isArray(entries)
     ? entries.filter((entry) => entry && !entry.reverted)
@@ -371,12 +464,14 @@ export function buildAggregatedChangeLogSummary(entries = []) {
   const highlights = buildHighlights(ordered)
   const totals = buildTotals(safeEntries, ordered, highlights)
   const interviewPrepAdvice = buildInterviewPrepAdvice(ordered, highlights)
+  const sections = buildSectionChanges(safeEntries)
 
   return {
     categories: ordered,
     highlights,
     totals,
-    interviewPrepAdvice
+    interviewPrepAdvice,
+    sections
   }
 }
 
