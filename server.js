@@ -9741,7 +9741,19 @@ function ensureScoreBreakdownCompleteness(source = {}) {
 
 function scoreBreakdownToArray(scoreBreakdown = {}) {
   const normalized = ensureScoreBreakdownCompleteness(scoreBreakdown);
-  return ATS_METRIC_DEFINITIONS.map(({ key }) => normalized[key]);
+  return ATS_METRIC_DEFINITIONS.map(({ key, category }) => {
+    const metric = normalized[key] || {};
+    const normalizedCategory =
+      typeof metric.category === 'string' && metric.category.trim().length
+        ? metric.category
+        : category;
+
+    return {
+      ...metric,
+      key: metric.key || key,
+      category: normalizedCategory,
+    };
+  });
 }
 
 function computeCompositeAtsScore(scoreBreakdown = {}) {

@@ -1,4 +1,8 @@
-import { buildScoreBreakdown } from '../lib/scoring/atsMetrics.js';
+import {
+  ATS_METRIC_DEFINITIONS,
+  buildScoreBreakdown,
+  scoreBreakdownToArray,
+} from '../lib/scoring/atsMetrics.js';
 
 const jobDescription = `We are hiring a senior software engineer to lead React and Node.js initiatives.
 You will optimize performance, mentor teammates, and deliver measurable outcomes.
@@ -81,6 +85,24 @@ describe('buildScoreBreakdown', () => {
     Object.values(breakdown).forEach(({ score }) => {
       expect(score).toBeGreaterThanOrEqual(0);
       expect(score).toBeLessThanOrEqual(100);
+    });
+  });
+
+  test('scoreBreakdownToArray outputs all ATS categories in order', () => {
+    const breakdown = buildScoreBreakdown(strongResume, {
+      jobText: jobDescription,
+      jobSkills,
+      resumeSkills: ['React', 'Node.js', 'TypeScript', 'Leadership', 'Optimization', 'AWS'],
+    });
+
+    const metrics = scoreBreakdownToArray(breakdown);
+
+    expect(metrics).toHaveLength(ATS_METRIC_DEFINITIONS.length);
+    expect(metrics.map((metric) => metric.category)).toEqual(
+      ATS_METRIC_DEFINITIONS.map(({ category }) => category)
+    );
+    metrics.forEach((metric, index) => {
+      expect(metric.key).toBe(ATS_METRIC_DEFINITIONS[index].key);
     });
   });
 
