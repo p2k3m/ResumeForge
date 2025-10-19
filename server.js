@@ -5980,6 +5980,15 @@ async function rewriteSectionsWithGemini(
         ? sections.structuredExperience
         : [],
     };
+    const sectionPrompts = [
+      ['Summary', 'Rewrite only the Summary of the CV as per this JD.'],
+      ['Work Experience', 'Rewrite only the Work Experience of the CV as per this JD.'],
+      ['Education', 'Rewrite only the Education of the CV as per this JD.'],
+      ['Certifications', 'Rewrite only the Certifications of the CV as per this JD.'],
+      ['Skills', 'Rewrite only the Skills of the CV as per this JD.'],
+      ['Projects', 'Rewrite only the Projects of the CV as per this JD.'],
+    ];
+
     const instructionLines = [
       'You are an elite resume architect optimizing for Gemini/OpenAI outputs.',
       'Follow these rules precisely:',
@@ -5988,6 +5997,8 @@ async function rewriteSectionsWithGemini(
       '- Use the structuredExperience array to rewrite each role\'s responsibilities so verbs, metrics, and focus mirror the job description while staying truthful to the provided achievements.',
       '- Blend JD-critical skills into the skills section only when the candidate context proves them—avoid isolated keyword stuffing.',
       '- Emphasise measurable impact and outcomes that demonstrate the candidate already performs what the JD requires; do not fabricate new roles or tools.',
+      '- For each section output, constrain the LLM instruction exactly as follows:',
+      ...sectionPrompts.map(([section, prompt]) => `  - ${section}: "${prompt}"`),
       '- Respond using ONLY valid JSON conforming to the provided schema.',
     ];
     const promptPackage = createVersionedPrompt({
