@@ -1391,6 +1391,29 @@ const ITEM_REASON_HINTS_BY_SUGGESTION = {
   }
 }
 
+const CHANGE_LOG_SECTION_LABELS = {
+  summary: 'Summary',
+  skills: 'Skills',
+  experience: 'Work Experience',
+  certifications: 'Certifications',
+  projects: 'Projects',
+  highlights: 'Highlights',
+  designation: 'Designation',
+  education: 'Education',
+  resume: 'Entire Resume'
+}
+
+const CHANGE_LOG_SECTIONS_BY_TYPE = {
+  'improve-summary': { key: 'summary', label: 'Summary' },
+  'add-missing-skills': { key: 'skills', label: 'Skills' },
+  'align-experience': { key: 'experience', label: 'Work Experience' },
+  'improve-certifications': { key: 'certifications', label: 'Certifications' },
+  'improve-projects': { key: 'projects', label: 'Projects' },
+  'improve-highlights': { key: 'highlights', label: 'Highlights' },
+  'change-designation': { key: 'designation', label: 'Designation' },
+  'enhance-all': { key: 'resume', label: 'Entire Resume' }
+}
+
 const DOWNLOAD_VARIANT_BADGE_STYLES = {
   original: {
     text: 'Original',
@@ -1631,6 +1654,69 @@ function buildChangeLogEntry(suggestion) {
         .filter(Boolean)
     : []
 
+  const normalizeSectionKey = (value) => {
+    const text = typeof value === 'string' ? value.trim() : ''
+    if (!text) return ''
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, '_')
+  }
+
+  const resolveSectionLabel = (key, label) => {
+    const trimmed = typeof label === 'string' ? label.trim() : ''
+    if (trimmed) {
+      return trimmed
+    }
+    const keyCandidate = normalizeSectionKey(key)
+    if (keyCandidate && CHANGE_LOG_SECTION_LABELS[keyCandidate]) {
+      return CHANGE_LOG_SECTION_LABELS[keyCandidate]
+    }
+    if (keyCandidate) {
+      return keyCandidate.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    }
+    return ''
+  }
+
+  const sectionChangeMap = new Map()
+
+  const registerSectionChange = (keyCandidate, labelCandidate, weight = 1) => {
+    const label = resolveSectionLabel(keyCandidate, labelCandidate)
+    const key = normalizeSectionKey(keyCandidate) || normalizeSectionKey(label)
+    if (!key && !label) {
+      return
+    }
+    const existing = sectionChangeMap.get(key) || { key, label, count: 0 }
+    if (label && !existing.label) {
+      existing.label = label
+    }
+    const increment = Number.isFinite(weight) && weight > 0 ? weight : 1
+    existing.count += increment
+    if (!existing.label) {
+      existing.label = resolveSectionLabel(key)
+    }
+    sectionChangeMap.set(key, existing)
+  }
+
+  summarySegments.forEach((segment) => {
+    if (!segment || !segment.section) return
+    registerSectionChange(segment.section, segment.section)
+  })
+
+  if (Array.isArray(suggestion?.sectionChanges)) {
+    suggestion.sectionChanges.forEach((section) => {
+      if (!section) return
+      const weight = Number.isFinite(section.count) ? Number(section.count) : 1
+      registerSectionChange(
+        section.key || section.section || section.label,
+        section.label || section.section || section.key,
+        weight
+      )
+    })
+  }
+
+  if (suggestion?.rescore?.section) {
+    const rescoreSection = suggestion.rescore.section
+    registerSectionChange(rescoreSection.key || rescoreSection.label, rescoreSection.label || rescoreSection.key)
+  }
+
   const aggregateUnique = (items) => {
     const seen = new Set()
     const ordered = []
@@ -1780,6 +1866,20 @@ function buildChangeLogEntry(suggestion) {
     suggestionType: suggestion?.type
   })
 
+  if (sectionChangeMap.size === 0) {
+    const fallbackSection = CHANGE_LOG_SECTIONS_BY_TYPE[suggestionType]
+    if (fallbackSection) {
+      registerSectionChange(fallbackSection.key, fallbackSection.label)
+    }
+  }
+
+  const sectionChanges = Array.from(sectionChangeMap.values()).sort((a, b) => {
+    if (b.count !== a.count) {
+      return b.count - a.count
+    }
+    return a.label.localeCompare(b.label)
+  })
+
   return {
     id: suggestion?.id,
     label,
@@ -1794,6 +1894,7 @@ function buildChangeLogEntry(suggestion) {
     removedItems,
     itemizedChanges,
     categoryChangelog,
+    sectionChanges,
     scoreDelta:
       typeof suggestion?.scoreDelta === 'number' && Number.isFinite(suggestion.scoreDelta)
         ? suggestion.scoreDelta
