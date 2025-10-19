@@ -117,6 +117,18 @@ describe('upload to download flow (e2e)', () => {
     expect(typeof improvementResponse.body.updatedResume).toBe('string');
     expect(improvementResponse.body.updatedResume).toContain('Forward-looking Lead Software Engineer');
     expect(improvementResponse.body.updatedResume).toContain('Spotlighted quantified wins');
+    expect(improvementResponse.body.scores).toEqual(
+      expect.objectContaining({
+        match: expect.objectContaining({
+          before: expect.objectContaining({ score: expect.any(Number) }),
+          after: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+        ats: expect.objectContaining({
+          before: expect.objectContaining({ score: expect.any(Number) }),
+          after: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+      })
+    );
 
     mocks.mockS3Send.mockClear();
 
@@ -142,6 +154,18 @@ describe('upload to download flow (e2e)', () => {
     expect(generationResponse.body.success).toBe(true);
     expect(typeof generationResponse.body.atsScoreBeforeExplanation).toBe('string');
     expect(typeof generationResponse.body.atsScoreAfterExplanation).toBe('string');
+    expect(generationResponse.body.scores).toEqual(
+      expect.objectContaining({
+        match: expect.objectContaining({
+          before: expect.objectContaining({ score: expect.any(Number) }),
+          after: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+        ats: expect.objectContaining({
+          before: expect.objectContaining({ score: expect.any(Number) }),
+          after: expect.objectContaining({ score: expect.any(Number) }),
+        }),
+      })
+    );
 
     const generationTypes = extractTypes(generationResponse.body.urls);
     expect(generationTypes).toEqual(
