@@ -9762,6 +9762,44 @@ function scoreBreakdownToArray(scoreBreakdown = {}) {
   });
 }
 
+function buildAtsDeltaBreakdown(beforeBreakdown = {}, afterBreakdown = {}) {
+  if (!beforeBreakdown || !afterBreakdown) {
+    return null;
+  }
+
+  const delta = {};
+
+  ATS_METRIC_DEFINITIONS.forEach(({ key, category }) => {
+    const beforeMetric = beforeBreakdown[key];
+    const afterMetric = afterBreakdown[key];
+    const beforeScore =
+      typeof beforeMetric?.score === 'number' && Number.isFinite(beforeMetric.score)
+        ? Math.round(beforeMetric.score)
+        : null;
+    const afterScore =
+      typeof afterMetric?.score === 'number' && Number.isFinite(afterMetric.score)
+        ? Math.round(afterMetric.score)
+        : null;
+
+    if (beforeScore === null || afterScore === null) {
+      return;
+    }
+
+    const diff = Math.round(afterScore - beforeScore);
+    delta[key] = {
+      key,
+      category: afterMetric?.category || beforeMetric?.category || category,
+      score: diff,
+    };
+  });
+
+  if (!Object.keys(delta).length) {
+    return null;
+  }
+
+  return delta;
+}
+
 function computeCompositeAtsScore(scoreBreakdown = {}) {
   const normalized = ensureScoreBreakdownCompleteness(scoreBreakdown);
   let weightedSum = 0;
@@ -11292,6 +11330,23 @@ function mergeSessionScoresWithRescoreSummary({
     });
     if (Object.keys(deltaBreakdown).length) {
       atsDelta.breakdown = deltaBreakdown;
+    }
+  } else {
+    const summaryDeltaBreakdown =
+      normalizeSummaryScoreBreakdown(deltaOverall.scoreBreakdown) ||
+      normalizeSummaryScoreBreakdown(deltaOverall.atsSubScores) ||
+      null;
+    if (summaryDeltaBreakdown) {
+      const normalizedDelta = {};
+      ATS_METRIC_DEFINITIONS.forEach(({ key }) => {
+        const metric = summaryDeltaBreakdown[key];
+        if (typeof metric?.score === 'number' && Number.isFinite(metric.score)) {
+          normalizedDelta[key] = { score: Math.round(metric.score) };
+        }
+      });
+      if (Object.keys(normalizedDelta).length) {
+        atsDelta.breakdown = normalizedDelta;
+      }
     }
   }
 
@@ -15233,6 +15288,13 @@ async function handleImprovementRequest(type, req, res) {
     const atsBefore = scoreBreakdownToArray(overallBeforeBreakdown);
     const atsAfter = scoreBreakdownToArray(overallAfterBreakdown);
     const overallScoreDelta = overallAfterMatch.score - overallBeforeMatch.score;
+    const overallDeltaBreakdown = buildAtsDeltaBreakdown(
+      overallBeforeBreakdown,
+      overallAfterBreakdown,
+    );
+    const overallDeltaAtsScores = overallDeltaBreakdown
+      ? scoreBreakdownToArray(overallDeltaBreakdown)
+      : [];
 
     const sectionContext = resolveImprovementSectionContext(type, resumeText, updatedResumeText);
     const sectionBeforeSkills = extractResumeSkills(sectionContext.beforeText);
@@ -15378,6 +15440,10 @@ async function handleImprovementRequest(type, req, res) {
         delta: {
           score: overallScoreDelta,
           coveredSkills: coveredSkillsOverall,
+          ...(overallDeltaBreakdown ? { scoreBreakdown: overallDeltaBreakdown } : {}),
+          ...(overallDeltaAtsScores.length
+            ? { atsSubScores: overallDeltaAtsScores }
+            : {}),
         },
       },
       selectionProbability: {
