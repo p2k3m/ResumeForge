@@ -33,14 +33,14 @@ ResumeForge now deploys a suite of dedicated Lambda functions, each fronted by d
 | Resume upload | `lambdas/resumeUpload.handler` | `POST /api/process-cv` |
 | Job description evaluation | `lambdas/jobEvaluation.handler` | `POST /api/jd/evaluate` |
 | Scoring | `lambdas/scoring.handler` | `POST /api/score-match`, `POST /api/rescore-improvement` |
-| Enhancement – summary | `lambdas/enhancement.handler` | `POST /api/improve-summary` |
-| Enhancement – skills | `lambdas/enhancement.handler` | `POST /api/add-missing-skills`, `POST /api/improve-skills` |
-| Enhancement – designation | `lambdas/enhancement.handler` | `POST /api/change-designation`, `POST /api/improve-designation` |
-| Enhancement – experience | `lambdas/enhancement.handler` | `POST /api/align-experience`, `POST /api/improve-experience` |
-| Enhancement – certifications | `lambdas/enhancement.handler` | `POST /api/improve-certifications` |
-| Enhancement – projects | `lambdas/enhancement.handler` | `POST /api/improve-projects` |
-| Enhancement – highlights | `lambdas/enhancement.handler` | `POST /api/improve-highlights` |
-| Enhancement – ATS uplift | `lambdas/enhancement.handler` | `POST /api/enhance-all`, `POST /api/improve-ats` |
+| Enhancement – summary | `lambdas/enhancementImproveSummary.handler` | `POST /api/improve-summary` |
+| Enhancement – skills | `lambdas/enhancementImproveSkills.handler` | `POST /api/add-missing-skills`, `POST /api/improve-skills` |
+| Enhancement – designation | `lambdas/enhancementImproveDesignation.handler` | `POST /api/change-designation`, `POST /api/improve-designation` |
+| Enhancement – experience | `lambdas/enhancementImproveExperience.handler` | `POST /api/align-experience`, `POST /api/improve-experience` |
+| Enhancement – certifications | `lambdas/enhancementImproveCertifications.handler` | `POST /api/improve-certifications` |
+| Enhancement – projects | `lambdas/enhancementImproveProjects.handler` | `POST /api/improve-projects` |
+| Enhancement – highlights | `lambdas/enhancementImproveHighlights.handler` | `POST /api/improve-highlights` |
+| Enhancement – ATS uplift | `lambdas/enhancementImproveAts.handler` | `POST /api/enhance-all`, `POST /api/improve-ats` |
 | Document generation | `lambdas/documentGeneration.handler` | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
 | Auditing & metrics | `lambdas/auditing.handler` | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
 
