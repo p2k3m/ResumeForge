@@ -29,6 +29,6 @@ This primer helps new teammates explain ResumeForge to "regular" users — candi
 | --- | --- | --- |
 | Upload résumé | `POST /api/process-cv` | Stores the résumé, manual job description, and session metadata. Kicks off scoring and orchestration events. |
 | Evaluate fit | `POST /api/score-match` | Runs ATS scoring against the pasted job description for the current session. |
-| Apply improvements | `POST /api/enhance-all` (alias: `POST /api/improve-ats`) and section-specific `POST /api/improve-*` routes | Generates targeted rewrites that the candidate can accept or reject. |
+| Apply improvements | `POST /api/improve-all` for batch LLM passes, `POST /api/enhance-all` (alias: `POST /api/improve-ats`) and section-specific `POST /api/improve-*` routes | Generates targeted rewrites that the candidate can accept or reject. |
 | Regenerate deliverables | `POST /api/generate-enhanced-docs` | Produces refreshed résumé variants and cover letters, tagging each artifact with template and session metadata. |
 | Download artifacts | `POST /api/refresh-download-link` | Issues signed URLs for the current session’s files so the candidate can download the final package. |

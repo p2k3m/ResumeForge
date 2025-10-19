@@ -16766,10 +16766,37 @@ const improvementRoutes = [
   { path: '/api/improve-ats', type: 'enhance-all' },
 ];
 
+const IMPROVE_ALL_BATCH_TYPES = [
+  'improve-summary',
+  'add-missing-skills',
+  'change-designation',
+  'align-experience',
+  'improve-certifications',
+  'improve-projects',
+  'improve-highlights',
+];
+
 improvementRoutes.forEach(({ path: routePath, type }) => {
   app.post(routePath, assignJobContext, async (req, res) => {
     await handleImprovementRequest(type, req, res);
   });
+});
+
+app.post('/api/improve-all', assignJobContext, async (req, res) => {
+  const basePayload = req.body && typeof req.body === 'object' ? req.body : {};
+  const overrideTypes = IMPROVE_ALL_BATCH_TYPES;
+  const previousBody = req.body;
+  req.body = {
+    ...basePayload,
+    types: overrideTypes,
+    toggles: overrideTypes,
+    primaryType: overrideTypes[0],
+  };
+  try {
+    await handleImprovementBatchRequest(req, res);
+  } finally {
+    req.body = previousBody;
+  }
 });
 
 app.post('/api/improve-batch', assignJobContext, async (req, res) => {

@@ -356,6 +356,25 @@ paths:
                 $ref: '#/components/schemas/TargetedImprovementResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /api/improve-all:
+    post:
+      summary: Apply every targeted improvement in a single request
+      operationId: postImproveAll
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetedImprovementRequest'
+      responses:
+        '200':
+          description: Batch improvements generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImprovementBatchResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
   /api/enhance-all:
     post:
       summary: Apply holistic resume enhancement
@@ -836,6 +855,86 @@ components:
         - selectionProbabilityDelta
         - urlExpiresInSeconds
         - urls
+    ImprovementBatchResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        type:
+          type: string
+        title:
+          type: string
+        beforeExcerpt:
+          type: string
+        afterExcerpt:
+          type: string
+        explanation:
+          type: string
+        confidence:
+          type: number
+          nullable: true
+        updatedResume:
+          type: string
+        improvementSummary:
+          type: object
+          additionalProperties: true
+        rescore:
+          type: object
+          additionalProperties: true
+        originalTitle:
+          type: string
+        modifiedTitle:
+          type: string
+        llmTrace:
+          type: object
+          nullable: true
+          additionalProperties: true
+      required:
+        - success
+        - type
+        - title
+        - beforeExcerpt
+        - afterExcerpt
+        - explanation
+        - updatedResume
+        - rescore
+        - originalTitle
+        - modifiedTitle
+    ImprovementBatchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        types:
+          type: array
+          items:
+            type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImprovementBatchResult'
+        updatedResume:
+          type: string
+        urls:
+          type: array
+          items:
+            $ref: '#/components/schemas/DownloadUrl'
+        urlExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        generatedAt:
+          type: string
+          format: date-time
+      required:
+        - success
+        - types
+        - results
+        - updatedResume
+        - urls
+        - generatedAt
     GenerateEnhancedDocsRequest:
       type: object
       properties:

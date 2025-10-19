@@ -59,6 +59,11 @@ const enhancementServices = {
       { method: 'POST', path: '/api/improve-ats' },
     ],
   },
+  enhancementImproveAll: {
+    serviceName: 'enhancement-improve-all',
+    description: 'Executes every targeted improvement in a single batch.',
+    allowedRoutes: [{ method: 'POST', path: '/api/improve-all' }],
+  },
 };
 
 export const services = {

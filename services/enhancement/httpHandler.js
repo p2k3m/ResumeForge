@@ -28,4 +28,7 @@ export const enhancementImproveHighlightsHttpHandler =
 export const enhancementImproveAtsHttpHandler =
   createEnhancementHttpHandler('enhancementImproveAts');
 
+export const enhancementImproveAllHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveAll');
+
 export default enhancementImproveSummaryHttpHandler;

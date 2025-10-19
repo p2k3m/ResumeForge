@@ -817,6 +817,40 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
+  EnhancementImproveAllFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-all'
+      CodeUri: .
+      Handler: lambdas/enhancementImproveAll.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
+        ImproveAll:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-all
+            Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancementImproveAll
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
   DocumentGenerationQueue:
     Type: AWS::SQS::Queue
     Properties:
