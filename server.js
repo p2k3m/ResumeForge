@@ -1003,26 +1003,38 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
         border-radius: 6px;
         font-size: 0.95rem;
       }
-      p:last-of-type {
-        margin-bottom: 0;
+      ul {
+        padding-left: 1.25rem;
+      }
+      li + li {
+        margin-top: 0.5rem;
       }
       .fallback {
         display: flex;
         flex-direction: column;
         gap: 1rem;
       }
+      .fallback__actions {
+        background: rgba(15, 23, 42, 0.05);
+        border-radius: 8px;
+        padding: 1rem;
+      }
     </style>
   </head>
   <body>
     <div id="root" data-status="client-assets-missing"></div>
-    <noscript>
-      <main class="fallback">
-        <h1>ResumeForge client rebuilding</h1>
-        <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
-        <p>To fix this in development, run <code>npm run build:client</code>. For deployed environments, ensure the <code>client/dist</code> directory is bundled alongside the Lambda function.</p>
-      </main>
-    </noscript>
-    <script type="module" src="/assets/index-fallback.js" data-fallback="true"></script>
+    <main class="fallback" role="alert">
+      <h1>ResumeForge client rebuilding</h1>
+      <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
+      <div class="fallback__actions">
+        <p>To restore the UI:</p>
+        <ul>
+          <li>In local development, run <code>npm run build:client</code> and refresh this page.</li>
+          <li>For deployed stacks, redeploy the Lambda bundle with the <code>client/dist</code> directory included.</li>
+          <li>After redeploying, run <code>npm run publish:cloudfront-url -- &lt;stack-name&gt;</code> to update the canonical CloudFront domain, then <code>npm run verify:cloudfront</code> to confirm the distribution serves <code>/healthz</code>.</li>
+        </ul>
+      </div>
+    </main>
   </body>
 </html>`;
 
