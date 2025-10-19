@@ -6,6 +6,61 @@ import {
   routeMatchesRequest,
 } from './routing.js';
 
+const enhancementServices = {
+  enhancementImproveSummary: {
+    serviceName: 'enhancement-improve-summary',
+    description: 'Generates updated resume summary suggestions.',
+    allowedRoutes: [{ method: 'POST', path: '/api/improve-summary' }],
+  },
+  enhancementImproveSkills: {
+    serviceName: 'enhancement-improve-skills',
+    description: 'Adds or refines relevant skill highlights.',
+    allowedRoutes: [
+      { method: 'POST', path: '/api/add-missing-skills' },
+      { method: 'POST', path: '/api/improve-skills' },
+    ],
+  },
+  enhancementImproveDesignation: {
+    serviceName: 'enhancement-improve-designation',
+    description: 'Aligns job titles and designations to the target role.',
+    allowedRoutes: [
+      { method: 'POST', path: '/api/change-designation' },
+      { method: 'POST', path: '/api/improve-designation' },
+    ],
+  },
+  enhancementImproveExperience: {
+    serviceName: 'enhancement-improve-experience',
+    description: 'Realigns experience narratives with the job description.',
+    allowedRoutes: [
+      { method: 'POST', path: '/api/align-experience' },
+      { method: 'POST', path: '/api/improve-experience' },
+    ],
+  },
+  enhancementImproveCertifications: {
+    serviceName: 'enhancement-improve-certifications',
+    description: 'Improves certification summaries and relevance.',
+    allowedRoutes: [{ method: 'POST', path: '/api/improve-certifications' }],
+  },
+  enhancementImproveProjects: {
+    serviceName: 'enhancement-improve-projects',
+    description: 'Enhances project descriptions and achievements.',
+    allowedRoutes: [{ method: 'POST', path: '/api/improve-projects' }],
+  },
+  enhancementImproveHighlights: {
+    serviceName: 'enhancement-improve-highlights',
+    description: 'Refines resume highlights and key takeaways.',
+    allowedRoutes: [{ method: 'POST', path: '/api/improve-highlights' }],
+  },
+  enhancementImproveAts: {
+    serviceName: 'enhancement-improve-ats',
+    description: 'Runs holistic ATS improvements across the resume.',
+    allowedRoutes: [
+      { method: 'POST', path: '/api/enhance-all' },
+      { method: 'POST', path: '/api/improve-ats' },
+    ],
+  },
+};
+
 export const services = {
   clientApp: {
     serviceName: 'client-app',
@@ -56,24 +111,7 @@ export const services = {
       { method: 'POST', path: '/api/rescore-improvement' },
     ],
   },
-  enhancement: {
-    serviceName: 'enhancement',
-    description: 'Handles AI-driven resume enhancement flows.',
-    allowedRoutes: [
-      { method: 'POST', path: '/api/improve-summary' },
-      { method: 'POST', path: '/api/add-missing-skills' },
-      { method: 'POST', path: '/api/improve-skills' },
-      { method: 'POST', path: '/api/change-designation' },
-      { method: 'POST', path: '/api/improve-designation' },
-      { method: 'POST', path: '/api/align-experience' },
-      { method: 'POST', path: '/api/improve-experience' },
-      { method: 'POST', path: '/api/improve-certifications' },
-      { method: 'POST', path: '/api/improve-projects' },
-      { method: 'POST', path: '/api/improve-highlights' },
-      { method: 'POST', path: '/api/enhance-all' },
-      { method: 'POST', path: '/api/improve-ats' },
-    ],
-  },
+  ...enhancementServices,
   documentGeneration: {
     serviceName: 'document-generation',
     description: 'Generates CVs and cover letters for download.',

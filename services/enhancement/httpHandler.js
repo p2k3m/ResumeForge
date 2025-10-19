@@ -1,10 +1,31 @@
 import { createServiceHandler } from '../../microservices/createServiceHandler.js';
 import { getServiceConfig } from '../../microservices/services.js';
 
-const enhancementConfig = getServiceConfig('enhancement');
+const createEnhancementHttpHandler = (key) =>
+  createServiceHandler(getServiceConfig(key));
 
-export const enhancementHttpHandler = createServiceHandler(
-  enhancementConfig,
-);
+export const enhancementImproveSummaryHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveSummary');
 
-export default enhancementHttpHandler;
+export const enhancementImproveSkillsHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveSkills');
+
+export const enhancementImproveDesignationHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveDesignation');
+
+export const enhancementImproveExperienceHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveExperience');
+
+export const enhancementImproveCertificationsHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveCertifications');
+
+export const enhancementImproveProjectsHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveProjects');
+
+export const enhancementImproveHighlightsHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveHighlights');
+
+export const enhancementImproveAtsHttpHandler =
+  createEnhancementHttpHandler('enhancementImproveAts');
+
+export default enhancementImproveSummaryHttpHandler;

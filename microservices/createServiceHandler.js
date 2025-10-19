@@ -95,17 +95,16 @@ export function createServiceHandler({
   };
 
   const operationGroup = (() => {
-    switch (serviceKey) {
-      case 'documentGeneration':
-        return 'artifact-generation';
-      case 'enhancement':
-        return 'enhancement';
-      case 'clientApp':
-      case 'auditing':
-        return 'artifact-download';
-      default:
-        return undefined;
+    if (serviceKey === 'documentGeneration') {
+      return 'artifact-generation';
     }
+    if (serviceKey === 'clientApp' || serviceKey === 'auditing') {
+      return 'artifact-download';
+    }
+    if (typeof serviceKey === 'string' && serviceKey.startsWith('enhancement')) {
+      return 'enhancement';
+    }
+    return undefined;
   })();
 
   return withLambdaObservability(serviceHandler, {
