@@ -1035,6 +1035,11 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
         </ul>
       </div>
     </main>
+    <script
+      type="module"
+      data-placeholder="true"
+      src="/assets/index-dev.js"
+    ></script>
   </body>
 </html>`;
 
