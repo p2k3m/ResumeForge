@@ -15923,12 +15923,16 @@ app.post('/api/score-match', assignJobContext, async (req, res) => {
 const improvementRoutes = [
   { path: '/api/improve-summary', type: 'improve-summary' },
   { path: '/api/add-missing-skills', type: 'add-missing-skills' },
+  { path: '/api/improve-skills', type: 'add-missing-skills' },
   { path: '/api/change-designation', type: 'change-designation' },
+  { path: '/api/improve-designation', type: 'change-designation' },
   { path: '/api/align-experience', type: 'align-experience' },
+  { path: '/api/improve-experience', type: 'align-experience' },
   { path: '/api/improve-certifications', type: 'improve-certifications' },
   { path: '/api/improve-projects', type: 'improve-projects' },
   { path: '/api/improve-highlights', type: 'improve-highlights' },
   { path: '/api/enhance-all', type: 'enhance-all' },
+  { path: '/api/improve-ats', type: 'enhance-all' },
 ];
 
 improvementRoutes.forEach(({ path: routePath, type }) => {

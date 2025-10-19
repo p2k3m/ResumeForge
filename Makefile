@@ -4,9 +4,16 @@ LAMBDA_FUNCTIONS := \
 	ResumeForgeFunction \
 	ClientAppFunction \
 	JobEvaluationFunction \
-	ScoringFunction \
-	EnhancementFunction \
-	DocumentGenerationFunction \
+        ScoringFunction \
+        EnhancementImproveSummaryFunction \
+        EnhancementImproveSkillsFunction \
+        EnhancementImproveDesignationFunction \
+        EnhancementImproveExperienceFunction \
+        EnhancementImproveCertificationsFunction \
+        EnhancementImproveProjectsFunction \
+        EnhancementImproveHighlightsFunction \
+        EnhancementImproveAtsFunction \
+        DocumentGenerationFunction \
 	DocumentGenerationWorkerFunction \
 	WorkflowScoreFunction \
 	WorkflowEnhancementSectionFunction \

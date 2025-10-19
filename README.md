@@ -25,7 +25,7 @@ Every interaction is processed via the serverless Express Lambda/API Gateway sta
 
 ## Microservice layout
 
-ResumeForge now deploys six discrete Lambda functions, each fronted by dedicated API Gateway resources. This keeps cold starts predictable and prevents resume upload traffic from competing with AI-heavy scoring or document generation flows. The microservice catalogue lives in [`microservices/services.js`](microservices/services.js) and is summarised below (see [docs/microservices.md](docs/microservices.md) for the architecture deep-dive):
+ResumeForge now deploys a suite of dedicated Lambda functions, each fronted by dedicated API Gateway resources. This keeps cold starts predictable and prevents resume upload traffic from competing with AI-heavy scoring or document generation flows. The microservice catalogue lives in [`microservices/services.js`](microservices/services.js) and is summarised below (see [docs/microservices.md](docs/microservices.md) for the architecture deep-dive):
 
 | Service | Lambda handler | API surface |
 | --- | --- | --- |
@@ -33,7 +33,14 @@ ResumeForge now deploys six discrete Lambda functions, each fronted by dedicated
 | Resume upload | `lambdas/resumeUpload.handler` | `POST /api/process-cv` |
 | Job description evaluation | `lambdas/jobEvaluation.handler` | `POST /api/jd/evaluate` |
 | Scoring | `lambdas/scoring.handler` | `POST /api/score-match`, `POST /api/rescore-improvement` |
-| Enhancement | `lambdas/enhancement.handler` | `POST /api/improve-*`, `POST /api/enhance-all` |
+| Enhancement – summary | `lambdas/enhancement.handler` | `POST /api/improve-summary` |
+| Enhancement – skills | `lambdas/enhancement.handler` | `POST /api/add-missing-skills`, `POST /api/improve-skills` |
+| Enhancement – designation | `lambdas/enhancement.handler` | `POST /api/change-designation`, `POST /api/improve-designation` |
+| Enhancement – experience | `lambdas/enhancement.handler` | `POST /api/align-experience`, `POST /api/improve-experience` |
+| Enhancement – certifications | `lambdas/enhancement.handler` | `POST /api/improve-certifications` |
+| Enhancement – projects | `lambdas/enhancement.handler` | `POST /api/improve-projects` |
+| Enhancement – highlights | `lambdas/enhancement.handler` | `POST /api/improve-highlights` |
+| Enhancement – ATS uplift | `lambdas/enhancement.handler` | `POST /api/enhance-all`, `POST /api/improve-ats` |
 | Document generation | `lambdas/documentGeneration.handler` | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
 | Auditing & metrics | `lambdas/auditing.handler` | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
 

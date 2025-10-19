@@ -188,7 +188,14 @@ Resources:
                 - !GetAtt ClientAppFunctionRole.Arn
                 - !GetAtt JobEvaluationFunctionRole.Arn
                 - !GetAtt ScoringFunctionRole.Arn
-                - !GetAtt EnhancementFunctionRole.Arn
+                - !GetAtt EnhancementImproveSummaryFunctionRole.Arn
+                - !GetAtt EnhancementImproveSkillsFunctionRole.Arn
+                - !GetAtt EnhancementImproveDesignationFunctionRole.Arn
+                - !GetAtt EnhancementImproveExperienceFunctionRole.Arn
+                - !GetAtt EnhancementImproveCertificationsFunctionRole.Arn
+                - !GetAtt EnhancementImproveProjectsFunctionRole.Arn
+                - !GetAtt EnhancementImproveHighlightsFunctionRole.Arn
+                - !GetAtt EnhancementImproveAtsFunctionRole.Arn
                 - !GetAtt DocumentGenerationFunctionRole.Arn
                 - !GetAtt AuditingFunctionRole.Arn
                 - !GetAtt WorkflowGenerateFunctionRole.Arn
@@ -209,7 +216,14 @@ Resources:
                 - !GetAtt ClientAppFunctionRole.Arn
                 - !GetAtt JobEvaluationFunctionRole.Arn
                 - !GetAtt ScoringFunctionRole.Arn
-                - !GetAtt EnhancementFunctionRole.Arn
+                - !GetAtt EnhancementImproveSummaryFunctionRole.Arn
+                - !GetAtt EnhancementImproveSkillsFunctionRole.Arn
+                - !GetAtt EnhancementImproveDesignationFunctionRole.Arn
+                - !GetAtt EnhancementImproveExperienceFunctionRole.Arn
+                - !GetAtt EnhancementImproveCertificationsFunctionRole.Arn
+                - !GetAtt EnhancementImproveProjectsFunctionRole.Arn
+                - !GetAtt EnhancementImproveHighlightsFunctionRole.Arn
+                - !GetAtt EnhancementImproveAtsFunctionRole.Arn
                 - !GetAtt DocumentGenerationFunctionRole.Arn
                 - !GetAtt AuditingFunctionRole.Arn
                 - !GetAtt WorkflowGenerateFunctionRole.Arn
@@ -507,10 +521,10 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-  EnhancementFunction:
+  EnhancementImproveSummaryFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement'
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-summary'
       CodeUri: .
       Handler: lambdas/enhancement.handler
       Runtime: nodejs18.x
@@ -529,47 +543,267 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-summary
             Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveSkillsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-skills'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         AddMissingSkills:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/add-missing-skills
             Method: ANY
+        ImproveSkills:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-skills
+            Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveDesignationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-designation'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         ChangeDesignation:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/change-designation
             Method: ANY
+        ImproveDesignation:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-designation
+            Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveExperienceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-experience'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         AlignExperience:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/align-experience
             Method: ANY
+        ImproveExperience:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-experience
+            Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveCertificationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-certifications'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         ImproveCertifications:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-certifications
             Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveProjectsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-projects'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         ImproveProjects:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-projects
             Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveHighlightsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-highlights'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         ImproveHighlights:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-highlights
             Method: ANY
+      Environment:
+        Variables:
+          <<: *ResumeForgeFunctionEnvironmentVariables
+          ACTIVE_SERVICE: enhancement
+      Policies: *ResumeForgeFunctionPolicies
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
+  EnhancementImproveAtsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-enhancement-improve-ats'
+      CodeUri: .
+      Handler: lambdas/enhancement.handler
+      Runtime: nodejs18.x
+      MemorySize: 2048
+      Timeout: 300
+      AutoPublishAlias: !Ref StageName
+      ProvisionedConcurrencyConfig: !If
+        - EnableProvisionedConcurrency
+        -
+          ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
+        - !Ref AWS::NoValue
+      Events:
         EnhanceAll:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/enhance-all
+            Method: ANY
+        ImproveAts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/improve-ats
             Method: ANY
       Environment:
         Variables:

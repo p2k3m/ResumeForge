@@ -86,6 +86,28 @@ describe('targeted improvement endpoints (integration)', () => {
         ],
       },
       {
+        route: '/api/improve-skills',
+        type: 'add-missing-skills',
+        section: 'Skills',
+        beforeExcerpt: '- JavaScript',
+        afterExcerpt: '- JavaScript\n- Leadership',
+        explanation: 'Added targeted skills including leadership and cloud.',
+        mutations: [
+          {
+            target: '- JavaScript',
+            value: '- JavaScript\n- Leadership',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Skills',
+            before: '- JavaScript',
+            after: '- JavaScript\n- Leadership',
+            reasons: ['Added targeted skills including leadership and cloud.'],
+          },
+        ],
+      },
+      {
         route: '/api/change-designation',
         type: 'change-designation',
         section: 'Designation',
@@ -108,7 +130,51 @@ describe('targeted improvement endpoints (integration)', () => {
         ],
       },
       {
+        route: '/api/improve-designation',
+        type: 'change-designation',
+        section: 'Designation',
+        beforeExcerpt: 'Senior Software Engineer',
+        afterExcerpt: 'Lead Software Engineer',
+        explanation: 'Aligned title with target role.',
+        mutations: [
+          {
+            target: 'Senior Software Engineer',
+            value: 'Lead Software Engineer',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Designation',
+            before: 'Senior Software Engineer',
+            after: 'Lead Software Engineer',
+            reasons: ['Aligned title with target role.'],
+          },
+        ],
+      },
+      {
         route: '/api/align-experience',
+        type: 'align-experience',
+        section: 'Experience',
+        beforeExcerpt: '- Built scalable services.',
+        afterExcerpt: '- Built scalable services.\n- Expanded leadership initiatives.',
+        explanation: 'Expanded experience bullets for leadership initiatives.',
+        mutations: [
+          {
+            target: '- Built scalable services.',
+            value: '- Built scalable services.\n- Expanded leadership initiatives.',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Experience',
+            before: '- Built scalable services.',
+            after: '- Built scalable services.\n- Expanded leadership initiatives.',
+            reasons: ['Expanded experience bullets for leadership initiatives.'],
+          },
+        ],
+      },
+      {
+        route: '/api/improve-experience',
         type: 'align-experience',
         section: 'Experience',
         beforeExcerpt: '- Built scalable services.',
@@ -197,6 +263,78 @@ describe('targeted improvement endpoints (integration)', () => {
       },
       {
         route: '/api/enhance-all',
+        type: 'enhance-all',
+        section: '',
+        beforeExcerpt: 'Original summary line focused on delivery.',
+        afterExcerpt: 'Applied holistic improvements across resume sections.',
+        explanation: 'Applied holistic improvements across resume sections.',
+        mutations: [
+          {
+            target: 'Original summary line focused on delivery.',
+            value: 'Applied holistic improvements across resume sections.',
+          },
+          {
+            target: '- JavaScript',
+            value: '- JavaScript\n- Leadership',
+          },
+          {
+            target: '- Delivered analytics dashboard for leadership.',
+            value: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+          },
+          {
+            target: '- Recognised for 20% adoption growth.',
+            value: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
+          },
+          {
+            target: '- Built scalable services.',
+            value: '- Built scalable services.\n- Expanded leadership initiatives.',
+          },
+          {
+            target: '- AWS Certified Solutions Architect',
+            value: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+          },
+        ],
+        changeDetails: [
+          {
+            section: 'Summary',
+            before: '- Original summary line focused on delivery.',
+            after: '- Applied holistic improvements across resume sections.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Skills',
+            before: '- JavaScript',
+            after: '- JavaScript\n- Leadership',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Projects',
+            before: '- Delivered analytics dashboard for leadership.',
+            after: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Highlights',
+            before: '- Recognised for 20% adoption growth.',
+            after: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Work Experience',
+            before: '- Built scalable services.',
+            after: '- Built scalable services.\n- Expanded leadership initiatives.',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+          {
+            section: 'Certifications',
+            before: '- AWS Certified Solutions Architect',
+            after: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+            reasons: ['Applied holistic improvements across resume sections.'],
+          },
+        ],
+      },
+      {
+        route: '/api/improve-ats',
         type: 'enhance-all',
         section: '',
         beforeExcerpt: 'Original summary line focused on delivery.',
