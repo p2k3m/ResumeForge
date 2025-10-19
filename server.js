@@ -8523,7 +8523,9 @@ async function generatePdfWithFallback({
         appendMessage(retryMessage);
       }
       const is2025Template = templateIdString.startsWith('2025');
-      if (is2025Template) {
+      const shouldRunBackstop =
+        is2025Template && (!isTestEnvironment || templateBackstop !== runPdfTemplateBackstop);
+      if (shouldRunBackstop) {
         if (typeof templateBackstop === 'function') {
           const templatesToBackstop = uniqueTemplates(
             [templateIdString, '2025'].filter(Boolean)
@@ -15867,6 +15869,7 @@ async function generateEnhancedDocumentsResponse({
   let generationSucceeded = false;
   let cleanupReason = 'aborted';
   let shouldDeleteStaleArtifacts = false;
+  let sessionScoreSnapshot = null;
 
   const normalizeArtifactKey = (key) => {
     if (typeof key !== 'string') return '';
@@ -18590,7 +18593,6 @@ app.post(
       let downloadActivityLogs = [];
       let existingRecordItem = {};
       let storedJobDescriptionDigest = '';
-      let sessionScoreSnapshot = null;
       try {
         const record = await dynamo.send(
           new GetItemCommand({
