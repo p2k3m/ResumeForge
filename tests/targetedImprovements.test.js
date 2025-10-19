@@ -34,6 +34,26 @@ describe('enforceTargetedUpdate', () => {
     expect(result.updatedResume).toContain('- Built features for enterprise clients.');
   });
 
+  test('applies afterExcerpt when summary output omits section headings', () => {
+    const snippet = 'Revamped summary that highlights leadership with measurable outcomes.';
+
+    const result = enforceTargetedUpdate(
+      'improve-summary',
+      baseResume,
+      {
+        updatedResume: snippet,
+        beforeExcerpt: 'Original summary line.',
+        afterExcerpt: snippet,
+      },
+      {}
+    );
+
+    expect(result.updatedResume).toContain(snippet);
+    expect(result.updatedResume).not.toContain('Original summary line.');
+    expect(result.updatedResume).toContain('# Skills\n- JavaScript\n- Node.js');
+    expect(result.updatedResume).toContain('# Highlights\n- Recognised for improving deployment reliability.');
+  });
+
   test('limits add-missing-skills updates to the Skills section', () => {
     const updatedResume = `Alex Roe\n# Summary\nAltered summary should not persist.\n# Skills\n- JavaScript\n- Node.js\n- React\n# Experience\n- Built features for enterprise clients.`;
 
