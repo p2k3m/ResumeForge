@@ -83,21 +83,34 @@ function renderSummaryChips(items, type) {
 
   return (
     <ul className="mt-3 flex flex-wrap gap-2">
-      {items.map((item) => (
-        <li
-          key={`${type}-${item.categoryKey}-${item.value}`}
-          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
-            type === 'added'
-              ? 'border-emerald-200 bg-emerald-50/80 text-emerald-700'
-              : 'border-rose-200 bg-rose-50/80 text-rose-700'
-          }`}
-        >
-          <span className="rounded-full bg-white/70 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-current">
-            {item.categoryLabel}
-          </span>
-          <span>{item.value}</span>
-        </li>
-      ))}
+      {items.map((item) => {
+        const badgeLabel = typeof item.categoryLabel === 'string'
+          ? item.categoryLabel.replace(/\s+/g, '\u00a0')
+          : item.categoryLabel
+
+        const valueLabel = typeof item.value === 'string' && item.value
+          ? `${item.value} (${type === 'added' ? 'added' : 'missing'})`
+          : item.value
+
+        return (
+          <li
+            key={`${type}-${item.categoryKey}-${item.value}`}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${
+              type === 'added'
+                ? 'border-emerald-200 bg-emerald-50/80 text-emerald-700'
+                : 'border-rose-200 bg-rose-50/80 text-rose-700'
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className="rounded-full bg-white/70 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-current"
+            >
+              {badgeLabel ? `${badgeLabel}:` : ''}
+            </span>
+            <span>{valueLabel}</span>
+          </li>
+        )
+      })}
     </ul>
   )
 }
