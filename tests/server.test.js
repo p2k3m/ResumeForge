@@ -3007,6 +3007,161 @@ describe('change log persistence safeguards', () => {
     setupDefaultDynamoMock();
   });
 
+  test('captures rescore summary and updates session score snapshot', async () => {
+    const changeLogKey = 'cv/candidate/session/logs/change-log.json';
+    const existingChangeLog = {
+      entries: [],
+      dismissedEntries: [],
+      coverLetters: { entries: [], dismissedEntries: [] },
+      sessionLogs: [],
+      evaluationLogs: [],
+      enhancementLogs: [],
+      downloadLogs: [],
+    };
+
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-789' },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: changeLogKey },
+              sessionId: { S: 'session-123' },
+              candidateName: { S: 'Jamie Doe' },
+              userId: { S: 'user-123' },
+              uploadedAt: { S: '2024-01-01T00:00:00.000Z' },
+              changeLog: { L: [] },
+            },
+          });
+        case 'UpdateItemCommand':
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    const putCommands = [];
+    mockS3Send.mockReset();
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        if (command.input.Key === changeLogKey) {
+          return Promise.resolve({
+            Body: Buffer.from(JSON.stringify(existingChangeLog)),
+          });
+        }
+        const err = new Error('NoSuchKey');
+        err.name = 'NoSuchKey';
+        err.$metadata = { httpStatusCode: 404 };
+        throw err;
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command);
+        return Promise.resolve({});
+      }
+      if (command.__type === 'DeleteObjectCommand') {
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    const rescoreSummary = {
+      section: {
+        key: 'summary',
+        label: 'Summary',
+        before: { score: 44, missingSkills: ['GraphQL'] },
+        after: { score: 70, missingSkills: [] },
+        delta: { score: 26, coveredSkills: ['GraphQL'] },
+      },
+      overall: {
+        before: {
+          score: 52,
+          missingSkills: ['Kubernetes'],
+          scoreBreakdown: {
+            layoutSearchability: { score: 40, category: 'Layout & Searchability' },
+            atsReadability: { score: 55, category: 'Readability' },
+            impact: { score: 50, category: 'Impact' },
+            crispness: { score: 60, category: 'Crispness' },
+            otherQuality: { score: 58, category: 'Other' },
+          },
+        },
+        after: {
+          score: 68,
+          missingSkills: ['GraphQL'],
+          scoreBreakdown: {
+            layoutSearchability: { score: 65, category: 'Layout & Searchability' },
+            atsReadability: { score: 70, category: 'Readability' },
+            impact: { score: 72, category: 'Impact' },
+            crispness: { score: 66, category: 'Crispness' },
+            otherQuality: { score: 69, category: 'Other' },
+          },
+        },
+        delta: { score: 16, coveredSkills: ['Kubernetes'] },
+      },
+      selectionProbability: {
+        before: 40,
+        after: 58,
+        delta: 18,
+        beforeLevel: 'Low',
+        afterLevel: 'Medium',
+        factors: [{ label: 'JD alignment', tone: 'positive' }],
+      },
+      selectionInsights: {
+        probability: 58,
+        level: 'Medium',
+        message: 'Improved keyword alignment',
+        before: { probability: 40, level: 'Low', message: 'Missing keywords' },
+        after: { probability: 58, level: 'Medium', message: 'Better keywords' },
+        factors: [{ label: 'JD alignment', tone: 'positive' }],
+      },
+    };
+
+    const response = await request(app)
+      .post('/api/change-log')
+      .send({
+        jobId: 'job-789',
+        entry: {
+          id: 'improvement-1',
+          title: 'Add missing cloud keywords',
+          detail: 'Inserted Kubernetes and Terraform references.',
+          rescoreSummary,
+          scoreDelta: 16,
+        },
+      });
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body.changeLog)).toBe(true);
+    const [entry] = response.body.changeLog;
+    expect(entry.rescoreSummary).toBeDefined();
+    expect(entry.rescoreSummary.overall.after.score).toBe(68);
+
+    const scores = response.body.scores;
+    expect(scores).toBeDefined();
+    expect(scores.match.after.score).toBe(68);
+    expect(scores.match.before.score).toBe(52);
+    expect(scores.match.delta.score).toBe(16);
+    expect(scores.ats.after.score).toBe(69);
+    expect(scores.selectionProbabilityBefore).toBe(40);
+    expect(scores.selectionProbabilityAfter).toBe(58);
+    expect(scores.selectionProbabilityDelta).toBe(18);
+    expect(scores.selectionProbabilityFactors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: 'JD alignment' })])
+    );
+
+    const changeLogWrite = putCommands.find(
+      (command) => command.__type === 'PutObjectCommand'
+    );
+    expect(changeLogWrite).toBeDefined();
+    const persistedPayload = JSON.parse(changeLogWrite.input.Body);
+    expect(persistedPayload.entries[0].rescoreSummary.overall.after.score).toBe(68);
+    expect(persistedPayload.scores.match.after.score).toBe(68);
+
+    setupDefaultDynamoMock();
+  });
+
   test('stores session change logs under a user session prefix when no prior key exists', async () => {
     const putCommands = [];
     mockS3Send.mockImplementation((command) => {

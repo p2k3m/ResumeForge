@@ -347,6 +347,24 @@ describe('targeted improvement endpoints (integration)', () => {
           }),
         })
       );
+      expect(response.body.scores).toEqual(
+        expect.objectContaining({
+          recordedAt: expect.any(String),
+          match: expect.objectContaining({
+            before: expect.objectContaining({ score: expect.any(Number) }),
+            after: expect.objectContaining({ score: expect.any(Number) }),
+            delta: expect.objectContaining({ score: expect.any(Number) }),
+          }),
+          ats: expect.objectContaining({
+            before: expect.objectContaining({ score: expect.any(Number) }),
+            after: expect.objectContaining({ score: expect.any(Number) }),
+            delta: expect.objectContaining({ score: expect.any(Number) }),
+          }),
+        })
+      );
+      expect(typeof response.body.scores.selectionProbabilityBefore).toBe('number');
+      expect(typeof response.body.scores.selectionProbabilityAfter).toBe('number');
+      expect(typeof response.body.scores.selectionProbabilityDelta).toBe('number');
       expect(typeof response.body.selectionProbabilityBefore).toBe('number');
       expect(typeof response.body.selectionProbabilityAfter).toBe('number');
       expect(typeof response.body.selectionProbabilityDelta).toBe('number');

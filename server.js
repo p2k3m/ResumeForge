@@ -9696,6 +9696,10 @@ const ATS_METRIC_DEFINITIONS = [
   { key: 'otherQuality', category: 'Other' },
 ];
 
+const ATS_METRIC_CATEGORY_LOOKUP = new Map(
+  ATS_METRIC_DEFINITIONS.map(({ key, category }) => [category.toLowerCase(), key])
+);
+
 const ATS_METRIC_WEIGHTS = {
   layoutSearchability: 0.2,
   atsReadability: 0.25,
@@ -11093,6 +11097,322 @@ function normalizeSessionScoreSnapshot(snapshot) {
     return null;
   }
   return sanitized;
+}
+
+function normalizeRescoreSummary(summary) {
+  if (!summary || typeof summary !== 'object') {
+    return null;
+  }
+
+  const sanitized = sanitizeJsonValue(summary);
+  if (!sanitized || typeof sanitized !== 'object') {
+    return null;
+  }
+
+  return sanitized;
+}
+
+function normalizeSummaryScoreBreakdown(breakdown) {
+  if (!breakdown) {
+    return null;
+  }
+
+  if (Array.isArray(breakdown)) {
+    const mapped = breakdown.reduce((acc, metric) => {
+      if (!metric || typeof metric !== 'object') {
+        return acc;
+      }
+
+      const explicitKey =
+        typeof metric.key === 'string' && metric.key.trim() ? metric.key.trim() : '';
+      const category = typeof metric.category === 'string' ? metric.category.trim() : '';
+      const lookupKey = category ? ATS_METRIC_CATEGORY_LOOKUP.get(category.toLowerCase()) : '';
+      const key = explicitKey || lookupKey;
+      if (!key) {
+        return acc;
+      }
+
+      acc[key] = sanitizeMetric(metric, category || undefined);
+      return acc;
+    }, {});
+
+    if (!Object.keys(mapped).length) {
+      return null;
+    }
+
+    return ensureScoreBreakdownCompleteness(mapped);
+  }
+
+  if (typeof breakdown === 'object') {
+    return ensureScoreBreakdownCompleteness(breakdown);
+  }
+
+  return null;
+}
+
+function mergeSessionScoresWithRescoreSummary({
+  existingScores = null,
+  rescoreSummary,
+  recordedAt,
+  source = 'improvement',
+} = {}) {
+  const normalizedSummary = normalizeRescoreSummary(rescoreSummary);
+  if (!normalizedSummary) {
+    return normalizeSessionScoreSnapshot(existingScores) || null;
+  }
+
+  const existingSnapshot = normalizeSessionScoreSnapshot(existingScores) || {};
+  const merged = { ...existingSnapshot };
+
+  const timestamp =
+    typeof recordedAt === 'string' && recordedAt.trim()
+      ? recordedAt.trim()
+      : new Date().toISOString();
+  merged.recordedAt = timestamp;
+  if (typeof source === 'string' && source.trim()) {
+    merged.source = source.trim();
+  } else if (!merged.source) {
+    merged.source = 'improvement';
+  }
+
+  const overall = normalizedSummary.overall || {};
+  const beforeOverall = overall.before || {};
+  const afterOverall = overall.after || {};
+  const deltaOverall = overall.delta || {};
+
+  const sanitizeSkillList = (value) =>
+    Array.isArray(value)
+      ? value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+      : [];
+
+  const matchBefore = {
+    ...(existingSnapshot.match?.before || {}),
+  };
+  if (typeof beforeOverall.score === 'number') {
+    matchBefore.score = beforeOverall.score;
+  }
+  const beforeMissingSkills = sanitizeSkillList(beforeOverall.missingSkills);
+  if (beforeMissingSkills.length || !Array.isArray(matchBefore.missingSkills)) {
+    matchBefore.missingSkills = beforeMissingSkills;
+  }
+  if (!Array.isArray(matchBefore.table) && Array.isArray(existingSnapshot.match?.before?.table)) {
+    matchBefore.table = existingSnapshot.match.before.table;
+  }
+
+  const matchAfter = {
+    ...(existingSnapshot.match?.after || {}),
+  };
+  if (typeof afterOverall.score === 'number') {
+    matchAfter.score = afterOverall.score;
+  }
+  const afterMissingSkills = sanitizeSkillList(afterOverall.missingSkills);
+  if (afterMissingSkills.length || !Array.isArray(matchAfter.missingSkills)) {
+    matchAfter.missingSkills = afterMissingSkills;
+  }
+  if (!Array.isArray(matchAfter.table) && Array.isArray(existingSnapshot.match?.after?.table)) {
+    matchAfter.table = existingSnapshot.match.after.table;
+  }
+
+  const matchDelta = {
+    ...(existingSnapshot.match?.delta || {}),
+  };
+  let matchDeltaScore =
+    typeof deltaOverall.score === 'number'
+      ? deltaOverall.score
+      : typeof matchAfter.score === 'number' && typeof matchBefore.score === 'number'
+        ? Math.round(matchAfter.score - matchBefore.score)
+        : matchDelta.score ?? null;
+  if (typeof matchDeltaScore === 'number') {
+    matchDelta.score = matchDeltaScore;
+  }
+  const coveredSkills = sanitizeSkillList(deltaOverall.coveredSkills);
+  if (coveredSkills.length || !Array.isArray(matchDelta.coveredSkills)) {
+    matchDelta.coveredSkills = coveredSkills;
+  }
+
+  merged.match = {
+    before: matchBefore,
+    after: matchAfter,
+    delta: matchDelta,
+  };
+
+  const existingAts = existingSnapshot.ats || {};
+  const beforeBreakdown =
+    normalizeSummaryScoreBreakdown(beforeOverall.scoreBreakdown) ||
+    normalizeSummaryScoreBreakdown(beforeOverall.atsSubScores) ||
+    existingAts.before?.breakdown ||
+    null;
+  const afterBreakdown =
+    normalizeSummaryScoreBreakdown(afterOverall.scoreBreakdown) ||
+    normalizeSummaryScoreBreakdown(afterOverall.atsSubScores) ||
+    existingAts.after?.breakdown ||
+    null;
+
+  const atsBefore = { ...(existingAts.before || {}) };
+  let atsBeforeScore = null;
+  if (beforeBreakdown) {
+    atsBefore.breakdown = beforeBreakdown;
+    atsBeforeScore = computeCompositeAtsScore(beforeBreakdown);
+  } else if (typeof atsBefore.score === 'number') {
+    atsBeforeScore = atsBefore.score;
+  }
+  if (typeof atsBeforeScore === 'number') {
+    atsBefore.score = atsBeforeScore;
+  }
+
+  const atsAfter = { ...(existingAts.after || {}) };
+  let atsAfterScore = null;
+  if (afterBreakdown) {
+    atsAfter.breakdown = afterBreakdown;
+    atsAfterScore = computeCompositeAtsScore(afterBreakdown);
+  } else if (typeof atsAfter.score === 'number') {
+    atsAfterScore = atsAfter.score;
+  }
+  if (typeof atsAfterScore === 'number') {
+    atsAfter.score = atsAfterScore;
+  }
+
+  const atsDelta = { ...(existingAts.delta || {}) };
+  if (typeof atsAfterScore === 'number' && typeof atsBeforeScore === 'number') {
+    atsDelta.score = Math.round(atsAfterScore - atsBeforeScore);
+  }
+  if (beforeBreakdown && afterBreakdown) {
+    const deltaBreakdown = {};
+    ATS_METRIC_DEFINITIONS.forEach(({ key }) => {
+      const beforeMetric = beforeBreakdown[key];
+      const afterMetric = afterBreakdown[key];
+      if (
+        typeof beforeMetric?.score === 'number' &&
+        typeof afterMetric?.score === 'number'
+      ) {
+        deltaBreakdown[key] = {
+          score: Math.round(afterMetric.score - beforeMetric.score),
+        };
+      }
+    });
+    if (Object.keys(deltaBreakdown).length) {
+      atsDelta.breakdown = deltaBreakdown;
+    }
+  }
+
+  merged.ats = {
+    before: atsBefore,
+    after: atsAfter,
+    delta: atsDelta,
+  };
+
+  const selectionInsights = normalizedSummary.selectionInsights || {};
+  const selectionProbability = normalizedSummary.selectionProbability || {};
+  const existingSelection = existingSnapshot.selection || {};
+
+  const selectionBefore = { ...(existingSelection.before || {}) };
+  if (typeof selectionProbability.before === 'number') {
+    selectionBefore.probability = selectionProbability.before;
+  }
+  if (selectionInsights.before && typeof selectionInsights.before === 'object') {
+    if (selectionInsights.before.level) {
+      selectionBefore.level = selectionInsights.before.level;
+    }
+    const beforeSummaryText =
+      selectionInsights.before.summary || selectionInsights.before.message || null;
+    if (beforeSummaryText) {
+      selectionBefore.summary = beforeSummaryText;
+    }
+  }
+
+  const selectionAfter = { ...(existingSelection.after || {}) };
+  if (typeof selectionProbability.after === 'number') {
+    selectionAfter.probability = selectionProbability.after;
+  } else if (typeof selectionInsights.probability === 'number') {
+    selectionAfter.probability = selectionInsights.probability;
+  }
+  if (selectionInsights.after && typeof selectionInsights.after === 'object') {
+    if (selectionInsights.after.level) {
+      selectionAfter.level = selectionInsights.after.level;
+    }
+    const afterSummaryText =
+      selectionInsights.after.summary ||
+      selectionInsights.after.message ||
+      selectionInsights.message ||
+      selectionInsights.summary ||
+      null;
+    if (afterSummaryText) {
+      selectionAfter.summary = afterSummaryText;
+    }
+  } else {
+    if (selectionInsights.level) {
+      selectionAfter.level = selectionInsights.level;
+    }
+    const fallbackSummary = selectionInsights.message || selectionInsights.summary || null;
+    if (fallbackSummary) {
+      selectionAfter.summary = fallbackSummary;
+    }
+  }
+
+  const selectionDelta = { ...(existingSelection.delta || {}) };
+  if (typeof selectionProbability.delta === 'number') {
+    selectionDelta.probability = selectionProbability.delta;
+  } else if (
+    typeof selectionAfter.probability === 'number' &&
+    typeof selectionBefore.probability === 'number'
+  ) {
+    selectionDelta.probability = Math.round(
+      selectionAfter.probability - selectionBefore.probability
+    );
+  }
+
+  const beforeLevel = selectionBefore.level;
+  const afterLevel = selectionAfter.level || selectionInsights.level || null;
+  if (beforeLevel && afterLevel && beforeLevel !== afterLevel) {
+    selectionDelta.levelChange = afterLevel;
+  }
+
+  const selectionFactors =
+    (Array.isArray(selectionInsights.factors) && selectionInsights.factors.length
+      ? selectionInsights.factors
+      : Array.isArray(selectionProbability.factors) && selectionProbability.factors.length
+        ? selectionProbability.factors
+        : existingSelection.factors) || [];
+
+  const selection = {
+    before: selectionBefore,
+    after: selectionAfter,
+    delta: selectionDelta,
+  };
+  if (selectionFactors.length) {
+    selection.factors = selectionFactors;
+  }
+
+  merged.selection = selection;
+
+  if (typeof selectionBefore.probability === 'number') {
+    merged.selectionProbabilityBefore = Math.round(selectionBefore.probability);
+  }
+  const resolvedAfterProbability =
+    typeof selectionAfter.probability === 'number'
+      ? selectionAfter.probability
+      : typeof selectionInsights.probability === 'number'
+        ? selectionInsights.probability
+        : null;
+  if (typeof resolvedAfterProbability === 'number') {
+    merged.selectionProbabilityAfter = Math.round(resolvedAfterProbability);
+  }
+
+  if (typeof selectionDelta.probability === 'number') {
+    merged.selectionProbabilityDelta = Math.round(selectionDelta.probability);
+  } else if (
+    typeof merged.selectionProbabilityAfter === 'number' &&
+    typeof merged.selectionProbabilityBefore === 'number'
+  ) {
+    merged.selectionProbabilityDelta =
+      merged.selectionProbabilityAfter - merged.selectionProbabilityBefore;
+  }
+
+  if (selectionFactors.length) {
+    merged.selectionProbabilityFactors = selectionFactors;
+  }
+
+  return normalizeSessionScoreSnapshot(merged);
 }
 
 function buildSessionScoreSnapshotFromScoringResult(
@@ -14304,6 +14624,11 @@ function normalizeChangeLogEntryInput(entry) {
   const rejectionReason = normalizeChangeLogString(
     entry.rejectionReason || entry.rejectedReason || entry.dismissedReason
   );
+  const rescoreSummary = normalizeRescoreSummary(
+    entry.rescoreSummary || entry.rescore
+  );
+  const rescorePending = Boolean(entry.rescorePending);
+  const rescoreError = normalizeChangeLogString(entry.rescoreError);
 
   let scoreDelta = null;
   const rawDelta = entry.scoreDelta;
@@ -14339,6 +14664,9 @@ function normalizeChangeLogEntryInput(entry) {
     rejected,
     rejectedAt: rejectedAt || null,
     rejectionReason: rejectionReason || null,
+    ...(rescoreSummary ? { rescoreSummary } : {}),
+    ...(rescorePending ? { rescorePending: true } : {}),
+    ...(rescoreError ? { rescoreError } : {}),
   };
 }
 
@@ -15078,6 +15406,7 @@ async function handleImprovementRequest(type, req, res) {
     let assetUrls = [];
     let assetUrlExpiry = 0;
     let templateContextOutput;
+    let sessionScores = null;
 
     try {
       let secrets;
@@ -15234,6 +15563,7 @@ async function handleImprovementRequest(type, req, res) {
         assetUrls.length > 0
           ? enhancedDocs.urlExpiresInSeconds || URL_EXPIRATION_SECONDS
           : 0;
+      sessionScores = enhancedDocs?.scores ?? null;
     } catch (assetErr) {
       logStructured('error', 'targeted_improvement_asset_generation_failed', {
         ...logContext,
@@ -15281,6 +15611,8 @@ async function handleImprovementRequest(type, req, res) {
       urlExpiresInSeconds: assetUrlExpiry,
       urls: assetUrls,
     };
+
+    responsePayload.scores = sessionScores;
 
     if (templateContextOutput) {
       responsePayload.templateContext = templateContextOutput;
@@ -19646,6 +19978,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let dismissedChangeLogEntries = [...existingDismissedChangeLogEntries];
   let coverLetterEntries = [...existingCoverLetterEntries];
   let dismissedCoverLetterEntries = [...existingDismissedCoverLetterEntries];
+  let normalizedEntryForScores = null;
 
   if (removeEntry) {
     const entryId = normalizeChangeLogString(
@@ -19722,6 +20055,9 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     };
     if (!mergedEntry.acceptedAt) {
       mergedEntry.acceptedAt = baseEntry?.acceptedAt || nowIso;
+    }
+    if (normalizedEntry.rescoreSummary) {
+      normalizedEntryForScores = { ...mergedEntry, rescoreSummary: normalizedEntry.rescoreSummary };
     }
     if (existingIndex >= 0) {
       updatedChangeLog = existingChangeLogEntries.map((entry) =>
@@ -19913,8 +20249,17 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     normalizedChangeLogEntries
   );
   const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
-  const normalizedSessionScores =
+  let normalizedSessionScores =
     normalizeSessionScoreSnapshot(req.body?.scores) || existingSessionScores || null;
+
+  if (normalizedEntryForScores?.rescoreSummary) {
+    normalizedSessionScores = mergeSessionScoresWithRescoreSummary({
+      existingScores: normalizedSessionScores,
+      rescoreSummary: normalizedEntryForScores.rescoreSummary,
+      recordedAt: normalizedEntryForScores.acceptedAt || nowIso,
+      source: 'improvement',
+    });
+  }
 
   const resolvedSessionOwnerSegment = resolveDocumentOwnerSegment({
     userId: res.locals.userId || storedUserId,
