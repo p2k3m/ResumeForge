@@ -100,6 +100,18 @@ describe('scoreResumeAgainstJob', () => {
     expect(result.selectionProbabilityDelta).toBe(
       result.selection.after.probability - result.selection.before.probability
     );
+    expect(result.selectionProbabilityFactors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'designation', label: 'Designation match' }),
+        expect.objectContaining({ key: 'experience', label: 'Years / experience' }),
+        expect.objectContaining({ key: 'skills', label: 'Skill match' }),
+        expect.objectContaining({ key: 'tasks', label: 'Task overlap' }),
+        expect.objectContaining({ key: 'highlights', label: 'Highlights' }),
+        expect.objectContaining({ key: 'certifications', label: 'Certifications' }),
+      ])
+    );
+    expect(Array.isArray(result.selection.factors)).toBe(true);
+    expect(result.selection.factors).toBe(result.selectionProbabilityFactors);
   });
 
   it('validates required fields and returns descriptive errors', () => {
