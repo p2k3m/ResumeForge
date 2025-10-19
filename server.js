@@ -3934,20 +3934,35 @@ function sectionLinesEqual(a = [], b = []) {
 }
 
 function applySectionUpdate(originalResume, updatedResume, options = {}) {
-  const { pattern, defaultLabel, insertIndex = 1, fallbackContent } = options;
+  const {
+    pattern,
+    defaultLabel,
+    insertIndex = 1,
+    fallbackContent,
+    pruneValues = [],
+  } = options;
+  const pruneSet = new Set(
+    Array.isArray(pruneValues)
+      ? pruneValues
+          .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+          .filter(Boolean)
+      : []
+  );
+  const sanitizeAndPrune = (lines = []) =>
+    sanitizeSectionLines(lines).filter((line) => !pruneSet.has(line.trim().toLowerCase()));
   const baseSection = extractSectionContent(originalResume, pattern);
   const updatedSection = extractSectionContent(updatedResume, pattern);
   const baseContent = sanitizeSectionLines(baseSection.content);
-  const fallbackLines = sanitizeSectionLines(coerceSectionContent(fallbackContent));
+  const fallbackLines = sanitizeAndPrune(coerceSectionContent(fallbackContent));
   const shouldUseFallback =
     !updatedSection.content.length &&
     fallbackLines.length > 0 &&
     !sectionLinesEqual(fallbackLines, baseContent);
   let newContent = updatedSection.content.length
-    ? sanitizeSectionLines(updatedSection.content)
+    ? sanitizeAndPrune(updatedSection.content)
     : shouldUseFallback
-    ? fallbackLines
-    : [...baseContent];
+      ? fallbackLines
+      : [...baseContent];
   const precedingLine =
     updatedSection && typeof updatedSection.start === 'number' && updatedSection.start > 0
       ? (updatedSection.lines?.[updatedSection.start - 1] || '').trim()
@@ -4298,11 +4313,19 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
   }
 
   if (type === 'improve-summary') {
+    const pruneTitles = [
+      context?.jobTitle,
+      context?.currentTitle,
+      context?.originalTitle,
+    ]
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean);
     const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
       pattern: SUMMARY_SECTION_PATTERN,
       defaultLabel: 'Summary',
       insertIndex: 1,
       fallbackContent: baseResult.afterExcerpt,
+      pruneValues: pruneTitles,
     });
     return {
       ...baseResult,
@@ -16382,7 +16405,7 @@ async function handleImprovementBatchRequest(req, res) {
         jobDescription,
         jobTitle: jobTitleInput,
         currentTitle: currentTitleInput,
-        originalTitle: originalTitleInput,
+        originalTitle: originalTitleInput || currentTitleInput,
         jobSkills,
         resumeSkills: currentResumeSkills,
         missingSkills,
@@ -16513,7 +16536,7 @@ async function handleImprovementBatchRequest(req, res) {
         updatedResume: updatedResumeText,
         improvementSummary,
         rescore: rescoreSummary,
-        originalTitle: originalTitleInput,
+        originalTitle: originalTitleInput || currentTitleInput,
         modifiedTitle: jobTitleInput || currentTitleInput,
         llmTrace: improvementResult.llmTrace || null,
       });
