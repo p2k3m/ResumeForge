@@ -2441,6 +2441,23 @@ function App() {
   const changeCount = changeLog.length
   const scoreMetricCount = scoreBreakdown.length
   const scoreDashboardReady = scoreMetricCount > 0
+  const hasFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value)
+  const matchHasAtsScore =
+    hasFiniteNumber(match?.originalScore) ||
+    hasFiniteNumber(match?.scoreBefore) ||
+    hasFiniteNumber(match?.atsScoreBefore) ||
+    hasFiniteNumber(match?.score) ||
+    hasFiniteNumber(match?.atsScore) ||
+    hasFiniteNumber(match?.enhancedScore) ||
+    hasFiniteNumber(match?.scoreAfter) ||
+    hasFiniteNumber(match?.atsScoreAfter)
+  const matchHasSelectionProbability =
+    hasFiniteNumber(match?.selectionProbabilityBefore) ||
+    hasFiniteNumber(match?.selectionProbabilityAfter) ||
+    hasFiniteNumber(match?.selectionProbability) ||
+    hasFiniteNumber(match?.selectionProbabilityDelta)
+  const scoreDashboardHasContent =
+    scoreDashboardReady || matchHasAtsScore || matchHasSelectionProbability
   const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
   const hasAnalysisData =
     scoreMetricCount > 0 || hasMatch || improvementCount > 0 || downloadCount > 0 || changeCount > 0
@@ -7995,10 +8012,11 @@ function App() {
     return ''
   })()
   const metricsCount = Array.isArray(scoreBreakdown) ? scoreBreakdown.length : 0
+  const scoreStageCount = metricsCount > 0 ? metricsCount : matchHasSelectionProbability ? 1 : 0
   const suggestionsCount = improvementResults.length
   const changeLogCount = changeLog.length
   const dashboardStageOptions = [
-    { key: 'score', label: 'Scores', count: metricsCount, ready: scoreDashboardReady },
+    { key: 'score', label: 'Scores', count: scoreStageCount, ready: scoreDashboardHasContent },
     { key: 'suggestions', label: 'Suggestions', count: suggestionsCount, ready: suggestionsCount > 0 },
     { key: 'changelog', label: 'Change Log', count: changeLogCount, ready: changeLogCount > 0 }
   ]
@@ -8459,7 +8477,7 @@ function App() {
                 </div>
               }
             >
-              {scoreDashboardReady ? (
+              {scoreDashboardHasContent ? (
                 <>
                   <ATSScoreDashboard
                     metrics={scoreBreakdown}
@@ -8471,7 +8489,9 @@ function App() {
                       currentPhase === 'enhance' ? metricImprovementState : {}
                     }
                   />
-                  {showDeltaSummary && <DeltaSummaryPanel summary={deltaSummary} />}
+                  {scoreDashboardReady && showDeltaSummary && (
+                    <DeltaSummaryPanel summary={deltaSummary} />
+                  )}
                 </>
               ) : (
                 <div className="rounded-3xl border border-dashed border-indigo-200/80 bg-white/70 p-6 text-sm text-indigo-700">
