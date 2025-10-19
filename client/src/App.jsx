@@ -6142,16 +6142,105 @@ function App() {
       }
 
       const data = await response.json()
+      const summary = rescoreSummary && typeof rescoreSummary === 'object' ? rescoreSummary : null
+      const overallSummary =
+        summary && typeof summary.overall === 'object' ? summary.overall : null
+      const selectionSummary =
+        summary && typeof summary.selectionProbability === 'object'
+          ? summary.selectionProbability
+          : null
+      const selectionInsightsSummary =
+        summary && typeof summary.selectionInsights === 'object'
+          ? summary.selectionInsights
+          : null
+
+      const extractSummaryMetrics = (section) => {
+        if (!section || typeof section !== 'object') {
+          return []
+        }
+        if (Array.isArray(section.atsSubScores)) {
+          return orderAtsMetrics(section.atsSubScores)
+        }
+        if (Array.isArray(section.scoreBreakdown)) {
+          return orderAtsMetrics(section.scoreBreakdown)
+        }
+        if (section.scoreBreakdown && typeof section.scoreBreakdown === 'object') {
+          return orderAtsMetrics(Object.values(section.scoreBreakdown))
+        }
+        return []
+      }
+
+      const beforeSummaryMetrics = overallSummary ? extractSummaryMetrics(overallSummary.before) : []
+      const afterSummaryMetrics = overallSummary ? extractSummaryMetrics(overallSummary.after) : []
+      const deltaSummaryMetrics = overallSummary ? extractSummaryMetrics(overallSummary.delta) : []
+
+      const metricsByCategory = (list) => {
+        if (!Array.isArray(list) || list.length === 0) {
+          return new Map()
+        }
+        return new Map(
+          list
+            .map((metric) => {
+              const category =
+                typeof metric?.category === 'string' && metric.category.trim()
+                  ? metric.category.trim()
+                  : ''
+              return category ? [category, metric] : null
+            })
+            .filter(Boolean)
+        )
+      }
+
+      const beforeMetricMap = metricsByCategory(beforeSummaryMetrics)
+      const afterMetricMap = metricsByCategory(afterSummaryMetrics)
+      const deltaMetricMap = metricsByCategory(deltaSummaryMetrics)
+
       const metrics = orderAtsMetrics(
         Array.isArray(data.atsSubScores)
           ? data.atsSubScores
           : Array.isArray(data.scoreBreakdown)
             ? data.scoreBreakdown
             : Object.values(data.scoreBreakdown || {})
-      ).map((metric) => ({
-        ...metric,
-        tip: metric?.tip ?? metric?.tips?.[0] ?? ''
-      }))
+      ).map((metric) => {
+        const enriched = {
+          ...metric,
+          tip: metric?.tip ?? metric?.tips?.[0] ?? ''
+        }
+        const category =
+          typeof metric?.category === 'string' && metric.category.trim()
+            ? metric.category.trim()
+            : ''
+
+        if (category) {
+          const beforeMetric = beforeMetricMap.get(category)
+          const afterMetric = afterMetricMap.get(category)
+          const deltaMetric = deltaMetricMap.get(category)
+
+          if (
+            typeof beforeMetric?.score === 'number' &&
+            Number.isFinite(beforeMetric.score)
+          ) {
+            enriched.beforeScore = beforeMetric.score
+          }
+          if (
+            typeof afterMetric?.score === 'number' &&
+            Number.isFinite(afterMetric.score)
+          ) {
+            enriched.afterScore = afterMetric.score
+          }
+          if (
+            typeof deltaMetric?.score === 'number' &&
+            Number.isFinite(deltaMetric.score)
+          ) {
+            enriched.deltaScore = deltaMetric.score
+            if (deltaMetric.score !== 0) {
+              enriched.deltaText = formatScoreDelta(deltaMetric.score)
+            }
+          }
+        }
+
+        return enriched
+      })
       setScoreBreakdown(metrics)
 
       const nextResumeSkills = Array.isArray(data.resumeSkills) ? data.resumeSkills : []
@@ -6164,18 +6253,6 @@ function App() {
 
       const previousMissingList = normalizeSkillList(previousMissingSkills)
       const responseCovered = normalizeSkillList(data.coveredSkills)
-
-      const summary = rescoreSummary && typeof rescoreSummary === 'object' ? rescoreSummary : null
-      const overallSummary =
-        summary && typeof summary.overall === 'object' ? summary.overall : null
-      const selectionSummary =
-        summary && typeof summary.selectionProbability === 'object'
-          ? summary.selectionProbability
-          : null
-      const selectionInsightsSummary =
-        summary && typeof summary.selectionInsights === 'object'
-          ? summary.selectionInsights
-          : null
 
       const beforeSelectionValue =
         typeof selectionSummary?.before === 'number' && Number.isFinite(selectionSummary.before)
