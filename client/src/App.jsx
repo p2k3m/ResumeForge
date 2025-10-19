@@ -107,6 +107,10 @@ const improvementActions = [
   }
 ]
 
+const IMPROVE_ALL_BATCH_KEYS = improvementActions
+  .map((action) => action.key)
+  .filter((key) => key && key !== 'enhance-all')
+
 const METRIC_IMPROVEMENT_PRESETS = [
   {
     category: 'Layout & Searchability',
@@ -7676,6 +7680,12 @@ function App() {
       if (types.includes('enhance-all') && types.length > 1) {
         types = ['enhance-all']
       }
+      const shouldUseImproveAll =
+        types.includes('enhance-all') ||
+        (IMPROVE_ALL_BATCH_KEYS.length > 0 &&
+          IMPROVE_ALL_BATCH_KEYS.every((key) => types.includes(key)))
+      const requestTypesNormalized = shouldUseImproveAll ? IMPROVE_ALL_BATCH_KEYS : types
+      const requestPath = shouldUseImproveAll ? '/api/improve-all' : '/api/improve-batch'
       if (improvementLockRef.current) {
         setError('Please wait for the current improvement to finish before requesting another one.')
         return
@@ -7691,12 +7701,19 @@ function App() {
         return
       }
       improvementLockRef.current = true
-      const isBatch = types.length > 1
-      setActiveImprovement(isBatch ? 'batch' : types[0])
-      setActiveImprovementBatchKeys(isBatch ? types : [])
+      const isBatchRequest = requestTypesNormalized.length > 1
+      const activeImprovementKey = shouldUseImproveAll
+        ? types.includes('enhance-all')
+          ? 'enhance-all'
+          : 'batch'
+        : isBatchRequest
+          ? 'batch'
+          : types[0]
+      setActiveImprovement(activeImprovementKey)
+      setActiveImprovementBatchKeys(isBatchRequest ? requestTypesNormalized : [])
       setError('')
       try {
-        const requestUrl = buildApiUrl(API_BASE_URL, '/api/improve-batch')
+        const requestUrl = buildApiUrl(API_BASE_URL, requestPath)
         const selectionTargetTitle =
           typeof selectionInsights?.designation?.targetTitle === 'string'
             ? selectionInsights.designation.targetTitle.trim()
@@ -7743,9 +7760,9 @@ function App() {
           coverTemplate1: canonicalCoverPrimaryTemplate,
           coverTemplate2: canonicalCoverSecondaryTemplate,
           coverTemplates: canonicalCoverTemplateList,
-          types,
-          toggles: types,
-          primaryType: types[0]
+          types: requestTypesNormalized,
+          toggles: requestTypesNormalized,
+          primaryType: requestTypesNormalized[0]
         }
         if (manualCertificatesInput.trim()) {
           payload.manualCertificates = manualCertificatesInput.trim()
