@@ -18,6 +18,10 @@ describe('DeltaSummaryPanel', () => {
     render(<DeltaSummaryPanel summary={summary} />)
 
     expect(screen.getByText('Immediate Match Deltas')).toBeInTheDocument()
+    expect(screen.getByText('Before updates')).toBeInTheDocument()
+    expect(screen.getByText('After enhancements')).toBeInTheDocument()
+    expect(screen.getByText(/gaps flagged/i)).toBeInTheDocument()
+    expect(screen.getByText(/signals added/i)).toBeInTheDocument()
     expect(screen.getByText('JD Skills')).toBeInTheDocument()
     expect(screen.getByText('AWS')).toBeInTheDocument()
     expect(screen.getByText('GraphQL')).toBeInTheDocument()
