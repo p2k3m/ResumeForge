@@ -215,7 +215,12 @@ function ATSScoreDashboard({
       return { metric: metricWithTip, improvement: null }
     }
 
-    const busy = improvementState.activeKey === config.actionKey
+    const activeBatchKeys = Array.isArray(improvementState.activeBatchKeys)
+      ? improvementState.activeBatchKeys
+      : []
+    const busy =
+      improvementState.activeKey === config.actionKey ||
+      (improvementState.activeKey === 'batch' && activeBatchKeys.includes(config.actionKey))
     const locked = Boolean(improvementState.locked)
     const disabledKeys = Array.isArray(improvementState.disabledKeys)
       ? improvementState.disabledKeys
