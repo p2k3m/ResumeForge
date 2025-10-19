@@ -11033,6 +11033,196 @@ function normalizeSessionChangeLogArray(entries = []) {
     .filter(Boolean);
 }
 
+function sanitizeJsonValue(value) {
+  if (value === null) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    const sanitizedArray = value
+      .map((item) => sanitizeJsonValue(item))
+      .filter((item) => item !== undefined);
+    return sanitizedArray;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? Number(value) : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'object' && value) {
+    const entries = Object.entries(value).reduce((acc, [key, val]) => {
+      const sanitized = sanitizeJsonValue(val);
+      if (sanitized === undefined) {
+        return acc;
+      }
+      if (
+        sanitized &&
+        typeof sanitized === 'object' &&
+        !Array.isArray(sanitized) &&
+        Object.keys(sanitized).length === 0
+      ) {
+        return acc;
+      }
+      if (Array.isArray(sanitized) && sanitized.length === 0) {
+        acc[key] = [];
+        return acc;
+      }
+      acc[key] = sanitized;
+      return acc;
+    }, {});
+    if (Object.keys(entries).length === 0) {
+      return undefined;
+    }
+    return entries;
+  }
+  return undefined;
+}
+
+function normalizeSessionScoreSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return null;
+  }
+  const sanitized = sanitizeJsonValue(snapshot);
+  if (!sanitized || typeof sanitized !== 'object') {
+    return null;
+  }
+  return sanitized;
+}
+
+function buildSessionScoreSnapshotFromScoringResult(
+  result,
+  { recordedAt, source } = {}
+) {
+  if (!result || typeof result !== 'object') {
+    return null;
+  }
+
+  const snapshot = {};
+  const timestamp =
+    typeof recordedAt === 'string' && recordedAt.trim()
+      ? recordedAt.trim()
+      : new Date().toISOString();
+  snapshot.recordedAt = timestamp;
+
+  if (typeof source === 'string' && source.trim()) {
+    snapshot.source = source.trim();
+  }
+
+  if (result.match && typeof result.match === 'object') {
+    snapshot.match = result.match;
+  } else {
+    const afterMissingSkills = Array.isArray(result.missingSkills)
+      ? result.missingSkills
+      : [];
+    snapshot.match = {
+      after: {
+        score: typeof result.score === 'number' ? result.score : null,
+        missingSkills: afterMissingSkills,
+        table: Array.isArray(result.alignmentTable) ? result.alignmentTable : [],
+      },
+    };
+  }
+
+  if (result.match && typeof result.match === 'object') {
+    const beforeMissing = Array.isArray(result.match?.before?.missingSkills)
+      ? result.match.before.missingSkills
+      : [];
+    const afterMissing = Array.isArray(result.match?.after?.missingSkills)
+      ? result.match.after.missingSkills
+      : Array.isArray(result.missingSkills)
+        ? result.missingSkills
+        : [];
+    const afterSet = new Set(
+      afterMissing
+        .map((skill) => (typeof skill === 'string' ? skill.trim().toLowerCase() : ''))
+        .filter(Boolean)
+    );
+    const coveredSkills = beforeMissing
+      .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+      .filter((skill) => skill && !afterSet.has(skill.toLowerCase()));
+    const beforeScore =
+      typeof result.match?.before?.score === 'number'
+        ? result.match.before.score
+        : null;
+    const afterScore =
+      typeof result.match?.after?.score === 'number'
+        ? result.match.after.score
+        : typeof result.score === 'number'
+          ? result.score
+          : null;
+    snapshot.match = {
+      ...result.match,
+      delta: {
+        ...(result.match?.delta && typeof result.match.delta === 'object'
+          ? result.match.delta
+          : {}),
+        score:
+          Number.isFinite(afterScore) && Number.isFinite(beforeScore)
+            ? Math.round(afterScore - beforeScore)
+            : result.match?.delta?.score ?? null,
+        coveredSkills,
+      },
+    };
+  }
+
+  if (result.ats && typeof result.ats === 'object') {
+    snapshot.ats = result.ats;
+  }
+
+  if (result.selection && typeof result.selection === 'object') {
+    snapshot.selection = result.selection;
+  }
+
+  const probabilityBefore = Number.isFinite(result.selectionProbabilityBefore)
+    ? result.selectionProbabilityBefore
+    : typeof result.selection?.before?.probability === 'number'
+      ? result.selection.before.probability
+      : null;
+  if (probabilityBefore !== null) {
+    snapshot.selectionProbabilityBefore = probabilityBefore;
+  }
+
+  const probabilityAfter = Number.isFinite(result.selectionProbabilityAfter)
+    ? result.selectionProbabilityAfter
+    : typeof result.selection?.after?.probability === 'number'
+      ? result.selection.after.probability
+      : null;
+  if (probabilityAfter !== null) {
+    snapshot.selectionProbabilityAfter = probabilityAfter;
+  }
+
+  const probabilityDelta = Number.isFinite(result.selectionProbabilityDelta)
+    ? result.selectionProbabilityDelta
+    : probabilityBefore !== null && probabilityAfter !== null
+      ? Math.round(probabilityAfter - probabilityBefore)
+      : null;
+  if (probabilityDelta !== null) {
+    snapshot.selectionProbabilityDelta = probabilityDelta;
+  }
+
+  const probabilityFactors = Array.isArray(result.selectionProbabilityFactors)
+    ? result.selectionProbabilityFactors
+    : Array.isArray(result.selection?.factors)
+      ? result.selection.factors
+      : [];
+  if (probabilityFactors.length) {
+    snapshot.selectionProbabilityFactors = probabilityFactors;
+  }
+
+  if (typeof result.atsScoreBeforeExplanation === 'string') {
+    snapshot.atsScoreBeforeExplanation = result.atsScoreBeforeExplanation;
+  }
+  if (typeof result.atsScoreAfterExplanation === 'string') {
+    snapshot.atsScoreAfterExplanation = result.atsScoreAfterExplanation;
+  }
+
+  return normalizeSessionScoreSnapshot(snapshot);
+}
+
 async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = {}) {
   const data = await readJsonFromS3({ s3, bucket, key });
   if (!data) {
@@ -11045,6 +11235,8 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
       evaluationLogs: [],
       enhancementLogs: [],
       downloadLogs: [],
+      summary: normalizeChangeLogSummaryPayload(null),
+      scores: null,
     };
   }
   const entries = normalizeSessionChangeLogArray(data.entries);
@@ -11076,6 +11268,8 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
   const evaluationLogs = normalizeChangeLogActivityArray(data.evaluationLogs);
   const enhancementLogs = normalizeChangeLogActivityArray(data.enhancementLogs);
   const downloadLogs = normalizeChangeLogActivityArray(data.downloadLogs);
+  const summary = normalizeChangeLogSummaryPayload(data.summary);
+  const scores = normalizeSessionScoreSnapshot(data.scores);
 
   return {
     entries,
@@ -11086,6 +11280,8 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
     evaluationLogs,
     enhancementLogs,
     downloadLogs,
+    summary,
+    scores,
   };
 }
 
@@ -11166,6 +11362,7 @@ async function writeSessionChangeLog({
   evaluationLogs = [],
   enhancementLogs = [],
   downloadLogs = [],
+  scores = null,
 }) {
   if (!s3) {
     return null;
@@ -11214,6 +11411,7 @@ async function writeSessionChangeLog({
   const normalizedEvaluationLogs = normalizeChangeLogActivityArray(evaluationLogs);
   const normalizedEnhancementLogs = normalizeChangeLogActivityArray(enhancementLogs);
   const normalizedDownloadLogs = normalizeChangeLogActivityArray(downloadLogs);
+  const normalizedScores = normalizeSessionScoreSnapshot(scores);
   const payload = {
     version: 1,
     jobId,
@@ -11229,6 +11427,7 @@ async function writeSessionChangeLog({
     evaluationLogs: normalizedEvaluationLogs,
     enhancementLogs: normalizedEnhancementLogs,
     downloadLogs: normalizedDownloadLogs,
+    ...(normalizedScores ? { scores: normalizedScores } : {}),
   };
   await sendS3CommandWithRetry(
     s3,
@@ -11255,6 +11454,177 @@ async function writeSessionChangeLog({
     }
   );
   return { payload, bucket: resolvedBucket, key: resolvedKey };
+}
+
+async function persistSessionScoreSnapshot({ result, res } = {}) {
+  if (!result || typeof result !== 'object' || !res) {
+    return null;
+  }
+
+  const jobId = typeof result.jobId === 'string' ? result.jobId.trim() : '';
+  if (!jobId) {
+    return null;
+  }
+
+  const scoreSnapshot = buildSessionScoreSnapshotFromScoringResult(result, {
+    recordedAt: new Date().toISOString(),
+    source: 'scoring',
+  });
+
+  if (!scoreSnapshot) {
+    return null;
+  }
+
+  const requestId = res.locals.requestId;
+  const userId = res.locals.userId;
+  const logContext = { requestId, jobId, route: 'score-match' };
+
+  const dynamo = new DynamoDBClient({ region });
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+
+  try {
+    await ensureDynamoTableExists({ dynamo, tableName });
+  } catch (err) {
+    logStructured('warn', 'score_snapshot_table_unavailable', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return null;
+  }
+
+  const profileIdentifier =
+    resolveProfileIdentifier({ linkedinProfileUrl: '', userId, jobId }) || jobId;
+  const storedLinkedIn = normalizePersonalData(profileIdentifier);
+
+  let record;
+  try {
+    record = await dynamo.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+        ProjectionExpression:
+          'jobId, s3Bucket, s3Key, sessionChangeLogKey, changeLog, sessionId, candidateName, userId, uploadedAt',
+      })
+    );
+  } catch (err) {
+    logStructured('warn', 'score_snapshot_record_load_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return null;
+  }
+
+  const item = record.Item || {};
+  if (!item.jobId || item.jobId.S !== jobId) {
+    logStructured('warn', 'score_snapshot_job_context_missing', logContext);
+    return null;
+  }
+
+  const storedBucket = normalizeDynamoStringAttribute(item.s3Bucket) || '';
+  const originalUploadKey = normalizeDynamoStringAttribute(item.s3Key) || '';
+  const existingSessionId = normalizeDynamoStringAttribute(item.sessionId) || '';
+  const existingCandidateName = normalizeDynamoStringAttribute(item.candidateName) || '';
+  const storedUserId = normalizeDynamoStringAttribute(item.userId) || '';
+  const uploadedAt = normalizeDynamoStringAttribute(item.uploadedAt) || '';
+  const dateSegment = uploadedAt ? uploadedAt.slice(0, 10) : '';
+
+  let sessionChangeLogKey = deriveSessionChangeLogKey({
+    changeLogKey: normalizeDynamoStringAttribute(item.sessionChangeLogKey),
+    originalUploadKey,
+  });
+
+  let sessionState;
+  try {
+    sessionState = await loadSessionChangeLog({
+      s3: s3Client,
+      bucket: storedBucket,
+      key: sessionChangeLogKey,
+      fallbackEntries: parseDynamoChangeLog(item.changeLog),
+    });
+  } catch (err) {
+    logStructured('warn', 'score_snapshot_changelog_load_failed', {
+      ...logContext,
+      bucket: storedBucket,
+      key: sessionChangeLogKey,
+      error: serializeError(err),
+    });
+    return null;
+  }
+
+  const entries = Array.isArray(sessionState?.entries) ? sessionState.entries : [];
+  const dismissedEntries = Array.isArray(sessionState?.dismissedEntries)
+    ? sessionState.dismissedEntries
+    : [];
+  const coverLetterEntries = Array.isArray(sessionState?.coverLetterEntries)
+    ? sessionState.coverLetterEntries
+    : [];
+  const dismissedCoverLetterEntries = Array.isArray(
+    sessionState?.dismissedCoverLetterEntries
+  )
+    ? sessionState.dismissedCoverLetterEntries
+    : [];
+  const sessionLogs = Array.isArray(sessionState?.sessionLogs)
+    ? sessionState.sessionLogs
+    : [];
+  const evaluationLogs = Array.isArray(sessionState?.evaluationLogs)
+    ? sessionState.evaluationLogs
+    : [];
+  const enhancementLogs = Array.isArray(sessionState?.enhancementLogs)
+    ? sessionState.enhancementLogs
+    : [];
+  const downloadLogs = Array.isArray(sessionState?.downloadLogs)
+    ? sessionState.downloadLogs
+    : [];
+
+  let summary = sessionState?.summary;
+  if (!summary) {
+    const aggregatedSummary = buildAggregatedChangeLogSummary(entries);
+    summary = normalizeChangeLogSummaryPayload(aggregatedSummary);
+  }
+
+  const sessionSegment =
+    (typeof result.sessionId === 'string' && result.sessionId.trim()) || existingSessionId;
+
+  const ownerSegment = resolveDocumentOwnerSegment({
+    userId: userId || storedUserId,
+    sanitizedName: existingCandidateName,
+  });
+
+  try {
+    await writeSessionChangeLog({
+      s3: s3Client,
+      bucket: storedBucket,
+      key: sessionChangeLogKey,
+      jobId,
+      originalUploadKey,
+      ownerSegment,
+      sanitizedName: existingCandidateName,
+      userId: userId || storedUserId,
+      sessionSegment,
+      requestId,
+      dateSegment,
+      entries,
+      summary,
+      dismissedEntries,
+      coverLetterEntries,
+      dismissedCoverLetterEntries,
+      sessionLogs,
+      evaluationLogs,
+      enhancementLogs,
+      downloadLogs,
+      scores: scoreSnapshot,
+    });
+  } catch (err) {
+    logStructured('warn', 'score_snapshot_write_failed', {
+      ...logContext,
+      bucket: storedBucket,
+      key: sessionChangeLogKey,
+      error: serializeError(err),
+    });
+    return null;
+  }
+
+  return scoreSnapshot;
 }
 
 function buildDocumentFileBaseName({ type, templateId, variant }) {
@@ -15125,6 +15495,16 @@ app.post('/api/score-match', assignJobContext, async (req, res) => {
         : 0,
     });
 
+    try {
+      await persistSessionScoreSnapshot({ result, res });
+    } catch (persistErr) {
+      logStructured('warn', 'score_snapshot_persist_failed', {
+        requestId,
+        jobId: result.jobId,
+        error: serializeError(persistErr),
+      });
+    }
+
     return res.json(result);
   } catch (error) {
     logStructured('error', 'match_score_failed', {
@@ -17199,6 +17579,7 @@ async function generateEnhancedDocumentsResponse({
         evaluationLogs: normalizedEvaluationLogs,
         enhancementLogs: normalizedEnhancementLogs,
         downloadLogs: normalizedDownloadLogs,
+        ...(sessionScoreSnapshot ? { scores: sessionScoreSnapshot } : {}),
       },
     },
   ];
@@ -17274,6 +17655,7 @@ async function generateEnhancedDocumentsResponse({
       evaluationLogs: normalizedEvaluationLogs,
       enhancementLogs: normalizedEnhancementLogs,
       downloadLogs: normalizedDownloadLogs,
+      scores: sessionScoreSnapshot,
     });
     persistedSessionChangeLogResult = persistedChangeLog;
 
@@ -17758,6 +18140,117 @@ async function generateEnhancedDocumentsResponse({
       resumeTemplatesForStage.history = dedupedHistory;
     }
   }
+
+  const matchBeforeScore = Number.isFinite(originalMatchResult.score)
+    ? Math.round(clamp(originalMatchResult.score, 0, 100))
+    : null;
+  const matchAfterScore = Number.isFinite(bestMatch.score)
+    ? Math.round(clamp(bestMatch.score, 0, 100))
+    : null;
+  const matchBeforeMissing = Array.isArray(originalMatchResult.newSkills)
+    ? originalMatchResult.newSkills
+    : [];
+  const matchAfterMissing = Array.isArray(bestMatch.newSkills) ? bestMatch.newSkills : [];
+  const matchAfterSet = new Set(
+    matchAfterMissing
+      .map((skill) => (typeof skill === 'string' ? skill.trim().toLowerCase() : ''))
+      .filter(Boolean)
+  );
+  const matchCoveredSkills = matchBeforeMissing
+    .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+    .filter((skill) => skill && !matchAfterSet.has(skill.toLowerCase()));
+  const selectionBeforeProbability =
+    typeof selectionInsights?.before?.probability === 'number'
+      ? selectionInsights.before.probability
+      : null;
+  const selectionAfterProbability =
+    typeof selectionInsights?.after?.probability === 'number'
+      ? selectionInsights.after.probability
+      : typeof selectionInsights?.probability === 'number'
+        ? selectionInsights.probability
+        : null;
+  const selectionDeltaProbability =
+    selectionBeforeProbability !== null && selectionAfterProbability !== null
+      ? Math.round(selectionAfterProbability - selectionBeforeProbability)
+      : null;
+  const scoreResultForSnapshot = {
+    match: {
+      before: {
+        score: matchBeforeScore,
+        missingSkills: matchBeforeMissing,
+        table: Array.isArray(originalMatchResult.table) ? originalMatchResult.table : [],
+      },
+      after: {
+        score: matchAfterScore,
+        missingSkills: matchAfterMissing,
+        table: Array.isArray(bestMatch.table) ? bestMatch.table : [],
+      },
+      delta: {
+        score:
+          matchAfterScore !== null && matchBeforeScore !== null
+            ? Math.round(matchAfterScore - matchBeforeScore)
+            : null,
+        coveredSkills: matchCoveredSkills,
+      },
+    },
+    ats: {
+      before: {
+        score: Number.isFinite(atsScoreBefore) ? Math.round(clamp(atsScoreBefore, 0, 100)) : null,
+        breakdown: baselineScoreBreakdown,
+      },
+      after: {
+        score: Number.isFinite(atsScoreAfter) ? Math.round(clamp(atsScoreAfter, 0, 100)) : null,
+        breakdown: finalScoreBreakdown,
+      },
+      delta: {
+        score:
+          Number.isFinite(atsScoreAfter) && Number.isFinite(atsScoreBefore)
+            ? Math.round(atsScoreAfter - atsScoreBefore)
+            : null,
+      },
+    },
+    selection: selectionInsights
+      ? {
+          before: {
+            probability: selectionBeforeProbability,
+            level: selectionInsights.before?.level || null,
+            summary:
+              selectionInsights.before?.message || selectionInsights.before?.summary || null,
+          },
+          after: {
+            probability: selectionAfterProbability,
+            level: selectionInsights.level || selectionInsights.after?.level || null,
+            summary: selectionInsights.message || selectionInsights.summary || null,
+          },
+          delta: {
+            probability: selectionDeltaProbability,
+            levelChange:
+              selectionInsights.before?.level &&
+              (selectionInsights.level || selectionInsights.after?.level) &&
+              selectionInsights.before.level !== (selectionInsights.level || selectionInsights.after?.level)
+                ? selectionInsights.level || selectionInsights.after.level
+                : null,
+          },
+          factors: Array.isArray(selectionInsights.factors) ? selectionInsights.factors : [],
+        }
+      : undefined,
+    selectionProbabilityBefore: selectionBeforeProbability,
+    selectionProbabilityAfter: selectionAfterProbability,
+    selectionProbabilityDelta: selectionDeltaProbability,
+    selectionProbabilityFactors: Array.isArray(selectionInsights?.factors)
+      ? selectionInsights.factors
+      : [],
+    atsScoreBeforeExplanation,
+    atsScoreAfterExplanation,
+  };
+
+  const scoreSnapshotTimestamp = generationCompletedAt || new Date().toISOString();
+  const generatedScoreSnapshot =
+    buildSessionScoreSnapshotFromScoringResult(scoreResultForSnapshot, {
+      recordedAt: scoreSnapshotTimestamp,
+      source: 'generation',
+    }) || sessionScoreSnapshot;
+  sessionScoreSnapshot = generatedScoreSnapshot;
   const resumeAvailableTemplates = uniqueValidCvTemplates(availableCvTemplates);
   if (resumeAvailableTemplates.length) {
     resumeTemplatesForStage.available = resumeAvailableTemplates;
@@ -17867,6 +18360,7 @@ async function generateEnhancedDocumentsResponse({
       entries: normalizedCoverLetterEntries,
       dismissedEntries: normalizedDismissedCoverLetterEntries,
     },
+    scores: sessionScoreSnapshot,
     templateContext: {
       template1,
       template2,
@@ -18096,6 +18590,7 @@ app.post(
       let downloadActivityLogs = [];
       let existingRecordItem = {};
       let storedJobDescriptionDigest = '';
+      let sessionScoreSnapshot = null;
       try {
         const record = await dynamo.send(
           new GetItemCommand({
@@ -18172,6 +18667,7 @@ app.post(
             downloadActivityLogs = Array.isArray(sessionState?.downloadLogs)
               ? sessionState.downloadLogs
               : [];
+            sessionScoreSnapshot = sessionState?.scores || null;
           } catch (sessionErr) {
             logStructured('warn', 'generation_change_log_load_failed', {
               ...logContext,
@@ -19001,6 +19497,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   let existingCandidateName = '';
   let storedUserId = '';
   let existingUploadedAt = '';
+  let existingSessionScores = null;
 
   const resolveActivityLogsInput = (primaryKey, alternativeKeys = []) => {
     const keys = [primaryKey, ...alternativeKeys];
@@ -19104,6 +19601,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       downloadActivityLogs = Array.isArray(sessionChangeLogState?.downloadLogs)
         ? sessionChangeLogState.downloadLogs
         : [];
+      existingSessionScores = sessionChangeLogState?.scores || null;
     } catch (loadErr) {
       logStructured('error', 'change_log_load_failed', {
         ...logContext,
@@ -19413,6 +19911,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
     normalizedChangeLogEntries
   );
   const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
+  const normalizedSessionScores =
+    normalizeSessionScoreSnapshot(req.body?.scores) || existingSessionScores || null;
 
   const resolvedSessionOwnerSegment = resolveDocumentOwnerSegment({
     userId: res.locals.userId || storedUserId,
@@ -19471,6 +19971,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       evaluationLogs: normalizedEvaluationLogs,
       enhancementLogs: normalizedEnhancementLogs,
       downloadLogs: normalizedDownloadLogs,
+      scores: normalizedSessionScores,
     });
     persistedSessionChangeLog = persistedChangeLog;
 
@@ -19621,6 +20122,7 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
       entries: normalizedCoverLetterEntriesForResponse,
       dismissedEntries: normalizedDismissedCoverLettersForResponse,
     },
+    scores: normalizedSessionScores,
   });
 });
 

@@ -55,6 +55,25 @@ describe('scoreResumeAgainstJob', () => {
       })
     );
 
+    expect(result.match).toEqual(
+      expect.objectContaining({
+        before: expect.objectContaining({
+          score: expect.any(Number),
+          missingSkills: expect.any(Array),
+          table: expect.any(Array),
+        }),
+        after: expect.objectContaining({
+          score: expect.any(Number),
+          missingSkills: expect.any(Array),
+          table: expect.any(Array),
+        }),
+        delta: expect.objectContaining({
+          score: expect.any(Number),
+          coveredSkills: expect.any(Array),
+        }),
+      })
+    );
+
     expect(result.ats).toEqual(
       expect.objectContaining({
         before: expect.objectContaining({
@@ -142,8 +161,10 @@ describe('scoreResumeAgainstJob', () => {
     });
 
     expect(outcome.ok).toBe(true);
-    const { selection, ats } = outcome.result;
+    const { selection, ats, match } = outcome.result;
     expect(selection.delta.probability).toBe(0);
     expect(ats.delta.score).toBe(0);
+    expect(match.delta.score).toBe(0);
+    expect(match.before.score).toBe(match.after.score);
   });
 });
