@@ -3860,7 +3860,9 @@ function replaceSectionContent(
 }
 
 function sanitizeSectionLines(lines = []) {
-  const cleaned = lines.map((line) => line.replace(/\s+$/, ''));
+  const cleaned = lines
+    .map((line) => (line === null || line === undefined ? '' : String(line)))
+    .map((line) => line.replace(/\s+$/, ''));
   while (cleaned.length && !cleaned[0].trim()) cleaned.shift();
   while (cleaned.length && !cleaned[cleaned.length - 1].trim()) cleaned.pop();
   return cleaned;
@@ -3892,14 +3894,46 @@ function escapeRegExp(value = '') {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function coerceSectionContent(value) {
+  if (value === null || value === undefined) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => coerceSectionContent(entry));
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    return String(value).split(/\r?\n/);
+  }
+  return [];
+}
+
+function sectionLinesEqual(a = [], b = []) {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function applySectionUpdate(originalResume, updatedResume, options = {}) {
-  const { pattern, defaultLabel, insertIndex = 1 } = options;
+  const { pattern, defaultLabel, insertIndex = 1, fallbackContent } = options;
   const baseSection = extractSectionContent(originalResume, pattern);
   const updatedSection = extractSectionContent(updatedResume, pattern);
   const baseContent = sanitizeSectionLines(baseSection.content);
-  let newContent = sanitizeSectionLines(
-    updatedSection.content.length ? updatedSection.content : baseContent
-  );
+  const fallbackLines = sanitizeSectionLines(coerceSectionContent(fallbackContent));
+  const shouldUseFallback =
+    !updatedSection.content.length &&
+    fallbackLines.length > 0 &&
+    !sectionLinesEqual(fallbackLines, baseContent);
+  let newContent = updatedSection.content.length
+    ? sanitizeSectionLines(updatedSection.content)
+    : shouldUseFallback
+    ? fallbackLines
+    : [...baseContent];
   const precedingLine =
     updatedSection && typeof updatedSection.start === 'number' && updatedSection.start > 0
       ? (updatedSection.lines?.[updatedSection.start - 1] || '').trim()
@@ -4254,6 +4288,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       pattern: SUMMARY_SECTION_PATTERN,
       defaultLabel: 'Summary',
       insertIndex: 1,
+      fallbackContent: baseResult.afterExcerpt,
     });
     return {
       ...baseResult,
@@ -4268,6 +4303,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       pattern: SKILLS_SECTION_PATTERN,
       defaultLabel: 'Skills',
       insertIndex: 2,
+      fallbackContent: baseResult.afterExcerpt,
     });
     return {
       ...baseResult,
@@ -4281,6 +4317,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
     const sectionResult = applySectionUpdate(safeOriginal, baseResult.updatedResume, {
       pattern: EXPERIENCE_SECTION_PATTERN,
       defaultLabel: 'Work Experience',
+      fallbackContent: baseResult.afterExcerpt,
     });
     return {
       ...baseResult,
@@ -4295,6 +4332,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       pattern: CERTIFICATIONS_SECTION_PATTERN,
       defaultLabel: 'Certifications',
       insertIndex: 3,
+      fallbackContent: baseResult.afterExcerpt,
     });
     return {
       ...baseResult,
@@ -4309,6 +4347,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       pattern: PROJECTS_SECTION_PATTERN,
       defaultLabel: 'Projects',
       insertIndex: 3,
+      fallbackContent: baseResult.afterExcerpt,
     });
     return {
       ...baseResult,
@@ -4323,6 +4362,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       pattern: HIGHLIGHTS_SECTION_PATTERN,
       defaultLabel: 'Highlights',
       insertIndex: 2,
+      fallbackContent: baseResult.afterExcerpt,
     });
     return {
       ...baseResult,
