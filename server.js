@@ -9270,7 +9270,7 @@ function buildSelectionInsights(context = {}) {
   const jobFitScores = [
     {
       key: 'designation',
-      label: 'Designation Alignment',
+      label: 'Designation match',
       score: normalizeFitScore(designationScore),
       status: designationStatus,
       message: designationMessage,
@@ -9281,7 +9281,7 @@ function buildSelectionInsights(context = {}) {
     },
     {
       key: 'skills',
-      label: 'Skill Coverage',
+      label: 'Skill match',
       score: normalizeFitScore(skillCoverage),
       status: skillsStatus,
       message: skillsMessage,
@@ -9293,7 +9293,7 @@ function buildSelectionInsights(context = {}) {
     },
     {
       key: 'experience',
-      label: 'Experience Match',
+      label: 'Years / experience',
       score: normalizeFitScore(experienceScore),
       status: experienceStatus,
       message: experienceMessage,
@@ -9305,7 +9305,7 @@ function buildSelectionInsights(context = {}) {
     },
     {
       key: 'tasks',
-      label: 'Task Alignment',
+      label: 'Task overlap',
       score: normalizeFitScore(tasksScore),
       status: tasksStatus,
       message: tasksMessage,
@@ -9315,7 +9315,7 @@ function buildSelectionInsights(context = {}) {
     },
     {
       key: 'highlights',
-      label: 'Highlights Strength',
+      label: 'Highlights',
       score: normalizeFitScore(highlightScore),
       status: highlightsStatus,
       message: highlightsMessage,
@@ -9326,7 +9326,7 @@ function buildSelectionInsights(context = {}) {
     },
     {
       key: 'certifications',
-      label: 'Certification Match',
+      label: 'Certifications',
       score: normalizeFitScore(certificationScore),
       status: certificationStatus,
       message: certificationMessage,
