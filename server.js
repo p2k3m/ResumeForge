@@ -5990,16 +5990,12 @@ async function rewriteSectionsWithGemini(
     ];
 
     const instructionLines = [
-      'You are an elite resume architect optimizing for Gemini/OpenAI outputs.',
-      'Follow these rules precisely:',
-      '- Never degrade CV structure; respect existing headings, chronology, and polished tone.',
-      '- Align work experience bullets, summary lines, and highlights directly with the job description responsibilities using evidence from the candidate history.',
-      '- Use the structuredExperience array to rewrite each role\'s responsibilities so verbs, metrics, and focus mirror the job description while staying truthful to the provided achievements.',
-      '- Blend JD-critical skills into the skills section only when the candidate context proves them—avoid isolated keyword stuffing.',
-      '- Emphasise measurable impact and outcomes that demonstrate the candidate already performs what the JD requires; do not fabricate new roles or tools.',
-      '- For each section output, constrain the LLM instruction exactly as follows:',
+      'You are coordinating Gemini/OpenAI resume rewrites that must stay faithful to the provided candidate history.',
+      'Respect existing CV structure, chronology, and tone—never invent employers, roles, or skills that lack support in the resume data.',
+      'Leverage the structuredExperience array to ground every rewrite in genuine achievements that align with the job description.',
+      'For each section below, use the exact constrained prompt verbatim:',
       ...sectionPrompts.map(([section, prompt]) => `  - ${section}: "${prompt}"`),
-      '- Respond using ONLY valid JSON conforming to the provided schema.',
+      'Blend JD-critical skills only when corroborated by the candidate content and respond using ONLY valid JSON that conforms to the provided schema.',
     ];
     const promptPackage = createVersionedPrompt({
       ...PROMPT_TEMPLATES.resumeRewrite,

@@ -69,10 +69,12 @@ describe('rewriteSectionsWithGemini prompt construction', () => {
 
     expect(generativeModelMock.generateContent).toHaveBeenCalledTimes(1);
     const prompt = promptRecorder[0];
-    expect(prompt).toContain('elite resume architect');
+    expect(prompt).toContain('coordinating Gemini/OpenAI resume rewrites');
     expect(prompt).toContain('Exciting job description here');
-    expect(prompt).toContain('Never degrade CV structure');
-    expect(prompt).toContain('Align work experience bullets');
+    expect(prompt).toContain('Respect existing CV structure');
+    expect(prompt).toContain('exact constrained prompt verbatim');
+    expect(prompt).toContain('Rewrite only the Summary of the CV as per this JD.');
+    expect(prompt).toContain('Rewrite only the Work Experience of the CV as per this JD.');
     expect(prompt).toContain('OUTPUT_SCHEMA');
     expect(prompt).toContain('INPUT_CONTEXT');
     expect(prompt).toMatch(/"resumeSections"/);
