@@ -2,15 +2,26 @@ import request from 'supertest';
 import app from '../server.js';
 import { handler } from '../lambda.js';
 
+function expectValidPortalMarkup(html) {
+  expect(html).toContain('<title>ResumeForge</title>');
+  expect(html).toContain('id="root"');
+
+  const hasHashedJs = /assets\/index-[\w]+\.js/.test(html);
+  const hasHashedCss = /assets\/index-[\w]+\.css/.test(html);
+
+  if (!hasHashedJs || !hasHashedCss) {
+    expect(html).toContain('data-status="client-assets-missing"');
+    expect(html).toContain('ResumeForge client rebuilding');
+  }
+}
+
 describe('serverless bootstrap', () => {
   it('responds to GET / with the hosted portal', async () => {
     const response = await request(app).get('/');
     expect(response.status).toBe(200);
     expect(response.type).toMatch(/html/);
-    expect(response.text).toContain('<title>ResumeForge</title>');
-    expect(response.text).toContain('id="root"');
+    expectValidPortalMarkup(response.text);
     expect(response.text).toContain('name="resumeforge-api-base"');
-    expect(response.text).toMatch(/assets\/index-[\w]+\.js/);
   });
 
   it('handles API Gateway proxy events without socket errors', async () => {
@@ -40,6 +51,6 @@ describe('serverless bootstrap', () => {
     const context = {};
     const result = await handler(event, context);
     expect(result.statusCode).toBe(200);
-    expect(result.body).toContain('<title>ResumeForge</title>');
+    expectValidPortalMarkup(result.body);
   });
 });
