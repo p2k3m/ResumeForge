@@ -18,6 +18,7 @@ ResumeForge retains a single Express implementation but deploys it as discrete L
 | `enhancementImproveProjects` | Enhances project write-ups and outcomes. | `POST /api/improve-projects` |
 | `enhancementImproveHighlights` | Polishes key highlights and achievements. | `POST /api/improve-highlights` |
 | `enhancementImproveAts` | Executes whole-resume ATS uplift passes. | `POST /api/enhance-all`, `POST /api/improve-ats` |
+| `enhancementImproveAll` | Runs every targeted improvement in a single batch request. | `POST /api/improve-all` |
 | `documentGeneration` | Generates downloadable CV variants and cover letters. API requests are enqueued to a FIFO queue and processed by a dedicated worker Lambda. | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
 | `auditing` | Publishes change logs, download refreshes, CloudFront metadata and health checks. | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
 

@@ -71,6 +71,11 @@ const FUNCTION_BUILD_CONFIG = {
     copyClientAssets: false,
     copyTemplates: true,
   },
+  EnhancementImproveAllFunction: {
+    entryPoints: ['lambdas/enhancementImproveAll.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
   DocumentGenerationFunction: {
     entryPoints: ['lambdas/documentGeneration.js'],
     copyClientAssets: false,

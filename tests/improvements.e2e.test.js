@@ -533,6 +533,182 @@ describe('targeted improvement endpoints (integration)', () => {
     expect(generateContentMock).toHaveBeenCalledTimes(aiResponses.length);
   });
 
+  test('improve-all batches every targeted improvement', async () => {
+    const { app } = await setupTestServer();
+    const { generateContentMock } = await import('./mocks/generateContentMock.js');
+
+    generateContentMock.mockReset();
+
+    const batchResponses = [
+      {
+        type: 'improve-summary',
+        section: 'Summary',
+        beforeExcerpt: 'Original summary line focused on delivery.',
+        afterExcerpt: 'Refined summary spotlighting leadership wins.',
+        explanation: 'Refined summary spotlighting leadership wins.',
+        mutations: [
+          {
+            target: 'Original summary line focused on delivery.',
+            value: 'Refined summary spotlighting leadership wins.',
+          },
+        ],
+      },
+      {
+        type: 'add-missing-skills',
+        section: 'Skills',
+        beforeExcerpt: '- JavaScript',
+        afterExcerpt: '- JavaScript\n- Leadership',
+        explanation: 'Added targeted skills including leadership and cloud.',
+        mutations: [
+          {
+            target: '- JavaScript',
+            value: '- JavaScript\n- Leadership',
+          },
+        ],
+      },
+      {
+        type: 'change-designation',
+        section: 'Designation',
+        beforeExcerpt: 'Senior Software Engineer',
+        afterExcerpt: 'Lead Software Engineer',
+        explanation: 'Aligned title with target role.',
+        mutations: [
+          {
+            target: 'Senior Software Engineer',
+            value: 'Lead Software Engineer',
+          },
+        ],
+      },
+      {
+        type: 'align-experience',
+        section: 'Experience',
+        beforeExcerpt: '- Built scalable services.',
+        afterExcerpt: '- Built scalable services.\n- Expanded leadership initiatives.',
+        explanation: 'Expanded experience bullets for leadership initiatives.',
+        mutations: [
+          {
+            target: '- Built scalable services.',
+            value: '- Built scalable services.\n- Expanded leadership initiatives.',
+          },
+        ],
+      },
+      {
+        type: 'improve-certifications',
+        section: 'Certifications',
+        beforeExcerpt: '- AWS Certified Solutions Architect',
+        afterExcerpt: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+        explanation: 'Elevated certifications for cloud leadership.',
+        mutations: [
+          {
+            target: '- AWS Certified Solutions Architect',
+            value: '- AWS Certified Solutions Architect\n- Azure Administrator Associate',
+          },
+        ],
+      },
+      {
+        type: 'improve-projects',
+        section: 'Projects',
+        beforeExcerpt: '- Delivered analytics dashboard for leadership.',
+        afterExcerpt: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+        explanation: 'Spotlighted projects that match role priorities.',
+        mutations: [
+          {
+            target: '- Delivered analytics dashboard for leadership.',
+            value: '- Delivered analytics dashboard for leadership.\n- Added cloud migration case study.',
+          },
+        ],
+      },
+      {
+        type: 'improve-highlights',
+        section: 'Highlights',
+        beforeExcerpt: '- Recognised for 20% adoption growth.',
+        afterExcerpt: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
+        explanation: 'Reinforced highlights with quantified wins tied to the JD success metrics.',
+        mutations: [
+          {
+            target: '- Recognised for 20% adoption growth.',
+            value: '- Recognised for 20% adoption growth.\n- Spotlighted quantified wins for JD success metrics.',
+          },
+        ],
+      },
+    ];
+
+    let workingResume = baseResume;
+
+    batchResponses.forEach(({ section, beforeExcerpt, afterExcerpt, explanation, mutations }) => {
+      const replacements = mutations.length
+        ? mutations
+        : [{ target: beforeExcerpt, value: afterExcerpt }];
+      const updatedResume = replacements.reduce(
+        (text, mutation) => text.replace(mutation.target, mutation.value),
+        workingResume
+      );
+
+      generateContentMock.mockResolvedValueOnce({
+        response: {
+          text: () =>
+            JSON.stringify({
+              updatedResume,
+              beforeExcerpt,
+              afterExcerpt,
+              explanation,
+              confidence: 0.74,
+              changeDetails: [
+                {
+                  section,
+                  before: beforeExcerpt,
+                  after: afterExcerpt,
+                  reasons: [explanation],
+                },
+              ],
+            }),
+        },
+      });
+
+      workingResume = updatedResume;
+    });
+
+    const response = await request(app)
+      .post('/api/improve-all')
+      .send({
+        ...basePayload,
+        jobTitle: 'Lead Software Engineer',
+        currentTitle: 'Senior Software Engineer',
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.types).toEqual(
+      batchResponses.map((entry) => entry.type)
+    );
+    expect(Array.isArray(response.body.results)).toBe(true);
+    expect(response.body.results).toHaveLength(batchResponses.length);
+    expect(typeof response.body.updatedResume).toBe('string');
+    expect(response.body.updatedResume).toBe(workingResume);
+    expect(Array.isArray(response.body.urls)).toBe(true);
+    expect(response.body.urlExpiresAt).toBeNull();
+    expect(typeof response.body.generatedAt).toBe('string');
+
+    batchResponses.forEach((expected, index) => {
+      const entry = response.body.results[index];
+      expect(entry).toEqual(
+        expect.objectContaining({
+          success: true,
+          type: expected.type,
+          title: expect.any(String),
+          beforeExcerpt: expected.beforeExcerpt,
+          afterExcerpt: expected.afterExcerpt,
+          explanation: expected.explanation,
+          rescore: expect.any(Object),
+          originalTitle: basePayload.currentTitle,
+          modifiedTitle: basePayload.jobTitle,
+        })
+      );
+    });
+
+    expect(generateContentMock).toHaveBeenCalledTimes(batchResponses.length);
+  });
+
   test('improve-highlights fallback references JD-specified LLM vendors', async () => {
     const { app } = await setupTestServer();
     const { generateContentMock } = await import('./mocks/generateContentMock.js');

@@ -41,6 +41,7 @@ ResumeForge now deploys a suite of dedicated Lambda functions, each fronted by d
 | Enhancement – projects | `lambdas/enhancementImproveProjects.handler` | `POST /api/improve-projects` |
 | Enhancement – highlights | `lambdas/enhancementImproveHighlights.handler` | `POST /api/improve-highlights` |
 | Enhancement – ATS uplift | `lambdas/enhancementImproveAts.handler` | `POST /api/enhance-all`, `POST /api/improve-ats` |
+| Enhancement – batch all sections | `lambdas/enhancementImproveAll.handler` | `POST /api/improve-all` |
 | Document generation | `lambdas/documentGeneration.handler` | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
 | Auditing & metrics | `lambdas/auditing.handler` | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
 
