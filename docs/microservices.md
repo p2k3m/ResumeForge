@@ -10,7 +10,7 @@ ResumeForge retains a single Express implementation but deploys it as discrete L
 | `resumeUpload` | Accepts résumé uploads, persists session metadata, and kicks off preprocessing. | `POST /api/process-cv` |
 | `jobEvaluation` | Consumes résumé text plus a job description and returns fit analysis. | `POST /api/jd/evaluate` |
 | `scoring` | Calculates match scores and supports re-scoring after enhancements. | `POST /api/score-match`, `POST /api/rescore-improvement` |
-| `enhancement` | Runs Gemini-powered improvements for summaries, skills, experience and more. | `POST /api/improve-summary`, `POST /api/add-missing-skills`, `POST /api/change-designation`, `POST /api/align-experience`, `POST /api/improve-certifications`, `POST /api/improve-projects`, `POST /api/improve-highlights`, `POST /api/enhance-all` |
+| `enhancement` | Runs Gemini-powered improvements for summaries, skills, experience and more. | `POST /api/improve-summary`, `POST /api/add-missing-skills`, `POST /api/improve-skills`, `POST /api/change-designation`, `POST /api/improve-designation`, `POST /api/align-experience`, `POST /api/improve-experience`, `POST /api/improve-certifications`, `POST /api/improve-projects`, `POST /api/improve-highlights`, `POST /api/enhance-all`, `POST /api/improve-ats` |
 | `documentGeneration` | Generates downloadable CV variants and cover letters. API requests are enqueued to a FIFO queue and processed by a dedicated worker Lambda. | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
 | `auditing` | Publishes change logs, download refreshes, CloudFront metadata and health checks. | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
 

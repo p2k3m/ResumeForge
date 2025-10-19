@@ -31,7 +31,42 @@ const FUNCTION_BUILD_CONFIG = {
     copyClientAssets: false,
     copyTemplates: true,
   },
-  EnhancementFunction: {
+  EnhancementImproveSummaryFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveSkillsFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveDesignationFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveExperienceFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveCertificationsFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveProjectsFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveHighlightsFunction: {
+    entryPoints: ['lambdas/enhancement.js'],
+    copyClientAssets: false,
+    copyTemplates: true,
+  },
+  EnhancementImproveAtsFunction: {
     entryPoints: ['lambdas/enhancement.js'],
     copyClientAssets: false,
     copyTemplates: true,

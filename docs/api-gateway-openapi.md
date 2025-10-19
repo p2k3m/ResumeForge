@@ -204,6 +204,25 @@ paths:
                 $ref: '#/components/schemas/TargetedImprovementResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /api/improve-skills:
+    post:
+      summary: Inject missing skills into the resume (alias)
+      operationId: postImproveSkills
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetedImprovementRequest'
+      responses:
+        '200':
+          description: Skills improvement applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetedImprovementResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
   /api/change-designation:
     post:
       summary: Update headline designation for the target role
@@ -223,10 +242,48 @@ paths:
                 $ref: '#/components/schemas/TargetedImprovementResponse'
         default:
           $ref: '#/components/responses/ErrorResponse'
+  /api/improve-designation:
+    post:
+      summary: Update headline designation for the target role (alias)
+      operationId: postImproveDesignation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetedImprovementRequest'
+      responses:
+        '200':
+          description: Designation adjusted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetedImprovementResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
   /api/align-experience:
     post:
       summary: Realign experience section for the target job
       operationId: postAlignExperience
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetedImprovementRequest'
+      responses:
+        '200':
+          description: Experience enhancement applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetedImprovementResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/improve-experience:
+    post:
+      summary: Realign experience section for the target job (alias)
+      operationId: postImproveExperience
       requestBody:
         required: true
         content:
@@ -312,6 +369,25 @@ paths:
       responses:
         '200':
           description: Holistic enhancement applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetedImprovementResponse'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+  /api/improve-ats:
+    post:
+      summary: Apply holistic resume enhancement (alias)
+      operationId: postImproveAts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TargetedImprovementRequest'
+      responses:
+        '200':
+          description: Combined resume improvement applied
           content:
             application/json:
               schema:
