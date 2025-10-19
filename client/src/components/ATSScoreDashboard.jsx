@@ -594,10 +594,11 @@ function ATSScoreDashboard({
       </div>
 
       {match && (
-        <div
-          className={`grid grid-cols-1 gap-4 ${hasComparableScores ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
-          aria-label="match comparison"
-        >
+        <>
+          <div
+            className={`grid grid-cols-1 gap-4 ${hasComparableScores ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}
+            aria-label="match comparison"
+          >
           {(atsScoreSummary || selectionProbabilitySummary) && (
             <div
               className="md:col-span-full rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -909,44 +910,44 @@ function ATSScoreDashboard({
               </div>
             </div>
           </div>
-        </div>
-      )}
-      {match && improvementDetails.length > 0 && (
-        <div
-          className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-          data-testid="improvement-recap-card"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Improvement Recap</p>
-              <h3 className="mt-1 text-lg font-semibold text-slate-900">What changed and why it matters</h3>
+          {improvementDetails.length > 0 && (
+            <div
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+              data-testid="improvement-recap-card"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Improvement Recap</p>
+                  <h3 className="mt-1 text-lg font-semibold text-slate-900">What changed and why it matters</h3>
+                </div>
+                <InfoTooltip
+                  variant="light"
+                  align="right"
+                  label="How should you use these improvements?"
+                  content="Each update highlights what changed, why it lifts your ATS alignment, and how to talk about it when you interview."
+                />
+              </div>
+              <ul className="mt-4 space-y-4">
+                {improvementDetails.map((detail) => (
+                  <li
+                    key={detail.id}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+                    data-testid="improvement-recap-item"
+                  >
+                    <p className="text-sm font-semibold text-slate-900">{detail.section}</p>
+                    <p className="mt-2 text-sm text-slate-700">{detail.changeSummary}</p>
+                    <p className="mt-2 text-sm text-slate-700" data-testid="improvement-recap-reason">
+                      <span className="font-semibold text-slate-900">Why it matters:</span> {detail.reasonText}
+                    </p>
+                    <p className="mt-2 text-sm italic text-slate-600" data-testid="improvement-recap-interview">
+                      {detail.interviewAdvice}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <InfoTooltip
-              variant="light"
-              align="right"
-              label="How should you use these improvements?"
-              content="Each update highlights what changed, why it lifts your ATS alignment, and how to talk about it when you interview."
-            />
-          </div>
-          <ul className="mt-4 space-y-4">
-            {improvementDetails.map((detail) => (
-              <li
-                key={detail.id}
-                className="rounded-lg border border-slate-200 bg-slate-50 p-4"
-                data-testid="improvement-recap-item"
-              >
-                <p className="text-sm font-semibold text-slate-900">{detail.section}</p>
-                <p className="mt-2 text-sm text-slate-700">{detail.changeSummary}</p>
-                <p className="mt-2 text-sm text-slate-700" data-testid="improvement-recap-reason">
-                  <span className="font-semibold text-slate-900">Why it matters:</span> {detail.reasonText}
-                </p>
-                <p className="mt-2 text-sm italic text-slate-600" data-testid="improvement-recap-interview">
-                  {detail.interviewAdvice}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </div>
+          )}
+        </>
       )}
     </section>
   )

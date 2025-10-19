@@ -1082,7 +1082,6 @@ const DYNAMO_TABLE_MAX_WAIT_MS =
 
 async function waitForTableActive({ dynamo, tableName, ignoreNotFound = false }) {
   const startedAt = Date.now();
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       const desc = await dynamo.send(new DescribeTableCommand({ TableName: tableName }));
@@ -21003,7 +21002,6 @@ app.post(
 
   const waitForTableActive = async (ignoreNotFound = false) => {
     const startedAt = Date.now();
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
         const desc = await dynamo.send(
