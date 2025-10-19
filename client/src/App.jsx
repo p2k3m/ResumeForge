@@ -2238,6 +2238,14 @@ function App() {
   ])
   const [activeDashboardStage, setActiveDashboardStage] = useState('score')
   const [activeImprovement, setActiveImprovement] = useState('')
+  const [activeImprovementBatchKeys, setActiveImprovementBatchKeys] = useState([])
+  const [selectedImprovementKeys, setSelectedImprovementKeys] = useState([])
+  const selectedImprovementSet = useMemo(
+    () => new Set(selectedImprovementKeys.filter((key) => typeof key === 'string' && key.trim())),
+    [selectedImprovementKeys]
+  )
+  const selectedImprovementCount = selectedImprovementSet.size
+  const hasSelectedImprovements = selectedImprovementCount > 0
   const [isBulkAccepting, setIsBulkAccepting] = useState(false)
   const [error, setErrorState] = useState('')
   const [errorRecovery, setErrorRecovery] = useState(null)
@@ -2618,10 +2626,16 @@ function App() {
   const metricImprovementState = useMemo(
     () => ({
       activeKey: activeImprovement,
+      activeBatchKeys: activeImprovementBatchKeys,
       locked: !improvementsUnlocked,
       lockMessage: improvementsUnlocked ? '' : improvementUnlockMessage
     }),
-    [activeImprovement, improvementUnlockMessage, improvementsUnlocked]
+    [
+      activeImprovement,
+      activeImprovementBatchKeys,
+      improvementUnlockMessage,
+      improvementsUnlocked
+    ]
   )
   const improvementButtonsDisabled =
     isProcessing || improvementBusy || isBulkAccepting || !improvementsUnlocked
@@ -7510,196 +7524,325 @@ function App() {
     setError
   ])
 
-  const handleImprovementClick = async (type) => {
-    if (type !== 'enhance-all') {
-      setEnhanceAllSummaryText('')
-    }
-
-    if (improvementLockRef.current) {
-      setError('Please wait for the current improvement to finish before requesting another one.')
+  const handleToggleImprovementSelection = useCallback((key) => {
+    if (typeof key !== 'string' || !key.trim()) {
       return
     }
-    if (!jobId) {
-      setError('Upload your resume and complete scoring before requesting improvements.')
-      return
-    }
-    if (!improvementAvailable) {
-      setError(
-        improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
-      )
-      return
-    }
-    improvementLockRef.current = true
-    setActiveImprovement(type)
-    setError('')
-    try {
-      const requestUrl = buildApiUrl(API_BASE_URL, `/api/${type}`)
-      const selectionTargetTitle =
-        typeof selectionInsights?.designation?.targetTitle === 'string'
-          ? selectionInsights.designation.targetTitle.trim()
-          : ''
-      const matchModifiedTitle =
-        typeof match?.modifiedTitle === 'string' ? match.modifiedTitle.trim() : ''
-      const matchOriginalTitle =
-        typeof match?.originalTitle === 'string' ? match.originalTitle.trim() : ''
-      const targetJobTitle =
-        selectionTargetTitle || parsedJobTitle || matchModifiedTitle || matchOriginalTitle
-      const currentResumeTitle = matchModifiedTitle || matchOriginalTitle
+    const normalizedKey = key.trim()
+    setSelectedImprovementKeys((prev) => {
+      const existing = new Set(prev.filter((item) => typeof item === 'string' && item.trim()))
+      const isEnhanceAll = normalizedKey === 'enhance-all'
+      if (existing.has(normalizedKey)) {
+        existing.delete(normalizedKey)
+        return Array.from(existing)
+      }
+      if (isEnhanceAll) {
+        return ['enhance-all']
+      }
+      existing.delete('enhance-all')
+      existing.add(normalizedKey)
+      return Array.from(existing)
+    })
+  }, [])
 
-      const {
-        canonicalTemplate,
-        canonicalPrimaryTemplate,
-        canonicalSecondaryTemplate,
-        canonicalCoverTemplate,
-        canonicalCoverPrimaryTemplate,
-        canonicalCoverSecondaryTemplate,
-        canonicalTemplateList,
-        canonicalCoverTemplateList,
-        context: requestTemplateContext
-      } = buildTemplateRequestContext(templateContext, selectedTemplate)
+  const handleSelectAllImprovements = useCallback(() => {
+    const selectable = improvementActions
+      .map((action) => action.key)
+      .filter((key) => key && key !== 'enhance-all')
+    setSelectedImprovementKeys(selectable)
+  }, [])
 
-      const payload = {
-        jobId,
-        resumeText,
-        jobDescription: jobDescriptionText,
-        jobTitle: targetJobTitle,
-        currentTitle: currentResumeTitle,
-        originalTitle: matchOriginalTitle,
-        jobSkills,
-        resumeSkills,
-        missingSkills: match?.missingSkills || [],
-        knownCertificates,
-        manualCertificates: manualCertificatesData,
-        templateContext: cloneData(requestTemplateContext),
-        templateId: canonicalTemplate,
-        template: canonicalTemplate,
-        template1: canonicalPrimaryTemplate,
-        template2: canonicalSecondaryTemplate,
-        templates: canonicalTemplateList,
-        coverTemplate: canonicalCoverTemplate,
-        coverTemplate1: canonicalCoverPrimaryTemplate,
-        coverTemplate2: canonicalCoverSecondaryTemplate,
-        coverTemplates: canonicalCoverTemplateList
-      }
-      if (manualCertificatesInput.trim()) {
-        payload.manualCertificates = manualCertificatesInput.trim()
-      }
-      if (userIdentifier) {
-        payload.userId = userIdentifier
-      }
+  const handleClearImprovementSelection = useCallback(() => {
+    setSelectedImprovementKeys([])
+  }, [])
 
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        const errPayload = await response.json().catch(() => ({}))
-        const { message, code, source, logs, requestId } = resolveApiError({
-          data: errPayload,
-          fallback:
-            response.status >= 500
-              ? CV_GENERATION_ERROR_MESSAGE
-              : 'Unable to generate improvement.',
-          status: response.status
-        })
-        const error = new Error(message)
-        if (code) {
-          error.code = code
-        }
-        if (source) {
-          error.serviceError = source
-        }
-        if (requestId) {
-          error.requestId = requestId
-        }
-        if (Array.isArray(logs) && logs.length) {
-          error.logs = logs
-        }
-        throw error
-      }
-
-      const data = await response.json()
-      const urlsValue = normalizeOutputFiles(data.urls, {
-        defaultExpiresAt: data?.urlExpiresAt,
-        defaultExpiresInSeconds: data?.urlExpiresInSeconds
-      })
-      if (urlsValue.length) {
-        updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })
-        const {
-          drafts: improvementCoverDrafts,
-          originals: improvementCoverOriginals
-        } = deriveCoverLetterStateFromFiles(urlsValue)
-        setCoverLetterDrafts(improvementCoverDrafts)
-        setCoverLetterOriginals(improvementCoverOriginals)
-        setDownloadStates({})
-      }
-      const templateContextValue = normalizeTemplateContext(
-        data && typeof data.templateContext === 'object' ? data.templateContext : null
-      )
-      if (templateContextValue) {
-        setTemplateContext(templateContextValue)
-      }
-      const improvementSummary = Array.isArray(data.improvementSummary)
-        ? data.improvementSummary
+  const executeImprovementRequest = useCallback(
+    async (requestTypes = []) => {
+      const normalizedTypes = Array.isArray(requestTypes)
+        ? requestTypes.map((value) => (typeof value === 'string' ? value.trim() : '')).filter(Boolean)
         : []
-      const enhanceAllSummary =
-        type === 'enhance-all' && improvementSummary.length
-          ? formatEnhanceAllSummary(improvementSummary)
-          : ''
-      let explanation = (data.explanation || 'Change generated successfully.').trim()
-      if (!explanation) {
-        explanation = 'Change generated successfully.'
+      if (normalizedTypes.length === 0) {
+        return
       }
-      if (type === 'enhance-all' && improvementSummary.length && enhanceAllSummary) {
-        const meaningfulBase = explanation && !/^applied deterministic improvements/i.test(explanation)
-        explanation = meaningfulBase ? `${explanation} ${enhanceAllSummary}` : enhanceAllSummary
+      const allowedKeys = new Set(improvementActions.map((action) => action.key))
+      let types = Array.from(new Set(normalizedTypes.filter((key) => allowedKeys.has(key))))
+      if (!types.length) {
+        return
       }
-      const originalTitle = typeof data.originalTitle === 'string' ? data.originalTitle.trim() : ''
-      const modifiedTitle = typeof data.modifiedTitle === 'string' ? data.modifiedTitle.trim() : ''
-      const suggestion = {
-        id: `${type}-${Date.now()}`,
-        type,
-        title:
-          data.title || improvementActions.find((action) => action.key === type)?.label || 'Improvement',
-        beforeExcerpt: data.beforeExcerpt || '',
-        afterExcerpt: data.afterExcerpt || '',
-        explanation,
-        updatedResume: data.updatedResume || resumeText,
-        confidence: typeof data.confidence === 'number' ? data.confidence : 0.6,
-        accepted: null,
-        originalTitle,
-        modifiedTitle,
-        improvementSummary,
-        rescoreSummary: normalizeRescoreSummary(data.rescore),
-        scoreDelta: null,
-        rescorePending: false,
-        rescoreError: ''
-      }
-      setImprovementResults((prev) => [suggestion, ...prev])
-
-    } catch (err) {
-      console.error('Improvement request failed', err)
-      const errorMessage =
-        (typeof err?.message === 'string' && err.message.trim()) ||
-        CV_GENERATION_ERROR_MESSAGE
-      const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
-      const { logs: improvementLogs, requestId: improvementRequestId } = extractErrorMetadata(err)
-      setError(errorMessage, {
-        serviceError: serviceErrorSource,
-        errorCode,
-        logs: improvementLogs,
-        requestId: improvementRequestId
-      })
-      if (type === 'enhance-all') {
+      if (!types.includes('enhance-all')) {
         setEnhanceAllSummaryText('')
       }
-    } finally {
-      setActiveImprovement('')
-      improvementLockRef.current = false
+      if (types.includes('enhance-all') && types.length > 1) {
+        types = ['enhance-all']
+      }
+      if (improvementLockRef.current) {
+        setError('Please wait for the current improvement to finish before requesting another one.')
+        return
+      }
+      if (!jobId) {
+        setError('Upload your resume and complete scoring before requesting improvements.')
+        return
+      }
+      if (!improvementAvailable) {
+        setError(
+          improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
+        )
+        return
+      }
+      improvementLockRef.current = true
+      const isBatch = types.length > 1
+      setActiveImprovement(isBatch ? 'batch' : types[0])
+      setActiveImprovementBatchKeys(isBatch ? types : [])
+      setError('')
+      try {
+        const requestUrl = buildApiUrl(API_BASE_URL, '/api/improve-batch')
+        const selectionTargetTitle =
+          typeof selectionInsights?.designation?.targetTitle === 'string'
+            ? selectionInsights.designation.targetTitle.trim()
+            : ''
+        const matchModifiedTitle =
+          typeof match?.modifiedTitle === 'string' ? match.modifiedTitle.trim() : ''
+        const matchOriginalTitle =
+          typeof match?.originalTitle === 'string' ? match.originalTitle.trim() : ''
+        const targetJobTitle =
+          selectionTargetTitle || parsedJobTitle || matchModifiedTitle || matchOriginalTitle
+        const currentResumeTitle = matchModifiedTitle || matchOriginalTitle
+
+        const {
+          canonicalTemplate,
+          canonicalPrimaryTemplate,
+          canonicalSecondaryTemplate,
+          canonicalCoverTemplate,
+          canonicalCoverPrimaryTemplate,
+          canonicalCoverSecondaryTemplate,
+          canonicalTemplateList,
+          canonicalCoverTemplateList,
+          context: requestTemplateContext
+        } = buildTemplateRequestContext(templateContext, selectedTemplate)
+
+        const payload = {
+          jobId,
+          resumeText,
+          jobDescription: jobDescriptionText,
+          jobTitle: targetJobTitle,
+          currentTitle: currentResumeTitle,
+          originalTitle: matchOriginalTitle,
+          jobSkills,
+          resumeSkills,
+          missingSkills: match?.missingSkills || [],
+          knownCertificates,
+          manualCertificates: manualCertificatesData,
+          templateContext: cloneData(requestTemplateContext),
+          templateId: canonicalTemplate,
+          template: canonicalTemplate,
+          template1: canonicalPrimaryTemplate,
+          template2: canonicalSecondaryTemplate,
+          templates: canonicalTemplateList,
+          coverTemplate: canonicalCoverTemplate,
+          coverTemplate1: canonicalCoverPrimaryTemplate,
+          coverTemplate2: canonicalCoverSecondaryTemplate,
+          coverTemplates: canonicalCoverTemplateList,
+          types,
+          toggles: types,
+          primaryType: types[0]
+        }
+        if (manualCertificatesInput.trim()) {
+          payload.manualCertificates = manualCertificatesInput.trim()
+        }
+        if (userIdentifier) {
+          payload.userId = userIdentifier
+        }
+
+        const response = await fetch(requestUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+
+        if (!response.ok) {
+          const errPayload = await response.json().catch(() => ({}))
+          const { message, code, source, logs, requestId } = resolveApiError({
+            data: errPayload,
+            fallback:
+              response.status >= 500
+                ? CV_GENERATION_ERROR_MESSAGE
+                : 'Unable to generate improvement.',
+            status: response.status
+          })
+          const error = new Error(message)
+          if (code) {
+            error.code = code
+          }
+          if (source) {
+            error.serviceError = source
+          }
+          if (requestId) {
+            error.requestId = requestId
+          }
+          if (Array.isArray(logs) && logs.length) {
+            error.logs = logs
+          }
+          throw error
+        }
+
+        const data = await response.json()
+        const urlsValue = normalizeOutputFiles(data.urls || data.assetUrls, {
+          defaultExpiresAt: data?.urlExpiresAt,
+          defaultExpiresInSeconds: data?.urlExpiresInSeconds
+        })
+        if (urlsValue.length) {
+          updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })
+          const {
+            drafts: improvementCoverDrafts,
+            originals: improvementCoverOriginals
+          } = deriveCoverLetterStateFromFiles(urlsValue)
+          setCoverLetterDrafts(improvementCoverDrafts)
+          setCoverLetterOriginals(improvementCoverOriginals)
+          setDownloadStates({})
+        }
+        const templateContextValue = normalizeTemplateContext(
+          data && typeof data.templateContext === 'object' ? data.templateContext : null
+        )
+        if (templateContextValue) {
+          setTemplateContext(templateContextValue)
+        }
+        const results = Array.isArray(data.results) ? data.results : [data]
+        let latestEnhanceAllSummary = ''
+        const suggestionsToAdd = results.map((item, index) => {
+          const entryType =
+            typeof item?.type === 'string' && item.type.trim()
+              ? item.type.trim()
+              : types[Math.min(index, types.length - 1)]
+          const improvementSummary = Array.isArray(item?.improvementSummary)
+            ? item.improvementSummary
+            : []
+          const enhanceAllSummaryCandidate =
+            entryType === 'enhance-all' && improvementSummary.length
+              ? formatEnhanceAllSummary(improvementSummary)
+              : ''
+          let explanation =
+            (typeof item?.explanation === 'string' && item.explanation.trim()) ||
+            'Change generated successfully.'
+          if (entryType === 'enhance-all' && improvementSummary.length && enhanceAllSummaryCandidate) {
+            const meaningfulBase =
+              explanation && !/^applied deterministic improvements/i.test(explanation)
+            explanation = meaningfulBase
+              ? `${explanation} ${enhanceAllSummaryCandidate}`
+              : enhanceAllSummaryCandidate
+            latestEnhanceAllSummary = enhanceAllSummaryCandidate
+          }
+          const originalTitle =
+            typeof item?.originalTitle === 'string' ? item.originalTitle.trim() : ''
+          const modifiedTitle =
+            typeof item?.modifiedTitle === 'string' ? item.modifiedTitle.trim() : ''
+          return {
+            id: `${entryType}-${Date.now()}-${index}`,
+            type: entryType,
+            title:
+              item?.title ||
+              improvementActions.find((action) => action.key === entryType)?.label ||
+              'Improvement',
+            beforeExcerpt: item?.beforeExcerpt || '',
+            afterExcerpt: item?.afterExcerpt || '',
+            explanation,
+            updatedResume: item?.updatedResume || resumeText,
+            confidence: typeof item?.confidence === 'number' ? item.confidence : 0.6,
+            accepted: null,
+            originalTitle,
+            modifiedTitle,
+            improvementSummary,
+            rescoreSummary: normalizeRescoreSummary(item?.rescore || item?.rescoreSummary),
+            scoreDelta: null,
+            rescorePending: false,
+            rescoreError: ''
+          }
+        })
+        if (latestEnhanceAllSummary) {
+          setEnhanceAllSummaryText(latestEnhanceAllSummary)
+        }
+        if (suggestionsToAdd.length) {
+          setImprovementResults((prev) => [...suggestionsToAdd, ...prev])
+        }
+        setSelectedImprovementKeys((prev) =>
+          prev.filter((key) => !types.includes(key))
+        )
+      } catch (err) {
+        console.error('Improvement request failed', err)
+        const errorMessage =
+          (typeof err?.message === 'string' && err.message.trim()) ||
+          CV_GENERATION_ERROR_MESSAGE
+        const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(err)
+        const { logs: improvementLogs, requestId: improvementRequestId } = extractErrorMetadata(err)
+        setError(errorMessage, {
+          serviceError: serviceErrorSource,
+          errorCode,
+          logs: improvementLogs,
+          requestId: improvementRequestId
+        })
+        if (types.includes('enhance-all')) {
+          setEnhanceAllSummaryText('')
+        }
+      } finally {
+        setActiveImprovement('')
+        setActiveImprovementBatchKeys([])
+        improvementLockRef.current = false
+      }
+    },
+    [
+      API_BASE_URL,
+      buildTemplateRequestContext,
+      cloneData,
+      deriveCoverLetterStateFromFiles,
+      deriveServiceContextFromError,
+      improvementActions,
+      improvementAvailable,
+      improvementLockRef,
+      improvementUnlockMessage,
+      jobDescriptionText,
+      jobId,
+      jobSkills,
+      knownCertificates,
+      manualCertificatesData,
+      manualCertificatesInput,
+      match,
+      normalizeOutputFiles,
+      normalizeRescoreSummary,
+      normalizeTemplateContext,
+      parsedJobTitle,
+      resumeText,
+      resumeSkills,
+      selectionInsights,
+      selectedTemplate,
+      formatEnhanceAllSummary,
+      setActiveImprovement,
+      setActiveImprovementBatchKeys,
+      setCoverLetterDrafts,
+      setCoverLetterOriginals,
+      setDownloadStates,
+      setEnhanceAllSummaryText,
+      setError,
+      setImprovementResults,
+      setSelectedImprovementKeys,
+      setTemplateContext,
+      templateContext,
+      updateOutputFiles,
+      userIdentifier
+    ]
+  )
+
+  const handleImprovementClick = async (type) => {
+    if (typeof type !== 'string' || !type.trim()) {
+      return
     }
+    await executeImprovementRequest([type.trim()])
   }
+
+  const handleRunSelectedImprovements = useCallback(async () => {
+    if (!selectedImprovementKeys.length) {
+      return
+    }
+    await executeImprovementRequest(selectedImprovementKeys)
+  }, [executeImprovementRequest, selectedImprovementKeys])
 
   const handleRejectImprovement = async (id) => {
     const targetSuggestion = improvementResults.find((item) => item.id === id)
@@ -8990,7 +9133,10 @@ function App() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {improvementActions.map((action) => {
-                    const isActive = activeImprovement === action.key
+                    const isSelected = selectedImprovementSet.has(action.key)
+                    const isActive =
+                      activeImprovement === action.key ||
+                      (activeImprovement === 'batch' && activeImprovementBatchKeys.includes(action.key))
                     const buttonDisabled = isProcessing || improvementBusy || !improvementsUnlocked
                     return (
                       <button
@@ -9011,23 +9157,81 @@ function App() {
                           !improvementsUnlocked && improvementUnlockMessage ? improvementUnlockMessage : undefined
                         }
                       >
-                        <div className="flex items-center gap-4">
-                          {action.icon && (
-                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50/90 p-2 ring-1 ring-purple-100">
-                              <img src={action.icon} alt="" className="h-8 w-8" aria-hidden="true" />
-                            </span>
-                          )}
-                          <div className="flex-1">
-                            <p className="text-lg font-semibold text-purple-800">{action.label}</p>
-                            <p className="text-sm text-purple-600">{action.helper}</p>
+                        <div className="flex items-start gap-4">
+                          <div
+                            className="pt-1"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-5 w-5 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
+                              checked={isSelected}
+                              onChange={() => handleToggleImprovementSelection(action.key)}
+                              disabled={buttonDisabled}
+                              aria-label={`Select ${action.label}`}
+                            />
                           </div>
-                          {isActive && (
-                            <span className="h-6 w-6 shrink-0 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                          )}
+                          <div className="flex items-center gap-4 flex-1">
+                            {action.icon && (
+                              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-purple-50/90 p-2 ring-1 ring-purple-100">
+                                <img src={action.icon} alt="" className="h-8 w-8" aria-hidden="true" />
+                              </span>
+                            )}
+                            <div className="flex-1">
+                              <p className="text-lg font-semibold text-purple-800">{action.label}</p>
+                              <p className="text-sm text-purple-600">{action.helper}</p>
+                              {isSelected && (
+                                <p className="mt-2 inline-flex items-center rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
+                                  Selected
+                                </p>
+                              )}
+                            </div>
+                            {isActive && (
+                              <span className="h-6 w-6 shrink-0 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                            )}
+                          </div>
                         </div>
                       </button>
                     )
                   })}
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={handleSelectAllImprovements}
+                      disabled={improvementButtonsDisabled}
+                      className="inline-flex items-center rounded-full border border-purple-200 px-4 py-1.5 font-semibold text-purple-700 transition hover:border-purple-300 hover:text-purple-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearImprovementSelection}
+                      disabled={!hasSelectedImprovements}
+                      className="inline-flex items-center rounded-full border border-purple-200 px-4 py-1.5 font-semibold text-purple-700 transition hover:border-purple-300 hover:text-purple-900 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Clear
+                    </button>
+                    <span className="text-xs font-semibold text-purple-600">
+                      {hasSelectedImprovements
+                        ? `${selectedImprovementCount} selected`
+                        : 'No improvements selected'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRunSelectedImprovements}
+                    disabled={!hasSelectedImprovements || improvementButtonsDisabled}
+                    className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:from-purple-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-busy={activeImprovement === 'batch' ? 'true' : 'false'}
+                  >
+                    {improvementBusy && activeImprovement === 'batch'
+                      ? 'Generating…'
+                      : `Generate selected${
+                          hasSelectedImprovements ? ` (${selectedImprovementCount})` : ''
+                        }`}
+                  </button>
                 </div>
                 {improvementsUnlocked && improvementResults.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">

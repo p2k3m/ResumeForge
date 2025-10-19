@@ -15727,6 +15727,310 @@ async function handleImprovementRequest(type, req, res) {
   }
 }
 
+async function handleImprovementBatchRequest(req, res) {
+  const payload = req.body || {};
+  const requestedTypes = Array.isArray(payload.types)
+    ? payload.types
+    : Array.isArray(payload.toggles)
+      ? payload.toggles
+      : [];
+  const normalizedTypes = requestedTypes
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean);
+  let types = Array.from(
+    new Set(normalizedTypes.filter((key) => Object.prototype.hasOwnProperty.call(IMPROVEMENT_CONFIG, key)))
+  );
+  if (types.includes('enhance-all') && types.length > 1) {
+    types = ['enhance-all'];
+  }
+  if (types.length === 0) {
+    return sendError(
+      res,
+      400,
+      'IMPROVEMENT_TYPE_REQUIRED',
+      'Select at least one improvement before submitting the request.'
+    );
+  }
+
+  const jobIdInput = typeof payload.jobId === 'string' ? payload.jobId.trim() : '';
+  if (!jobIdInput) {
+    return sendError(
+      res,
+      400,
+      'JOB_ID_REQUIRED',
+      'jobId is required after scoring before requesting improvements.'
+    );
+  }
+
+  req.jobId = jobIdInput;
+  res.locals.jobId = jobIdInput;
+  captureUserContext(req, res);
+  const requestId = res.locals.requestId;
+  const logContext = {
+    requestId,
+    jobId: jobIdInput,
+    types,
+  };
+
+  const resumeTextInput = typeof payload.resumeText === 'string' ? payload.resumeText : '';
+  const jobDescription = typeof payload.jobDescription === 'string' ? payload.jobDescription : '';
+
+  if (!resumeTextInput.trim() || !jobDescription.trim()) {
+    return sendError(
+      res,
+      400,
+      'IMPROVEMENT_INPUT_REQUIRED',
+      'resumeText and jobDescription are required to generate improvements.',
+      { fields: ['resumeText', 'jobDescription'] }
+    );
+  }
+
+  const parseList = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (typeof value === 'string') {
+      return value
+        .split(/[\n,;]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const jobSkills = parseList(payload.jobSkills);
+  const resumeSkillsInput = parseList(payload.resumeSkills);
+  const baselineResumeSkills = resumeSkillsInput.length
+    ? resumeSkillsInput
+    : extractResumeSkills(resumeTextInput);
+  const missingSkills = parseList(payload.missingSkills).length
+    ? parseList(payload.missingSkills)
+    : computeSkillGap(jobSkills, baselineResumeSkills);
+
+  const knownCertificates = Array.isArray(payload.knownCertificates)
+    ? dedupeCertificates(payload.knownCertificates)
+    : dedupeCertificates(parseManualCertificates(payload.knownCertificates));
+  const manualCertificates = Array.isArray(payload.manualCertificates)
+    ? payload.manualCertificates
+    : parseManualCertificates(payload.manualCertificates);
+  const linkedinData =
+    typeof payload.linkedinData === 'object' && payload.linkedinData
+      ? payload.linkedinData
+      : {};
+  const credlyProfileUrl = typeof payload.credlyProfileUrl === 'string' ? payload.credlyProfileUrl.trim() : '';
+  const credlyCertifications = Array.isArray(payload.credlyCertifications)
+    ? payload.credlyCertifications
+    : [];
+  const credlyStatus =
+    typeof payload.credlyStatus === 'object' && payload.credlyStatus
+      ? {
+          attempted:
+            typeof payload.credlyStatus.attempted === 'boolean'
+              ? payload.credlyStatus.attempted
+              : Boolean(credlyProfileUrl),
+          success: Boolean(payload.credlyStatus.success),
+          manualEntryRequired: Boolean(payload.credlyStatus.manualEntryRequired),
+          message: typeof payload.credlyStatus.message === 'string' ? payload.credlyStatus.message : '',
+        }
+      : {
+          attempted: Boolean(credlyProfileUrl),
+          success: false,
+          manualEntryRequired: false,
+          message: '',
+        };
+
+  const jobTitleInput = typeof payload.jobTitle === 'string' ? payload.jobTitle.trim() : '';
+  const currentTitleInput = typeof payload.currentTitle === 'string' ? payload.currentTitle.trim() : '';
+  const originalTitleInput = typeof payload.originalTitle === 'string' ? payload.originalTitle.trim() : '';
+
+  let currentResumeText = resumeTextInput;
+  let currentResumeSkills = baselineResumeSkills;
+
+  const sectionPatterns = {
+    'improve-summary': SUMMARY_SECTION_PATTERN,
+    'add-missing-skills': SKILLS_SECTION_PATTERN,
+    'align-experience': EXPERIENCE_SECTION_PATTERN,
+    'improve-certifications': CERTIFICATIONS_SECTION_PATTERN,
+    'improve-projects': PROJECTS_SECTION_PATTERN,
+    'improve-highlights': HIGHLIGHTS_SECTION_PATTERN,
+  };
+
+  const results = [];
+
+  try {
+    for (const type of types) {
+      const improvementResult = await runTargetedImprovement(type, {
+        resumeText: currentResumeText,
+        jobDescription,
+        jobTitle: jobTitleInput,
+        currentTitle: currentTitleInput,
+        originalTitle: originalTitleInput,
+        jobSkills,
+        resumeSkills: currentResumeSkills,
+        missingSkills,
+        knownCertificates,
+        manualCertificates,
+        linkedinData,
+        credlyProfileUrl,
+        credlyCertifications,
+        credlyStatus,
+        requestId,
+      });
+
+      const normalizedBeforeExcerpt = sectionPatterns[type]
+        ? normalizeSectionExcerpt(currentResumeText, sectionPatterns[type], improvementResult.beforeExcerpt)
+        : improvementResult.beforeExcerpt;
+      const updatedResumeText =
+        typeof improvementResult.updatedResume === 'string' && improvementResult.updatedResume.trim()
+          ? improvementResult.updatedResume
+          : currentResumeText;
+      const normalizedAfterExcerpt = sectionPatterns[type]
+        ? normalizeSectionExcerpt(updatedResumeText, sectionPatterns[type], improvementResult.afterExcerpt)
+        : improvementResult.afterExcerpt;
+
+      const baselineResumeSkillsList = extractResumeSkills(currentResumeText);
+      const updatedResumeSkillsList = extractResumeSkills(updatedResumeText);
+      const overallBeforeMatch = calculateMatchScore(jobSkills, baselineResumeSkillsList);
+      const overallAfterMatch = calculateMatchScore(jobSkills, updatedResumeSkillsList);
+      const overallBeforeBreakdown = buildScoreBreakdown(currentResumeText, {
+        jobText: jobDescription,
+        jobSkills,
+        resumeSkills: baselineResumeSkillsList,
+      });
+      const overallAfterBreakdown = buildScoreBreakdown(updatedResumeText, {
+        jobText: jobDescription,
+        jobSkills,
+        resumeSkills: updatedResumeSkillsList,
+      });
+      const atsBefore = scoreBreakdownToArray(overallBeforeBreakdown);
+      const atsAfter = scoreBreakdownToArray(overallAfterBreakdown);
+      const overallDeltaBreakdown = buildAtsDeltaBreakdown(
+        overallBeforeBreakdown,
+        overallAfterBreakdown,
+      );
+      const overallDeltaAtsScores = overallDeltaBreakdown
+        ? scoreBreakdownToArray(overallDeltaBreakdown)
+        : [];
+
+      const normalizeSkillSet = (skills = []) =>
+        new Set((Array.isArray(skills) ? skills : []).map((skill) => skill.toLowerCase()).filter(Boolean));
+      const beforeMissingOverall = Array.isArray(overallBeforeMatch.newSkills) ? overallBeforeMatch.newSkills : [];
+      const afterMissingOverall = Array.isArray(overallAfterMatch.newSkills) ? overallAfterMatch.newSkills : [];
+      const afterMissingOverallSet = normalizeSkillSet(afterMissingOverall);
+      const coveredSkillsOverall = beforeMissingOverall.filter(
+        (skill) => !afterMissingOverallSet.has(skill.toLowerCase())
+      );
+
+      const sectionContext = resolveImprovementSectionContext(type, currentResumeText, updatedResumeText);
+      const sectionBeforeSkills = extractResumeSkills(sectionContext.beforeText);
+      const sectionAfterSkills = extractResumeSkills(sectionContext.afterText);
+      const sectionBeforeMatch = calculateMatchScore(jobSkills, sectionBeforeSkills);
+      const sectionAfterMatch = calculateMatchScore(jobSkills, sectionAfterSkills);
+      const sectionScoreDelta = sectionAfterMatch.score - sectionBeforeMatch.score;
+      const afterSectionMissingSet = normalizeSkillSet(sectionAfterMatch.newSkills);
+      const beforeSectionMissing = Array.isArray(sectionBeforeMatch.newSkills)
+        ? sectionBeforeMatch.newSkills
+        : [];
+      const coveredSkillsSection = beforeSectionMissing.filter(
+        (skill) => !afterSectionMissingSet.has(skill.toLowerCase())
+      );
+
+      const rescoreSummary = {
+        section: {
+          key: sectionContext.key,
+          label: sectionContext.label,
+          before: {
+            score: sectionBeforeMatch.score,
+            missingSkills: beforeSectionMissing,
+          },
+          after: {
+            score: sectionAfterMatch.score,
+            missingSkills: Array.isArray(sectionAfterMatch.newSkills) ? sectionAfterMatch.newSkills : [],
+          },
+          delta: {
+            score: sectionScoreDelta,
+            coveredSkills: coveredSkillsSection,
+          },
+        },
+        overall: {
+          before: {
+            score: overallBeforeMatch.score,
+            missingSkills: beforeMissingOverall,
+            atsSubScores: atsBefore,
+            scoreBreakdown: overallBeforeBreakdown,
+          },
+          after: {
+            score: overallAfterMatch.score,
+            missingSkills: afterMissingOverall,
+            atsSubScores: atsAfter,
+            scoreBreakdown: overallAfterBreakdown,
+          },
+          delta: {
+            score: overallAfterMatch.score - overallBeforeMatch.score,
+            coveredSkills: coveredSkillsOverall,
+            ...(overallDeltaBreakdown ? { scoreBreakdown: overallDeltaBreakdown } : {}),
+            ...(overallDeltaAtsScores.length ? { atsSubScores: overallDeltaAtsScores } : {}),
+          },
+        },
+      };
+
+      const improvementConfig = IMPROVEMENT_SECTION_CONFIG[type] || {};
+      const explanation = improvementResult.explanation || '';
+      const improvementSummary = buildImprovementSummary(
+        normalizedBeforeExcerpt,
+        normalizedAfterExcerpt,
+        explanation,
+        improvementResult.changeDetails,
+        improvementConfig,
+      );
+
+      results.push({
+        success: true,
+        type,
+        title: IMPROVEMENT_CONFIG[type]?.title || '',
+        beforeExcerpt: normalizedBeforeExcerpt || '',
+        afterExcerpt: normalizedAfterExcerpt || '',
+        explanation,
+        confidence: improvementResult.confidence,
+        updatedResume: updatedResumeText,
+        improvementSummary,
+        rescore: rescoreSummary,
+        originalTitle: originalTitleInput,
+        modifiedTitle: jobTitleInput || currentTitleInput,
+        llmTrace: improvementResult.llmTrace || null,
+      });
+
+      currentResumeText = updatedResumeText;
+      currentResumeSkills = updatedResumeSkillsList;
+    }
+  } catch (err) {
+    logStructured('error', 'targeted_improvement_batch_failed', {
+      ...logContext,
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      500,
+      'IMPROVEMENT_BATCH_FAILED',
+      'Unable to generate the requested improvements.',
+      process.env.NODE_ENV === 'development' ? err : undefined
+    );
+  }
+
+  logStructured('info', 'targeted_improvement_batch_completed', {
+    ...logContext,
+    suggestionCount: results.length,
+  });
+
+  return res.json({
+    success: true,
+    types,
+    results,
+    updatedResume: currentResumeText,
+    urls: [],
+    urlExpiresAt: null,
+    generatedAt: new Date().toISOString(),
+  });
+}
+
 app.get('/api/published-cloudfront', async (req, res) => {
   try {
     const metadata = await loadPublishedCloudfrontMetadata();
@@ -15946,6 +16250,10 @@ improvementRoutes.forEach(({ path: routePath, type }) => {
   app.post(routePath, assignJobContext, async (req, res) => {
     await handleImprovementRequest(type, req, res);
   });
+});
+
+app.post('/api/improve-batch', assignJobContext, async (req, res) => {
+  await handleImprovementBatchRequest(req, res);
 });
 
 const DOWNLOAD_ARTIFACT_ATTRIBUTE_KEYS = [
