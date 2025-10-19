@@ -11705,7 +11705,15 @@ async function loadSessionChangeLog({ s3, bucket, key, fallbackEntries = [] } = 
   const evaluationLogs = normalizeChangeLogActivityArray(data.evaluationLogs);
   const enhancementLogs = normalizeChangeLogActivityArray(data.enhancementLogs);
   const downloadLogs = normalizeChangeLogActivityArray(data.downloadLogs);
-  const summary = normalizeChangeLogSummaryPayload(data.summary);
+  let summary = normalizeChangeLogSummaryPayload(data.summary);
+  if ((!Array.isArray(summary.sections) || !summary.sections.length) && entries.length) {
+    const derivedSummary = normalizeChangeLogSummaryPayload(
+      buildAggregatedChangeLogSummary(entries)
+    );
+    if (Array.isArray(derivedSummary.sections) && derivedSummary.sections.length) {
+      summary = { ...summary, sections: derivedSummary.sections };
+    }
+  }
   const scores = normalizeSessionScoreSnapshot(data.scores);
 
   return {
@@ -11821,7 +11829,7 @@ async function writeSessionChangeLog({
   if (!resolvedBucket || !resolvedKey) {
     return null;
   }
-  const normalizedSummary = normalizeChangeLogSummaryPayload(summary);
+  let normalizedSummary = normalizeChangeLogSummaryPayload(summary);
   const normalizedEntries = Array.isArray(entries)
     ? entries.map((entry) => normalizeChangeLogEntryInput(entry)).filter(Boolean)
     : [];
@@ -11849,6 +11857,19 @@ async function writeSessionChangeLog({
   const normalizedEnhancementLogs = normalizeChangeLogActivityArray(enhancementLogs);
   const normalizedDownloadLogs = normalizeChangeLogActivityArray(downloadLogs);
   const normalizedScores = normalizeSessionScoreSnapshot(scores);
+
+  if (
+    (!Array.isArray(normalizedSummary.sections) || !normalizedSummary.sections.length) &&
+    normalizedEntries.length
+  ) {
+    const derivedSummary = normalizeChangeLogSummaryPayload(
+      buildAggregatedChangeLogSummary(normalizedEntries)
+    );
+    if (Array.isArray(derivedSummary.sections) && derivedSummary.sections.length) {
+      normalizedSummary = { ...normalizedSummary, sections: derivedSummary.sections };
+    }
+  }
+
   const payload = {
     version: 1,
     jobId,
