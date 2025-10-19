@@ -3,6 +3,8 @@
 This guide walks a candidate through ResumeForge end to end so every action has a clearly defined outcome.
 
 > **Start here:** [`https://d3p8c4n7s9f0ab.cloudfront.net`](https://d3p8c4n7s9f0ab.cloudfront.net) is the active CloudFront entry point. Share this link with candidates so they always land on the latest deployment. Run `npm run verify:cloudfront` after each publish to confirm the CDN is still answering `/healthz` before sending traffic.
+>
+> Last verified: 15 July 2024 at 12:00 UTC per [`config/published-cloudfront.json`](../config/published-cloudfront.json).
 
 ## 1. Upload a résumé
 - **What to do:** Drag-and-drop or browse for a PDF, DOC, or DOCX résumé.
