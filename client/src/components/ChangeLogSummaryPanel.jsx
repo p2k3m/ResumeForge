@@ -100,13 +100,41 @@ function ChangeLogSummaryPanel({ summary, context = {} }) {
   const {
     highlights = [],
     categories = [],
-    interviewPrepAdvice = ''
+    interviewPrepAdvice = '',
+    totals = {},
+    sections = []
   } = summary
   const hasHighlights = Array.isArray(highlights) && highlights.length > 0
   const hasCategories = Array.isArray(categories) && categories.length > 0
   const adviceText = typeof interviewPrepAdvice === 'string'
     ? interviewPrepAdvice.trim()
     : ''
+  const sectionEntries = Array.isArray(sections) ? sections.filter(Boolean) : []
+
+  const statDefinitions = [
+    {
+      key: 'entries',
+      label: 'Accepted improvements',
+      value: Number.isFinite(totals.entries) ? totals.entries : null
+    },
+    {
+      key: 'categories',
+      label: 'Categories impacted',
+      value: Number.isFinite(totals.categories) ? totals.categories : null
+    },
+    {
+      key: 'addedItems',
+      label: 'Items added',
+      value: Number.isFinite(totals.addedItems) ? totals.addedItems : null
+    },
+    {
+      key: 'removedItems',
+      label: 'Items removed',
+      value: Number.isFinite(totals.removedItems) ? totals.removedItems : null
+    }
+  ].filter((stat) => stat.value !== null)
+  const hasStats = statDefinitions.length > 0
+  const hasSections = sectionEntries.length > 0
 
   const jobTitle = normalizeContextText(context.jobTitle)
   const jobDescriptionSnippet = summariseContextSnippet(
@@ -139,6 +167,22 @@ function ChangeLogSummaryPanel({ summary, context = {} }) {
           Quickly review the standout updates applied to your resume after accepting improvements.
         </p>
       </header>
+
+      {hasStats && (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {statDefinitions.map((stat) => (
+            <div
+              key={stat.key}
+              className="rounded-2xl border border-slate-200 bg-white/90 p-4 text-center shadow-inner"
+            >
+              <p className="caps-label-tight text-xs font-semibold text-slate-500">
+                {stat.label}
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{stat.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {hasContext && (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -206,6 +250,27 @@ function ChangeLogSummaryPanel({ summary, context = {} }) {
         </div>
       )}
 
+      {hasSections && (
+        <div className="space-y-3">
+          <p className="caps-label text-xs font-semibold text-slate-500">Where updates landed</p>
+          <div className="flex flex-wrap gap-2">
+            {sectionEntries.map((section) => (
+              <span
+                key={section.key || section.label}
+                className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50/80 px-3 py-1 text-xs font-semibold text-indigo-700"
+              >
+                <span>{section.label || section.key || 'Section'}</span>
+                {Number.isFinite(section.count) && (
+                  <span className="rounded-full bg-white/80 px-2 py-0.5 text-[0.65rem] font-semibold text-indigo-600">
+                    ×{section.count}
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {hasHighlights && (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {highlights.map((highlight) => (
@@ -242,6 +307,31 @@ function ChangeLogSummaryPanel({ summary, context = {} }) {
                     <p className="text-xs text-slate-600">{category.description}</p>
                   )}
                 </div>
+                {(Array.isArray(category.added) && category.added.length > 0) ||
+                (Array.isArray(category.removed) && category.removed.length > 0) ? (
+                  <div className="flex flex-wrap gap-2">
+                    {Array.isArray(category.added) &&
+                      category.added.map((item) => (
+                        <span
+                          key={`${category.key}-added-${item}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-1 text-xs font-semibold text-emerald-700"
+                        >
+                          <span aria-hidden="true">＋</span>
+                          {item}
+                        </span>
+                      ))}
+                    {Array.isArray(category.removed) &&
+                      category.removed.map((item) => (
+                        <span
+                          key={`${category.key}-removed-${item}`}
+                          className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50/80 px-3 py-1 text-xs font-semibold text-rose-700"
+                        >
+                          <span aria-hidden="true">–</span>
+                          {item}
+                        </span>
+                      ))}
+                  </div>
+                ) : null}
                 {(Array.isArray(category.reasons) && category.reasons.length > 0) && (
                   <ul className="list-disc space-y-1 pl-4 text-xs text-slate-600">
                     {category.reasons.slice(0, 4).map((reason, index) => (
