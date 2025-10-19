@@ -14686,6 +14686,7 @@ function buildSectionChangeEntries({
   categoryChangelog = [],
 } = {}) {
   const registry = new Map();
+  const seenKeys = new Set();
 
   if (Array.isArray(entry.sectionChanges)) {
     entry.sectionChanges.forEach((section) => {
@@ -14702,19 +14703,56 @@ function buildSectionChangeEntries({
     });
   }
 
+  const hasExplicitSections = registry.size > 0;
+  const updateSeenKeys = () => {
+    if (!hasExplicitSections) {
+      return;
+    }
+    for (const key of registry.keys()) {
+      if (key) {
+        seenKeys.add(key);
+      }
+    }
+  };
+
+  updateSeenKeys();
+
+  const registerWithDeduplication = (
+    keyCandidate,
+    labelCandidate,
+    weight,
+    options
+  ) => {
+    if (hasExplicitSections) {
+      const resolvedLabel = resolveChangeLogSectionLabel(keyCandidate, labelCandidate);
+      const candidateKey = canonicalizeChangeLogSectionKey(
+        keyCandidate,
+        resolvedLabel || labelCandidate
+      );
+      const fallbackKey = canonicalizeChangeLogSectionKey(resolvedLabel, resolvedLabel);
+      const finalKey = candidateKey || fallbackKey;
+      if (finalKey && seenKeys.has(finalKey)) {
+        return;
+      }
+    }
+
+    registerSectionChangeEntry(registry, keyCandidate, labelCandidate, weight, options);
+
+    updateSeenKeys();
+  };
+
   if (Array.isArray(summarySegments)) {
     summarySegments.forEach((segment) => {
       if (!segment) {
         return;
       }
-      registerSectionChangeEntry(registry, segment.section, segment.section);
+      registerWithDeduplication(segment.section, segment.section);
     });
   }
 
   const rescoreSection = entry?.rescoreSummary?.section;
   if (rescoreSection) {
-    registerSectionChangeEntry(
-      registry,
+    registerWithDeduplication(
       rescoreSection.key || rescoreSection.label,
       rescoreSection.label || rescoreSection.key
     );
@@ -14725,8 +14763,7 @@ function buildSectionChangeEntries({
       if (!category) {
         return;
       }
-      registerSectionChangeEntry(
-        registry,
+      registerWithDeduplication(
         category.key || category.label,
         category.label || category.key,
         1,
