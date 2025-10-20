@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node ./node_modules/vite/bin/vite.js build",
+    "postbuild": "node ../scripts/prune-client-assets.mjs",
     "preview": "vite preview",
     "test": "node -e \"console.log('no tests')\""
   },
