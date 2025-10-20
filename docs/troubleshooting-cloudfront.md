@@ -2,6 +2,8 @@
 
 When the published CloudFront domain stops responding, use the verification helper to confirm whether the CDN is reachable and serving the expected health payload. The runbook below walks through verifying the outage, validating the recorded metadata, and republishing a working distribution.
 
+> **Break-glass override:** If CloudFront refuses to serve newly uploaded assets but you must move forward temporarily (for example, during an ongoing AWS outage), export `ALLOW_CLOUDFRONT_VERIFY_FAILURE=true` before running `npm run verify:static`. The script will still attempt the CDN checks and log the failures, but it will exit successfully so the pipeline can continue. Remove the override and rerun the verifier as soon as the CDN stabilizes so production traffic is never switched to an unverified distribution.
+
 ## 1. Run the verifier
 
 ```bash
