@@ -198,26 +198,50 @@ async function resolveCloudfrontUrl() {
 }
 
 function resolveCloudfrontRetryConfiguration() {
-  const DEFAULT_ATTEMPTS = 10
-  const DEFAULT_DELAY_MS = 30000
+  const DEFAULT_ATTEMPTS = 12
+  const DEFAULT_INITIAL_DELAY_MS = 30000
+  const DEFAULT_BACKOFF_FACTOR = 1.5
+  const DEFAULT_MAX_DELAY_MS = 300000
 
   const attemptsCandidate = process.env.CLOUDFRONT_VERIFY_MAX_ATTEMPTS
   const delayCandidate = process.env.CLOUDFRONT_VERIFY_RETRY_DELAY_MS
+  const backoffCandidate = process.env.CLOUDFRONT_VERIFY_BACKOFF_FACTOR
+  const maxDelayCandidate = process.env.CLOUDFRONT_VERIFY_MAX_DELAY_MS
 
   let attempts = Number.parseInt(attemptsCandidate, 10)
   if (!Number.isFinite(attempts) || attempts < 1) {
     attempts = DEFAULT_ATTEMPTS
   }
 
-  let delayMs = Number.parseInt(delayCandidate, 10)
-  if (!Number.isFinite(delayMs) || delayMs < 0) {
-    delayMs = DEFAULT_DELAY_MS
+  let initialDelayMs = Number.parseInt(delayCandidate, 10)
+  if (!Number.isFinite(initialDelayMs) || initialDelayMs < 0) {
+    initialDelayMs = DEFAULT_INITIAL_DELAY_MS
+  }
+
+  let backoffFactor = Number.parseFloat(backoffCandidate)
+  if (!Number.isFinite(backoffFactor) || backoffFactor < 1) {
+    backoffFactor = DEFAULT_BACKOFF_FACTOR
+  }
+
+  let maxDelayMs = Number.parseInt(maxDelayCandidate, 10)
+  if (!Number.isFinite(maxDelayMs) || maxDelayMs <= 0) {
+    maxDelayMs = DEFAULT_MAX_DELAY_MS
+  }
+
+  const retryDelays = []
+  if (attempts > 1) {
+    let currentDelay = initialDelayMs
+    for (let i = 0; i < attempts - 1; i += 1) {
+      const normalizedDelay = Math.max(0, Math.min(Math.round(currentDelay), maxDelayMs))
+      retryDelays.push(normalizedDelay)
+      const nextDelay = currentDelay * backoffFactor
+      currentDelay = Number.isFinite(nextDelay) && nextDelay > 0 ? nextDelay : initialDelayMs
+    }
   }
 
   return {
     attempts,
-    retries: Math.max(0, attempts - 1),
-    retryDelayMs: delayMs,
+    retryDelays,
   }
 }
 
@@ -236,12 +260,11 @@ function shouldAllowCloudfrontFailure() {
   return false
 }
 
-async function verifyCloudfrontAssets(baseUrl, { retries, retryDelayMs }) {
+async function verifyCloudfrontAssets(baseUrl, { retryDelays }) {
   try {
     await verifyClientAssets({
       baseUrl,
-      retries,
-      retryDelayMs,
+      retryDelays,
       logger: console,
     })
     return true
@@ -317,7 +340,8 @@ async function main() {
   const retryConfig = resolveCloudfrontRetryConfiguration()
 
   if (retryConfig.attempts > 1) {
-    const waitSeconds = Math.round((retryConfig.retryDelayMs * (retryConfig.attempts - 1)) / 1000)
+    const totalWaitMs = retryConfig.retryDelays.reduce((sum, value) => sum + value, 0)
+    const waitSeconds = Math.round(totalWaitMs / 1000)
     console.log(
       `[verify-static] Will retry CloudFront asset checks up to ${retryConfig.attempts} times (${waitSeconds}s total wait time).`,
     )
