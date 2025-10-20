@@ -43,8 +43,8 @@ async function main() {
 
     await verifyClientAssets({
       baseUrl: targetUrl,
-      retries: 1,
-      retryDelayMs: 15000,
+      retries: 4,
+      retryDelayMs: 30000,
       logger: console,
     });
     console.log('Verified client assets are accessible after deployment.');
