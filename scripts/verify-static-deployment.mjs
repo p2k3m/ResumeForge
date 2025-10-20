@@ -224,6 +224,17 @@ async function main() {
   await verifyS3Assets({ s3, bucket, manifest })
   console.log('[verify-static] Confirmed all uploaded static assets are accessible via S3.')
 
+  const skipCloudfront = /^(?:true|1|yes)$/iu.test(
+    String(process.env.SKIP_CLOUDFRONT_VERIFY || '').trim(),
+  )
+  if (skipCloudfront) {
+    console.warn('[verify-static] Skipping CloudFront verification due to SKIP_CLOUDFRONT_VERIFY.')
+    console.warn(
+      '[verify-static] S3 assets are verified, but CDN availability has not been confirmed by this run.',
+    )
+    return
+  }
+
   const cloudfrontUrl = await resolveCloudfrontUrl()
   console.log(`[verify-static] Verifying CloudFront asset availability at ${cloudfrontUrl}`)
   const verified = await verifyCloudfrontAssets(cloudfrontUrl)
