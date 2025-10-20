@@ -912,3 +912,11 @@ jobs:
           name: published-cloudfront
           path: config/published-cloudfront.json
           if-no-files-found: error
+
+      - name: Upload static build artifacts to S3
+        if: success()
+        run: npm run upload:static
+        env:
+          STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
+          STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
+          BUILD_VERSION: ${{ github.sha }}
