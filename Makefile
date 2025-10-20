@@ -15,12 +15,13 @@ LAMBDA_FUNCTIONS := \
         EnhancementImproveAtsFunction \
         EnhancementImproveAllFunction \
         DocumentGenerationFunction \
-	DocumentGenerationWorkerFunction \
-	WorkflowScoreFunction \
-	WorkflowEnhancementSectionFunction \
-	WorkflowCombineFunction \
-	WorkflowGenerateFunction \
-	AuditingFunction
+        DocumentGenerationWorkerFunction \
+        WorkflowScoreFunction \
+        WorkflowEnhancementSectionFunction \
+        WorkflowCombineFunction \
+        WorkflowGenerateFunction \
+        CloudFrontLogProcessorFunction \
+        AuditingFunction
 
 .PHONY: help install clean lint lint-fix test test-api test-e2e test-templates verify build build-all build-client build-lambda dev deploy sam-build sam-deploy coverage $(addprefix build-,$(LAMBDA_FUNCTIONS))
 
