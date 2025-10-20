@@ -920,3 +920,10 @@ jobs:
           STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
           STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
           BUILD_VERSION: ${{ github.sha }}
+
+      - name: Verify static asset availability
+        if: success()
+        run: npm run verify:static
+        env:
+          STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
+          STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
