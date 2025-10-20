@@ -100,6 +100,28 @@ Parameters:
     Description: >-
       Set to 'false' to use an existing DynamoDB table specified in ResumeTableName
       instead of creating a new one.
+  EnableCloudFrontMonitoring:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'true'
+    Description: >-
+      Enable CloudFront access log delivery, metric publishing, and recurring 404
+      alarms. Set to 'false' to skip provisioning monitoring resources.
+  CloudFront404Threshold:
+    Type: Number
+    Default: 25
+    MinValue: 1
+    Description: >-
+      Number of 404 responses within a five-minute window that should trigger the
+      recurring CloudFront 404 alarm.
+  CloudFrontAlarmTopicArn:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional SNS topic ARN that should receive recurring CloudFront 404 alarm
+      notifications. Leave blank to provision a dedicated topic for the stack.
 
 Conditions:
   CreateResumeTableCondition: !Equals [!Ref CreateResumeTable, 'true']
@@ -112,6 +134,13 @@ Conditions:
   UseProvidedWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
   CreateDefaultWebAcl: !Not [!Condition UseProvidedWebAcl]
   IsProductionStage: !Equals [!Ref StageName, 'prod']
+  EnableCloudFrontMonitoringCondition: !Equals [!Ref EnableCloudFrontMonitoring, 'true']
+  UseExistingCloudFrontAlarmTopic: !And
+    - !Condition EnableCloudFrontMonitoringCondition
+    - !Not [!Equals [!Ref CloudFrontAlarmTopicArn, '']]
+  CreateCloudFrontAlarmTopicCondition: !And
+    - !Condition EnableCloudFrontMonitoringCondition
+    - !Equals [!Ref CloudFrontAlarmTopicArn, '']
 
 Rules:
   RequireGeminiConfiguration:
@@ -233,6 +262,53 @@ Resources:
               - CreateDataBucketCondition
               - !Sub arn:aws:s3:::${DataBucket}
               - !Sub arn:aws:s3:::${DataBucketName}
+
+  CloudFrontLogBucket:
+    Type: AWS::S3::Bucket
+    Condition: EnableCloudFrontMonitoringCondition
+    Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
+  CloudFrontLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: EnableCloudFrontMonitoringCondition
+    Properties:
+      Bucket: !Ref CloudFrontLogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontLogDelivery
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action:
+              - s3:PutObject
+            Resource: !Sub '${CloudFrontLogBucket.Arn}/${AWS::StackName}/${StageName}/*'
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${ResumeForgeDistribution}'
+          - Sid: AllowCloudFrontLogAclCheck
+            Effect: Allow
+            Principal:
+              Service: delivery.logs.amazonaws.com
+            Action:
+              - s3:GetBucketAcl
+            Resource: !GetAtt CloudFrontLogBucket.Arn
 
   ResumeForgeWebAcl:
     Condition: CreateDefaultWebAcl
@@ -1057,6 +1133,49 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
+  CloudFrontLogProcessorFunction:
+    Type: AWS::Serverless::Function
+    Condition: EnableCloudFrontMonitoringCondition
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${StageName}-cloudfront-log-processor'
+      CodeUri: .
+      Handler: lambdas/cloudfrontLogProcessor.handler
+      Runtime: nodejs18.x
+      MemorySize: 256
+      Timeout: 120
+      Events:
+        CloudFrontLogDelivery:
+          Type: S3
+          Properties:
+            Bucket: !Ref CloudFrontLogBucket
+            Events:
+              - s3:ObjectCreated:*
+      Environment:
+        Variables:
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+          STAGE_NAME: !Ref StageName
+          DEPLOYMENT_ENVIRONMENT: !Ref StageName
+          CLOUDFRONT_DISTRIBUTION_ID: !Ref ResumeForgeDistribution
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Sub '${CloudFrontLogBucket.Arn}/${AWS::StackName}/${StageName}/*'
+        - Statement:
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricData
+            Resource: '*'
+            Condition:
+              StringEquals:
+                cloudwatch:namespace: ResumeForge/CloudFront
+      Tags:
+        Environment: !Ref StageName
+    Metadata:
+      BuildMethod: makefile
+
   DocumentGenerationSendPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -1070,6 +1189,53 @@ Resources:
             Action:
               - sqs:SendMessage
             Resource: !GetAtt DocumentGenerationQueue.Arn
+
+  CloudFront404AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: CreateCloudFrontAlarmTopicCondition
+    Properties:
+      DisplayName: !Sub 'ResumeForge ${StageName} CloudFront 404 Alerts'
+      TopicName: !Sub '${AWS::StackName}-${StageName}-cloudfront-404'
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
+
+  CloudFrontRecurring404Alarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableCloudFrontMonitoringCondition
+    Properties:
+      AlarmName: !Sub '${AWS::StackName}-${StageName}-cloudfront-recurring-404s'
+      AlarmDescription: >-
+        Alerts when CloudFront logs contain recurring 404 responses over two
+        consecutive five-minute periods.
+      Namespace: 'ResumeForge/CloudFront'
+      MetricName: Recurring404Count
+      Dimensions:
+        - Name: DistributionId
+          Value: !Ref ResumeForgeDistribution
+        - Name: Stage
+          Value: !Ref StageName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: !Ref CloudFront404Threshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If
+        - UseExistingCloudFrontAlarmTopic
+        - - !Ref CloudFrontAlarmTopicArn
+        - !If
+          - CreateCloudFrontAlarmTopicCondition
+          - - !Ref CloudFront404AlarmTopic
+          - []
+      OKActions: !If
+        - UseExistingCloudFrontAlarmTopic
+        - - !Ref CloudFrontAlarmTopicArn
+        - !If
+          - CreateCloudFrontAlarmTopicCondition
+          - - !Ref CloudFront404AlarmTopic
+          - []
 
   ResumeForgeWorkflowStateMachine:
     Type: AWS::Serverless::StateMachine
@@ -1893,6 +2059,12 @@ Resources:
         Enabled: true
         Comment: API Gateway distribution for ResumeForge
         WebACLId: !If [UseProvidedWebAcl, !Ref WebAclArn, !Ref AWS::NoValue]
+        Logging: !If
+          - EnableCloudFrontMonitoringCondition
+          - Bucket: !GetAtt CloudFrontLogBucket.DomainName
+            Prefix: !Sub '${AWS::StackName}/${StageName}/'
+            IncludeCookies: false
+          - !Ref AWS::NoValue
         Origins:
           - Id: ResumeForgeApiOrigin
             DomainName: !Sub "${ResumeForgeApi}.execute-api.${AWS::Region}.amazonaws.com"
@@ -1943,3 +2115,21 @@ Outputs:
   SecondaryRegion:
     Description: Secondary AWS region configured for the deployment.
     Value: !Ref SecondaryRegion
+  CloudFrontLogBucketName:
+    Condition: EnableCloudFrontMonitoringCondition
+    Description: S3 bucket that stores CloudFront access logs.
+    Value: !Ref CloudFrontLogBucket
+  CloudFrontRecurring404AlarmName:
+    Condition: EnableCloudFrontMonitoringCondition
+    Description: CloudWatch alarm that tracks recurring CloudFront 404 responses.
+    Value: !Ref CloudFrontRecurring404Alarm
+  CloudFront404AlarmTopicArnOutput:
+    Condition: EnableCloudFrontMonitoringCondition
+    Description: SNS topic ARN that receives recurring CloudFront 404 alerts.
+    Value: !If
+      - UseExistingCloudFrontAlarmTopic
+      - !Ref CloudFrontAlarmTopicArn
+      - !If
+        - CreateCloudFrontAlarmTopicCondition
+        - !Ref CloudFront404AlarmTopic
+        - ''
