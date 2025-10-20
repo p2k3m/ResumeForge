@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { checkCloudfrontHealth, resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js';
+import { verifyClientAssets } from '../lib/cloudfrontAssetCheck.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +40,14 @@ async function main() {
     console.log(
       `CloudFront distribution responded with status "${result.payload.status}" at ${result.url}.`
     );
+
+    await verifyClientAssets({
+      baseUrl: targetUrl,
+      retries: 1,
+      retryDelayMs: 15000,
+      logger: console,
+    });
+    console.log('Verified client assets are accessible after deployment.');
     process.exit(0);
   } catch (err) {
     console.error('CloudFront verification failed:');
