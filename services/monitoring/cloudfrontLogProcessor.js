@@ -73,9 +73,30 @@ export function parseCloudFrontLog(content) {
   };
 }
 
+export function extractDistributionIdFromKey(key) {
+  if (!isNonEmptyString(key)) {
+    return '';
+  }
+
+  const segments = key.split('/');
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const segment = segments[i];
+    if (!isNonEmptyString(segment)) {
+      continue;
+    }
+
+    const distributionId = segment.split('.')[0];
+    if (isNonEmptyString(distributionId)) {
+      return distributionId;
+    }
+  }
+
+  return '';
+}
+
 function buildMetricDatum({ distributionId, stageName, notFoundCount }) {
   if (!isNonEmptyString(distributionId)) {
-    throw new Error('CLOUDFRONT_DISTRIBUTION_ID must be provided.');
+    throw new Error('Unable to determine CloudFront distribution identifier from log object key.');
   }
 
   const dimensions = [
@@ -115,7 +136,6 @@ export async function processCloudFrontLogs(event) {
     return;
   }
 
-  const distributionId = process.env.CLOUDFRONT_DISTRIBUTION_ID;
   const stageName = process.env.STAGE_NAME;
 
   for (const record of event.Records) {
@@ -127,7 +147,18 @@ export async function processCloudFrontLogs(event) {
       continue;
     }
 
-    const command = new GetObjectCommand({ Bucket: bucket, Key: decodeURIComponent(key.replace(/\+/g, ' ')) });
+    const decodedKey = decodeURIComponent(key.replace(/\+/g, ' '));
+    const distributionId = extractDistributionIdFromKey(decodedKey);
+
+    if (!isNonEmptyString(distributionId)) {
+      console.warn('Skipping CloudFront log without a distribution identifier in the object key.', {
+        bucket,
+        key,
+      });
+      continue;
+    }
+
+    const command = new GetObjectCommand({ Bucket: bucket, Key: decodedKey });
     const response = await s3.send(command);
     const bodyBuffer = await streamToBuffer(response.Body);
     const content = normaliseLogPayload(bodyBuffer);

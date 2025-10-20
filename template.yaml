@@ -1155,7 +1155,6 @@ Resources:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
           STAGE_NAME: !Ref StageName
           DEPLOYMENT_ENVIRONMENT: !Ref StageName
-          CLOUDFRONT_DISTRIBUTION_ID: !Ref ResumeForgeDistribution
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
