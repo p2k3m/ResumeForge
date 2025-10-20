@@ -197,12 +197,36 @@ async function resolveCloudfrontUrl() {
   return url
 }
 
-async function verifyCloudfrontAssets(baseUrl) {
+function resolveCloudfrontRetryConfiguration() {
+  const DEFAULT_ATTEMPTS = 10
+  const DEFAULT_DELAY_MS = 30000
+
+  const attemptsCandidate = process.env.CLOUDFRONT_VERIFY_MAX_ATTEMPTS
+  const delayCandidate = process.env.CLOUDFRONT_VERIFY_RETRY_DELAY_MS
+
+  let attempts = Number.parseInt(attemptsCandidate, 10)
+  if (!Number.isFinite(attempts) || attempts < 1) {
+    attempts = DEFAULT_ATTEMPTS
+  }
+
+  let delayMs = Number.parseInt(delayCandidate, 10)
+  if (!Number.isFinite(delayMs) || delayMs < 0) {
+    delayMs = DEFAULT_DELAY_MS
+  }
+
+  return {
+    attempts,
+    retries: Math.max(0, attempts - 1),
+    retryDelayMs: delayMs,
+  }
+}
+
+async function verifyCloudfrontAssets(baseUrl, { retries, retryDelayMs }) {
   try {
     await verifyClientAssets({
       baseUrl,
-      retries: 4,
-      retryDelayMs: 30000,
+      retries,
+      retryDelayMs,
       logger: console,
     })
     return true
@@ -272,9 +296,17 @@ async function main() {
   const cloudfrontUrl = await resolveCloudfrontUrl()
   console.log(`[verify-static] Verifying CloudFront asset availability at ${cloudfrontUrl}`)
   const enforceCloudfrontVerification = shouldEnforceVerification('ENFORCE_CLOUDFRONT_VERIFY')
+  const retryConfig = resolveCloudfrontRetryConfiguration()
+
+  if (retryConfig.attempts > 1) {
+    const waitSeconds = Math.round((retryConfig.retryDelayMs * (retryConfig.attempts - 1)) / 1000)
+    console.log(
+      `[verify-static] Will retry CloudFront asset checks up to ${retryConfig.attempts} times (${waitSeconds}s total wait time).`,
+    )
+  }
 
   try {
-    const verified = await verifyCloudfrontAssets(cloudfrontUrl)
+    const verified = await verifyCloudfrontAssets(cloudfrontUrl, retryConfig)
     if (verified) {
       console.log('[verify-static] CloudFront is serving the expected client assets.')
     } else {
