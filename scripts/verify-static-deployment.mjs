@@ -9,7 +9,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js'
-import { verifyClientAssets } from '../lib/cloudfrontAssetCheck.js'
+import { verifyClientAssets, PROXY_BLOCKED_ERROR_CODE } from '../lib/cloudfrontAssetCheck.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -184,12 +184,29 @@ async function resolveCloudfrontUrl() {
 }
 
 async function verifyCloudfrontAssets(baseUrl) {
-  await verifyClientAssets({
-    baseUrl,
-    retries: 4,
-    retryDelayMs: 30000,
-    logger: console,
-  })
+  try {
+    await verifyClientAssets({
+      baseUrl,
+      retries: 4,
+      retryDelayMs: 30000,
+      logger: console,
+    })
+    return true
+  } catch (error) {
+    if (error?.code === PROXY_BLOCKED_ERROR_CODE) {
+      console.warn(
+        `[verify-static] Skipping CloudFront asset verification: ${error?.message || 'access blocked by proxy.'}`,
+      )
+      console.warn(
+        '[verify-static] S3 assets are verified, but CDN availability could not be confirmed from this network.',
+      )
+      console.warn(
+        '[verify-static] Re-run this command from a network with CloudFront access to complete the CDN check.',
+      )
+      return false
+    }
+    throw error
+  }
 }
 
 async function main() {
@@ -209,8 +226,14 @@ async function main() {
 
   const cloudfrontUrl = await resolveCloudfrontUrl()
   console.log(`[verify-static] Verifying CloudFront asset availability at ${cloudfrontUrl}`)
-  await verifyCloudfrontAssets(cloudfrontUrl)
-  console.log('[verify-static] CloudFront is serving the expected client assets.')
+  const verified = await verifyCloudfrontAssets(cloudfrontUrl)
+  if (verified) {
+    console.log('[verify-static] CloudFront is serving the expected client assets.')
+  } else {
+    console.warn(
+      '[verify-static] CloudFront asset verification skipped. Confirm CDN availability separately before promoting traffic.',
+    )
+  }
 }
 
 main().catch((error) => {
