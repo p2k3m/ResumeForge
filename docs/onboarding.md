@@ -17,7 +17,7 @@ This primer helps new teammates explain ResumeForge to "regular" users — candi
 - **Highlight iteration:** Encourage users to evaluate, tweak, and re-evaluate multiple times. The dashboard updates instantly so they can observe the impact of each round of changes before downloading.
 - **Set expectations on data retention:** Explain that uploads and generated files are scoped to the active session and are overwritten on subsequent iterations, keeping storage lean without manual cleanup.
 - **Share the entry point:** Direct candidates to the active CloudFront domain listed in the README and `docs/cloudfront-url.md` so they always land on the latest deployment. Run `npm run verify:cloudfront` right after publishing to catch CDN regressions before sharing links.
-  - Current bookmark: [`https://d3p8c4n7s9f0ab.cloudfront.net`](https://d3p8c4n7s9f0ab.cloudfront.net) (published 15 July 2024 at 12:00 UTC per [`config/published-cloudfront.json`](../config/published-cloudfront.json)).
+  - Current bookmark: [`https://d2k9m8n7p6q5r4.cloudfront.net`](https://d2k9m8n7p6q5r4.cloudfront.net) (fronting the `resume-forge-app-2025` bucket; published 20 September 2024 at 09:30 UTC per [`config/published-cloudfront.json`](../config/published-cloudfront.json)).
 
 ## Where to learn more
 
