@@ -1141,13 +1141,6 @@ Resources:
       Runtime: nodejs18.x
       MemorySize: 256
       Timeout: 120
-      Events:
-        CloudFrontLogDelivery:
-          Type: S3
-          Properties:
-            Bucket: !Ref CloudFrontLogBucket
-            Events:
-              - s3:ObjectCreated:*
       Environment:
         Variables:
           AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
@@ -1172,6 +1165,35 @@ Resources:
         Environment: !Ref StageName
     Metadata:
       BuildMethod: makefile
+
+  CloudFrontLogDeliveryRule:
+    Type: AWS::Events::Rule
+    Condition: EnableCloudFrontMonitoringCondition
+    Properties:
+      Description: Trigger the CloudFront log processor when new access logs are delivered.
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref CloudFrontLogBucket
+      Name: !Sub '${AWS::StackName}-${StageName}-cloudfront-log-delivery'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CloudFrontLogProcessorFunction.Arn
+          Id: CloudFrontLogProcessor
+
+  CloudFrontLogDeliveryInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: EnableCloudFrontMonitoringCondition
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CloudFrontLogProcessorFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CloudFrontLogDeliveryRule.Arn
 
   DocumentGenerationSendPolicy:
     Type: AWS::IAM::Policy
