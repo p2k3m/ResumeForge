@@ -54,4 +54,49 @@ describe('verifyClientAssets', () => {
 
     expect(assetGetCalls.some(([url]) => url.includes('__cf_verify_bust='))).toBe(true);
   });
+
+  test('requests index.html with cache-busting parameters to avoid stale content', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-cb71cdf7.js') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const indexRequest = fetchImpl.mock.calls.find(([url]) => url.includes('/index.html'));
+    expect(indexRequest).toBeDefined();
+    const [, options] = indexRequest;
+    expect(options?.headers?.['Cache-Control']).toBe('no-cache');
+    expect(options?.headers?.Pragma).toBe('no-cache');
+    expect(new URL(indexRequest[0]).searchParams.has('__cf_verify_bust')).toBe(true);
+  });
 });
