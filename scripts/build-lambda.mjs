@@ -111,6 +111,11 @@ const FUNCTION_BUILD_CONFIG = {
     copyClientAssets: false,
     copyTemplates: true,
   },
+  CloudFrontLogProcessorFunction: {
+    entryPoints: ['lambdas/cloudfrontLogProcessor.js'],
+    copyClientAssets: false,
+    copyTemplates: false,
+  },
 }
 
 function parseCliOptions() {
