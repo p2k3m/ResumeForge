@@ -2,6 +2,7 @@ import { gzipSync } from 'zlib';
 import {
   normaliseLogPayload,
   parseCloudFrontLog,
+  extractDistributionIdFromKey,
 } from '../services/monitoring/cloudfrontLogProcessor.js';
 
 describe('cloudfront log processor utilities', () => {
@@ -30,5 +31,17 @@ describe('cloudfront log processor utilities', () => {
     const compressed = gzipSync(Buffer.from(original, 'utf-8'));
 
     expect(normaliseLogPayload(compressed)).toBe(original);
+  });
+});
+
+describe('extractDistributionIdFromKey', () => {
+  test('returns distribution id from nested key with prefix', () => {
+    const key = 'my-stack/prod/E123ABC456DEF.2024-05-01-12.gz';
+
+    expect(extractDistributionIdFromKey(key)).toBe('E123ABC456DEF');
+  });
+
+  test('returns empty string when key is missing distribution segment', () => {
+    expect(extractDistributionIdFromKey('my-stack/prod/.invalid-log.gz')).toBe('');
   });
 });
