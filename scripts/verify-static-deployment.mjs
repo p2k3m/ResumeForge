@@ -15,6 +15,20 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
 
+function isTruthyEnv(value) {
+  if (typeof value !== 'string') {
+    return false
+  }
+  return /^(?:true|1|yes)$/iu.test(value.trim())
+}
+
+function shouldEnforceVerification(flagName) {
+  if (flagName && Object.prototype.hasOwnProperty.call(process.env, flagName)) {
+    return isTruthyEnv(process.env[flagName])
+  }
+  return isTruthyEnv(process.env.CI || '')
+}
+
 function resolveBucketConfiguration() {
   const bucketCandidate =
     process.env.STATIC_ASSETS_BUCKET || process.env.DATA_BUCKET || process.env.S3_BUCKET
@@ -210,7 +224,27 @@ async function verifyCloudfrontAssets(baseUrl) {
 }
 
 async function main() {
-  const { bucket, prefix } = resolveBucketConfiguration()
+  const enforceStaticVerification = shouldEnforceVerification('ENFORCE_STATIC_ASSET_VERIFY')
+
+  let bucketConfig
+  try {
+    bucketConfig = resolveBucketConfiguration()
+  } catch (error) {
+    if (enforceStaticVerification) {
+      throw error
+    }
+
+    console.warn(`[verify-static] ${error?.message || error}`)
+    console.warn(
+      '[verify-static] Static asset verification skipped because enforcement is disabled for this environment.',
+    )
+    console.warn(
+      '[verify-static] Set ENFORCE_STATIC_ASSET_VERIFY=true (or run in CI) to require bucket configuration before continuing.',
+    )
+    return
+  }
+
+  const { bucket, prefix } = bucketConfig
   const s3 = new S3Client({})
 
   console.log(`[verify-static] Verifying static assets in s3://${bucket}/${prefix}/`)
@@ -237,12 +271,27 @@ async function main() {
 
   const cloudfrontUrl = await resolveCloudfrontUrl()
   console.log(`[verify-static] Verifying CloudFront asset availability at ${cloudfrontUrl}`)
-  const verified = await verifyCloudfrontAssets(cloudfrontUrl)
-  if (verified) {
-    console.log('[verify-static] CloudFront is serving the expected client assets.')
-  } else {
+  const enforceCloudfrontVerification = shouldEnforceVerification('ENFORCE_CLOUDFRONT_VERIFY')
+
+  try {
+    const verified = await verifyCloudfrontAssets(cloudfrontUrl)
+    if (verified) {
+      console.log('[verify-static] CloudFront is serving the expected client assets.')
+    } else {
+      console.warn(
+        '[verify-static] CloudFront asset verification skipped. Confirm CDN availability separately before promoting traffic.',
+      )
+    }
+  } catch (error) {
+    if (enforceCloudfrontVerification) {
+      throw error
+    }
+
     console.warn(
-      '[verify-static] CloudFront asset verification skipped. Confirm CDN availability separately before promoting traffic.',
+      `[verify-static] CloudFront asset verification failed (${error?.message || error}). Enforcement disabled, continuing.`,
+    )
+    console.warn(
+      '[verify-static] Set ENFORCE_CLOUDFRONT_VERIFY=true (or run in CI) to force failures when CDN assets are unavailable.',
     )
   }
 }
