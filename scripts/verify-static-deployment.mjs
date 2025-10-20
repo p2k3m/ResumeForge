@@ -221,6 +221,21 @@ function resolveCloudfrontRetryConfiguration() {
   }
 }
 
+function shouldAllowCloudfrontFailure() {
+  const overrideCandidates = [
+    process.env.ALLOW_CLOUDFRONT_VERIFY_FAILURE,
+    process.env.CLOUDFRONT_VERIFY_ALLOW_FAILURE,
+  ]
+
+  for (const candidate of overrideCandidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return isTruthyEnv(candidate)
+    }
+  }
+
+  return false
+}
+
 async function verifyCloudfrontAssets(baseUrl, { retries, retryDelayMs }) {
   try {
     await verifyClientAssets({
@@ -249,6 +264,7 @@ async function verifyCloudfrontAssets(baseUrl, { retries, retryDelayMs }) {
 
 async function main() {
   const enforceStaticVerification = shouldEnforceVerification('ENFORCE_STATIC_ASSET_VERIFY')
+  const allowCloudfrontFailure = shouldAllowCloudfrontFailure()
 
   let bucketConfig
   try {
@@ -295,7 +311,9 @@ async function main() {
 
   const cloudfrontUrl = await resolveCloudfrontUrl()
   console.log(`[verify-static] Verifying CloudFront asset availability at ${cloudfrontUrl}`)
-  const enforceCloudfrontVerification = shouldEnforceVerification('ENFORCE_CLOUDFRONT_VERIFY')
+  const enforceCloudfrontVerification = allowCloudfrontFailure
+    ? false
+    : shouldEnforceVerification('ENFORCE_CLOUDFRONT_VERIFY')
   const retryConfig = resolveCloudfrontRetryConfiguration()
 
   if (retryConfig.attempts > 1) {
@@ -317,6 +335,16 @@ async function main() {
   } catch (error) {
     if (enforceCloudfrontVerification) {
       throw error
+    }
+
+    if (allowCloudfrontFailure) {
+      console.warn(
+        `[verify-static] CloudFront asset verification failed (${error?.message || error}). Continuing because ALLOW_CLOUDFRONT_VERIFY_FAILURE is enabled.`,
+      )
+      console.warn(
+        '[verify-static] Confirm CDN availability separately before promoting traffic. Disabling enforcement should be reserved for break-glass scenarios.',
+      )
+      return
     }
 
     console.warn(
