@@ -78,6 +78,7 @@ export function extractDistributionIdFromKey(key) {
     return '';
   }
 
+  const distributionIdPattern = /^E[A-Z0-9]{11,}$/;
   const segments = key.split('/');
   for (let i = segments.length - 1; i >= 0; i -= 1) {
     const segment = segments[i];
@@ -86,7 +87,7 @@ export function extractDistributionIdFromKey(key) {
     }
 
     const distributionId = segment.split('.')[0];
-    if (isNonEmptyString(distributionId)) {
+    if (distributionIdPattern.test(distributionId)) {
       return distributionId;
     }
   }
