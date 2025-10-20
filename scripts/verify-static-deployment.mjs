@@ -186,8 +186,8 @@ async function resolveCloudfrontUrl() {
 async function verifyCloudfrontAssets(baseUrl) {
   await verifyClientAssets({
     baseUrl,
-    retries: 2,
-    retryDelayMs: 20000,
+    retries: 4,
+    retryDelayMs: 30000,
     logger: console,
   })
 }
