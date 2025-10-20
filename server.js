@@ -2287,6 +2287,10 @@ async function loadPublishedCloudfrontMetadata() {
         typeof parsed?.distributionId === 'string' && parsed.distributionId.trim()
           ? parsed.distributionId.trim()
           : null,
+      originBucket:
+        typeof parsed?.originBucket === 'string' && parsed.originBucket.trim()
+          ? parsed.originBucket.trim()
+          : null,
       updatedAt:
         typeof parsed?.updatedAt === 'string' && parsed.updatedAt.trim()
           ? parsed.updatedAt.trim()

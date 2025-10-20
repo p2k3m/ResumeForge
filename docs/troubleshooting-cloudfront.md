@@ -10,17 +10,17 @@ npm run verify:cloudfront
 
 - The command reads the canonical distribution metadata from `config/published-cloudfront.json` and probes the `/healthz` endpoint on the recorded URL.
 - A successful check prints `status "ok"` with the fully-qualified URL.
-- A failure such as `Failed to reach https://d3p8c4n7s9f0ab.cloudfront.net/healthz: fetch failed` means the CDN cannot be reached from the current network or the distribution is offline. The helper now prints next steps that point to this runbook and remind you to redeploy if the metadata is stale.
+- A failure such as `Failed to reach https://d2k9m8n7p6q5r4.cloudfront.net/healthz: fetch failed` means the CDN cannot be reached from the current network or the distribution is offline. The helper now prints next steps that point to this runbook and remind you to redeploy if the metadata is stale.
 
 ### Example failure output
 
 ```text
-Loaded CloudFront URL from config: https://d3p8c4n7s9f0ab.cloudfront.net
+Loaded CloudFront URL from config: https://d2k9m8n7p6q5r4.cloudfront.net
 CloudFront verification failed:
-Failed to reach https://d3p8c4n7s9f0ab.cloudfront.net/healthz: fetch failed
+Failed to reach https://d2k9m8n7p6q5r4.cloudfront.net/healthz: fetch failed
 
 Next steps:
-- Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output.
+- Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output (the current distribution fronts the `resume-forge-app-2025` bucket).
 - If the distribution was replaced or removed, redeploy the SAM stack and republish the CloudFront URL:
     sam validate
     sam build --use-container
