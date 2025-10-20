@@ -46,4 +46,14 @@ Pass an explicit URL to validate a newly deployed stack before publishing:
 npm run verify:cloudfront -- https://d123456abcdef8.cloudfront.net/prod
 ```
 
+After uploading the latest client build, double-check that the CDN is serving the fresh assets and that every object listed in
+`static/client/<stage>/latest/manifest.json` resolves from S3:
+
+```bash
+npm run verify:static
+```
+
+This command loads the published CloudFront domain from `config/published-cloudfront.json`, validates the manifest uploaded to
+S3, and then confirms the hashed bundles referenced by `index.html` are reachable via CloudFront.
+
 After publishing, share the refreshed domain from `config/published-cloudfront.json` with downstream consumers so they can update bookmarks, integrations, or public references.
