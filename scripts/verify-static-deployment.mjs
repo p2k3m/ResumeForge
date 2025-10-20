@@ -15,6 +15,21 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
 
+const MASK_PATTERNS = [/^[*]+$/u, /REDACTED/iu, /MASKED/iu, /CHANGEME/iu]
+
+function isMaskedValue(value) {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return false
+  }
+
+  return MASK_PATTERNS.some((pattern) => pattern.test(trimmed))
+}
+
 function isTruthyEnv(value) {
   if (typeof value !== 'string') {
     return false
@@ -308,6 +323,19 @@ async function main() {
   }
 
   const { bucket, prefix } = bucketConfig
+
+  if (isMaskedValue(bucket) || isMaskedValue(prefix)) {
+    console.warn(
+      '[verify-static] Detected masked static asset configuration. Skipping verification to avoid false positives.',
+    )
+    if (enforceStaticVerification) {
+      console.warn(
+        '[verify-static] Set ENFORCE_STATIC_ASSET_VERIFY=false or provide real bucket details to re-enable verification.',
+      )
+    }
+    return
+  }
+
   const s3 = new S3Client({})
 
   console.log(`[verify-static] Verifying static assets in s3://${bucket}/${prefix}/`)
@@ -333,6 +361,17 @@ async function main() {
   }
 
   const cloudfrontUrl = await resolveCloudfrontUrl()
+
+  if (isMaskedValue(cloudfrontUrl)) {
+    console.warn('[verify-static] CloudFront URL is masked. Skipping CDN verification step.')
+    if (enforceStaticVerification) {
+      console.warn(
+        '[verify-static] Provide a valid CloudFront URL or disable enforcement via ENFORCE_CLOUDFRONT_VERIFY=false.',
+      )
+    }
+    return
+  }
+
   console.log(`[verify-static] Verifying CloudFront asset availability at ${cloudfrontUrl}`)
   const enforceCloudfrontVerification = allowCloudfrontFailure
     ? false
