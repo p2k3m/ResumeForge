@@ -294,6 +294,11 @@ This command invokes Vite to emit the production client into `client/dist` and b
 inside `dist/lambda`. Each artifact directory includes a `build-info.json` file that captures the Git SHA and build timestamp
 for traceability. Individual steps remain available through `npm run build:client` and `npm run build:lambda`.
 
+Before packaging or uploading build artifacts, run through this quick checklist to prevent missing assets in your deployment:
+
+1. Run the React client build step from the project root (or inside `client/`) using `npm run build`, which invokes Vite’s build pipeline defined in `client/package.json`. This produces the `client/dist` directory that must be uploaded alongside your build artifacts to avoid 404 errors when the site requests static assets.
+2. After the build completes, confirm that the `client/dist` folder exists and contains the generated assets before you push or upload the artifacts.
+
 Use `npm run build:all` (or `make build-all`) to wipe previous artifacts via `npm run clean` before rebuilding. Running `npm run clean` on its own removes cached coverage reports, stale SAM builds, and old client bundles so subsequent builds start from a pristine workspace.
 
 ### Post-deployment verification
