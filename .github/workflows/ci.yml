@@ -77,9 +77,8 @@ jobs:
       - name: Remove AWS credential cache artifacts
         run: rm -rf ~/.aws/credentials ~/.aws/config || true
 
-      - name: Build client bundle
-        run: npm run build
-        working-directory: client
+      - name: Build all project assets
+        run: npm run build:all
 
       - name: Upload client build artifacts
         uses: actions/upload-artifact@v4
