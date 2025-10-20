@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { verifyClientAssets } from '../lib/cloudfrontAssetCheck.js';
 
 describe('verifyClientAssets', () => {
