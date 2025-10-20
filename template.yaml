@@ -300,8 +300,6 @@ Resources:
               StringEquals:
                 s3:x-amz-acl: bucket-owner-full-control
                 aws:SourceAccount: !Ref AWS::AccountId
-              ArnLike:
-                aws:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${ResumeForgeDistribution}'
           - Sid: AllowCloudFrontLogAclCheck
             Effect: Allow
             Principal:
