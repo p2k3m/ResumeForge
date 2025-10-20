@@ -24,6 +24,7 @@
     "verify": "npm run test:ci",
     "print:cloudfront-url": "node scripts/print-cloudfront-url.mjs",
     "refresh:templates": "node scripts/refresh-templates.mjs",
+    "predeploy:sam": "npm run build:client && node scripts/ensure-client-dist.mjs",
     "deploy:sam": "sam build --cached --parallel && sam deploy",
     "test:sam": "sam local invoke AuditingFunction --event tests/sam/healthz-event.json",
     "publish:cloudfront-url": "node scripts/publish-cloudfront-url.mjs",
