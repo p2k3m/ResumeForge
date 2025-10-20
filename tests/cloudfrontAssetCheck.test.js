@@ -153,4 +153,61 @@ describe('verifyClientAssets', () => {
     expect(options?.headers?.Pragma).toBe('no-cache');
     expect(new URL(indexRequest[0]).searchParams.has('__cf_verify_bust')).toBe(true);
   });
+
+  test('honors an explicit retry delay schedule when provided', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    let shouldFail = true;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-cb71cdf7.js') {
+        if (method === 'HEAD' && shouldFail) {
+          shouldFail = false;
+          return new Response(null, { status: 500, statusText: 'Upstream Error' });
+        }
+
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    const warn = jest.fn();
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retryDelays: [0],
+        logger: { warn },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Client assets check failed on attempt 1/2'),
+    );
+
+    const headCalls = fetchImpl.mock.calls.filter(([url, init]) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      return new URL(url).pathname === '/assets/index-cb71cdf7.js' && method === 'HEAD';
+    });
+
+    expect(headCalls).toHaveLength(2);
+  });
 });
