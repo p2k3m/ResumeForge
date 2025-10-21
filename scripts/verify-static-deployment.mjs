@@ -275,12 +275,13 @@ function shouldAllowCloudfrontFailure() {
   return false
 }
 
-async function verifyCloudfrontAssets(baseUrl, { retryDelays }) {
+async function verifyCloudfrontAssets(baseUrl, { retryDelays, assetPathPrefixes }) {
   try {
     await verifyClientAssets({
       baseUrl,
       retryDelays,
       logger: console,
+      assetPathPrefixes,
     })
     return true
   } catch (error) {
@@ -349,6 +350,20 @@ async function main() {
   await verifyS3Assets({ s3, bucket, manifest })
   console.log('[verify-static] Confirmed all uploaded static assets are accessible via S3.')
 
+  const manifestPrefix = typeof manifest?.prefix === 'string' ? manifest.prefix.trim() : ''
+  const candidatePrefixes = [manifestPrefix, prefix]
+    .filter((value) => typeof value === 'string' && value.trim())
+    .map((value) => value.trim().replace(/^\/+/, '').replace(/\/+$/, ''))
+  const assetPathPrefixes = Array.from(new Set(candidatePrefixes))
+
+  if (assetPathPrefixes.length > 0) {
+    console.log(
+      `[verify-static] Will probe CloudFront assets with path prefix fallback${
+        assetPathPrefixes.length === 1 ? '' : 'es'
+      }: ${assetPathPrefixes.join(', ')}`,
+    )
+  }
+
   const skipCloudfront = /^(?:true|1|yes)$/iu.test(
     String(process.env.SKIP_CLOUDFRONT_VERIFY || '').trim(),
   )
@@ -387,7 +402,10 @@ async function main() {
   }
 
   try {
-    const verified = await verifyCloudfrontAssets(cloudfrontUrl, retryConfig)
+    const verified = await verifyCloudfrontAssets(cloudfrontUrl, {
+      ...retryConfig,
+      assetPathPrefixes,
+    })
     if (verified) {
       console.log('[verify-static] CloudFront is serving the expected client assets.')
     } else {

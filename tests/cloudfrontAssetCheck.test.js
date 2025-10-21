@@ -248,4 +248,54 @@ describe('verifyClientAssets', () => {
       }),
     ).rejects.toThrow(/docs\/troubleshooting-cloudfront\.md[\s\S]*ALLOW_CLOUDFRONT_VERIFY_FAILURE=true/);
   });
+
+  test('retries asset verification with manifest prefixes when root path returns 404', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-cb71cdf7.js') {
+        return new Response(null, { status: 404, statusText: 'Not Found' });
+      }
+
+      if (target.pathname === '/static/client/prod/latest/assets/index-cb71cdf7.js') {
+        return new Response(null, { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        assetPathPrefixes: ['static/client/prod/latest'],
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const attemptedPaths = fetchImpl.mock.calls
+      .map(([url]) => new URL(url).pathname)
+      .filter((pathname) => pathname.includes('index-cb71cdf7.js'));
+
+    expect(attemptedPaths).toContain('/assets/index-cb71cdf7.js');
+    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-cb71cdf7.js');
+  });
 });
