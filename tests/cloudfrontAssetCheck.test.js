@@ -512,6 +512,56 @@ describe('verifyClientAssets', () => {
     expect(attemptedPaths).toContain('/client/prod/latest/assets/index-cb71cdf7.js');
   });
 
+  test('includes attempted asset path details when all CDN prefixes fail', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname.includes('index-cb71cdf7.js')) {
+        return new Response(null, { status: 403, statusText: 'Forbidden' });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    const expectedPaths = [
+      '/assets/index-cb71cdf7.js',
+      '/static/client/prod/latest/assets/index-cb71cdf7.js',
+      '/client/prod/latest/assets/index-cb71cdf7.js',
+      '/prod/latest/assets/index-cb71cdf7.js',
+      '/latest/assets/index-cb71cdf7.js',
+    ];
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        assetPathPrefixes: ['static/client/prod/latest'],
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).rejects.toMatchObject({
+      attemptedAssetPaths: expectedPaths,
+      message: expect.stringContaining('attempted asset paths: /assets/index-cb71cdf7.js'),
+    });
+  });
+
   test('throws a proxy blocked error when responses indicate an upstream proxy', async () => {
     const html = `<!doctype html>
       <html>
