@@ -386,7 +386,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/process-cv
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: &ResumeForgeFunctionEnvironmentVariables
@@ -449,66 +449,126 @@ Resources:
       Timeout: 30
       AutoPublishAlias: !Ref StageName
       Events:
-        Root:
+        RootGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /
-            Method: ANY
-        IndexHtml:
+            Method: GET
+        RootHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /
+            Method: HEAD
+        IndexHtmlGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /index.html
-            Method: ANY
-        Favicon:
+            Method: GET
+        IndexHtmlHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /index.html
+            Method: HEAD
+        FaviconGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /favicon.ico
-            Method: ANY
-        Manifest:
+            Method: GET
+        FaviconHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /favicon.ico
+            Method: HEAD
+        ManifestGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /manifest.webmanifest
-            Method: ANY
-        Robots:
+            Method: GET
+        ManifestHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /manifest.webmanifest
+            Method: HEAD
+        RobotsGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /robots.txt
-            Method: ANY
-        ServiceWorker:
+            Method: GET
+        RobotsHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /robots.txt
+            Method: HEAD
+        ServiceWorkerGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /service-worker.js
-            Method: ANY
-        Assets:
+            Method: GET
+        ServiceWorkerHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /service-worker.js
+            Method: HEAD
+        AssetsGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /assets/{proxy+}
-            Method: ANY
-        Fonts:
+            Method: GET
+        AssetsHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /assets/{proxy+}
+            Method: HEAD
+        FontsGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /fonts/{proxy+}
-            Method: ANY
-        Images:
+            Method: GET
+        FontsHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /fonts/{proxy+}
+            Method: HEAD
+        ImagesGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /images/{proxy+}
-            Method: ANY
-        CoverTemplates:
+            Method: GET
+        ImagesHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /images/{proxy+}
+            Method: HEAD
+        CoverTemplatesGet:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /cover-templates/{proxy+}
-            Method: ANY
+            Method: GET
+        CoverTemplatesHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /cover-templates/{proxy+}
+            Method: HEAD
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -542,7 +602,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/jd/evaluate
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -576,13 +636,13 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/score-match
-            Method: ANY
+            Method: POST
         RescoreImprovement:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/rescore-improvement
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -616,7 +676,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-summary
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -650,13 +710,13 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/add-missing-skills
-            Method: ANY
+            Method: POST
         ImproveSkills:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-skills
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -690,13 +750,13 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/change-designation
-            Method: ANY
+            Method: POST
         ImproveDesignation:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-designation
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -730,13 +790,13 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/align-experience
-            Method: ANY
+            Method: POST
         ImproveExperience:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-experience
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -770,7 +830,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-certifications
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -804,7 +864,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-projects
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -838,7 +898,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-highlights
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -872,13 +932,13 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/enhance-all
-            Method: ANY
+            Method: POST
         ImproveAts:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-ats
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -912,7 +972,7 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/improve-all
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -986,13 +1046,13 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/generate-enhanced-docs
-            Method: ANY
+            Method: POST
         RenderCoverLetter:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/render-cover-letter
-            Method: ANY
+            Method: POST
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
@@ -1356,25 +1416,25 @@ Resources:
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/change-log
-            Method: ANY
+            Method: POST
         RefreshDownloadLink:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/refresh-download-link
-            Method: ANY
+            Method: POST
         PublishedCloudfront:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/published-cloudfront
-            Method: ANY
+            Method: GET
         Healthz:
           Type: Api
           Properties:
             RestApiId: !Ref ResumeForgeApi
             Path: /healthz
-            Method: ANY
+            Method: GET
       Environment:
         Variables:
           <<: *ResumeForgeFunctionEnvironmentVariables
