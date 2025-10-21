@@ -459,6 +459,59 @@ describe('verifyClientAssets', () => {
     expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-cb71cdf7.js');
   });
 
+  test('attempts suffix variations of manifest prefixes when CDN origin strips leading segments', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-cb71cdf7.js') {
+        return new Response(null, { status: 404, statusText: 'Not Found' });
+      }
+
+      if (target.pathname === '/static/client/prod/latest/assets/index-cb71cdf7.js') {
+        return new Response(null, { status: 403, statusText: 'Forbidden' });
+      }
+
+      if (target.pathname === '/client/prod/latest/assets/index-cb71cdf7.js') {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        assetPathPrefixes: ['static/client/prod/latest'],
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const attemptedPaths = fetchImpl.mock.calls
+      .map(([url]) => new URL(url).pathname)
+      .filter((pathname) => pathname.includes('index-cb71cdf7.js'));
+
+    expect(attemptedPaths).toContain('/client/prod/latest/assets/index-cb71cdf7.js');
+  });
+
   test('throws a proxy blocked error when responses indicate an upstream proxy', async () => {
     const html = `<!doctype html>
       <html>
