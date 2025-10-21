@@ -1,7 +1,7 @@
 # ResumeForge
 
 ## Overview
-ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with the pasted job description text. The Express API is wrapped with `@vendia/serverless-express` and deployed to AWS Lambda behind API Gateway so the entire stack runs on demand. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains only lightweight session metadata, keeping the monthly infrastructure cost negligible for small user counts. The runtime follows the AWS best-practice flow of **API Gateway → Lambda → S3**, using environment variables for secrets and shifting change-log/audit data out of DynamoDB and into S3.
+ResumeForge generates tailored cover letters and enhanced CV versions by combining a candidate's résumé with the pasted job description text. The platform deploys a suite of focused Lambda functions (upload, evaluation, scoring, enhancements, document generation, and frontend delivery) behind API Gateway so each domain scales independently while still reusing the shared Express middleware stack. Persistent artifacts are stored in Amazon S3 while DynamoDB (on-demand billing) retains only lightweight session metadata, keeping the monthly infrastructure cost negligible for small user counts. The runtime follows the AWS best-practice flow of **API Gateway → Lambda → S3**, using environment variables for secrets and shifting change-log/audit data out of DynamoDB and into S3.
 
 ## User flow
 
@@ -45,7 +45,7 @@ ResumeForge now deploys a suite of dedicated Lambda functions, each fronted by d
 | Document generation | `lambdas/documentGeneration.handler` | `POST /api/generate-enhanced-docs`, `POST /api/render-cover-letter` |
 | Auditing & metrics | `lambdas/auditing.handler` | `POST /api/change-log`, `POST /api/refresh-download-link`, `GET /api/published-cloudfront`, `GET /healthz` |
 
-Each handler is created with `createServiceHandler`, which mounts the shared Express app but rejects out-of-scope routes with a `404` that includes the service name for observability. Because the SAM template wires every endpoint to its corresponding function, an upload failure never exhausts scoring capacity and vice versa.
+Each handler is created with `createServiceHandler`, which mounts only the routes required for that domain and rejects out-of-scope requests with a `404` that includes the service name for observability. Because the SAM template wires every endpoint to its corresponding function—without a catch-all monolithic Lambda—an upload failure never exhausts scoring capacity and vice versa.
 
 ### Multi-stage, user-driven improvement
 
@@ -189,7 +189,7 @@ During the guided deploy provide values for:
 
 The deployment creates:
 
-- `ResumeForgeHandler` Lambda function (Node.js 18) using `lambda.js`
+- A set of domain-specific Lambda functions (Node.js 18) such as `resume-upload`, `job-evaluation`, `scoring`, enhancement handlers, document generation, and the client delivery function
 - Regional REST API Gateway with binary support for `multipart/form-data`
 - S3 bucket for uploads/logs and DynamoDB table with on-demand billing
 

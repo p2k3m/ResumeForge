@@ -1,6 +1,6 @@
 # Microservice architecture
 
-ResumeForge retains a single Express implementation but deploys it as discrete Lambda functions. Each function exposes only the endpoints required for its domain so we can scale traffic hotspots independently while keeping the codebase familiar for teams used to Express.
+ResumeForge deploys discrete, domain-scoped Lambda functions that reuse a shared Express middleware stack. Each function exposes only the endpoints required for its domain so we can scale traffic hotspots independently while keeping the codebase familiar for teams used to Express. There is no monolithic catch-all handler—API Gateway always invokes the specific function for the requested route.
 
 ## Service catalogue
 
@@ -26,7 +26,7 @@ See [`microservices/services.js`](../microservices/services.js) for the source o
 
 ## Handler factory
 
-[`microservices/createServiceHandler.js`](../microservices/createServiceHandler.js) wraps the shared Express app with `@vendia/serverless-express`. The factory accepts a service configuration (name, routes, and optional binary media types) and returns the Lambda handler. Requests that miss the declared route list receive a structured `404` response containing the service name and the attempted path/method, which simplifies API Gateway log searches when a client accidentally calls the wrong microservice.
+[`microservices/createServiceHandler.js`](../microservices/createServiceHandler.js) wraps the shared Express middleware with `@vendia/serverless-express`. The factory accepts a service configuration (name, routes, and optional binary media types) and returns the Lambda handler. Requests that miss the declared route list receive a structured `404` response containing the service name and the attempted path/method, which simplifies API Gateway log searches when a client accidentally calls the wrong microservice while ensuring no request falls back to a monolithic Lambda.
 
 ```js
 import { createServiceHandler } from '../microservices/createServiceHandler.js';

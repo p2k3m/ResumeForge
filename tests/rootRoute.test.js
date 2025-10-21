@@ -1,6 +1,6 @@
 import request from 'supertest';
 import app from '../server.js';
-import { handler } from '../lambda.js';
+import { handler as clientAppHandler } from '../lambdas/clientApp.js';
 
 function expectValidPortalMarkup(html) {
   expect(html).toContain('<title>ResumeForge</title>');
@@ -49,7 +49,7 @@ describe('serverless bootstrap', () => {
       isBase64Encoded: false
     };
     const context = {};
-    const result = await handler(event, context);
+    const result = await clientAppHandler(event, context);
     expect(result.statusCode).toBe(200);
     expectValidPortalMarkup(result.body);
   });
