@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { verifyClientAssets } from '../lib/cloudfrontAssetCheck.js';
+import { PROXY_BLOCKED_ERROR_CODE, verifyClientAssets } from '../lib/cloudfrontAssetCheck.js';
 
 describe('verifyClientAssets', () => {
   test('adds a cache-busting query parameter when an asset initially returns 404', async () => {
@@ -401,5 +401,97 @@ describe('verifyClientAssets', () => {
 
     expect(attemptedPaths).toContain('/assets/index-cb71cdf7.js');
     expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-cb71cdf7.js');
+  });
+
+  test('throws a proxy blocked error when responses indicate an upstream proxy', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-cb71cdf7.js') {
+        return new Response(null, {
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { Server: 'envoy', Via: 'proxy.example.test' },
+        });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).rejects.toMatchObject({ code: PROXY_BLOCKED_ERROR_CODE });
+  });
+
+  test('throws a proxy blocked error when network connectivity is filtered', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const createNetworkError = () => {
+      const cause = new Error('connect ENETUNREACH 0.0.0.0:443');
+      cause.code = 'ENETUNREACH';
+      const error = new TypeError('fetch failed');
+      error.cause = cause;
+      return error;
+    };
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname.startsWith('/assets/') && method === 'HEAD') {
+        throw createNetworkError();
+      }
+
+      if (target.pathname.startsWith('/assets/') && method === 'GET') {
+        throw createNetworkError();
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).rejects.toMatchObject({ code: PROXY_BLOCKED_ERROR_CODE });
   });
 });
