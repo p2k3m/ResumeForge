@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises'
 import {
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3'
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js'
@@ -166,6 +167,115 @@ async function verifyS3Assets({ s3, bucket, manifest }) {
     throw new Error(
       `[verify-static] ${failures.length} static asset${failures.length === 1 ? '' : 's'} ` +
         `failed S3 verification: ${details}`,
+    )
+  }
+}
+
+function normalizeHashedIndexAssets(manifest) {
+  const manifestAssets = Array.isArray(manifest?.hashedIndexAssets)
+    ? manifest.hashedIndexAssets
+    : []
+  const manifestFiles = Array.isArray(manifest?.files) ? manifest.files : []
+
+  const fallbackAssets = manifestAssets.length
+    ? []
+    : manifestFiles
+        .map((entry) => entry?.path || entry?.key || '')
+        .filter(Boolean)
+
+  const combined = manifestAssets.length ? manifestAssets : fallbackAssets
+
+  const normalizedAssets = []
+  const seen = new Set()
+  for (const asset of combined) {
+    if (typeof asset !== 'string') {
+      continue
+    }
+    const trimmed = asset.trim()
+    if (!trimmed) {
+      continue
+    }
+    const normalizedPath = trimmed.replace(/^\/+/, '').replace(/\\/g, '/')
+    const match = normalizedPath.match(/assets\/index-[\w.-]+\.(?:css|js)$/u)
+    if (!match) {
+      continue
+    }
+
+    const relative = match[0]
+
+    if (!seen.has(relative)) {
+      seen.add(relative)
+      normalizedAssets.push(relative)
+    }
+  }
+
+  return normalizedAssets
+}
+
+function ensureHashedIndexAssets(manifest, { manifestKey, bucket }) {
+  const hashedAssets = normalizeHashedIndexAssets(manifest)
+  if (hashedAssets.length === 0) {
+    throw new Error(
+      `[verify-static] Manifest s3://${bucket}/${manifestKey} must list hashed index assets. Redeploy the static build.`,
+    )
+  }
+
+  const hasCss = hashedAssets.some((asset) => asset.endsWith('.css'))
+  const hasJs = hashedAssets.some((asset) => asset.endsWith('.js'))
+  if (!hasCss || !hasJs) {
+    throw new Error(
+      `[verify-static] Manifest s3://${bucket}/${manifestKey} must include hashed index CSS and JS bundles.`,
+    )
+  }
+
+  return hashedAssets
+}
+
+async function ensureNoStaleIndexAssets({ s3, bucket, prefix, hashedAssets }) {
+  const prefixWithSlash = prefix.endsWith('/') ? prefix : `${prefix}/`
+  const hashedSet = new Set(
+    hashedAssets.map((asset) => (typeof asset === 'string' ? asset.trim() : asset)).filter(Boolean),
+  )
+  const hashedPattern = /^assets\/index-[\w.-]+\.(?:css|js)$/u
+  const stale = []
+
+  let continuationToken
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefixWithSlash,
+        ContinuationToken: continuationToken,
+      }),
+    )
+
+    for (const item of response.Contents || []) {
+      if (!item?.Key || typeof item.Key !== 'string') {
+        continue
+      }
+      const key = item.Key.trim()
+      if (!key.startsWith(prefixWithSlash)) {
+        continue
+      }
+      const relative = key.slice(prefixWithSlash.length)
+      if (!hashedPattern.test(relative)) {
+        continue
+      }
+      if (!hashedSet.has(relative)) {
+        stale.push(relative)
+      }
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
+  } while (continuationToken)
+
+  if (stale.length > 0) {
+    const details = stale.join(', ')
+    throw new Error(
+      `[verify-static] Stale hashed index asset${
+        stale.length === 1 ? '' : 's'
+      } detected under s3://${bucket}/${prefixWithSlash}: ${details}. ` +
+        'Delete the existing objects or rerun the upload script before publishing.',
     )
   }
 }
@@ -347,8 +457,13 @@ async function main() {
     } from s3://${bucket}/${manifestKey}`,
   )
 
+  const hashedAssets = ensureHashedIndexAssets(manifest, { manifestKey, bucket })
+
   await verifyS3Assets({ s3, bucket, manifest })
   console.log('[verify-static] Confirmed all uploaded static assets are accessible via S3.')
+
+  await ensureNoStaleIndexAssets({ s3, bucket, prefix, hashedAssets })
+  console.log('[verify-static] No stale hashed index assets detected in the deployment prefix.')
 
   const manifestPrefix = typeof manifest?.prefix === 'string' ? manifest.prefix.trim() : ''
   const candidatePrefixes = [manifestPrefix, prefix]
