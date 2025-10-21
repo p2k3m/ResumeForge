@@ -291,7 +291,15 @@ async function uploadFiles({ s3, bucket, prefix, files }) {
   return uploaded
 }
 
-async function uploadManifest({ s3, bucket, prefix, stage, buildVersion, uploadedFiles }) {
+async function uploadManifest({
+  s3,
+  bucket,
+  prefix,
+  stage,
+  buildVersion,
+  uploadedFiles,
+  hashedAssets,
+}) {
   const manifestKey = buildS3Key(prefix, 'manifest.json')
   const payload = {
     stage,
@@ -300,6 +308,8 @@ async function uploadManifest({ s3, bucket, prefix, stage, buildVersion, uploade
     uploadedAt: new Date().toISOString(),
     fileCount: uploadedFiles.length,
     files: uploadedFiles,
+    hashedIndexAssets: Array.isArray(hashedAssets) ? hashedAssets : [],
+    hashedIndexAssetCount: Array.isArray(hashedAssets) ? hashedAssets.length : 0,
   }
 
   const body = `${JSON.stringify(payload, null, 2)}\n`
@@ -317,7 +327,7 @@ async function uploadManifest({ s3, bucket, prefix, stage, buildVersion, uploade
 }
 
 async function main() {
-  const { files } = await gatherClientAssetFiles()
+  const { files, hashedAssets } = await gatherClientAssetFiles()
   const { bucket, prefix, stage } = resolveBucketConfiguration()
   const buildVersion = resolveBuildVersion()
   const s3 = new S3Client({})
@@ -344,6 +354,7 @@ async function main() {
     stage,
     buildVersion,
     uploadedFiles,
+    hashedAssets,
   })
 
   console.log(
