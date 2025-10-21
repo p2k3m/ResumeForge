@@ -2570,7 +2570,7 @@ function resolveCurrentAllowedOrigins() {
   return DEFAULT_ALLOWED_ORIGINS;
 }
 
-function resolveActiveServiceAllowList() {
+function collectActiveServiceDeclarations() {
   const raw =
     (typeof process.env.ACTIVE_SERVICE === 'string'
       ? process.env.ACTIVE_SERVICE
@@ -2580,26 +2580,46 @@ function resolveActiveServiceAllowList() {
       : '');
 
   if (!raw.trim()) {
-    return null;
+    return [];
   }
 
-  const values = raw
+  return raw
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
+}
 
-  if (!values.length) {
+function hasWildcardServiceDeclaration(values = []) {
+  return values.some((value) => {
+    if (typeof value !== 'string') {
+      return false;
+    }
+    const normalized = value.trim().toLowerCase();
+    return normalized === '*' || normalized === 'all';
+  });
+}
+
+function resolveActiveServiceAllowList(values = collectActiveServiceDeclarations()) {
+  if (!Array.isArray(values) || values.length === 0) {
     return null;
   }
 
-  if (values.some((value) => value === '*' || value.toLowerCase() === 'all')) {
+  if (hasWildcardServiceDeclaration(values)) {
     return null;
   }
 
   return new Set(values);
 }
 
-const activeServiceAllowList = resolveActiveServiceAllowList();
+const declaredActiveServices = collectActiveServiceDeclarations();
+const activeServiceAllowList = resolveActiveServiceAllowList(declaredActiveServices);
+
+const shouldServeClientAppRoutes =
+  declaredActiveServices.length === 0 ||
+  hasWildcardServiceDeclaration(declaredActiveServices) ||
+  declaredActiveServices.some((value) =>
+    typeof value === 'string' && value.trim().toLowerCase() === 'clientapp'
+  );
 
 const SERVICE_GUARD_HEADERS = Object.freeze({
   'Content-Type': 'application/json',
@@ -2768,11 +2788,17 @@ app.use((req, res, next) => {
   next();
 });
 
-if (clientAssetsAvailable()) {
-  app.use(express.static(clientDistDir, { index: false, fallthrough: true }));
-} else {
-  logStructured('warn', 'client_build_missing', {
-    path: clientIndexPath,
+if (shouldServeClientAppRoutes) {
+  if (clientAssetsAvailable()) {
+    app.use(express.static(clientDistDir, { index: false, fallthrough: true }));
+  } else {
+    logStructured('warn', 'client_build_missing', {
+      path: clientIndexPath,
+    });
+  }
+} else if (declaredActiveServices.length) {
+  logStructured('info', 'client_assets_routing_disabled', {
+    activeServices: declaredActiveServices,
   });
 }
 
@@ -16653,22 +16679,30 @@ app.get(['/redirect/latest', '/go/cloudfront'], async (req, res) => {
   }
 });
 
-app.get('/', async (req, res) => {
-  try {
-    const html = await getClientIndexHtml();
-    res.type('html').send(html);
-  } catch (err) {
-    logStructured('error', 'client_ui_load_failed', {
-      error: serializeError(err),
-    });
-    sendError(
-      res,
-      500,
-      'CLIENT_UI_UNAVAILABLE',
-      'Client application is unavailable. Please try again later or contact support.'
-    );
-  }
-});
+if (shouldServeClientAppRoutes) {
+  app.get('/', async (req, res) => {
+    try {
+      const html = await getClientIndexHtml();
+      res.type('html').send(html);
+    } catch (err) {
+      logStructured('error', 'client_ui_load_failed', {
+        error: serializeError(err),
+      });
+      sendError(
+        res,
+        500,
+        'CLIENT_UI_UNAVAILABLE',
+        'Client application is unavailable. Please try again later or contact support.'
+      );
+    }
+  });
+} else {
+  app.get('/', (req, res) => {
+    const method = typeof req.method === 'string' ? req.method : 'GET';
+    const rawPath = typeof req.path === 'string' ? req.path : '/';
+    respondWithServiceNotFound(res, method, rawPath, 'clientApp');
+  });
+}
 
 app.get('/favicon.ico', (req, res) => {
   res.status(204).end();
