@@ -26,6 +26,7 @@ function resolveBuildVersion() {
 const buildVersion = resolveBuildVersion()
 
 export default defineConfig({
+  base: './',
   plugins: [react()],
   server: {
     proxy: {
