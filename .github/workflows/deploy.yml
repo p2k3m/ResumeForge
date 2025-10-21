@@ -702,6 +702,16 @@ jobs:
               continue
             fi
 
+            if printf '%s\n' "$deploy_err_normalized" | grep -qi 'UPDATE_COMPLETE_CLEANUP_IN_PROGRESS'; then
+              echo "sam deploy failed because the stack is still completing a previous update. Waiting for cleanup to finish before retrying..."
+
+              ensure_stack_ready_for_deploy "waiting for stack cleanup after attempt $deploy_attempt"
+
+              deploy_attempt=$((deploy_attempt + 1))
+              sleep 15
+              continue
+            fi
+
             if printf '%s\n' "$deploy_err_normalized" | grep -qi "InvalidChangeSetStatus" && \
                printf '%s\n' "$deploy_err_normalized" | grep -qi "\[OBSOLETE\]"; then
               echo "sam deploy reported an obsolete change set. Inspecting status..."
