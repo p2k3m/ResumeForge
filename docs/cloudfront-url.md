@@ -54,6 +54,6 @@ npm run verify:static
 ```
 
 This command loads the published CloudFront domain from `config/published-cloudfront.json`, validates the manifest uploaded to
-S3, and then confirms the hashed bundles referenced by `index.html` are reachable via CloudFront.
+S3, and then confirms the hashed bundles referenced by the application root (`/`) are reachable via CloudFront.
 
 After publishing, share the refreshed domain from `config/published-cloudfront.json` with downstream consumers so they can update bookmarks, integrations, or public references.
