@@ -42,9 +42,9 @@ describe('published CloudFront helpers', () => {
   test('responds with published metadata when available', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d2k9m8n7p6q5r4.cloudfront.net/',
-      distributionId: 'E2LATESTBUCKET56',
-      updatedAt: '2024-09-20T09:30:00.000Z',
+      url: 'https://d3p4q5r6s7t8u9.cloudfront.net/',
+      distributionId: 'E3NEWPORTAL789',
+      updatedAt: '2024-10-15T14:45:00.000Z',
       originBucket: 'resume-forge-app-2025',
     };
     const { app, cleanup } = await createServer({ metadata });
@@ -55,9 +55,9 @@ describe('published CloudFront helpers', () => {
         success: true,
         cloudfront: {
           stackName: metadata.stackName,
-          url: 'https://d2k9m8n7p6q5r4.cloudfront.net',
-          fileUrl: 'https://d2k9m8n7p6q5r4.cloudfront.net',
-          typeUrl: 'https://d2k9m8n7p6q5r4.cloudfront.net#download',
+          url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+          fileUrl: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+          typeUrl: 'https://d3p4q5r6s7t8u9.cloudfront.net#download',
           distributionId: metadata.distributionId,
           originBucket: metadata.originBucket,
           updatedAt: metadata.updatedAt,
@@ -71,16 +71,16 @@ describe('published CloudFront helpers', () => {
   test('redirects callers to the published domain', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d2k9m8n7p6q5r4.cloudfront.net/prod',
-      distributionId: 'E2LATESTBUCKET56',
-      updatedAt: '2024-09-20T09:30:00.000Z',
+      url: 'https://d3p4q5r6s7t8u9.cloudfront.net/prod',
+      distributionId: 'E3NEWPORTAL789',
+      updatedAt: '2024-10-15T14:45:00.000Z',
       originBucket: 'resume-forge-app-2025',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
       const response = await request(app).get('/go/cloudfront');
       expect(response.status).toBe(308);
-      expect(response.headers.location).toBe('https://d2k9m8n7p6q5r4.cloudfront.net/prod');
+      expect(response.headers.location).toBe('https://d3p4q5r6s7t8u9.cloudfront.net/prod');
     } finally {
       await cleanup();
     }
@@ -89,9 +89,9 @@ describe('published CloudFront helpers', () => {
   test('allows redirecting to a specific path on the published domain', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d2k9m8n7p6q5r4.cloudfront.net',
-      distributionId: 'E2LATESTBUCKET56',
-      updatedAt: '2024-09-20T09:30:00.000Z',
+      url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+      distributionId: 'E3NEWPORTAL789',
+      updatedAt: '2024-10-15T14:45:00.000Z',
       originBucket: 'resume-forge-app-2025',
     };
     const { app, cleanup } = await createServer({ metadata });
@@ -101,7 +101,7 @@ describe('published CloudFront helpers', () => {
         .query({ path: 'api/process-cv' });
       expect(response.status).toBe(308);
       expect(response.headers.location).toBe(
-        'https://d2k9m8n7p6q5r4.cloudfront.net/api/process-cv'
+        'https://d3p4q5r6s7t8u9.cloudfront.net/api/process-cv'
       );
     } finally {
       await cleanup();

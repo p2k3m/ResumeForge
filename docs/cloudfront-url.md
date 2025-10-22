@@ -5,18 +5,18 @@ The **canonical production CloudFront domain** for ResumeForge lives in [`config
 ```json
 {
   "stackName": "ResumeForge",
-  "url": "https://d2k9m8n7p6q5r4.cloudfront.net",
-  "distributionId": "E2LATESTBUCKET56",
+  "url": "https://d3p4q5r6s7t8u9.cloudfront.net",
+  "distributionId": "E3NEWPORTAL789",
   "originBucket": "resume-forge-app-2025",
-  "updatedAt": "2024-09-20T09:30:00.000Z"
+  "updatedAt": "2024-10-15T14:45:00.000Z"
 }
 ```
 
 ## Active domain snapshot
 
-- **Production CloudFront URL:** [`https://d2k9m8n7p6q5r4.cloudfront.net`](https://d2k9m8n7p6q5r4.cloudfront.net)
+- **Production CloudFront URL:** [`https://d3p4q5r6s7t8u9.cloudfront.net`](https://d3p4q5r6s7t8u9.cloudfront.net)
 - **Origin bucket:** `resume-forge-app-2025`
-- **Published:** 20 September 2024, 09:30 UTC (source: [`config/published-cloudfront.json`](../config/published-cloudfront.json))
+- **Published:** 15 October 2024, 14:45 UTC (source: [`config/published-cloudfront.json`](../config/published-cloudfront.json))
 
 This document and the project README mirror the latest domain so onboarding teams can copy the canonical URL without installing the CLI helpers or loading the app.
 
