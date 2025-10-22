@@ -221,10 +221,6 @@ function shouldDeleteObjectKey(key, prefix) {
     return false
   }
 
-  if (sanitized.startsWith('assets/')) {
-    return false
-  }
-
   return true
 }
 
