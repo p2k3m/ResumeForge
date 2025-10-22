@@ -6,7 +6,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -22,7 +22,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         if (method === 'HEAD') {
           return new Response(null, { status: 404, statusText: 'Not Found' });
         }
@@ -49,7 +49,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-cb71cdf7.js' && method === 'GET';
+      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
     });
 
     expect(assetGetCalls.some(([url]) => url.includes('__cf_verify_bust='))).toBe(true);
@@ -59,7 +59,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -75,7 +75,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         if (method === 'HEAD') {
           return new Response(null, { status: 403, statusText: 'Forbidden' });
         }
@@ -104,7 +104,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-cb71cdf7.js' && method === 'GET';
+      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
     });
 
     expect(assetGetCalls).toHaveLength(2);
@@ -115,7 +115,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -131,7 +131,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         if (method === 'HEAD') {
           return new Response(null, { status: 404, statusText: 'Not Found' });
         }
@@ -158,7 +158,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-cb71cdf7.js' && method === 'GET';
+      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
     });
 
     expect(assetGetCalls).toHaveLength(1);
@@ -169,8 +169,8 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="./assets/index-cb71cdf7.js"></script>
-          <link rel="stylesheet" href="./assets/index-7f4fb383.css" />
+          <script type="module" src="./assets/index-d438c9c1.js"></script>
+          <link rel="stylesheet" href="./assets/index-ac104019.css" />
         </head>
         <body></body>
       </html>`;
@@ -186,7 +186,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (['/assets/index-cb71cdf7.js', '/assets/index-7f4fb383.css'].includes(target.pathname)) {
+      if (['/assets/index-d438c9c1.js', '/assets/index-ac104019.css'].includes(target.pathname)) {
         return new Response('', { status: 200 });
       }
 
@@ -214,8 +214,8 @@ describe('verifyClientAssets', () => {
 
     expect(requestedPaths).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: '/assets/index-cb71cdf7.js', method: 'HEAD' }),
-        expect.objectContaining({ path: '/assets/index-7f4fb383.css', method: 'HEAD' }),
+        expect.objectContaining({ path: '/assets/index-d438c9c1.js', method: 'HEAD' }),
+        expect.objectContaining({ path: '/assets/index-ac104019.css', method: 'HEAD' }),
       ]),
     );
   });
@@ -224,7 +224,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -240,7 +240,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         if (method === 'HEAD') {
           return new Response(null, { status: 403, statusText: 'Forbidden' });
         }
@@ -264,7 +264,7 @@ describe('verifyClientAssets', () => {
     ).resolves.toBeUndefined();
 
     const assetRequests = fetchImpl.mock.calls.filter(([url]) =>
-      url.includes('/assets/index-cb71cdf7.js'),
+      url.includes('/assets/index-d438c9c1.js'),
     );
     expect(assetRequests).toHaveLength(2);
     const [, headOptions] = assetRequests[0];
@@ -278,7 +278,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -294,7 +294,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         return new Response('', { status: 200 });
       }
 
@@ -323,7 +323,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -341,7 +341,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         if (method === 'HEAD' && shouldFail) {
           shouldFail = false;
           return new Response(null, { status: 500, statusText: 'Upstream Error' });
@@ -370,7 +370,7 @@ describe('verifyClientAssets', () => {
 
     const headCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-cb71cdf7.js' && method === 'HEAD';
+      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'HEAD';
     });
 
     expect(headCalls).toHaveLength(2);
@@ -380,7 +380,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -396,7 +396,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
 
@@ -418,7 +418,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -434,11 +434,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
         return new Response(null, { status: 200 });
       }
 
@@ -458,17 +458,17 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-cb71cdf7.js'));
+      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
 
-    expect(attemptedPaths).toContain('/assets/index-cb71cdf7.js');
-    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-cb71cdf7.js');
+    expect(attemptedPaths).toContain('/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
   });
 
   test('retries asset verification with manifest prefixes when root path returns 403', async () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -484,11 +484,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         return new Response(null, { status: 403, statusText: 'Access Denied' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
         return new Response(null, { status: 200 });
       }
 
@@ -508,17 +508,17 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-cb71cdf7.js'));
+      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
 
-    expect(attemptedPaths).toContain('/assets/index-cb71cdf7.js');
-    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-cb71cdf7.js');
+    expect(attemptedPaths).toContain('/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
   });
 
   test('attempts suffix variations of manifest prefixes when CDN origin strips leading segments', async () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -534,15 +534,15 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
         return new Response(null, { status: 403, statusText: 'Forbidden' });
       }
 
-      if (target.pathname === '/client/prod/latest/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/client/prod/latest/assets/index-d438c9c1.js') {
         return new Response('', { status: 200 });
       }
 
@@ -562,16 +562,16 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-cb71cdf7.js'));
+      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
 
-    expect(attemptedPaths).toContain('/client/prod/latest/assets/index-cb71cdf7.js');
+    expect(attemptedPaths).toContain('/client/prod/latest/assets/index-d438c9c1.js');
   });
 
   test('includes attempted asset path details when all CDN prefixes fail', async () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -587,7 +587,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname.includes('index-cb71cdf7.js')) {
+      if (target.pathname.includes('index-d438c9c1.js')) {
         return new Response(null, { status: 403, statusText: 'Forbidden' });
       }
 
@@ -595,11 +595,11 @@ describe('verifyClientAssets', () => {
     });
 
     const expectedPaths = [
-      '/assets/index-cb71cdf7.js',
-      '/static/client/prod/latest/assets/index-cb71cdf7.js',
-      '/client/prod/latest/assets/index-cb71cdf7.js',
-      '/prod/latest/assets/index-cb71cdf7.js',
-      '/latest/assets/index-cb71cdf7.js',
+      '/assets/index-d438c9c1.js',
+      '/static/client/prod/latest/assets/index-d438c9c1.js',
+      '/client/prod/latest/assets/index-d438c9c1.js',
+      '/prod/latest/assets/index-d438c9c1.js',
+      '/latest/assets/index-d438c9c1.js',
     ];
 
     await expect(
@@ -613,7 +613,7 @@ describe('verifyClientAssets', () => {
       }),
     ).rejects.toMatchObject({
       attemptedAssetPaths: expectedPaths,
-      message: expect.stringContaining('attempted asset paths: /assets/index-cb71cdf7.js'),
+      message: expect.stringContaining('attempted asset paths: /assets/index-d438c9c1.js'),
     });
   });
 
@@ -621,8 +621,8 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
-          <link rel="stylesheet" href="/assets/index-7f4fb383.css" />
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
+          <link rel="stylesheet" href="/assets/index-ac104019.css" />
         </head>
         <body></body>
       </html>`;
@@ -678,7 +678,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
@@ -694,7 +694,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-cb71cdf7.js') {
+      if (target.pathname === '/assets/index-d438c9c1.js') {
         return new Response(null, {
           status: 403,
           statusText: 'Forbidden',
@@ -720,7 +720,7 @@ describe('verifyClientAssets', () => {
     const html = `<!doctype html>
       <html>
         <head>
-          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
         </head>
         <body></body>
       </html>`;
