@@ -617,6 +617,63 @@ describe('verifyClientAssets', () => {
     });
   });
 
+  test('sends an Origin header when probing hashed asset routes', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-cb71cdf7.js"></script>
+          <link rel="stylesheet" href="/assets/index-7f4fb383.css" />
+        </head>
+        <body></body>
+      </html>`;
+
+    const observedOrigins = [];
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname.startsWith('/assets/')) {
+        observedOrigins.push(options?.headers?.Origin ?? null);
+
+        if (method === 'HEAD') {
+          return new Response(null, { status: 405, statusText: 'Method Not Allowed' });
+        }
+
+        const contentType = target.pathname.endsWith('.css')
+          ? 'text/css'
+          : 'application/javascript';
+
+        return new Response('', {
+          status: 200,
+          headers: { 'Content-Type': contentType },
+        });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(observedOrigins).not.toHaveLength(0);
+    expect(observedOrigins.every((value) => value === 'https://example.cloudfront.net')).toBe(true);
+  });
+
   test('throws a proxy blocked error when responses indicate an upstream proxy', async () => {
     const html = `<!doctype html>
       <html>
