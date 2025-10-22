@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { checkCloudfrontHealth, resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js';
-import { verifyClientAssets } from '../lib/cloudfrontAssetCheck.js';
+import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js';
+import { runPostDeploymentApiTests } from '../lib/postDeploymentApiTests.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,17 +36,16 @@ async function main() {
       console.log(`Verifying provided CloudFront URL: ${targetUrl}`);
     }
 
-    const result = await checkCloudfrontHealth({ url: targetUrl });
-    console.log(
-      `CloudFront distribution responded with status "${result.payload.status}" at ${result.url}.`
-    );
-
-    await verifyClientAssets({
+    const { health } = await runPostDeploymentApiTests({
       baseUrl: targetUrl,
+      healthCheckTimeoutMs: 10000,
       retries: 4,
       retryDelayMs: 30000,
       logger: console,
     });
+    console.log(
+      `CloudFront distribution responded with status "${health.payload.status}" at ${health.url}.`
+    );
     console.log('Verified client assets are accessible after deployment.');
     process.exit(0);
   } catch (err) {
