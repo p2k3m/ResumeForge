@@ -201,6 +201,33 @@ function resolveBucketConfiguration() {
   return { bucket, prefix: normalizedPrefix, stage }
 }
 
+function shouldDeleteObjectKey(key, prefix) {
+  if (typeof key !== 'string' || !key) {
+    return false
+  }
+
+  const normalizedKey = key.replace(/\\/g, '/').trim()
+  if (!normalizedKey.startsWith(prefix)) {
+    return false
+  }
+
+  const relativePath = normalizedKey.slice(prefix.length)
+  if (!relativePath || relativePath === '/') {
+    return false
+  }
+
+  const sanitized = relativePath.replace(/^\/+/, '')
+  if (!sanitized) {
+    return false
+  }
+
+  if (sanitized.startsWith('assets/')) {
+    return false
+  }
+
+  return true
+}
+
 async function purgeExistingObjects({ s3, bucket, prefix }) {
   const prefixWithSlash = prefix.endsWith('/') ? prefix : `${prefix}/`
   let continuationToken
@@ -218,7 +245,7 @@ async function purgeExistingObjects({ s3, bucket, prefix }) {
     if (contents.length > 0) {
       const objects = contents
         .map((item) => item.Key)
-        .filter(Boolean)
+        .filter((key) => shouldDeleteObjectKey(key, prefixWithSlash))
         .map((key) => ({ Key: key }))
 
       for (let index = 0; index < objects.length; index += 1000) {
