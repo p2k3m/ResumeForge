@@ -8,6 +8,7 @@ import {
   DeleteObjectsCommand,
   HeadBucketCommand,
   ListObjectsV2Command,
+  PutBucketWebsiteCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -19,6 +20,7 @@ const projectRoot = path.resolve(__dirname, '..')
 const clientDistDir = path.join(projectRoot, 'client', 'dist')
 const clientIndexPath = path.join(clientDistDir, 'index.html')
 const serviceWorkerPath = path.join(clientDistDir, 'service-worker.js')
+const errorDocumentPath = path.join(clientDistDir, '404.html')
 const assetsDir = path.join(clientDistDir, 'assets')
 
 function resolveBuildVersion() {
@@ -117,6 +119,7 @@ function extractHashedIndexAssets(html) {
 async function gatherClientAssetFiles() {
   await ensureDirectoryPopulated(clientDistDir, { label: 'client build output' })
   await ensureFileExists(clientIndexPath, { label: 'client entry point' })
+  await ensureFileExists(errorDocumentPath, { label: 'custom error page' })
   await ensureDirectoryPopulated(assetsDir, { label: 'hashed asset bundle' })
   await ensureFileExists(serviceWorkerPath, { label: 'service worker' })
 
@@ -135,6 +138,31 @@ async function gatherClientAssetFiles() {
 
   files.sort((a, b) => a.localeCompare(b))
   return { files, hashedAssets }
+}
+
+async function configureStaticWebsiteHosting({ s3, bucket }) {
+  const configuration = {
+    IndexDocument: { Suffix: 'index.html' },
+    ErrorDocument: { Key: '404.html' },
+  }
+
+  try {
+    await s3.send(
+      new PutBucketWebsiteCommand({
+        Bucket: bucket,
+        WebsiteConfiguration: configuration,
+      }),
+    )
+    console.log(
+      `[upload-static] Configured static website hosting for s3://${bucket} (index.html → default, 404.html → error).`,
+    )
+  } catch (error) {
+    throw new Error(
+      `[upload-static] Failed to configure static website hosting on bucket "${bucket}": ${
+        error?.message || error
+      }`,
+    )
+  }
 }
 
 async function walkDirectory(directory, base = directory) {
@@ -369,6 +397,7 @@ async function main() {
   }
 
   await purgeExistingObjects({ s3, bucket, prefix })
+  await configureStaticWebsiteHosting({ s3, bucket })
   const uploadedFiles = await uploadFiles({ s3, bucket, prefix, files })
   await uploadManifest({
     s3,
