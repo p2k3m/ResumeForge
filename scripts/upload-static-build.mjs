@@ -154,7 +154,7 @@ async function configureStaticWebsiteHosting({ s3, bucket }) {
       }),
     )
     console.log(
-      `[upload-static] Configured static website hosting for s3://${bucket} (index.html → default, 404.html → error).`,
+      `[upload-static] Configured static website hosting for s3://${bucket} (/ → index.html default, 404.html → error).`,
     )
   } catch (error) {
     throw new Error(

@@ -15,7 +15,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -68,7 +68,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -124,7 +124,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -179,7 +179,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -233,7 +233,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -274,7 +274,7 @@ describe('verifyClientAssets', () => {
     expect(new URL(assetRequests[1][0]).searchParams.has('__cf_verify_bust')).toBe(false);
   });
 
-  test('requests index.html with cache-busting parameters to avoid stale content', async () => {
+  test('requests the application root with cache-busting parameters to avoid stale content', async () => {
     const html = `<!doctype html>
       <html>
         <head>
@@ -287,7 +287,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -311,7 +311,7 @@ describe('verifyClientAssets', () => {
       }),
     ).resolves.toBeUndefined();
 
-    const indexRequest = fetchImpl.mock.calls.find(([url]) => url.includes('/index.html'));
+    const indexRequest = fetchImpl.mock.calls.find(([url]) => new URL(url).pathname === '/');
     expect(indexRequest).toBeDefined();
     const [, options] = indexRequest;
     expect(options?.headers?.['Cache-Control']).toBe('no-cache');
@@ -334,7 +334,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -389,7 +389,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -427,7 +427,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -477,7 +477,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -527,7 +527,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -580,7 +580,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -633,7 +633,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -687,7 +687,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
@@ -737,7 +737,7 @@ describe('verifyClientAssets', () => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
 
-      if (target.pathname === '/index.html' && method === 'GET') {
+      if (target.pathname === '/' && method === 'GET') {
         return new Response(html, {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
