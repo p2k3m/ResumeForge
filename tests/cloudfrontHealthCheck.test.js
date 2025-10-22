@@ -23,7 +23,7 @@ describe('checkCloudfrontHealth', () => {
   });
 
   test('verifies a root CloudFront distribution', async () => {
-    const origin = 'https://d2k9m8n7p6q5r4.cloudfront.net';
+    const origin = 'https://d3p4q5r6s7t8u9.cloudfront.net';
     const pool = mockAgent.get(origin);
     pool.intercept({ path: '/healthz', method: 'GET' }).reply(
       200,
@@ -40,8 +40,8 @@ describe('checkCloudfrontHealth', () => {
   });
 
   test('verifies a distribution with a stage path', async () => {
-    const originWithStage = 'https://d2k9m8n7p6q5r4.cloudfront.net/prod';
-    const pool = mockAgent.get('https://d2k9m8n7p6q5r4.cloudfront.net');
+    const originWithStage = 'https://d3p4q5r6s7t8u9.cloudfront.net/prod';
+    const pool = mockAgent.get('https://d3p4q5r6s7t8u9.cloudfront.net');
     pool
       .intercept({ path: '/prod/healthz', method: 'GET' })
       .reply(200, { status: 'ok' }, { headers: { 'content-type': 'application/json' } });
@@ -49,12 +49,12 @@ describe('checkCloudfrontHealth', () => {
     const result = await checkCloudfrontHealth({ url: originWithStage, fetchImpl: undiciFetch });
     expect(result).toMatchObject({
       ok: true,
-      url: 'https://d2k9m8n7p6q5r4.cloudfront.net/prod/healthz',
+      url: 'https://d3p4q5r6s7t8u9.cloudfront.net/prod/healthz',
     });
   });
 
   test('throws when the health check fails', async () => {
-    const origin = 'https://d2k9m8n7p6q5r4.cloudfront.net';
+    const origin = 'https://d3p4q5r6s7t8u9.cloudfront.net';
     const pool = mockAgent.get(origin);
     pool
       .intercept({ path: '/healthz', method: 'GET' })
@@ -68,17 +68,17 @@ describe('checkCloudfrontHealth', () => {
 
 describe('buildHealthCheckUrl', () => {
   test('normalizes root URL', () => {
-    const url = buildHealthCheckUrl('https://d2k9m8n7p6q5r4.cloudfront.net');
-    expect(url.toString()).toBe('https://d2k9m8n7p6q5r4.cloudfront.net/healthz');
+    const url = buildHealthCheckUrl('https://d3p4q5r6s7t8u9.cloudfront.net');
+    expect(url.toString()).toBe('https://d3p4q5r6s7t8u9.cloudfront.net/healthz');
   });
 
   test('normalizes URL with trailing slash', () => {
-    const url = buildHealthCheckUrl('https://d2k9m8n7p6q5r4.cloudfront.net/');
-    expect(url.toString()).toBe('https://d2k9m8n7p6q5r4.cloudfront.net/healthz');
+    const url = buildHealthCheckUrl('https://d3p4q5r6s7t8u9.cloudfront.net/');
+    expect(url.toString()).toBe('https://d3p4q5r6s7t8u9.cloudfront.net/healthz');
   });
 
   test('normalizes URL with stage path', () => {
-    const url = buildHealthCheckUrl('https://d2k9m8n7p6q5r4.cloudfront.net/prod');
-    expect(url.toString()).toBe('https://d2k9m8n7p6q5r4.cloudfront.net/prod/healthz');
+    const url = buildHealthCheckUrl('https://d3p4q5r6s7t8u9.cloudfront.net/prod');
+    expect(url.toString()).toBe('https://d3p4q5r6s7t8u9.cloudfront.net/prod/healthz');
   });
 });

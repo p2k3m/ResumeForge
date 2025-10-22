@@ -1,6 +1,7 @@
 import React from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import App from './App.jsx'
+import { bootstrapApp } from './bootstrapApp.js'
 import '@fontsource-variable/inter/wght.css'
 import '@fontsource-variable/inter/wght-italic.css'
 import '@fontsource/jetbrains-mono/400.css'
@@ -8,36 +9,27 @@ import '@fontsource/jetbrains-mono/500.css'
 import '@fontsource/jetbrains-mono/700.css'
 import './index.css'
 
-const container = document.getElementById('root')
+const resolvedImportMetaEnv =
+  (typeof import.meta !== 'undefined' &&
+    import.meta &&
+    typeof import.meta === 'object' &&
+    import.meta.env) ||
+  globalThis.__RESUMEFORGE_IMPORT_META_ENV__ ||
+  {}
 
-const metaTag = document.querySelector('meta[name="resumeforge-api-base"]')
-const metaContent = metaTag?.content
-const sanitizedMetaBase = typeof metaContent === 'string' ? metaContent.trim() : ''
+bootstrapApp({
+  documentRef: typeof document !== 'undefined' ? document : undefined,
+  windowRef: typeof window !== 'undefined' ? window : undefined,
+  importMetaEnv: resolvedImportMetaEnv,
+  AppComponent: App,
+  reactDomClient: { createRoot, hydrateRoot }
+})
 
-if (typeof window !== 'undefined' && typeof window.__RESUMEFORGE_API_BASE_URL__ === 'undefined') {
-  const envBase =
-    typeof import.meta.env.VITE_API_BASE_URL === 'string'
-      ? import.meta.env.VITE_API_BASE_URL.trim()
-      : ''
-  const initialBase = sanitizedMetaBase || envBase
-  if (initialBase && initialBase !== 'undefined' && initialBase !== 'null') {
-    window.__RESUMEFORGE_API_BASE_URL__ = initialBase
-  }
-}
-
-const app = (
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
-
-if (container?.hasChildNodes()) {
-  hydrateRoot(container, app)
-} else if (container) {
-  createRoot(container).render(app)
-}
-
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !import.meta.env.DEV) {
+if (
+  typeof window !== 'undefined' &&
+  'serviceWorker' in navigator &&
+  !resolvedImportMetaEnv.DEV
+) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/service-worker.js')

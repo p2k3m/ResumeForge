@@ -201,11 +201,11 @@ npm run print:cloudfront-url -- <stack-name>
 
 The script uses your configured AWS credentials/region to read the `CloudFrontUrl` output from the specified stack and prints the full distribution URL (for example, `https://d123456abcdef8.cloudfront.net`).
 
-> **Active CloudFront domain:** `https://d2k9m8n7p6q5r4.cloudfront.net`
+> **Active CloudFront domain:** `https://d3p4q5r6s7t8u9.cloudfront.net`
 >
 > Origin bucket: `resume-forge-app-2025`
 >
-> Published: 20 September 2024 at 09:30 UTC (from [`config/published-cloudfront.json`](config/published-cloudfront.json)).
+> Published: 15 October 2024 at 14:45 UTC (from [`config/published-cloudfront.json`](config/published-cloudfront.json)).
 
 The canonical domain is tracked in `config/published-cloudfront.json` and mirrored here so anyone with repository access can retrieve the production URL without opening the app.
 
