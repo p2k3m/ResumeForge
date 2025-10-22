@@ -370,7 +370,11 @@ function resolveCloudfrontRetryConfiguration() {
   }
 }
 
-function shouldAllowCloudfrontFailure() {
+function shouldAllowCloudfrontFailure({ cliOverride } = {}) {
+  if (typeof cliOverride === 'boolean') {
+    return cliOverride
+  }
+
   const overrideCandidates = [
     process.env.ALLOW_CLOUDFRONT_VERIFY_FAILURE,
     process.env.CLOUDFRONT_VERIFY_ALLOW_FAILURE,
@@ -383,6 +387,46 @@ function shouldAllowCloudfrontFailure() {
   }
 
   return false
+}
+
+function parseCliFlags(argv = []) {
+  const flags = {
+    skipCloudfront: false,
+    allowCloudfrontFailure: undefined,
+  }
+
+  if (!Array.isArray(argv)) {
+    return flags
+  }
+
+  for (const rawArg of argv) {
+    if (typeof rawArg !== 'string') {
+      continue
+    }
+
+    const arg = rawArg.trim()
+    if (!arg.startsWith('--')) {
+      continue
+    }
+
+    const normalized = arg.replace(/=.*$/u, '').toLowerCase()
+
+    if (normalized === '--skip-cloudfront' || normalized === '--skip-cloudfront-verify') {
+      flags.skipCloudfront = true
+      continue
+    }
+
+    if (normalized === '--allow-cloudfront-failure') {
+      flags.allowCloudfrontFailure = true
+      continue
+    }
+
+    if (normalized === '--no-allow-cloudfront-failure') {
+      flags.allowCloudfrontFailure = false
+    }
+  }
+
+  return flags
 }
 
 async function verifyCloudfrontAssets(baseUrl, { retryDelays, assetPathPrefixes }) {
@@ -412,8 +456,11 @@ async function verifyCloudfrontAssets(baseUrl, { retryDelays, assetPathPrefixes 
 }
 
 async function main() {
+  const cliFlags = parseCliFlags(process.argv.slice(2))
   const enforceStaticVerification = shouldEnforceVerification('ENFORCE_STATIC_ASSET_VERIFY')
-  const allowCloudfrontFailure = shouldAllowCloudfrontFailure()
+  const allowCloudfrontFailure = shouldAllowCloudfrontFailure({
+    cliOverride: cliFlags.allowCloudfrontFailure,
+  })
 
   let bucketConfig
   try {
@@ -479,11 +526,16 @@ async function main() {
     )
   }
 
-  const skipCloudfront = /^(?:true|1|yes)$/iu.test(
+  const skipCloudfrontEnv = /^(?:true|1|yes)$/iu.test(
     String(process.env.SKIP_CLOUDFRONT_VERIFY || '').trim(),
   )
+  const skipCloudfront = cliFlags.skipCloudfront || skipCloudfrontEnv
   if (skipCloudfront) {
-    console.warn('[verify-static] Skipping CloudFront verification due to SKIP_CLOUDFRONT_VERIFY.')
+    if (cliFlags.skipCloudfront) {
+      console.warn('[verify-static] Skipping CloudFront verification due to --skip-cloudfront flag.')
+    } else {
+      console.warn('[verify-static] Skipping CloudFront verification due to SKIP_CLOUDFRONT_VERIFY.')
+    }
     console.warn(
       '[verify-static] S3 assets are verified, but CDN availability has not been confirmed by this run.',
     )
