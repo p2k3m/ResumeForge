@@ -165,6 +165,61 @@ describe('verifyClientAssets', () => {
     expect(new URL(assetGetCalls[0][0]).searchParams.has('__cf_verify_bust')).toBe(false);
   });
 
+  test('detects hashed index assets referenced with relative paths', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="./assets/index-cb71cdf7.js"></script>
+          <link rel="stylesheet" href="./assets/index-7f4fb383.css" />
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/index.html' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (['/assets/index-cb71cdf7.js', '/assets/index-7f4fb383.css'].includes(target.pathname)) {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const assetRequests = fetchImpl.mock.calls.filter(([url]) =>
+      new URL(url).pathname.startsWith('/assets/index-'),
+    );
+
+    const requestedPaths = assetRequests.map(([url, init]) => ({
+      path: new URL(url).pathname,
+      method: (init?.method || 'GET').toUpperCase(),
+    }));
+
+    expect(requestedPaths).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: '/assets/index-cb71cdf7.js', method: 'HEAD' }),
+        expect.objectContaining({ path: '/assets/index-7f4fb383.css', method: 'HEAD' }),
+      ]),
+    );
+  });
+
   test('retries with a normal GET request when a HEAD request returns 403', async () => {
     const html = `<!doctype html>
       <html>
