@@ -116,6 +116,18 @@ import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 
 const knownResumeIdentifiers = new Set();
 
+const IMMUTABLE_STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
+
+function setStaticAssetCacheHeaders(res, assetPath) {
+  const extension = path.extname(assetPath).toLowerCase();
+  if (extension && !STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST.has(extension)) {
+    res.setHeader('Cache-Control', IMMUTABLE_STATIC_ASSET_CACHE_CONTROL);
+  } else {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
+}
+
 const extractText = extractResumeText;
 const classifyDocument = classifyResumeDocument;
 const deploymentEnvironment = getDeploymentEnvironment();
@@ -2790,7 +2802,13 @@ app.use((req, res, next) => {
 
 if (shouldServeClientAppRoutes) {
   if (clientAssetsAvailable()) {
-    app.use(express.static(clientDistDir, { index: false, fallthrough: true }));
+    app.use(
+      express.static(clientDistDir, {
+        index: false,
+        fallthrough: true,
+        setHeaders: setStaticAssetCacheHeaders,
+      })
+    );
   } else {
     logStructured('warn', 'client_build_missing', {
       path: clientIndexPath,
@@ -24059,4 +24077,5 @@ export {
   determineUploadContentType,
   setCoverLetterFallbackBuilder,
   resetTestState,
+  setStaticAssetCacheHeaders,
 };
