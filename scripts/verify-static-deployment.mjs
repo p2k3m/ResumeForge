@@ -139,6 +139,42 @@ async function loadManifest({ s3, bucket, prefix }) {
   }
 }
 
+function normalizeHashedAssetPath(value) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  let normalized = value.trim()
+  if (!normalized) {
+    return null
+  }
+
+  const queryIndex = normalized.indexOf('?')
+  if (queryIndex >= 0) {
+    normalized = normalized.slice(0, queryIndex)
+  }
+
+  const assetsIndex = normalized.indexOf('assets/')
+  if (assetsIndex >= 0) {
+    normalized = normalized.slice(assetsIndex)
+  } else {
+    normalized = normalized
+      .replace(/^(?:\.\.\/)+/u, '')
+      .replace(/^(?:\.\/)+/u, '')
+      .replace(/^\/+/, '')
+  }
+
+  if (!normalized.startsWith('assets/')) {
+    return null
+  }
+
+  if (!/^assets\/index-[\w.-]+\.(?:css|js)$/u.test(normalized)) {
+    return null
+  }
+
+  return normalized
+}
+
 async function verifyS3Assets({ s3, bucket, manifest }) {
   const failures = []
   for (const entry of manifest.files) {
@@ -210,6 +246,88 @@ function normalizeHashedIndexAssets(manifest) {
   }
 
   return normalizedAssets
+}
+
+function extractHashedIndexAssetsFromHtml(html) {
+  if (typeof html !== 'string' || !html.trim()) {
+    throw new Error('[verify-static] index.html is empty or unreadable from S3.')
+  }
+
+  const assetPattern = /assets\/index-[\w.-]+\.(?:css|js)(?:\?[^"'>\s]+)?/gu
+  const matches = html.match(assetPattern) || []
+  const assets = []
+  const seen = new Set()
+
+  for (const match of matches) {
+    const normalized = normalizeHashedAssetPath(match)
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized)
+      assets.push(normalized)
+    }
+  }
+
+  if (assets.length === 0) {
+    throw new Error('[verify-static] index.html does not reference any hashed index assets.')
+  }
+
+  const cssCount = assets.filter((asset) => asset.endsWith('.css')).length
+  const jsCount = assets.filter((asset) => asset.endsWith('.js')).length
+  if (cssCount === 0 || jsCount === 0) {
+    throw new Error(
+      `[verify-static] index.html must reference hashed CSS and JS bundles. Found ${cssCount} CSS and ${jsCount} JS assets.`,
+    )
+  }
+
+  return assets
+}
+
+async function ensureIndexHtmlMatchesManifest({ s3, bucket, prefix, hashedAssets }) {
+  const indexKey = buildS3Key(prefix, 'index.html')
+
+  let response
+  try {
+    response = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: indexKey,
+      }),
+    )
+  } catch (error) {
+    const reason = error?.message || error
+    throw new Error(
+      `[verify-static] Unable to load index.html from s3://${bucket}/${indexKey}: ${reason}`,
+    )
+  }
+
+  const html = await readStreamToString(response.Body)
+  const indexAssets = extractHashedIndexAssetsFromHtml(html)
+
+  const manifestSet = new Set(
+    hashedAssets.map((asset) => normalizeHashedAssetPath(asset)).filter(Boolean),
+  )
+  const indexSet = new Set(indexAssets.map((asset) => normalizeHashedAssetPath(asset)).filter(Boolean))
+
+  const missingFromManifest = Array.from(indexSet).filter((asset) => !manifestSet.has(asset))
+  if (missingFromManifest.length > 0) {
+    const details = missingFromManifest.join(', ')
+    throw new Error(
+      `[verify-static] index.html references hashed asset${
+        missingFromManifest.length === 1 ? '' : 's'
+      } not listed in manifest.json: ${details}.`,
+    )
+  }
+
+  const missingFromIndex = Array.from(manifestSet).filter((asset) => !indexSet.has(asset))
+  if (missingFromIndex.length > 0) {
+    const details = missingFromIndex.join(', ')
+    throw new Error(
+      `[verify-static] Manifest hashed asset${
+        missingFromIndex.length === 1 ? '' : 's'
+      } not referenced by index.html: ${details}.`,
+    )
+  }
+
+  return { indexKey, indexAssets }
 }
 
 function ensureHashedIndexAssets(manifest, { manifestKey, bucket }) {
@@ -505,6 +623,17 @@ async function main() {
   )
 
   const hashedAssets = ensureHashedIndexAssets(manifest, { manifestKey, bucket })
+  const { indexKey, indexAssets } = await ensureIndexHtmlMatchesManifest({
+    s3,
+    bucket,
+    prefix,
+    hashedAssets,
+  })
+  console.log(
+    `[verify-static] index.html (${indexAssets.length} asset${
+      indexAssets.length === 1 ? '' : 's'
+    }) matches manifest hashed bundle references at s3://${bucket}/${indexKey}`,
+  )
 
   await verifyS3Assets({ s3, bucket, manifest })
   console.log('[verify-static] Confirmed all uploaded static assets are accessible via S3.')
