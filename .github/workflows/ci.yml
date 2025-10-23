@@ -199,6 +199,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Validate runtime configuration environment
+        run: node scripts/check-required-runtime-env.mjs
+        env:
+          SECRET_NAME: ${{ env.SECRET_NAME }}
+
       - name: Build serverless application
         run: sam build
 
