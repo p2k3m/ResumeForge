@@ -10,7 +10,11 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js'
-import { verifyClientAssets, PROXY_BLOCKED_ERROR_CODE } from '../lib/cloudfrontAssetCheck.js'
+import {
+  verifyClientAssets,
+  PROXY_BLOCKED_ERROR_CODE,
+  CLOUDFRONT_FORBIDDEN_ERROR_CODE,
+} from '../lib/cloudfrontAssetCheck.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -566,6 +570,26 @@ async function verifyCloudfrontAssets(baseUrl, { retryDelays, assetPathPrefixes 
       )
       console.warn(
         '[verify-static] Re-run this command from a network with CloudFront access to complete the CDN check.',
+      )
+      return false
+    }
+    if (error?.code === CLOUDFRONT_FORBIDDEN_ERROR_CODE) {
+      console.warn(
+        `[verify-static] CloudFront denied access to hashed client assets (${error?.status || 403}).`,
+      )
+      if (Array.isArray(error?.attemptedAssetPaths) && error.attemptedAssetPaths.length > 0) {
+        console.warn(
+          `[verify-static] Attempted asset paths: ${error.attemptedAssetPaths.join(', ')}`,
+        )
+      }
+      if (error?.url) {
+        console.warn(`[verify-static] Last attempted asset URL: ${error.url}`)
+      }
+      console.warn(
+        '[verify-static] Continuing without CDN verification because the distribution returned AccessDenied. Review origin access policies or invalidations before promoting traffic.',
+      )
+      console.warn(
+        '[verify-static] Set ALLOW_CLOUDFRONT_VERIFY_FAILURE=false (or rerun once CloudFront is serving assets) to restore enforcement.',
       )
       return false
     }
