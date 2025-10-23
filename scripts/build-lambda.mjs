@@ -5,6 +5,7 @@ import path from 'path'
 import { mkdir, rm, cp, writeFile } from 'fs/promises'
 import { spawn, execFile } from 'child_process'
 import { backstopPdfTemplates } from './pdf-template-backstop.mjs'
+import { ensureRequiredEnvVars } from './utils/ensure-required-env.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -166,6 +167,8 @@ function parseCliOptions() {
 
   return { outDir: outDirCandidate, functionNames }
 }
+
+ensureRequiredEnvVars({ context: 'the Lambda build process' })
 
 const { outDir, functionNames } = parseCliOptions()
 
