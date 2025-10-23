@@ -5,8 +5,11 @@ import fs from 'fs/promises'
 import path from 'path'
 import process from 'process'
 import { fileURLToPath } from 'url'
+import { ensureRequiredEnvVars } from './utils/ensure-required-env.mjs'
 
 async function main() {
+  ensureRequiredEnvVars({ context: 'the CloudFront URL publication workflow' })
+
   const [, , stackName] = process.argv
   if (!stackName) {
     console.error('Usage: npm run publish:cloudfront-url -- <stack-name>')
