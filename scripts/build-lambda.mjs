@@ -335,10 +335,15 @@ async function copyStaticAssets({ copyTemplates, copyClientAssets }) {
   }
 
   if (copyClientAssets) {
-    copyPairs.push([
-      path.join(projectRoot, 'client', 'dist'),
+    const clientDistSource = path.join(projectRoot, 'client', 'dist')
+    const clientDistTargets = [
       path.join(outDir, 'client', 'dist'),
-    ])
+      path.join(outDir, 'lambdas', 'client', 'dist'),
+    ]
+
+    for (const target of clientDistTargets) {
+      copyPairs.push([clientDistSource, target])
+    }
   }
 
   for (const [source, destination] of copyPairs) {
