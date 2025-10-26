@@ -55,59 +55,111 @@ function buildProxyEvent(payload, route = {}, messageId) {
   };
 }
 
-function buildProxyContext(record, context) {
+function buildProxyContext(record, context, { requestId, baseContext } = {}) {
+  const derivedRequestId =
+    typeof requestId === 'string' && requestId
+      ? requestId
+      : record
+        ? `${context.awsRequestId}:${record.messageId}`
+        : context.awsRequestId;
+  const sourceContext = baseContext && typeof baseContext === 'object' ? baseContext : {};
+
   return {
     callbackWaitsForEmptyEventLoop: false,
-    functionName: context.functionName,
-    functionVersion: context.functionVersion,
-    invokedFunctionArn: context.invokedFunctionArn,
-    memoryLimitInMB: context.memoryLimitInMB,
-    awsRequestId: `${context.awsRequestId}:${record.messageId}`,
-    logGroupName: context.logGroupName,
-    logStreamName: context.logStreamName,
-    identity: context.identity,
-    clientContext: context.clientContext,
+    functionName: sourceContext.functionName || context.functionName,
+    functionVersion: sourceContext.functionVersion || context.functionVersion,
+    invokedFunctionArn: sourceContext.invokedFunctionArn || context.invokedFunctionArn,
+    memoryLimitInMB: sourceContext.memoryLimitInMB || context.memoryLimitInMB,
+    awsRequestId: sourceContext.awsRequestId || derivedRequestId,
+    logGroupName: sourceContext.logGroupName || context.logGroupName,
+    logStreamName: sourceContext.logStreamName || context.logStreamName,
+    identity: sourceContext.identity || context.identity,
+    clientContext: sourceContext.clientContext || context.clientContext,
+  };
+}
+
+function normalizeHandlerResponse(response) {
+  return {
+    statusCode: Number.parseInt(response?.statusCode, 10) || 500,
+    headers: response?.headers || {},
+    body: response?.body || '',
+    isBase64Encoded: Boolean(response?.isBase64Encoded),
   };
 }
 
 const baseHandler = async (event, context) => {
   const records = Array.isArray(event?.Records) ? event.Records : [];
-  for (const record of records) {
-    let payload = {};
-    try {
-      payload = JSON.parse(record.body || '{}');
-    } catch {
-      payload = {};
+  if (records.length > 0) {
+    for (const record of records) {
+      let payload = {};
+      try {
+        payload = JSON.parse(record.body || '{}');
+      } catch {
+        payload = {};
+      }
+
+      const messagePayload =
+        payload && typeof payload === 'object' && payload.payload
+          ? payload.payload
+          : payload;
+      const route =
+        messagePayload && typeof messagePayload === 'object' && messagePayload.route
+          ? messagePayload.route
+          : { path: '/api/generate-enhanced-docs', method: 'POST' };
+      const bodyPayload =
+        messagePayload && typeof messagePayload === 'object' && messagePayload.payload
+          ? messagePayload.payload
+          : messagePayload;
+
+      const proxyEvent = buildProxyEvent(bodyPayload, route, record.messageId);
+      const proxyContext = buildProxyContext(record, context);
+
+      const response = await documentGenerationHttpHandler(
+        proxyEvent,
+        proxyContext,
+      );
+
+      const normalized = normalizeHandlerResponse(response);
+      if (normalized.statusCode >= 400) {
+        const error = new Error('Document generation worker failed');
+        error.response = normalized;
+        throw error;
+      }
     }
-
-    const messagePayload =
-      payload && typeof payload === 'object' && payload.payload
-        ? payload.payload
-        : payload;
-    const route =
-      messagePayload && typeof messagePayload === 'object' && messagePayload.route
-        ? messagePayload.route
-        : { path: '/api/generate-enhanced-docs', method: 'POST' };
-    const bodyPayload =
-      messagePayload && typeof messagePayload === 'object' && messagePayload.payload
-        ? messagePayload.payload
-        : messagePayload;
-
-    const proxyEvent = buildProxyEvent(bodyPayload, route, record.messageId);
-    const proxyContext = buildProxyContext(record, context);
-
-    const response = await documentGenerationHttpHandler(
-      proxyEvent,
-      proxyContext,
-    );
-
-    const status = Number.parseInt(response?.statusCode, 10) || 500;
-    if (status >= 400) {
-      const error = new Error('Document generation worker failed');
-      error.response = response;
-      throw error;
-    }
+    return;
   }
+
+  if (event?.proxyEvent) {
+    const proxyEvent = event.proxyEvent;
+    const requestId =
+      (typeof event.requestId === 'string' && event.requestId) ||
+      proxyEvent?.requestContext?.requestId ||
+      context.awsRequestId;
+    const proxyContext = buildProxyContext(null, context, {
+      requestId,
+      baseContext: event.proxyContext,
+    });
+
+    const response = await documentGenerationHttpHandler(proxyEvent, proxyContext);
+    return normalizeHandlerResponse(response);
+  }
+
+  const route =
+    event?.route && typeof event.route === 'object'
+      ? event.route
+      : { path: '/api/generate-enhanced-docs', method: 'POST' };
+  const bodyPayload =
+    event?.payload && typeof event.payload === 'object'
+      ? event.payload
+      : event;
+  const requestId = typeof event?.requestId === 'string' && event.requestId
+    ? event.requestId
+    : context.awsRequestId;
+
+  const proxyEvent = buildProxyEvent(bodyPayload, route, requestId);
+  const proxyContext = buildProxyContext(null, context, { requestId });
+  const response = await documentGenerationHttpHandler(proxyEvent, proxyContext);
+  return normalizeHandlerResponse(response);
 };
 
 export const handler = withLambdaObservability(baseHandler, {
