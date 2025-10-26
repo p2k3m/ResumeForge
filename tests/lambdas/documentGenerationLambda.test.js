@@ -1,17 +1,20 @@
+import { jest } from '@jest/globals';
 import { Buffer } from 'node:buffer';
 
 const mockSqsSend = jest.fn();
 const mockLambdaSend = jest.fn();
 
-jest.mock('@aws-sdk/client-sqs', () => ({
-  SQSClient: jest.fn().mockImplementation(() => ({ send: mockSqsSend })),
-  SendMessageCommand: jest.fn().mockImplementation((input) => ({ input })),
-}));
+async function mockAwsClients() {
+  await jest.unstable_mockModule('@aws-sdk/client-sqs', () => ({
+    SQSClient: jest.fn().mockImplementation(() => ({ send: mockSqsSend })),
+    SendMessageCommand: jest.fn().mockImplementation((input) => ({ input })),
+  }));
 
-jest.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: jest.fn().mockImplementation(() => ({ send: mockLambdaSend })),
-  InvokeCommand: jest.fn().mockImplementation((input) => ({ input })),
-}));
+  await jest.unstable_mockModule('@aws-sdk/client-lambda', () => ({
+    LambdaClient: jest.fn().mockImplementation(() => ({ send: mockLambdaSend })),
+    InvokeCommand: jest.fn().mockImplementation((input) => ({ input })),
+  }));
+}
 
 function createLambdaContext(overrides = {}) {
   return {
@@ -44,7 +47,7 @@ function successInvocationResponse() {
 }
 
 describe('documentGeneration lambda handler', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.resetModules();
     process.env.DOCUMENT_GENERATION_QUEUE_URL = 'https://sqs.example.com/123';
     process.env.DOCUMENT_GENERATION_WORKER_FUNCTION_NAME = 'document-generation-worker';
@@ -52,6 +55,7 @@ describe('documentGeneration lambda handler', () => {
     mockSqsSend.mockReset();
     mockLambdaSend.mockReset();
     mockLambdaSend.mockResolvedValue(successInvocationResponse());
+    await mockAwsClients();
   });
 
   test('reuses API Gateway request id for worker invocation and queue deduplication', async () => {
