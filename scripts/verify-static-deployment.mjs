@@ -15,6 +15,7 @@ import {
   PROXY_BLOCKED_ERROR_CODE,
   CLOUDFRONT_FORBIDDEN_ERROR_CODE,
 } from '../lib/cloudfrontAssetCheck.js'
+import { applyStageEnvironment } from '../config/stage.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -50,18 +51,21 @@ function shouldEnforceVerification(flagName) {
 }
 
 function resolveBucketConfiguration() {
-  const bucketCandidate =
-    process.env.STATIC_ASSETS_BUCKET || process.env.DATA_BUCKET || process.env.S3_BUCKET
-  const bucket = typeof bucketCandidate === 'string' ? bucketCandidate.trim() : ''
+  const {
+    stageName,
+    deploymentEnvironment,
+    staticAssetsBucket,
+    dataBucket,
+  } = applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
+
+  const bucket = staticAssetsBucket || dataBucket
   if (!bucket) {
     throw new Error(
       'STATIC_ASSETS_BUCKET (or DATA_BUCKET/S3_BUCKET) must be set to verify uploaded assets.',
     )
   }
 
-  const stageCandidate =
-    process.env.STAGE_NAME || process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV || 'prod'
-  const stage = String(stageCandidate).trim() || 'prod'
+  const stage = stageName || deploymentEnvironment || 'prod'
   const prefixCandidate = process.env.STATIC_ASSETS_PREFIX || `static/client/${stage}`
   const normalizedPrefix = String(prefixCandidate).trim().replace(/^\/+/, '').replace(/\/+$/, '')
   if (!normalizedPrefix) {

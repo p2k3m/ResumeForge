@@ -6,6 +6,7 @@ import { mkdir, rm, cp, writeFile } from 'fs/promises'
 import { spawn, execFile } from 'child_process'
 import { backstopPdfTemplates } from './pdf-template-backstop.mjs'
 import { ensureRequiredEnvVars } from './utils/ensure-required-env.mjs'
+import { applyStageEnvironment } from '../config/stage.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -169,6 +170,7 @@ function parseCliOptions() {
 }
 
 ensureRequiredEnvVars({ context: 'the Lambda build process' })
+applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
 
 const { outDir, functionNames } = parseCliOptions()
 

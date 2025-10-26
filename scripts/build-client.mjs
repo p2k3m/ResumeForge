@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { applyStageEnvironment } from '../config/stage.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -49,6 +50,7 @@ function ensureClientDependencies() {
 }
 
 function buildClient() {
+  applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: true })
   runCommand('npm run build', { cwd: clientDir, env: process.env })
 }
 
