@@ -11924,7 +11924,6 @@ function resolveSessionChangeLogLocation({
       ? process.env.SESSION_CHANGE_LOG_BUCKET.trim()
       : '',
     typeof process.env.S3_BUCKET === 'string' ? process.env.S3_BUCKET.trim() : '',
-    typeof process.env.S3_BUCKET_NAME === 'string' ? process.env.S3_BUCKET_NAME.trim() : '',
   ];
 
   let resolvedBucket = preferredBuckets.find((value) => value) || '';
