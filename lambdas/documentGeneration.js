@@ -1,10 +1,13 @@
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import { randomUUID } from 'crypto';
 import '../config/environment.js';
-import documentGenerationHttpHandler from '../services/documentGeneration/httpHandler.js';
 import { withLambdaObservability } from '../lib/observability/lambda.js';
 
-const sqsClient = new SQSClient({ region: process.env.AWS_REGION });
+const awsRegion = process.env.AWS_REGION;
+const clientConfig = awsRegion ? { region: awsRegion } : {};
+const sqsClient = new SQSClient(clientConfig);
+const lambdaClient = new LambdaClient(clientConfig);
 
 function parseBody(event = {}) {
   if (!event || event.body === undefined || event.body === null) {
@@ -149,16 +152,89 @@ function cloneLambdaContext(context = {}) {
   };
 }
 
-async function invokeDocumentGeneration(event, context, payload, route) {
-  const proxyEvent = buildProxyEvent(event, payload, route);
-  const proxyContext = cloneLambdaContext(context);
-  const response = await documentGenerationHttpHandler(proxyEvent, proxyContext);
+function resolveFinalText(primary = '', fallback = '') {
+  if (typeof primary === 'string' && primary.trim()) {
+    return primary;
+  }
+  if (typeof fallback === 'string') {
+    return fallback;
+  }
+  return '';
+}
+
+function prepareWorkerPayload(payload = {}) {
+  if (!payload || typeof payload !== 'object') {
+    return {};
+  }
+
+  const finalResumeText = resolveFinalText(
+    payload.finalResumeText,
+    resolveFinalText(payload.updatedResumeText, payload.resumeText),
+  );
+  const finalJobDescriptionText = resolveFinalText(
+    payload.finalJobDescriptionText,
+    payload.jobDescriptionText,
+  );
 
   return {
-    statusCode: Number.parseInt(response?.statusCode, 10) || 500,
-    headers: response?.headers || {},
-    body: response?.body || '',
-    isBase64Encoded: Boolean(response?.isBase64Encoded),
+    ...payload,
+    finalResumeText,
+    finalJobDescriptionText,
+    resumeText: finalResumeText,
+    jobDescriptionText: finalJobDescriptionText,
+  };
+}
+
+async function invokeWorkerLambda(event, context, payload, route) {
+  const functionName = process.env.DOCUMENT_GENERATION_WORKER_FUNCTION_NAME;
+  if (!functionName) {
+    throw new Error('DOCUMENT_GENERATION_WORKER_FUNCTION_NAME is not configured.');
+  }
+
+  const workerPayload = prepareWorkerPayload(payload);
+  const proxyEvent = buildProxyEvent(event, workerPayload, route);
+  const proxyContext = cloneLambdaContext(context);
+  const invocationPayload = {
+    proxyEvent,
+    proxyContext,
+    requestId: proxyEvent?.requestContext?.requestId,
+  };
+
+  const command = new InvokeCommand({
+    FunctionName: functionName,
+    InvocationType: 'RequestResponse',
+    Payload: Buffer.from(JSON.stringify(invocationPayload)),
+  });
+
+  const response = await lambdaClient.send(command);
+  const rawPayload = response?.Payload ? Buffer.from(response.Payload).toString('utf8') : '';
+
+  if (response?.FunctionError) {
+    const workerError = new Error(
+      `Document generation worker invocation failed: ${response.FunctionError}`,
+    );
+    workerError.functionError = response.FunctionError;
+    workerError.payload = rawPayload;
+    throw workerError;
+  }
+
+  let parsed = {};
+  if (rawPayload) {
+    try {
+      parsed = JSON.parse(rawPayload);
+    } catch (err) {
+      const parseError = new Error('Document generation worker returned invalid JSON payload.');
+      parseError.cause = err;
+      parseError.payload = rawPayload;
+      throw parseError;
+    }
+  }
+
+  return {
+    statusCode: Number.parseInt(parsed?.statusCode, 10) || 500,
+    headers: parsed?.headers || {},
+    body: parsed?.body ?? '',
+    isBase64Encoded: Boolean(parsed?.isBase64Encoded),
   };
 }
 
@@ -200,7 +276,7 @@ const baseHandler = async (event, context) => {
     await enqueueGeneration(queueUrl, { payload, route }, requestId);
   }
 
-  const response = await invokeDocumentGeneration(event, context, payload, route);
+  const response = await invokeWorkerLambda(event, context, payload, route);
   return response;
 };
 

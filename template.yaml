@@ -1058,6 +1058,7 @@ Resources:
           <<: *ResumeForgeFunctionEnvironmentVariables
           ACTIVE_SERVICE: documentGeneration
           DOCUMENT_GENERATION_QUEUE_URL: !GetAtt DocumentGenerationQueue.QueueUrl
+          DOCUMENT_GENERATION_WORKER_FUNCTION_NAME: !Ref DocumentGenerationWorkerFunction
       Policies: *ResumeForgeFunctionPolicies
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
@@ -1268,6 +1269,13 @@ Resources:
             Action:
               - sqs:SendMessage
             Resource: !GetAtt DocumentGenerationQueue.Arn
+          - Effect: Allow
+            Action:
+              - lambda:InvokeFunction
+              - lambda:InvokeAsync
+            Resource:
+              - !GetAtt DocumentGenerationWorkerFunction.Arn
+              - !Sub '${DocumentGenerationWorkerFunction.Arn}:*'
 
   CloudFront404AlarmTopic:
     Type: AWS::SNS::Topic
