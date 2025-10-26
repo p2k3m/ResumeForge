@@ -1075,7 +1075,6 @@ async function getClientIndexHtml() {
 }
 
 const DEFAULT_AWS_REGION = 'ap-south-1';
-const DEFAULT_ALLOWED_ORIGINS = [];
 const URL_EXPIRATION_SECONDS = 60 * 60; // 1 hour
 const DOWNLOAD_SESSION_RETENTION_MS = URL_EXPIRATION_SECONDS * 1000;
 const isTestEnvironment = process.env.NODE_ENV === 'test';
@@ -2262,10 +2261,38 @@ function normaliseOrigins(value) {
   return undefined;
 }
 
+function sanitizeAllowedOrigins(value) {
+  const normalized = normaliseOrigins(value);
+  if (!normalized || !normalized.length) {
+    return [];
+  }
+
+  const sanitized = [];
+  for (const candidate of normalized) {
+    if (!candidate || candidate === '*') {
+      continue;
+    }
+
+    try {
+      const parsedUrl = new URL(candidate);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        continue;
+      }
+      const origin = parsedUrl.origin;
+      if (origin && !sanitized.includes(origin)) {
+        sanitized.push(origin);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return sanitized;
+}
+
 function parseAllowedOrigins(value) {
-  if (!value) return DEFAULT_ALLOWED_ORIGINS;
-  const parsed = normaliseOrigins(value);
-  return parsed && parsed.length ? parsed : DEFAULT_ALLOWED_ORIGINS;
+  const parsed = sanitizeAllowedOrigins(value);
+  return parsed.length ? parsed : resolveDefaultAllowedOrigins();
 }
 
 function resolvePublishedCloudfrontPath() {
@@ -2276,6 +2303,64 @@ function resolvePublishedCloudfrontPath() {
       : path.resolve(process.cwd(), override);
   }
   return path.resolve(__dirname, 'config', 'published-cloudfront.json');
+}
+
+let publishedCloudfrontOriginLoaded = false;
+let publishedCloudfrontOriginCache;
+
+function resolvePublishedCloudfrontOrigin() {
+  if (publishedCloudfrontOriginLoaded) {
+    return publishedCloudfrontOriginCache || null;
+  }
+
+  publishedCloudfrontOriginLoaded = true;
+  try {
+    const filePath = resolvePublishedCloudfrontPath();
+    if (!filePath || !fsSync.existsSync(filePath)) {
+      return null;
+    }
+
+    const raw = fsSync.readFileSync(filePath, 'utf8');
+    if (!raw.trim()) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    const url = typeof parsed?.url === 'string' ? parsed.url.trim() : '';
+    if (!url) {
+      return null;
+    }
+
+    const resolved = new URL(url);
+    if (!resolved.origin) {
+      return null;
+    }
+
+    publishedCloudfrontOriginCache = resolved.origin;
+  } catch (err) {
+    logStructured('warn', 'published_cloudfront_origin_resolution_failed', {
+      error: serializeError(err),
+    });
+    publishedCloudfrontOriginCache = null;
+  }
+
+  return publishedCloudfrontOriginCache || null;
+}
+
+let defaultAllowedOriginsLoaded = false;
+let defaultAllowedOriginsCache = [];
+
+function resolveDefaultAllowedOrigins() {
+  if (defaultAllowedOriginsLoaded) {
+    return defaultAllowedOriginsCache;
+  }
+
+  defaultAllowedOriginsLoaded = true;
+  const publishedOrigin = resolvePublishedCloudfrontOrigin();
+  defaultAllowedOriginsCache = sanitizeAllowedOrigins(
+    publishedOrigin ? [publishedOrigin] : []
+  );
+  return defaultAllowedOriginsCache;
 }
 
 async function loadPublishedCloudfrontMetadata() {
@@ -2566,20 +2651,25 @@ let runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
 
 function resolveCurrentAllowedOrigins() {
   const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
-  if (
-    Array.isArray(runtimeConfig?.CLOUDFRONT_ORIGINS) &&
-    runtimeConfig.CLOUDFRONT_ORIGINS.length
-  ) {
-    return runtimeConfig.CLOUDFRONT_ORIGINS;
+  if (Array.isArray(runtimeConfig?.CLOUDFRONT_ORIGINS)) {
+    const configuredOrigins = sanitizeAllowedOrigins(
+      runtimeConfig.CLOUDFRONT_ORIGINS
+    );
+    if (configuredOrigins.length) {
+      return configuredOrigins;
+    }
   }
 
   const envOrigins =
     readEnvValue('CLOUDFRONT_ORIGINS') || readEnvValue('ALLOWED_ORIGINS');
   if (envOrigins) {
-    return parseAllowedOrigins(envOrigins);
+    const parsedEnvOrigins = parseAllowedOrigins(envOrigins);
+    if (parsedEnvOrigins.length) {
+      return parsedEnvOrigins;
+    }
   }
 
-  return DEFAULT_ALLOWED_ORIGINS;
+  return resolveDefaultAllowedOrigins();
 }
 
 function collectActiveServiceDeclarations() {
@@ -2708,8 +2798,8 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (!allowedOrigins.length || allowedOrigins.includes('*')) {
-      return callback(null, true);
+    if (!allowedOrigins.length) {
+      return callback(new Error('Origin not allowed by CORS policy'));
     }
 
     const isAllowed = allowedOrigins.some((allowedOrigin) => {
