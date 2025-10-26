@@ -13,6 +13,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import mime from 'mime-types'
+import { applyStageEnvironment } from '../config/stage.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -208,25 +209,29 @@ function determineCacheControl(relativePath) {
 }
 
 function resolveBucketConfiguration() {
-  const bucketCandidate =
-    process.env.STATIC_ASSETS_BUCKET || process.env.DATA_BUCKET || process.env.S3_BUCKET
-  const bucket = typeof bucketCandidate === 'string' ? bucketCandidate.trim() : ''
+  const {
+    stageName,
+    deploymentEnvironment,
+    staticAssetsBucket,
+    dataBucket,
+  } = applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
+
+  const bucket = staticAssetsBucket || dataBucket
   if (!bucket) {
     throw new Error(
       'STATIC_ASSETS_BUCKET (or DATA_BUCKET/S3_BUCKET) must be set to upload static assets to S3.',
     )
   }
 
-  const stageCandidate =
-    process.env.STAGE_NAME || process.env.DEPLOYMENT_ENVIRONMENT || process.env.NODE_ENV || 'prod'
-  const stage = String(stageCandidate).trim() || 'prod'
+  const environmentLabel = deploymentEnvironment || stageName || 'prod'
+  const stage = stageName || environmentLabel || 'prod'
   const prefixCandidate = process.env.STATIC_ASSETS_PREFIX || `static/client/${stage}`
   const normalizedPrefix = String(prefixCandidate).trim().replace(/^\/+/, '').replace(/\/+$/, '')
   if (!normalizedPrefix) {
     throw new Error('STATIC_ASSETS_PREFIX must resolve to a non-empty value.')
   }
 
-  return { bucket, prefix: normalizedPrefix, stage }
+  return { bucket, prefix: normalizedPrefix, stage, deploymentEnvironment: environmentLabel }
 }
 
 function shouldDeleteObjectKey(key, prefix) {
@@ -347,6 +352,7 @@ async function uploadManifest({
   bucket,
   prefix,
   stage,
+  deploymentEnvironment,
   buildVersion,
   uploadedFiles,
   hashedAssets,
@@ -355,6 +361,8 @@ async function uploadManifest({
   const payload = {
     stage,
     prefix,
+    bucket,
+    deploymentEnvironment: deploymentEnvironment || stage,
     buildVersion: buildVersion || null,
     uploadedAt: new Date().toISOString(),
     fileCount: uploadedFiles.length,
@@ -379,7 +387,7 @@ async function uploadManifest({
 
 async function main() {
   const { files, hashedAssets } = await gatherClientAssetFiles()
-  const { bucket, prefix, stage } = resolveBucketConfiguration()
+  const { bucket, prefix, stage, deploymentEnvironment } = resolveBucketConfiguration()
   const buildVersion = resolveBuildVersion()
   const s3 = new S3Client({})
 
@@ -404,6 +412,7 @@ async function main() {
     bucket,
     prefix,
     stage,
+    deploymentEnvironment,
     buildVersion,
     uploadedFiles,
     hashedAssets,

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import process from 'process';
 import dotenv from 'dotenv';
+import { applyStageEnvironment } from './stage.js';
 
 function hasValue(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -47,24 +48,17 @@ if (missing.length > 0) {
   );
 }
 
-const stageName = hasValue(process.env.STAGE_NAME)
-  ? process.env.STAGE_NAME.trim()
-  : normalizedNodeEnv === 'production'
-    ? 'prod'
-    : normalizedNodeEnv === 'test'
-      ? 'test'
-      : 'dev';
-
-process.env.STAGE_NAME = stageName;
-
-if (!hasValue(process.env.DEPLOYMENT_ENVIRONMENT)) {
-  process.env.DEPLOYMENT_ENVIRONMENT = stageName;
-}
-
-const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT.trim();
+const { stageName, deploymentEnvironment } = applyStageEnvironment({
+  propagateToProcessEnv: true,
+  propagateViteEnv: false,
+});
 
 export function getDeploymentEnvironment() {
   return deploymentEnvironment;
+}
+
+export function getStageName() {
+  return stageName;
 }
 
 function mergeTaggingString(existingTagging) {
@@ -84,6 +78,7 @@ export const REQUIRED_ENV_VARS = Object.freeze([...requiredEnvVars, 'AWS_REGION'
 
 export default {
   getDeploymentEnvironment,
+  getStageName,
   withEnvironmentTagging,
   REQUIRED_ENV_VARS,
 };
