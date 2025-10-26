@@ -222,4 +222,30 @@ describe('normalizeOutputFiles', () => {
     expect(result[0]).not.toHaveProperty('payload')
     expect(result[0]).not.toHaveProperty('tags')
   })
+
+  it('retains entries without URLs when allowEmptyUrls is true', () => {
+    const issues = []
+    const input = [
+      {
+        type: 'version1',
+        download: { text: 'Draft copy only' },
+      },
+      {
+        type: 'version2',
+        url: 'https://cdn.example.com/final.pdf',
+      },
+    ]
+
+    const result = normalizeOutputFiles(input, {
+      allowEmptyUrls: true,
+      onIssue: (issue) => issues.push(issue),
+    })
+
+    expect(result).toHaveLength(2)
+    expect(result[0]).toMatchObject({ type: 'version1', url: '', __issue: 'missing_url' })
+    expect(result[1]).toMatchObject({ type: 'version2', url: 'https://cdn.example.com/final.pdf' })
+    expect(issues).toEqual([
+      expect.objectContaining({ code: 'missing_url', type: 'version1' }),
+    ])
+  })
 })
