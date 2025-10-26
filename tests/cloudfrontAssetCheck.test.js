@@ -568,6 +568,56 @@ describe('verifyClientAssets', () => {
     expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
   });
 
+  test('retries asset verification with manifest prefixes when root path returns a server error', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-d438c9c1.js') {
+        return new Response(null, { status: 500, statusText: 'Internal Server Error' });
+      }
+
+      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
+        return new Response(null, { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        assetPathPrefixes: ['static/client/prod/latest'],
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const attemptedPaths = fetchImpl.mock.calls
+      .map(([url]) => new URL(url).pathname)
+      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
+
+    expect(attemptedPaths).toContain('/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
+  });
+
   test('attempts suffix variations of manifest prefixes when CDN origin strips leading segments', async () => {
     const html = `<!doctype html>
       <html>
