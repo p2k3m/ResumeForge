@@ -1506,9 +1506,81 @@ Resources:
                     "AWS/Lambda",
                     "Invocations",
                     "Resource",
-                    "${AWS::StackName}-${StageName}-enhancement:${StageName}",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-summary:${StageName}",
                     {
-                      "label": "enhancement"
+                      "label": "enhancement-improve-summary"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-skills:${StageName}",
+                    {
+                      "label": "enhancement-improve-skills"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-designation:${StageName}",
+                    {
+                      "label": "enhancement-improve-designation"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-experience:${StageName}",
+                    {
+                      "label": "enhancement-improve-experience"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-certifications:${StageName}",
+                    {
+                      "label": "enhancement-improve-certifications"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-projects:${StageName}",
+                    {
+                      "label": "enhancement-improve-projects"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-highlights:${StageName}",
+                    {
+                      "label": "enhancement-improve-highlights"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-ats:${StageName}",
+                    {
+                      "label": "enhancement-improve-ats"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Invocations",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-all:${StageName}",
+                    {
+                      "label": "enhancement-improve-all"
                     }
                   ],
                   [
@@ -1629,9 +1701,81 @@ Resources:
                     "AWS/Lambda",
                     "Errors",
                     "Resource",
-                    "${AWS::StackName}-${StageName}-enhancement:${StageName}",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-summary:${StageName}",
                     {
-                      "label": "enhancement"
+                      "label": "enhancement-improve-summary"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-skills:${StageName}",
+                    {
+                      "label": "enhancement-improve-skills"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-designation:${StageName}",
+                    {
+                      "label": "enhancement-improve-designation"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-experience:${StageName}",
+                    {
+                      "label": "enhancement-improve-experience"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-certifications:${StageName}",
+                    {
+                      "label": "enhancement-improve-certifications"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-projects:${StageName}",
+                    {
+                      "label": "enhancement-improve-projects"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-highlights:${StageName}",
+                    {
+                      "label": "enhancement-improve-highlights"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-ats:${StageName}",
+                    {
+                      "label": "enhancement-improve-ats"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Errors",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-all:${StageName}",
+                    {
+                      "label": "enhancement-improve-all"
                     }
                   ],
                   [
@@ -1756,9 +1900,89 @@ Resources:
                     "AWS/Lambda",
                     "Duration",
                     "Resource",
-                    "${AWS::StackName}-${StageName}-enhancement:${StageName}",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-summary:${StageName}",
                     {
-                      "label": "enhancement",
+                      "label": "enhancement-improve-summary",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-skills:${StageName}",
+                    {
+                      "label": "enhancement-improve-skills",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-designation:${StageName}",
+                    {
+                      "label": "enhancement-improve-designation",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-experience:${StageName}",
+                    {
+                      "label": "enhancement-improve-experience",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-certifications:${StageName}",
+                    {
+                      "label": "enhancement-improve-certifications",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-projects:${StageName}",
+                    {
+                      "label": "enhancement-improve-projects",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-highlights:${StageName}",
+                    {
+                      "label": "enhancement-improve-highlights",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-ats:${StageName}",
+                    {
+                      "label": "enhancement-improve-ats",
+                      "stat": "p95"
+                    }
+                  ],
+                  [
+                    "AWS/Lambda",
+                    "Duration",
+                    "Resource",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-all:${StageName}",
+                    {
+                      "label": "enhancement-improve-all",
                       "stat": "p95"
                     }
                   ],
@@ -1895,11 +2119,99 @@ Resources:
                     "ResumeForge/Operations",
                     "ColdStart",
                     "FunctionName",
-                    "${AWS::StackName}-${StageName}-enhancement",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-summary",
                     "Stage",
                     "${StageName}",
                     {
-                      "label": "enhancement"
+                      "label": "enhancement-improve-summary"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-skills",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-skills"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-designation",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-designation"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-experience",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-experience"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-certifications",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-certifications"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-projects",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-projects"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-highlights",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-highlights"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-ats",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-ats"
+                    }
+                  ],
+                  [
+                    "ResumeForge/Operations",
+                    "ColdStart",
+                    "FunctionName",
+                    "${AWS::StackName}-${StageName}-enhancement-improve-all",
+                    "Stage",
+                    "${StageName}",
+                    {
+                      "label": "enhancement-improve-all"
                     }
                   ],
                   [
