@@ -110,9 +110,19 @@ const baseHandler = async (event, context) => {
         messagePayload && typeof messagePayload === 'object' && messagePayload.payload
           ? messagePayload.payload
           : messagePayload;
+      const messageRequestId =
+        (typeof payload?.requestId === 'string' && payload.requestId)
+        || (typeof payload?.id === 'string' && payload.id)
+        || undefined;
 
-      const proxyEvent = buildProxyEvent(bodyPayload, route, record.messageId);
-      const proxyContext = buildProxyContext(record, context);
+      const proxyEvent = buildProxyEvent(
+        bodyPayload,
+        route,
+        messageRequestId || record.messageId,
+      );
+      const proxyContext = buildProxyContext(record, context, {
+        requestId: messageRequestId,
+      });
 
       const response = await documentGenerationHttpHandler(
         proxyEvent,

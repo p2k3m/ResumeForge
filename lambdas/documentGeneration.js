@@ -1,6 +1,6 @@
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import '../config/environment.js';
 import { withLambdaObservability } from '../lib/observability/lambda.js';
 
@@ -61,7 +61,7 @@ function resolveRouteFromEvent(event = {}) {
   };
 }
 
-function buildProxyEvent(event = {}, payload = {}, route = {}) {
+function buildProxyEvent(event = {}, payload = {}, route = {}, requestIdOverride) {
   const headers = event.headers && typeof event.headers === 'object'
     ? { ...event.headers }
     : {};
@@ -126,7 +126,10 @@ function buildProxyEvent(event = {}, payload = {}, route = {}) {
         sourceIp: event?.requestContext?.http?.sourceIp || '127.0.0.1',
         userAgent: event?.requestContext?.http?.userAgent || 'lambda',
       },
-      requestId: event?.requestContext?.requestId || randomUUID(),
+      requestId:
+        (typeof requestIdOverride === 'string' && requestIdOverride)
+          || event?.requestContext?.requestId
+          || randomUUID(),
       routeKey: `${method} ${path}`,
       stage,
       time: new Date().toISOString(),
@@ -185,19 +188,102 @@ function prepareWorkerPayload(payload = {}) {
   };
 }
 
-async function invokeWorkerLambda(event, context, payload, route) {
+function normalizeHeaderValue(headers = {}, name) {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+
+  const target = String(name || '').toLowerCase();
+  return Object.entries(headers).reduce((acc, [key, value]) => {
+    if (acc !== undefined) {
+      return acc;
+    }
+    if (typeof key === 'string' && key.toLowerCase() === target) {
+      return value;
+    }
+    return undefined;
+  }, undefined);
+}
+
+function stableStringify(value) {
+  if (value === null || value === undefined) {
+    return 'null';
+  }
+
+  if (typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    const entries = value.map((item) => stableStringify(item));
+    return `[${entries.join(',')}]`;
+  }
+
+  const keys = Object.keys(value).sort();
+  const serialized = keys.map((key) => {
+    const serializedValue = stableStringify(value[key]);
+    return `${JSON.stringify(key)}:${serializedValue}`;
+  });
+
+  return `{${serialized.join(',')}}`;
+}
+
+function createDeterministicIdentifier(payload, route) {
+  const hash = createHash('sha256');
+  const serialized = stableStringify({ payload, route });
+  hash.update(serialized);
+  return hash.digest('hex');
+}
+
+function resolveStableRequestId(event = {}, payload = {}, route = {}) {
+  const directId = (() => {
+    if (typeof event?.requestContext?.requestId === 'string' && event.requestContext.requestId) {
+      return event.requestContext.requestId;
+    }
+    if (typeof event?.id === 'string' && event.id) {
+      return event.id;
+    }
+    const headerRequestId =
+      normalizeHeaderValue(event?.headers, 'x-request-id') ||
+      normalizeHeaderValue(event?.headers, 'x-amzn-requestid') ||
+      normalizeHeaderValue(event?.headers, 'x-amzn-request-id');
+    if (typeof headerRequestId === 'string' && headerRequestId) {
+      return headerRequestId;
+    }
+    if (typeof payload?.requestId === 'string' && payload.requestId) {
+      return payload.requestId;
+    }
+    if (typeof payload?.id === 'string' && payload.id) {
+      return payload.id;
+    }
+    if (typeof payload?.jobId === 'string' && payload.jobId) {
+      return payload.jobId;
+    }
+    if (typeof payload?.sessionId === 'string' && payload.sessionId) {
+      return payload.sessionId;
+    }
+    return undefined;
+  })();
+
+  if (directId) {
+    return String(directId);
+  }
+
+  return createDeterministicIdentifier(payload, route);
+}
+
+async function invokeWorkerLambda(event, context, payload, route, requestId) {
   const functionName = process.env.DOCUMENT_GENERATION_WORKER_FUNCTION_NAME;
   if (!functionName) {
     throw new Error('DOCUMENT_GENERATION_WORKER_FUNCTION_NAME is not configured.');
   }
 
-  const workerPayload = prepareWorkerPayload(payload);
-  const proxyEvent = buildProxyEvent(event, workerPayload, route);
+  const proxyEvent = buildProxyEvent(event, payload, route, requestId);
   const proxyContext = cloneLambdaContext(context);
   const invocationPayload = {
     proxyEvent,
     proxyContext,
-    requestId: proxyEvent?.requestContext?.requestId,
+    requestId: requestId || proxyEvent?.requestContext?.requestId,
   };
 
   const command = new InvokeCommand({
@@ -243,18 +329,27 @@ async function enqueueGeneration(queueUrl, payload, requestId) {
     return null;
   }
 
+  const deduplicationId = typeof requestId === 'string' && requestId
+    ? requestId
+    : createDeterministicIdentifier(payload);
+  const finalRequestId = typeof requestId === 'string' && requestId
+    ? requestId
+    : deduplicationId;
+  const messageBody = {
+    id: finalRequestId,
+    requestId: finalRequestId,
+    type: 'document-generation',
+    payload,
+    enqueuedAt: new Date().toISOString(),
+  };
+
   try {
     await sqsClient.send(
       new SendMessageCommand({
         QueueUrl: queueUrl,
-        MessageBody: JSON.stringify({
-          id: requestId || randomUUID(),
-          type: 'document-generation',
-          payload,
-          enqueuedAt: new Date().toISOString(),
-        }),
+        MessageBody: JSON.stringify(messageBody),
         MessageGroupId: 'document-generation',
-        MessageDeduplicationId: `${requestId || randomUUID()}-${Date.now()}`,
+        MessageDeduplicationId: deduplicationId,
       }),
     );
   } catch (err) {
@@ -266,17 +361,23 @@ async function enqueueGeneration(queueUrl, payload, requestId) {
 
 const baseHandler = async (event, context) => {
   const payload = parseBody(event);
+  const preparedPayload = prepareWorkerPayload(payload);
   const route = resolveRouteFromEvent(event);
   const queueUrl = process.env.DOCUMENT_GENERATION_QUEUE_URL || '';
 
-  const requestId =
-    event?.requestContext?.requestId || context?.awsRequestId || randomUUID();
+  const requestId = resolveStableRequestId(event, preparedPayload, route);
 
   if (queueUrl) {
-    await enqueueGeneration(queueUrl, { payload, route }, requestId);
+    await enqueueGeneration(queueUrl, { payload: preparedPayload, route }, requestId);
   }
 
-  const response = await invokeWorkerLambda(event, context, payload, route);
+  const response = await invokeWorkerLambda(
+    event,
+    context,
+    preparedPayload,
+    route,
+    requestId,
+  );
   return response;
 };
 
