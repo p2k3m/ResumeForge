@@ -10,6 +10,7 @@ describe('CloudFront documentation snapshots', () => {
     loadFile('config/published-cloudfront.json')
   )
   const publishedUrl = metadata.url
+  const originBucket = metadata.originBucket
 
   it('mirrors the published URL in the README snapshot', () => {
     const readme = loadFile('README.md')
@@ -17,7 +18,7 @@ describe('CloudFront documentation snapshots', () => {
       `> **Active CloudFront domain:** \`${publishedUrl}\``
     )
     expect(readme).toContain(
-      '> Origin bucket: `resume-forge-app-2025`'
+      `> Origin bucket: \`${originBucket}\``
     )
   })
 
@@ -31,6 +32,9 @@ describe('CloudFront documentation snapshots', () => {
     docs.forEach((docPath) => {
       const contents = loadFile(docPath)
       expect(contents).toContain(publishedUrl)
+      if (docPath === 'docs/cloudfront-url.md') {
+        expect(contents).toContain(originBucket)
+      }
     })
   })
 
