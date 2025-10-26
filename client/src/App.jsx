@@ -3828,11 +3828,48 @@ function App() {
   }, [downloadGroups.cover])
 
   useEffect(() => {
-    setDownloadStates({})
-    if (outputFiles.length > 0) {
+    if (!Array.isArray(outputFiles) || outputFiles.length === 0) {
+      setDownloadStates({})
       setIsGeneratingDocs(false)
       setIsCoverLetterDownloading(false)
+      return
     }
+
+    const now = Date.now()
+    const nextStates = {}
+
+    outputFiles.forEach((file) => {
+      if (!file || typeof file !== 'object') {
+        return
+      }
+      const stateKey = getDownloadStateKey(file)
+      if (!stateKey) {
+        return
+      }
+      const downloadUrl = typeof file.url === 'string' ? file.url.trim() : ''
+      const expiresAtValue =
+        typeof file.expiresAt === 'string' ? file.expiresAt.trim() : ''
+      const storageKey = typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
+
+      let errorMessage = ''
+
+      if (!downloadUrl) {
+        errorMessage = 'Download link unavailable. Please regenerate the document.'
+      } else if (expiresAtValue) {
+        const expiryDate = new Date(expiresAtValue)
+        if (!Number.isNaN(expiryDate.getTime()) && expiryDate.getTime() <= now) {
+          errorMessage = storageKey
+            ? 'This link expired. Select Download to refresh it automatically.'
+            : 'This link has expired. Regenerate the documents to refresh the download link.'
+        }
+      }
+
+      nextStates[stateKey] = { status: 'idle', error: errorMessage }
+    })
+
+    setDownloadStates(nextStates)
+    setIsGeneratingDocs(false)
+    setIsCoverLetterDownloading(false)
   }, [outputFiles])
 
   useEffect(() => {
@@ -4800,6 +4837,9 @@ function App() {
             : ''
     }`
     const downloadButtonLabel = (() => {
+      if (!downloadUrl) {
+        return 'Link unavailable'
+      }
       if (isCoverLetter) {
         if (isExpired) return canRefresh ? 'Refresh link' : 'Link expired'
         if (isDownloading) return 'Downloading…'
@@ -4965,7 +5005,7 @@ function App() {
             )}
           </div>
         </div>
-        {!isCoverLetter && derivedDownloadError && (
+        {derivedDownloadError && (
           <p className="text-xs font-semibold text-rose-600">{derivedDownloadError}</p>
         )}
         {isCoverLetter && (
@@ -5441,6 +5481,7 @@ function App() {
       const outputFilesValue = normalizeOutputFiles(data.urls, {
         defaultExpiresAt: data?.urlExpiresAt,
         defaultExpiresInSeconds: data?.urlExpiresInSeconds,
+        allowEmptyUrls: true
       })
       updateOutputFiles(outputFilesValue, { generatedAt: data?.generatedAt })
       const { drafts: analysisCoverLetterDrafts, originals: analysisCoverLetterOriginals } =
@@ -5769,6 +5810,7 @@ function App() {
     const outputFilesValue = normalizeOutputFiles(snapshot.outputFiles, {
       defaultExpiresAt: snapshot?.urlExpiresAt,
       defaultExpiresInSeconds: snapshot?.urlExpiresInSeconds,
+      allowEmptyUrls: true
     })
     updateOutputFiles(outputFilesValue, { generatedAt: snapshot?.generatedAt })
 
@@ -7343,6 +7385,7 @@ function App() {
       const urlsValue = normalizeOutputFiles(data.urls, {
         defaultExpiresAt: data?.urlExpiresAt,
         defaultExpiresInSeconds: data?.urlExpiresInSeconds,
+        allowEmptyUrls: true
       })
       updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })
       const { drafts: generatedCoverLetterDrafts, originals: generatedCoverLetterOriginals } =
@@ -7806,7 +7849,8 @@ function App() {
         const data = await response.json()
         const urlsValue = normalizeOutputFiles(data.urls || data.assetUrls, {
           defaultExpiresAt: data?.urlExpiresAt,
-          defaultExpiresInSeconds: data?.urlExpiresInSeconds
+          defaultExpiresInSeconds: data?.urlExpiresInSeconds,
+          allowEmptyUrls: true
         })
         if (urlsValue.length) {
           updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })

@@ -621,7 +621,7 @@ function sanitizePresentationMeta(presentation) {
   return Object.keys(sanitized).length ? sanitized : undefined
 }
 
-function sanitizeNormalizedEntry(entry, index = 0) {
+function sanitizeNormalizedEntry(entry, index = 0, options = {}) {
   if (!entry || typeof entry !== 'object') {
     return null
   }
@@ -630,12 +630,22 @@ function sanitizeNormalizedEntry(entry, index = 0) {
 
   const type = sanitizeStringValue(entry.type) || `file_${index + 1}`
   const url = sanitizeStringValue(entry.url)
-  if (!url) {
+  if (!url && !options.allowEmptyUrls) {
+    reportNormalizationIssue(options, {
+      code: 'missing_url',
+      entry,
+      index,
+      type,
+    })
     return null
   }
 
   sanitized.type = type
-  sanitized.url = url
+  sanitized.url = url || ''
+
+  if (entry.__issue) {
+    sanitized.__issue = entry.__issue
+  }
 
   PRESERVED_STRING_FIELDS.forEach((key) => {
     const value = sanitizeStringValue(entry[key])
@@ -677,6 +687,19 @@ function sanitizeNormalizedEntry(entry, index = 0) {
   return sanitized
 }
 
+function reportNormalizationIssue(options, issue) {
+  if (!options || typeof options.onIssue !== 'function') {
+    return
+  }
+  try {
+    options.onIssue(issue)
+  } catch (err) {
+    if (typeof console !== 'undefined' && console?.warn) {
+      console.warn('normalizeOutputFiles issue callback failed', err)
+    }
+  }
+}
+
 function normaliseOutputFileEntry(entry, index = 0, fallbackType = '', options = {}) {
   if (!entry) return null
   if (typeof entry === 'string') {
@@ -691,9 +714,40 @@ function normaliseOutputFileEntry(entry, index = 0, fallbackType = '', options =
     return null
   }
 
+  const derivedType = deriveType(entry, fallbackType, index)
   const url = extractUrl(entry)
   if (!url) {
-    return null
+    reportNormalizationIssue(options, {
+      code: 'missing_url',
+      entry,
+      index,
+      type: derivedType,
+    })
+    if (!options.allowEmptyUrls) {
+      return null
+    }
+    const normalized = {
+      ...entry,
+      url: '',
+      type: derivedType,
+      __issue: 'missing_url',
+    }
+    if (hasTrustedMetadata(normalized)) {
+      normalized.__trusted = true
+    }
+    const expiresAt = resolveExpiresAt(entry, options)
+    if (expiresAt) {
+      normalized.expiresAt = expiresAt
+    } else if ('expiresAt' in normalized) {
+      delete normalized.expiresAt
+    }
+    if (
+      typeof normalized.text !== 'string' &&
+      typeof entry?.download?.text === 'string'
+    ) {
+      normalized.text = entry.download.text
+    }
+    return normalized
   }
 
   const normalized = {
@@ -716,7 +770,7 @@ function normaliseOutputFileEntry(entry, index = 0, fallbackType = '', options =
     normalized.text = entry.download.text
   }
 
-  normalized.type = deriveType(entry, fallbackType, index)
+  normalized.type = derivedType
 
   return normalized
 }
@@ -824,9 +878,9 @@ function dedupePreferredEntries(entries) {
     .map((item) => item.entry)
 }
 
-function finalizeNormalizedEntries(entries) {
+function finalizeNormalizedEntries(entries, options = {}) {
   return dedupePreferredEntries(entries)
-    .map((entry, index) => sanitizeNormalizedEntry(entry, index))
+    .map((entry, index) => sanitizeNormalizedEntry(entry, index, options))
     .filter(Boolean)
 }
 
@@ -844,13 +898,17 @@ export function normalizeOutputFiles(rawInput, options = {}) {
         normalized.push(normalizedEntry)
       }
     })
-    return finalizeNormalizedEntries(normalized)
+    return finalizeNormalizedEntries(normalized, options)
   }
 
   if (typeof rawInput === 'string') {
     const trimmed = rawInput.trim()
     if (!trimmed) return []
-    const sanitized = sanitizeNormalizedEntry({ type: 'file_1', url: trimmed }, 0)
+    const sanitized = sanitizeNormalizedEntry(
+      { type: 'file_1', url: trimmed },
+      0,
+      options
+    )
     return sanitized ? [sanitized] : []
   }
 
@@ -866,7 +924,7 @@ export function normalizeOutputFiles(rawInput, options = {}) {
     })
   }
 
-  return finalizeNormalizedEntries(normalized)
+  return finalizeNormalizedEntries(normalized, options)
 }
 
 export default normalizeOutputFiles
