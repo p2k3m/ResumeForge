@@ -1,15 +1,15 @@
 import { Buffer } from 'node:buffer';
 
-const sqsSendMock = jest.fn();
-const lambdaSendMock = jest.fn();
+const mockSqsSend = jest.fn();
+const mockLambdaSend = jest.fn();
 
 jest.mock('@aws-sdk/client-sqs', () => ({
-  SQSClient: jest.fn().mockImplementation(() => ({ send: sqsSendMock })),
+  SQSClient: jest.fn().mockImplementation(() => ({ send: mockSqsSend })),
   SendMessageCommand: jest.fn().mockImplementation((input) => ({ input })),
 }));
 
 jest.mock('@aws-sdk/client-lambda', () => ({
-  LambdaClient: jest.fn().mockImplementation(() => ({ send: lambdaSendMock })),
+  LambdaClient: jest.fn().mockImplementation(() => ({ send: mockLambdaSend })),
   InvokeCommand: jest.fn().mockImplementation((input) => ({ input })),
 }));
 
@@ -49,9 +49,9 @@ describe('documentGeneration lambda handler', () => {
     process.env.DOCUMENT_GENERATION_QUEUE_URL = 'https://sqs.example.com/123';
     process.env.DOCUMENT_GENERATION_WORKER_FUNCTION_NAME = 'document-generation-worker';
     process.env.AWS_REGION = 'us-east-1';
-    sqsSendMock.mockReset();
-    lambdaSendMock.mockReset();
-    lambdaSendMock.mockResolvedValue(successInvocationResponse());
+    mockSqsSend.mockReset();
+    mockLambdaSend.mockReset();
+    mockLambdaSend.mockResolvedValue(successInvocationResponse());
   });
 
   test('reuses API Gateway request id for worker invocation and queue deduplication', async () => {
@@ -75,16 +75,16 @@ describe('documentGeneration lambda handler', () => {
 
     await handler(event, createLambdaContext({ awsRequestId: 'aws-1' }));
 
-    expect(sqsSendMock).toHaveBeenCalledTimes(1);
-    const sqsInput = sqsSendMock.mock.calls[0][0].input;
+    expect(mockSqsSend).toHaveBeenCalledTimes(1);
+    const sqsInput = mockSqsSend.mock.calls[0][0].input;
     expect(sqsInput.MessageDeduplicationId).toBe('req-123');
 
     const queuedMessage = JSON.parse(sqsInput.MessageBody);
     expect(queuedMessage.requestId).toBe('req-123');
     expect(queuedMessage.payload.payload.resumeText).toBe('refined');
 
-    expect(lambdaSendMock).toHaveBeenCalledTimes(1);
-    const invokeInput = lambdaSendMock.mock.calls[0][0].input;
+    expect(mockLambdaSend).toHaveBeenCalledTimes(1);
+    const invokeInput = mockLambdaSend.mock.calls[0][0].input;
     const invocationPayload = JSON.parse(Buffer.from(invokeInput.Payload).toString('utf8'));
     expect(invocationPayload.requestId).toBe('req-123');
     expect(invocationPayload.proxyEvent.requestContext.requestId).toBe('req-123');
@@ -106,9 +106,9 @@ describe('documentGeneration lambda handler', () => {
     await handler(event, createLambdaContext({ awsRequestId: 'aws-1' }));
     await handler(event, createLambdaContext({ awsRequestId: 'aws-2' }));
 
-    expect(sqsSendMock).toHaveBeenCalledTimes(2);
-    const firstCall = sqsSendMock.mock.calls[0][0].input;
-    const secondCall = sqsSendMock.mock.calls[1][0].input;
+    expect(mockSqsSend).toHaveBeenCalledTimes(2);
+    const firstCall = mockSqsSend.mock.calls[0][0].input;
+    const secondCall = mockSqsSend.mock.calls[1][0].input;
     expect(firstCall.MessageDeduplicationId).toBe('job-42');
     expect(secondCall.MessageDeduplicationId).toBe('job-42');
   });
@@ -126,9 +126,9 @@ describe('documentGeneration lambda handler', () => {
     await handler(event, createLambdaContext({ awsRequestId: 'aws-1' }));
     await handler(event, createLambdaContext({ awsRequestId: 'aws-2' }));
 
-    expect(sqsSendMock).toHaveBeenCalledTimes(2);
-    const firstHash = sqsSendMock.mock.calls[0][0].input.MessageDeduplicationId;
-    const secondHash = sqsSendMock.mock.calls[1][0].input.MessageDeduplicationId;
+    expect(mockSqsSend).toHaveBeenCalledTimes(2);
+    const firstHash = mockSqsSend.mock.calls[0][0].input.MessageDeduplicationId;
+    const secondHash = mockSqsSend.mock.calls[1][0].input.MessageDeduplicationId;
     expect(firstHash).toHaveLength(64);
     expect(secondHash).toBe(firstHash);
   });
