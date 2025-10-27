@@ -60,6 +60,23 @@ const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
 const POST_DOWNLOAD_INVITE_MESSAGE =
   'Download complete! Upload another resume or job description, or try a different template to compare results.'
 
+const FLOW_STAGE_KEYS = Object.freeze(['upload', 'score', 'enhance', 'generate', 'download'])
+
+function createStageErrorState() {
+  return FLOW_STAGE_KEYS.reduce((acc, key) => {
+    acc[key] = ''
+    return acc
+  }, {})
+}
+
+function normalizeStageKey(stage) {
+  if (typeof stage !== 'string') {
+    return ''
+  }
+  const normalized = stage.trim().toLowerCase()
+  return FLOW_STAGE_KEYS.includes(normalized) ? normalized : ''
+}
+
 const improvementActions = [
   {
     key: 'improve-summary',
@@ -2391,6 +2408,7 @@ function App() {
   const [errorRecovery, setErrorRecovery] = useState(null)
   const [errorContext, setErrorContext] = useState({ source: '', code: '', requestId: '' })
   const [errorLogs, setErrorLogs] = useState([])
+  const [stageErrors, setStageErrors] = useState(() => createStageErrorState())
   const [environmentHost] = useState(() => {
     if (typeof window === 'undefined' || !window.location) {
       return ''
@@ -2447,6 +2465,23 @@ function App() {
           : ''
     const trimmedMessage = nextMessage.trim()
     setErrorState(trimmedMessage)
+    const normalizedStage = normalizeStageKey(options?.stage)
+    if (normalizedStage) {
+      setStageErrors((prev) => {
+        const safePrev =
+          prev && typeof prev === 'object' ? prev : createStageErrorState()
+        const currentValue =
+          typeof safePrev[normalizedStage] === 'string'
+            ? safePrev[normalizedStage]
+            : ''
+        if (currentValue === trimmedMessage) {
+          return safePrev === prev ? prev : { ...safePrev }
+        }
+        return { ...safePrev, [normalizedStage]: trimmedMessage }
+      })
+    } else if (!trimmedMessage) {
+      setStageErrors(createStageErrorState())
+    }
     const allowRetryOption =
       typeof options?.allowRetry === 'boolean' ? options.allowRetry : undefined
     const allowRetry = allowRetryOption !== false
@@ -2492,7 +2527,7 @@ function App() {
     } else {
       setErrorRecovery(null)
     }
-  }, [setErrorContext, setErrorLogs])
+  }, [setErrorContext, setErrorLogs, setStageErrors])
   const cloudfrontFallbackActive = useMemo(() => {
     if (!environmentHost) {
       return false
@@ -2837,7 +2872,16 @@ function App() {
   }, [cvFile])
 
   const uploadStatusDetail = useMemo(() => {
-    if (error) {
+    const uploadStageError =
+      typeof stageErrors?.upload === 'string' ? stageErrors.upload.trim() : ''
+    if (uploadStageError) {
+      return {
+        label: uploadStageError,
+        badgeClass:
+          'border-rose-200/80 bg-rose-50/80 text-rose-600'
+      }
+    }
+    if (error && !uploadStageError) {
       return {
         label: error,
         badgeClass:
@@ -2890,7 +2934,8 @@ function App() {
     hasManualJobDescriptionInput,
     isProcessing,
     queuedText,
-    uploadReady
+    uploadReady,
+    stageErrors
   ])
 
   const uploadStatusMessage = useMemo(() => {
@@ -3597,6 +3642,8 @@ function App() {
         ? errorContext.code.trim().toUpperCase()
         : ''
     const normalizedErrorSource = normalizeServiceSource(errorContext?.source)
+    const stageErrorMap =
+      stageErrors && typeof stageErrors === 'object' ? stageErrors : createStageErrorState()
     let errorStep = ''
     if (normalizedErrorMessage) {
       if (normalizedErrorCode && SERVICE_ERROR_STEP_BY_CODE[normalizedErrorCode]) {
@@ -3784,18 +3831,26 @@ function App() {
         noteTone = 'info'
       }
 
+      const stageErrorValue = (() => {
+        const raw = stageErrorMap?.[step.key]
+        return typeof raw === 'string' ? raw.trim() : ''
+      })()
+      const hasStageError = Boolean(stageErrorValue)
       const isErrorForStage = Boolean(
-        errorStep && normalizedErrorMessage && errorStep === step.key
+        !hasStageError && errorStep && normalizedErrorMessage && errorStep === step.key
       )
 
-      if (isErrorForStage) {
+      if (hasStageError) {
+        note = stageErrorValue
+        noteTone = 'warning'
+      } else if (isErrorForStage) {
         note = normalizedErrorMessage
         noteTone = 'warning'
       }
 
       const isActiveStage = status === 'current'
 
-      if (!isActiveStage && !isErrorForStage) {
+      if (!isActiveStage && !hasStageError && !isErrorForStage) {
         note = ''
         noteTone = ''
       }
@@ -3809,6 +3864,7 @@ function App() {
     downloadCount,
     error,
     errorContext,
+    stageErrors,
     hasAnalysisData,
     hasCvFile,
     hasManualJobDescriptionInput,
@@ -3873,6 +3929,19 @@ function App() {
           }))
         : []
 
+      const stageErrorSnapshot = Object.entries(stageErrors || {}).reduce(
+        (acc, [key, value]) => {
+          if (typeof value === 'string') {
+            const trimmed = value.trim()
+            if (trimmed) {
+              acc[key] = trimmed
+            }
+          }
+          return acc
+        },
+        {}
+      )
+
       const navigatorInfo = typeof navigator === 'object' && navigator
         ? {
             userAgent: typeof navigator.userAgent === 'string' ? navigator.userAgent : '',
@@ -3903,6 +3972,9 @@ function App() {
         logs: errorLogs.length ? errorLogs : undefined,
         downloadStates: Object.keys(downloadStateSnapshot).length
           ? downloadStateSnapshot
+          : undefined,
+        stageErrors: Object.keys(stageErrorSnapshot).length
+          ? stageErrorSnapshot
           : undefined,
         flow: flowSnapshot,
         environment: navigatorInfo
@@ -3938,6 +4010,7 @@ function App() {
     hasManualJobDescriptionInput,
     isProcessing,
     jobId,
+    stageErrors,
     queuedMessage,
     setQueuedMessage
   ])
@@ -4598,7 +4671,9 @@ function App() {
         'Unable to refresh the download link. Please try again.'
       if (!file || typeof file !== 'object') {
         if (!silent) {
-          setError('Download link is unavailable. Please regenerate the document.')
+          setError('Download link is unavailable. Please regenerate the document.', {
+            stage: 'download'
+          })
         }
         const err = new Error('DOWNLOAD_ENTRY_INVALID')
         err.message = 'Download link is unavailable. Please regenerate the document.'
@@ -4609,16 +4684,24 @@ function App() {
         typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
       if (!storageKey) {
         if (!silent) {
-          setError('Download link is unavailable. Please regenerate the document.')
+          setError('Download link is unavailable. Please regenerate the document.', {
+            stage: 'download'
+          })
         }
         const err = new Error('DOWNLOAD_KEY_MISSING')
         err.message = 'Download link is unavailable. Please regenerate the document.'
         throw err
       }
 
+      if (!silent) {
+        setError('', { stage: 'download' })
+      }
+
       if (!jobId) {
         if (!silent) {
-          setError('Upload your resume and job description before generating downloads.')
+          setError('Upload your resume and job description before generating downloads.', {
+            stage: 'download'
+          })
         }
         const err = new Error('JOB_ID_REQUIRED')
         err.message = 'Upload your resume and job description before generating downloads.'
@@ -4644,7 +4727,7 @@ function App() {
         )
       } catch (err) {
         if (!silent) {
-          setError(fallbackMessage)
+          setError(fallbackMessage, { stage: 'download' })
         }
         const error = err instanceof Error ? err : new Error(fallbackMessage)
         if (!error.message) {
@@ -4672,7 +4755,8 @@ function App() {
             serviceError: errorSource,
             errorCode,
             logs: errorLogsValue,
-            requestId: errorRequestId
+            requestId: errorRequestId,
+            stage: 'download'
           })
         }
         const err = new Error(errorMessage)
@@ -4694,7 +4778,7 @@ function App() {
         const message =
           'Download link is unavailable after refresh. Please regenerate the document.'
         if (!silent) {
-          setError(message)
+          setError(message, { stage: 'download' })
         }
         const err = new Error(message)
         err.code = 'DOWNLOAD_URL_MISSING'
@@ -4775,14 +4859,17 @@ function App() {
   const handleDownloadFile = useCallback(
     async (file) => {
       if (!file || typeof file !== 'object') {
-        setError('Unable to download this document. Please try again.')
+        setError('Unable to download this document. Please try again.', {
+          stage: 'download'
+        })
         return
       }
       let activeFile = file
+      setError('', { stage: 'download' })
       const presentation =
         activeFile.presentation || getDownloadPresentation(activeFile)
       if (typeof window === 'undefined' || typeof document === 'undefined') {
-        setError('Download is not supported in this environment.')
+        setError('Download is not supported in this environment.', { stage: 'download' })
         return
       }
       const stateKeyBase = getDownloadStateKey(activeFile)
@@ -4820,7 +4907,7 @@ function App() {
           const refreshMessage =
             refreshErr?.message ||
             'Unable to refresh the download link. Please try again.'
-          setError(refreshMessage)
+          setError(refreshMessage, { stage: 'download' })
           if (stateKeyBase) {
             setDownloadStates((prev) => ({
               ...prev,
@@ -4836,7 +4923,9 @@ function App() {
       }
 
       if (!downloadUrl) {
-        setError('Download link is unavailable. Please regenerate the document.')
+        setError('Download link is unavailable. Please regenerate the document.', {
+          stage: 'download'
+        })
         if (stateKeyBase) {
           setDownloadStates((prev) => ({
             ...prev,
@@ -4955,7 +5044,7 @@ function App() {
               : err?.code === 'EMPTY_PDF_CONTENT'
                 ? 'The downloaded file was empty. Please regenerate the document.'
                 : 'Unable to download this document. Please try again.'
-        setError(downloadErrorMessage)
+        setError(downloadErrorMessage, { stage: 'download' })
         setDownloadStates((prev) => ({
           ...prev,
           [stateKey]: {
@@ -5469,7 +5558,7 @@ function App() {
           payload.message || data.message || 'Upload processed after reconnection.'
         )
         setIsProcessing(false)
-        setError('')
+        setError('', { stage: 'upload' })
         const payloadUrls = Array.isArray(payload.urls) ? payload.urls : []
         updateOutputFiles(payloadUrls, { generatedAt: payload.generatedAt })
         const { drafts, originals } = deriveCoverLetterStateFromFiles(payloadUrls)
@@ -5494,7 +5583,7 @@ function App() {
           (typeof data?.message === 'string' && data.message.trim()) ||
           (typeof payloadError?.message === 'string' && payloadError.message.trim()) ||
           'Failed to process queued upload. Please try again.'
-        setError(failureMessage)
+        setError(failureMessage, { stage: 'upload' })
       }
     }
 
@@ -5515,12 +5604,12 @@ function App() {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (file && !file.name.toLowerCase().match(/\.(pdf|docx?)$/)) {
-      setError('Only PDF, DOC, or DOCX files are supported.')
+      setError('Only PDF, DOC, or DOCX files are supported.', { stage: 'upload' })
       return
     }
     if (file) {
       lastAutoScoreSignatureRef.current = ''
-      setError('')
+      setError('', { stage: 'upload' })
       if (cvInputRef.current) {
         cvInputRef.current.value = ''
       }
@@ -5531,12 +5620,12 @@ function App() {
   const handleFileChange = (e) => {
     const file = e.target.files[0]
     if (file && !file.name.toLowerCase().match(/\.(pdf|docx?)$/)) {
-      setError('Only PDF, DOC, or DOCX files are supported.')
+      setError('Only PDF, DOC, or DOCX files are supported.', { stage: 'upload' })
       return
     }
     if (file) {
       lastAutoScoreSignatureRef.current = ''
-      setError('')
+      setError('', { stage: 'upload' })
       if (cvInputRef.current) {
         cvInputRef.current.value = ''
       }
@@ -5579,7 +5668,7 @@ function App() {
 
     if (hasQueuedRescore) {
       setIsProcessing(true)
-      setError('')
+      setError('', { stage: 'score' })
       try {
         await runQueuedImprovementRescore()
       } finally {
@@ -5593,23 +5682,29 @@ function App() {
     const jobSignature = manualText ? `manual:${manualText}` : ''
 
     if (!cvFile) {
-      setError('Please upload a CV before submitting.')
+      setError('Please upload a CV before submitting.', { stage: 'upload' })
       return
     }
     if (!manualText) {
       setManualJobDescriptionRequired(true)
-      setError('Please paste the full job description before continuing.')
+      setError('Please paste the full job description before continuing.', {
+        stage: 'upload'
+      })
       manualJobDescriptionRef.current?.focus?.()
       return
     }
     if (manualJobDescriptionHasProhibitedHtml) {
-      setError('Remove HTML tags like <script> before continuing.')
+      setError('Remove HTML tags like <script> before continuing.', {
+        stage: 'upload'
+      })
       manualJobDescriptionRef.current?.focus?.()
       return
     }
     if (manualJobDescriptionLooksLikeUrl) {
       setManualJobDescriptionRequired(true)
-      setError('Paste the full job description text instead of a link.')
+      setError('Paste the full job description text instead of a link.', {
+        stage: 'upload'
+      })
       manualJobDescriptionRef.current?.focus?.()
       return
     }
@@ -5619,7 +5714,7 @@ function App() {
     }
 
     setIsProcessing(true)
-    setError('')
+    setError('', { stage: 'upload' })
     setMatch(null)
     setQueuedMessage('')
     resetAnalysisState()
@@ -5965,7 +6060,8 @@ function App() {
         serviceError: serviceErrorSource,
         errorCode,
         logs: errorLogsValue,
-        requestId: errorRequestId
+        requestId: errorRequestId,
+        stage: 'upload'
       })
       lastAutoScoreSignatureRef.current = ''
     } finally {
@@ -6118,7 +6214,7 @@ function App() {
       }))
     )
     setResumeHistory([])
-    setError('')
+    setError('', { stage: 'enhance' })
     setPreviewSuggestion(null)
   }, [initialAnalysisSnapshot, updateOutputFiles])
 
@@ -6918,7 +7014,7 @@ function App() {
     }
 
     if (scoreUpdateLockRef.current) {
-      setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
+      setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE, { stage: 'score' })
       return false
     }
 
@@ -6984,7 +7080,8 @@ function App() {
                     serviceError: serviceErrorSource,
                     errorCode,
                     logs: persistLogs,
-                    requestId: persistRequestId
+                    requestId: persistRequestId,
+                    stage: 'score'
                   }
                 )
               }
@@ -7014,7 +7111,8 @@ function App() {
             serviceError: serviceErrorSource,
             errorCode,
             logs: improvementLogs,
-            requestId: improvementRequestId
+            requestId: improvementRequestId,
+            stage: 'score'
           })
           setImprovementResults((prev) =>
             prev.map((item) =>
@@ -7103,7 +7201,7 @@ function App() {
       }
 
       if (scoreUpdateLockRef.current) {
-        setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
+        setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE, { stage: 'score' })
         return false
       }
 
@@ -7236,7 +7334,8 @@ function App() {
             serviceError: serviceErrorSource,
             errorCode,
             logs: persistLogs,
-            requestId: persistRequestId
+            requestId: persistRequestId,
+            stage: 'enhance'
           })
           setChangeLog(previousChangeLog || [])
         }
@@ -7279,7 +7378,9 @@ function App() {
   const handleDownloadPreviousVersion = useCallback(
     (changeId) => {
       if (!changeId) {
-        setError('Unable to download the previous version for this update.')
+        setError('Unable to download the previous version for this update.', {
+          stage: 'enhance'
+        })
         return
       }
       let historyEntry = resumeHistoryMap.get(changeId)
@@ -7294,11 +7395,15 @@ function App() {
         }
       }
       if (!historyEntry || typeof historyEntry.resumeBefore !== 'string') {
-        setError('Previous version is unavailable for this update.')
+        setError('Previous version is unavailable for this update.', {
+          stage: 'enhance'
+        })
         return
       }
       if (typeof window === 'undefined' || typeof document === 'undefined') {
-        setError('Download is not supported in this environment.')
+        setError('Download is not supported in this environment.', {
+          stage: 'enhance'
+        })
         return
       }
       const resumeContent = historyEntry.resumeBefore
@@ -7325,7 +7430,9 @@ function App() {
         resetUiAfterDownload()
       } catch (err) {
         console.error('Unable to download previous resume version', err)
-        setError('Unable to download the previous version. Please try again.')
+        setError('Unable to download the previous version. Please try again.', {
+          stage: 'enhance'
+        })
       }
     },
     [changeLog, resetUiAfterDownload, resumeHistoryMap, setError]
@@ -7334,7 +7441,7 @@ function App() {
   const handleRevertChange = useCallback(
     async (changeId) => {
       if (!changeId) {
-        setError('Unable to revert this update.')
+        setError('Unable to revert this update.', { stage: 'enhance' })
         return
       }
       let historyEntry = resumeHistoryMap.get(changeId)
@@ -7360,7 +7467,9 @@ function App() {
         }
       }
       if (!historyEntry) {
-        setError('Previous version is unavailable for this update.')
+        setError('Previous version is unavailable for this update.', {
+          stage: 'enhance'
+        })
         return
       }
 
@@ -7371,7 +7480,9 @@ function App() {
             ? historyEntry.resumeBeforeText
             : ''
       if (!previousResumeText) {
-        setError('Previous version is unavailable for this update.')
+        setError('Previous version is unavailable for this update.', {
+          stage: 'enhance'
+        })
         return
       }
 
@@ -7450,7 +7561,8 @@ function App() {
           setError(
             err?.message
               ? err.message
-              : 'Unable to mark the change as reverted. Please try again.'
+              : 'Unable to mark the change as reverted. Please try again.',
+            { stage: 'enhance' }
           )
           setResumeText(previousState.resumeText)
           setMatch(previousState.match ? cloneData(previousState.match) : null)
@@ -7542,15 +7654,21 @@ function App() {
 
   const handleGenerateEnhancedDocs = useCallback(async () => {
     if (!jobId) {
-      setError('Upload your resume and job description before generating downloads.')
+      setError('Upload your resume and job description before generating downloads.', {
+        stage: 'generate'
+      })
       return
     }
     if (!improvementsUnlocked) {
-      setError('Complete the initial scoring and improvement review before generating downloads.')
+      setError('Complete the initial scoring and improvement review before generating downloads.', {
+        stage: 'generate'
+      })
       return
     }
     if (improvementsRequireAcceptance && !hasAcceptedImprovement) {
-      setError('Accept at least one improvement before generating the enhanced documents.')
+      setError('Accept at least one improvement before generating the enhanced documents.', {
+        stage: 'generate'
+      })
       return
     }
     if (isGeneratingDocs) {
@@ -7558,7 +7676,7 @@ function App() {
     }
 
     setIsGeneratingDocs(true)
-    setError('')
+    setError('', { stage: 'generate' })
     try {
       const {
         canonicalTemplate,
@@ -7859,7 +7977,8 @@ function App() {
         serviceError: serviceErrorSource,
         errorCode,
         logs: errorLogsValue,
-        requestId: errorRequestId
+        requestId: errorRequestId,
+        stage: 'generate'
       })
     } finally {
       setIsGeneratingDocs(false)
@@ -7915,7 +8034,7 @@ function App() {
     }
 
     setIsBulkAccepting(true)
-    setError('')
+    setError('', { stage: 'enhance' })
 
     try {
       for (const suggestion of pendingSuggestions) {
@@ -7999,16 +8118,21 @@ function App() {
       const requestTypesNormalized = shouldUseImproveAll ? IMPROVE_ALL_BATCH_KEYS : types
       const requestPath = shouldUseImproveAll ? '/api/improve-all' : '/api/improve-batch'
       if (improvementLockRef.current) {
-        setError('Please wait for the current improvement to finish before requesting another one.')
+        setError('Please wait for the current improvement to finish before requesting another one.', {
+          stage: 'enhance'
+        })
         return
       }
       if (!jobId) {
-        setError('Upload your resume and complete scoring before requesting improvements.')
+        setError('Upload your resume and complete scoring before requesting improvements.', {
+          stage: 'enhance'
+        })
         return
       }
       if (!improvementAvailable) {
         setError(
-          improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.'
+          improvementUnlockMessage || 'Complete the initial analysis before requesting improvements.',
+          { stage: 'enhance' }
         )
         return
       }
@@ -8023,7 +8147,7 @@ function App() {
           : types[0]
       setActiveImprovement(activeImprovementKey)
       setActiveImprovementBatchKeys(isBatchRequest ? requestTypesNormalized : [])
-      setError('')
+      setError('', { stage: 'enhance' })
       try {
         const requestUrl = buildApiUrl(API_BASE_URL, requestPath)
         const selectionTargetTitle =
@@ -8208,7 +8332,8 @@ function App() {
           serviceError: serviceErrorSource,
           errorCode,
           logs: improvementLogs,
-          requestId: improvementRequestId
+          requestId: improvementRequestId,
+          stage: 'enhance'
         })
         if (types.includes('enhance-all')) {
           setEnhanceAllSummaryText('')
@@ -8284,7 +8409,7 @@ function App() {
     const wasAccepted = targetSuggestion.accepted === true
 
     if (wasAccepted && scoreUpdateLockRef.current) {
-      setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE)
+      setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE, { stage: 'score' })
       return false
     }
 
@@ -8343,7 +8468,9 @@ function App() {
         : ''
 
       if (!historyEntry || !previousResumeText) {
-        setError('Previous version is unavailable for this update.')
+        setError('Previous version is unavailable for this update.', {
+          stage: 'enhance'
+        })
         return false
       }
 
@@ -8437,7 +8564,8 @@ function App() {
           serviceError: serviceErrorSource,
           errorCode,
           logs: removalLogs,
-          requestId: removalRequestId
+          requestId: removalRequestId,
+          stage: 'enhance'
         })
         setChangeLog(previousChangeLogState || [])
         setImprovementResults(previousImprovementResults || [])
@@ -8512,7 +8640,7 @@ function App() {
         return
       }
       if (!previewedSuggestion) {
-        setError('This improvement is no longer available.')
+        setError('This improvement is no longer available.', { stage: 'enhance' })
         return
       }
       setPreviewActiveAction(action)
@@ -8540,7 +8668,8 @@ function App() {
           serviceError: serviceErrorSource,
           errorCode,
           logs: previewLogs,
-          requestId: previewRequestId
+          requestId: previewRequestId,
+          stage: 'enhance'
         })
       } finally {
         setPreviewActionBusy(false)
