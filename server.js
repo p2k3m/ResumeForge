@@ -8,10 +8,12 @@ import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { EventEmitter } from 'events';
 import { Readable } from 'stream';
+import { pipeline as streamPipeline } from 'node:stream/promises';
 import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   CopyObjectCommand,
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
@@ -44,6 +46,7 @@ import mime from 'mime-types';
 import { buildAggregatedChangeLogSummary } from './client/src/utils/changeLogSummaryShared.js';
 import {
   getDeploymentEnvironment,
+  getStageName,
   withEnvironmentTagging,
 } from './config/environment.js';
 import {
@@ -126,6 +129,235 @@ function setStaticAssetCacheHeaders(res, assetPath) {
   } else {
     res.setHeader('Cache-Control', 'no-cache');
   }
+}
+
+const HASHED_INDEX_ASSET_PATH_PATTERN =
+  /^\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/i;
+
+function resolveStaticAssetBucketCandidate() {
+  const candidates = [
+    readEnvValue('STATIC_ASSETS_BUCKET'),
+    readEnvValue('DATA_BUCKET'),
+    readEnvValue('S3_BUCKET'),
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function resolveStaticAssetPrefixCandidate() {
+  const explicit = readEnvValue('STATIC_ASSETS_PREFIX');
+  if (explicit) {
+    return explicit.replace(/^\/+/, '').replace(/\/+$/, '');
+  }
+
+  const stageName = readEnvValue('STAGE_NAME') || getStageName();
+  const environmentLabel =
+    readEnvValue('DEPLOYMENT_ENVIRONMENT') ||
+    deploymentEnvironment ||
+    stageName ||
+    'prod';
+
+  const base = (stageName || environmentLabel || 'prod').trim();
+  return `static/client/${base}/latest`;
+}
+
+function buildStaticAssetKey(prefix, requestPath) {
+  const normalizedPrefix = (prefix || '').replace(/^\/+/, '').replace(/\/+$/, '');
+  let sanitizedPath = typeof requestPath === 'string' ? requestPath : '';
+  sanitizedPath = sanitizedPath.replace(/\?.*$/, '').replace(/#.*$/, '');
+  sanitizedPath = sanitizedPath.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
+
+  if (!sanitizedPath) {
+    return normalizedPrefix;
+  }
+
+  const combined = `${normalizedPrefix}/${sanitizedPath}`;
+  return combined.replace(/\/{2,}/g, '/');
+}
+
+async function streamS3BodyToResponse(body, res) {
+  if (!body) {
+    res.end();
+    return;
+  }
+
+  if (typeof body === 'string' || Buffer.isBuffer(body)) {
+    res.send(body);
+    return;
+  }
+
+  if (typeof body.transformToWebStream === 'function') {
+    const webStream = body.transformToWebStream();
+    const nodeStream =
+      typeof Readable.fromWeb === 'function'
+        ? Readable.fromWeb(webStream)
+        : Readable.from(
+            (async function* streamWebReadable() {
+              const reader = webStream.getReader();
+              try {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  if (value !== undefined) {
+                    yield value;
+                  }
+                }
+              } finally {
+                reader.releaseLock?.();
+              }
+            })()
+          );
+    await streamPipeline(nodeStream, res);
+    return;
+  }
+
+  if (typeof body.transformToByteArray === 'function') {
+    const bytes = await body.transformToByteArray();
+    res.send(Buffer.from(bytes));
+    return;
+  }
+
+  if (typeof body.pipe === 'function') {
+    await streamPipeline(body, res);
+    return;
+  }
+
+  if (Symbol.asyncIterator in body) {
+    const chunks = [];
+    for await (const chunk of body) {
+      if (chunk === undefined || chunk === null) continue;
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    res.send(Buffer.concat(chunks));
+    return;
+  }
+
+  res.end();
+}
+
+function applyS3ResponseHeaders(res, metadata, assetPath) {
+  const {
+    ContentType,
+    CacheControl,
+    ContentLength,
+    ETag,
+    LastModified,
+  } = metadata || {};
+
+  if (ContentType) {
+    res.setHeader('Content-Type', ContentType);
+  } else {
+    const fallbackType = mime.lookup(assetPath);
+    if (fallbackType) {
+      res.setHeader('Content-Type', fallbackType);
+    }
+  }
+
+  if (CacheControl) {
+    res.setHeader('Cache-Control', CacheControl);
+  } else {
+    setStaticAssetCacheHeaders(res, assetPath);
+  }
+
+  if (ContentLength !== undefined) {
+    res.setHeader('Content-Length', String(ContentLength));
+  }
+
+  if (ETag) {
+    res.setHeader('ETag', ETag);
+  }
+
+  if (LastModified) {
+    const resolved =
+      LastModified instanceof Date
+        ? LastModified.toUTCString()
+        : typeof LastModified === 'number'
+          ? new Date(LastModified).toUTCString()
+          : String(LastModified);
+    if (resolved) {
+      res.setHeader('Last-Modified', resolved);
+    }
+  }
+}
+
+async function tryServeHashedIndexAssetFromS3(req, res, next) {
+  if (!HASHED_INDEX_ASSET_PATH_PATTERN.test(req.path || '')) {
+    return next();
+  }
+
+  const method = (req.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    return next();
+  }
+
+  const bucket = resolveStaticAssetBucketCandidate();
+  const prefix = resolveStaticAssetPrefixCandidate();
+
+  if (!bucket || !prefix || !s3Client || typeof s3Client.send !== 'function') {
+    return next();
+  }
+
+  const key = buildStaticAssetKey(prefix, req.path);
+  const logContext = {
+    bucket,
+    key,
+    path: req.path,
+    method,
+  };
+
+  try {
+    if (method === 'HEAD') {
+      const headResult = await sendS3CommandWithRetry(
+        s3Client,
+        () =>
+          new HeadObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          }),
+        {
+          retryLogEvent: 'client_asset_s3_head_retry',
+          retryLogContext: logContext,
+        }
+      );
+
+      applyS3ResponseHeaders(res, headResult, req.path);
+      res.status(200).end();
+      logStructured('info', 'client_asset_s3_head_served', logContext);
+      return;
+    }
+
+    const objectResult = await sendS3CommandWithRetry(
+      s3Client,
+      () =>
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        }),
+      {
+        retryLogEvent: 'client_asset_s3_retry',
+        retryLogContext: logContext,
+      }
+    );
+
+    applyS3ResponseHeaders(res, objectResult, req.path);
+    res.status(200);
+    await streamS3BodyToResponse(objectResult.Body, res);
+    logStructured('info', 'client_asset_s3_served', logContext);
+    return;
+  } catch (error) {
+    logStructured('warn', 'client_asset_s3_fallback_failed', {
+      ...logContext,
+      error: serializeError(error),
+    });
+  }
+
+  return next();
 }
 
 const extractText = extractResumeText;
@@ -3049,6 +3281,7 @@ if (shouldServeClientAppRoutes) {
       path: clientIndexPath,
     });
   }
+  app.use(tryServeHashedIndexAssetFromS3);
 } else if (declaredActiveServices.length) {
   logStructured('info', 'client_assets_routing_disabled', {
     activeServices: declaredActiveServices,

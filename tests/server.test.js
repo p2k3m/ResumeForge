@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
 import crypto from 'crypto';
+import { Readable } from 'stream';
 import { createTextDigest } from '../lib/resume/utils.js';
 
 process.env.S3_BUCKET = 'test-bucket';
@@ -11,11 +12,13 @@ process.env.CLOUDFRONT_ORIGINS = 'https://test.cloudfront.net';
 process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'false';
 
 const mockS3Send = jest.fn().mockResolvedValue({});
-const getObjectCommandMock = jest.fn((input) => ({ input }));
+const getObjectCommandMock = jest.fn((input) => ({ input, __type: 'GetObjectCommand' }));
+const headObjectCommandMock = jest.fn((input) => ({ input, __type: 'HeadObjectCommand' }));
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(() => ({ send: mockS3Send })),
   PutObjectCommand: jest.fn((input) => ({ input, __type: 'PutObjectCommand' })),
   GetObjectCommand: getObjectCommandMock,
+  HeadObjectCommand: headObjectCommandMock,
   ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
   DeleteObjectsCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectsCommand' })),
   CopyObjectCommand: jest.fn((input) => ({ input, __type: 'CopyObjectCommand' })),
@@ -152,6 +155,7 @@ beforeEach(() => {
   setupDefaultDynamoMock();
   getSignedUrlMock.mockClear();
   getObjectCommandMock.mockClear();
+  headObjectCommandMock.mockClear();
   wordExtractorExtractMock.mockClear();
   pdfParseMock.mockReset();
   pdfParseMock.mockResolvedValue({
@@ -183,6 +187,50 @@ describe('static asset fallbacks', () => {
     const res = await request(app).get('/favicon.ico');
     expect(res.status).toBe(204);
     expect(res.text).toBe('');
+  });
+
+  test('serves hashed index asset from S3 when local file is missing', async () => {
+    const assetBody = '/* fallback css */';
+    mockS3Send.mockImplementationOnce((command) => {
+      expect(command.__type).toBe('GetObjectCommand');
+      expect(command.input.Bucket).toBe('test-bucket');
+      expect(command.input.Key).toMatch(/static\/client\/.+\/latest\/assets\/index-missing\.css$/);
+      return Promise.resolve({
+        Body: Readable.from([assetBody]),
+        ContentType: 'text/css',
+        CacheControl: 'public, max-age=60',
+        ETag: '"etag-css"',
+      });
+    });
+
+    const res = await request(app).get('/assets/index-missing.css');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe(assetBody);
+    expect(res.headers['content-type']).toContain('text/css');
+    expect(res.headers['etag']).toBe('"etag-css"');
+    expect(mockS3Send).toHaveBeenCalledTimes(1);
+  });
+
+  test('performs HEAD lookup against S3 for hashed index asset metadata', async () => {
+    mockS3Send.mockImplementationOnce((command) => {
+      expect(command.__type).toBe('HeadObjectCommand');
+      expect(command.input.Bucket).toBe('test-bucket');
+      expect(command.input.Key).toMatch(/static\/client\/.+\/latest\/assets\/index-meta\.js$/);
+      return Promise.resolve({
+        ContentType: 'application/javascript',
+        ContentLength: 1234,
+        CacheControl: 'public, max-age=31536000, immutable',
+        ETag: '"etag-js"',
+        LastModified: new Date('2024-05-01T00:00:00Z'),
+      });
+    });
+
+    const res = await request(app).head('/assets/index-meta.js');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/javascript');
+    expect(res.headers['content-length']).toBe('1234');
+    expect(res.headers['etag']).toBe('"etag-js"');
+    expect(mockS3Send).toHaveBeenCalledTimes(1);
   });
 });
 
