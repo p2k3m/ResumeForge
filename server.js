@@ -12406,6 +12406,88 @@ function ensureUniquePdfKey(candidateKey, usedKeys) {
   return nextCandidate;
 }
 
+function normalizeArtifactTimestamp(value) {
+  if (!value) {
+    return '';
+  }
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return Number.isNaN(time) ? '' : value.toISOString();
+  }
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return '';
+    }
+    const date = new Date(trimmed);
+    return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+  }
+  return '';
+}
+
+function buildVersionTimestampSlug(isoTimestamp) {
+  if (typeof isoTimestamp !== 'string' || !isoTimestamp) {
+    return '';
+  }
+  const match = isoTimestamp.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/
+  );
+  if (!match) {
+    return '';
+  }
+  return `${match[1]}${match[2]}${match[3]}-${match[4]}${match[5]}${match[6]}`;
+}
+
+function buildArtifactVersionMetadata({
+  timestamp,
+  storageKey,
+  type,
+  contentBuffer,
+  textContent,
+} = {}) {
+  const isoTimestamp =
+    normalizeArtifactTimestamp(timestamp) || new Date().toISOString();
+  const hash = crypto.createHash('sha256');
+  hash.update(Buffer.from(isoTimestamp));
+  if (typeof type === 'string' && type.trim()) {
+    hash.update(Buffer.from(type.trim()));
+  }
+  if (typeof storageKey === 'string' && storageKey.trim()) {
+    hash.update(Buffer.from(storageKey.trim()));
+  }
+  if (Buffer.isBuffer(contentBuffer) && contentBuffer.length) {
+    hash.update(contentBuffer);
+  } else if (typeof textContent === 'string' && textContent.trim()) {
+    hash.update(Buffer.from(textContent.trim()));
+  }
+  const versionHash = hash.digest('hex');
+  const versionPrefix = buildVersionTimestampSlug(isoTimestamp);
+  const versionId = versionPrefix
+    ? `${versionPrefix}-${versionHash.slice(0, 12)}`
+    : versionHash.slice(0, 12);
+  return { generatedAt: isoTimestamp, versionHash, versionId };
+}
+
+function enrichArtifactWithVersionMetadata(target, options) {
+  const metadata = buildArtifactVersionMetadata(options);
+  if (target && typeof target === 'object') {
+    if (metadata.generatedAt) {
+      target.generatedAt = metadata.generatedAt;
+    }
+    if (metadata.versionHash) {
+      target.versionHash = metadata.versionHash;
+    }
+    if (metadata.versionId) {
+      target.versionId = metadata.versionId;
+    }
+  }
+  return metadata;
+}
+
 function buildTemplateScopedPdfKey({
   basePrefix,
   documentType,
@@ -18479,12 +18561,19 @@ async function generateEnhancedDocumentsResponse({
 
   if (normalizedOriginalUploadKey) {
     if (originalIsPdfLike) {
-      downloadArtifacts.unshift({
+      const originalArtifact = {
         type: 'original_upload',
         key: normalizedOriginalUploadKey,
         templateMetadata: originalTemplateMetadata,
         text: originalResumeForStorage,
+      };
+      enrichArtifactWithVersionMetadata(originalArtifact, {
+        timestamp: artifactTimestamp,
+        storageKey: normalizedOriginalUploadKey,
+        type: 'original_upload',
+        textContent: originalResumeForStorage,
       });
+      downloadArtifacts.unshift(originalArtifact);
       originalHandledViaArtifacts = true;
     } else {
       const originalPdfKey = buildTemplateScopedPdfKey({
@@ -18578,13 +18667,30 @@ async function generateEnhancedDocumentsResponse({
             }
           );
           registerArtifactKey(originalPdfKey);
-          uploadedArtifacts.push({ type: 'original_upload_pdf', key: originalPdfKey });
-          downloadArtifacts.unshift({
+          const originalPdfArtifact = {
             type: 'original_upload_pdf',
             key: originalPdfKey,
             templateMetadata: originalPdfTemplateMetadata,
             text: originalResumeForStorage,
+          };
+          const originalPdfVersion = enrichArtifactWithVersionMetadata(
+            originalPdfArtifact,
+            {
+              timestamp: artifactTimestamp,
+              storageKey: originalPdfKey,
+              type: 'original_upload_pdf',
+              contentBuffer: originalPdfBuffer,
+              textContent: originalResumeForStorage,
+            }
+          );
+          uploadedArtifacts.push({
+            type: 'original_upload_pdf',
+            key: originalPdfKey,
+            versionId: originalPdfVersion.versionId,
+            versionHash: originalPdfVersion.versionHash,
+            generatedAt: originalPdfVersion.generatedAt,
           });
+          downloadArtifacts.unshift(originalPdfArtifact);
           originalHandledViaArtifacts = true;
           logStructured(
             originalUsedMinimalFallback ? 'warn' : 'info',
@@ -18633,13 +18739,21 @@ async function generateEnhancedDocumentsResponse({
         Date.now() + URL_EXPIRATION_SECONDS * 1000
       ).toISOString();
       const typeFragment = encodeURIComponent('original_upload');
+      const originalSourceVersion = buildArtifactVersionMetadata({
+        timestamp: artifactTimestamp,
+        storageKey: originalUploadKey,
+        type: 'original_upload',
+        textContent: originalResumeForStorage,
+      });
       urls.push({
         type: 'original_upload',
         url: originalSignedUrl,
         fileUrl: originalSignedUrl,
         typeUrl: `${originalSignedUrl}#${typeFragment}`,
         expiresAt,
-        generatedAt: artifactTimestamp,
+        generatedAt: originalSourceVersion.generatedAt,
+        versionHash: originalSourceVersion.versionHash,
+        versionId: originalSourceVersion.versionId,
         templateId: 'original',
         templateName: 'Original Upload',
         templateType: 'resume',
@@ -18866,7 +18980,6 @@ async function generateEnhancedDocumentsResponse({
     );
 
     registerArtifactKey(key);
-    uploadedArtifacts.push({ type: name, key });
 
     if (name === 'version1' && existingArtifactKeys.cv1Url && existingArtifactKeys.cv1Url !== key) {
       registerStaleArtifactKey(existingArtifactKeys.cv1Url);
@@ -18921,7 +19034,30 @@ async function generateEnhancedDocumentsResponse({
       artifactDownloadEntry.text = '';
     }
 
+    const versionInfo = enrichArtifactWithVersionMetadata(
+      artifactDownloadEntry,
+      {
+        timestamp: artifactTimestamp,
+        storageKey: key,
+        type: name,
+        contentBuffer: pdfBuffer,
+        textContent:
+          typeof artifactDownloadEntry.rawText === 'string'
+            ? artifactDownloadEntry.rawText
+            : typeof artifactDownloadEntry.text === 'string'
+              ? artifactDownloadEntry.text
+              : '',
+      }
+    );
+
     downloadArtifacts.push(artifactDownloadEntry);
+    uploadedArtifacts.push({
+      type: name,
+      key,
+      versionId: versionInfo.versionId,
+      versionHash: versionInfo.versionHash,
+      generatedAt: versionInfo.generatedAt,
+    });
   }
 
   template1 = finalTemplateMapping.resume.primary || template1;
@@ -19229,9 +19365,16 @@ async function generateEnhancedDocumentsResponse({
       fileUrl: signedUrl,
       typeUrl: `${signedUrl}#${typeFragment}`,
       expiresAt,
-      generatedAt: artifactTimestamp,
+      generatedAt: artifact.generatedAt || artifactTimestamp,
       storageKey: artifact.key,
     };
+
+    if (artifact.versionHash) {
+      urlEntry.versionHash = artifact.versionHash;
+    }
+    if (artifact.versionId) {
+      urlEntry.versionId = artifact.versionId;
+    }
 
     if (artifact.templateMetadata) {
       urlEntry.templateId = artifact.templateMetadata.templateId;

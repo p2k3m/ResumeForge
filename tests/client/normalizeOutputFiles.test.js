@@ -248,4 +248,24 @@ describe('normalizeOutputFiles', () => {
       expect.objectContaining({ code: 'missing_url', type: 'version1' }),
     ])
   })
+
+  it('preserves version metadata on download entries', () => {
+    const input = [
+      {
+        type: 'version1',
+        url: 'https://cdn.example.com/enhanced.pdf',
+        versionId: '20250101-123456-abcdef123456',
+        versionHash:
+          'abcdef123456abcdef123456abcdef123456abcdef123456abcdef123456abcdef123456',
+      },
+    ]
+
+    const result = normalizeOutputFiles(input)
+
+    expect(result).toHaveLength(1)
+    expect(result[0].versionId).toBe('20250101-123456-abcdef123456')
+    expect(result[0].versionHash).toBe(
+      'abcdef123456abcdef123456abcdef123456abcdef123456abcdef123456abcdef123456'
+    )
+  })
 })

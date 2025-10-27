@@ -61,7 +61,9 @@ const PRESERVED_STRING_FIELDS = [
   'coverTemplate',
   'coverTemplateId',
   'coverTemplateName',
-  'storageKey'
+  'storageKey',
+  'versionId',
+  'versionHash'
 ]
 
 const TEMPLATE_META_STRING_FIELDS = [

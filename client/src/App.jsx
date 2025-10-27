@@ -514,12 +514,33 @@ function deriveDownloadFileName(file, presentation = {}, response, options = {})
   const timestampInput = options?.timestamp || options?.generatedAt || Date.now()
   const timestampSegment = buildTimestampSlug(timestampInput)
 
+  const versionSegmentRaw =
+    (typeof options?.versionId === 'string' && options.versionId.trim()) ||
+    (typeof file?.versionId === 'string' && file.versionId.trim()) ||
+    ''
+  const versionSegment = versionSegmentRaw
+    ? sanitizeFileNameSegment(versionSegmentRaw).slice(0, 40)
+    : ''
+  const hashSegmentRaw =
+    (typeof options?.versionHash === 'string' && options.versionHash.trim()) ||
+    (typeof file?.versionHash === 'string' && file.versionHash.trim()) ||
+    ''
+  const hashSegment =
+    !versionSegment && hashSegmentRaw
+      ? sanitizeFileNameSegment(hashSegmentRaw.slice(0, 12))
+      : ''
+
   const segments = [base]
   if (templateSegment && !segments.includes(templateSegment)) {
     segments.push(templateSegment)
   }
   if (timestampSegment && !segments.includes(timestampSegment)) {
     segments.push(timestampSegment)
+  }
+  if (versionSegment && !segments.includes(versionSegment)) {
+    segments.push(versionSegment)
+  } else if (hashSegment && !segments.includes(hashSegment)) {
+    segments.push(hashSegment)
   }
 
   const overrideType =
@@ -4662,7 +4683,9 @@ function App() {
           templateId: templateMeta.id,
           generatedAt: fileTimestamp,
           contentTypeOverride: normalizedContentType,
-          forcePdfExtension: shouldNormalizePdf
+          forcePdfExtension: shouldNormalizePdf,
+          versionId: activeFile.versionId,
+          versionHash: activeFile.versionHash
         })
         const blobUrl = URL.createObjectURL(downloadBlob)
         const link = document.createElement('a')
@@ -4809,6 +4832,8 @@ function App() {
           generatedAt: file.generatedAt,
           contentTypeOverride: 'application/pdf',
           forcePdfExtension: true,
+          versionId: file.versionId,
+          versionHash: file.versionHash,
         })
       : ''
     const downloadLinkLabel = presentation.linkLabel || 'Download File'
@@ -9629,6 +9654,8 @@ function App() {
                   generatedAt: previewFile.generatedAt,
                   contentTypeOverride: 'application/pdf',
                   forcePdfExtension: true,
+                  versionId: previewFile.versionId,
+                  versionHash: previewFile.versionHash,
                 })
               : ''
             const previewDownloadLinkLabel = previewPresentation.linkLabel || 'Download File'
