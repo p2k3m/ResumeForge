@@ -30,7 +30,8 @@
     "publish:cloudfront-url": "node scripts/publish-cloudfront-url.mjs",
     "upload:static": "node scripts/upload-static-build.mjs",
     "verify:cloudfront": "node scripts/verify-cloudfront.mjs",
-    "verify:static": "node scripts/verify-static-deployment.mjs"
+    "verify:static": "node scripts/verify-static-deployment.mjs",
+    "autofix:pipeline": "node scripts/auto-pipeline-repair.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.432.0",
@@ -47,6 +48,7 @@
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@google/generative-ai": "^0.11.3",
+    "@octokit/rest": "^22.0.0",
     "@vendia/serverless-express": "^4.10.3",
     "axios": "^1.6.2",
     "cfb": "^1.2.2",
@@ -60,6 +62,7 @@
     "mammoth": "^1.6.0",
     "mime-types": "^2.1.35",
     "multer": "^1.4.5-lts.1",
+    "openai": "^6.7.0",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
     "pdfkit": "^0.13.0",
