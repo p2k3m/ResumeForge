@@ -4971,7 +4971,12 @@ function App() {
 
         const response = await fetch(normalizedDownloadUrl)
         if (!response.ok) {
-          throw new Error(`Download failed with status ${response.status}`)
+          const downloadError = new Error(`Download failed with status ${response.status}`)
+          downloadError.status = response.status
+          if (response.status === 404) {
+            downloadError.code = 'DOWNLOAD_NOT_FOUND'
+          }
+          throw downloadError
         }
         const responseContentType = response.headers?.get?.('content-type') || ''
         const normalizedResponseType = responseContentType.split(';')[0]?.trim().toLowerCase() || ''
@@ -5036,26 +5041,38 @@ function App() {
         resetUiAfterDownload()
       } catch (err) {
         console.error('Download failed', err)
-        const downloadErrorMessage =
-          err?.code === 'NON_PDF_CONTENT'
-            ? 'The download link returned text instead of a PDF. Please regenerate the document.'
-            : err?.code === 'INVALID_PDF_SIGNATURE'
-              ? 'The downloaded file was corrupted. Please try regenerating the document.'
-              : err?.code === 'EMPTY_PDF_CONTENT'
-                ? 'The downloaded file was empty. Please regenerate the document.'
-                : 'Unable to download this document. Please try again.'
+        const isNotFoundError = err?.code === 'DOWNLOAD_NOT_FOUND' || err?.status === 404
+        const downloadErrorMessage = (() => {
+          if (isNotFoundError) {
+            return 'The PDF could not be found. Please regenerate the document to create a fresh link.'
+          }
+          if (err?.code === 'NON_PDF_CONTENT') {
+            return 'The download link returned text instead of a PDF. Please regenerate the document.'
+          }
+          if (err?.code === 'INVALID_PDF_SIGNATURE') {
+            return 'The downloaded file was corrupted. Please try regenerating the document.'
+          }
+          if (err?.code === 'EMPTY_PDF_CONTENT') {
+            return 'The downloaded file was empty. Please regenerate the document.'
+          }
+          return 'Unable to download this document. Please try again.'
+        })()
         setError(downloadErrorMessage, { stage: 'download' })
         setDownloadStates((prev) => ({
           ...prev,
           [stateKey]: {
-            status: 'idle',
-            error: 'Download failed. Try again or regenerate the document.'
+            status: isNotFoundError ? 'error' : 'idle',
+            error: isNotFoundError
+              ? 'Download link unavailable. Please regenerate the document.'
+              : 'Download failed. Try again or regenerate the document.'
           }
         }))
-        try {
-          window.open(downloadUrl, '_blank', 'noopener,noreferrer')
-        } catch (openErr) {
-          console.warn('Fallback open failed', openErr)
+        if (!isNotFoundError) {
+          try {
+            window.open(downloadUrl, '_blank', 'noopener,noreferrer')
+          } catch (openErr) {
+            console.warn('Fallback open failed', openErr)
+          }
         }
         setPendingDownloadFile(null)
       }
@@ -5133,6 +5150,7 @@ function App() {
     const resolvedStateKey = downloadStateKey || (typeof file.url === 'string' ? file.url : '')
     const downloadState = resolvedStateKey ? downloadStates[resolvedStateKey] : undefined
     const isDownloading = downloadState?.status === 'loading'
+    const downloadHasError = downloadState?.status === 'error'
     const downloadError = downloadState?.error || ''
     const derivedDownloadError = isExpired
       ? canRefresh
@@ -5142,9 +5160,9 @@ function App() {
         ? 'Download link unavailable. Please regenerate the document.'
         : downloadError
     const isDownloadUnavailable =
-      isDownloading || !downloadUrl || (isExpired && !canRefresh)
+      isDownloading || !downloadUrl || (isExpired && !canRefresh) || downloadHasError
     const isCoverLetterDownloadDisabled = isCoverLetter
-      ? !downloadUrl || (isExpired && !canRefresh)
+      ? !downloadUrl || (isExpired && !canRefresh) || downloadHasError
       : isDownloadUnavailable
     const templateNameValue =
       (typeof templateMeta?.name === 'string' && templateMeta.name.trim()) ||
@@ -5157,7 +5175,7 @@ function App() {
       (typeof file.coverTemplateId === 'string' && file.coverTemplateId.trim()) ||
       (typeof file.template === 'string' && file.template.trim()) ||
       ''
-    const directDownloadDisabled = !downloadUrl || (isExpired && !canRefresh)
+    const directDownloadDisabled = !downloadUrl || (isExpired && !canRefresh) || downloadHasError
     const directDownloadFileName = !directDownloadDisabled
       ? deriveDownloadFileName(file, presentation, null, {
           templateName: templateNameValue,
@@ -5195,6 +5213,9 @@ function App() {
             : ''
     }`
     const downloadButtonLabel = (() => {
+      if (downloadHasError) {
+        return 'Link unavailable'
+      }
       if (!downloadUrl) {
         return 'Link unavailable'
       }
@@ -5275,7 +5296,7 @@ function App() {
               type="button"
               onClick={() => {
                 const canDownload = isCoverLetter
-                  ? Boolean(downloadUrl) && (!isExpired || canRefresh)
+                  ? Boolean(downloadUrl) && (!isExpired || canRefresh) && !downloadHasError
                   : !isDownloadUnavailable
                 if (!canDownload) {
                   return
@@ -10033,6 +10054,7 @@ function App() {
               ? downloadStates[previewResolvedStateKey]
               : undefined
             const previewIsDownloading = previewDownloadState?.status === 'loading'
+            const previewHasError = previewDownloadState?.status === 'error'
             const previewDownloadError = previewDownloadState?.error || ''
             const pendingDownloadKey = pendingDownloadFile
               ? getDownloadStateKey(pendingDownloadFile)
@@ -10054,8 +10076,8 @@ function App() {
             const previewPresentation =
               previewFile.presentation || getDownloadPresentation(previewFile)
             const previewButtonDisabled =
-              previewIsDownloading || (!previewHasUrl && !previewCanRefresh)
-            const previewLinkDisabled = previewExpired || !previewHasUrl
+              previewIsDownloading || previewHasError || (!previewHasUrl && !previewCanRefresh)
+            const previewLinkDisabled = previewExpired || !previewHasUrl || previewHasError
             const previewTemplateMeta = previewFile.templateMeta || {}
             const previewTemplateName =
               (typeof previewTemplateMeta.name === 'string' && previewTemplateMeta.name.trim()) ||
@@ -10088,6 +10110,7 @@ function App() {
             }`
 
             const downloadButtonLabel = (() => {
+              if (previewHasError) return 'Link unavailable'
               if (previewIsDownloading) return 'Downloading…'
               if (previewExpired) return previewCanRefresh ? 'Refresh link' : 'Link expired'
               if (!previewHasUrl) return previewCanRefresh ? 'Refresh link' : 'Link unavailable'
@@ -10170,6 +10193,9 @@ function App() {
                             if (previewLinkDisabled) {
                               event.preventDefault()
                               event.stopPropagation()
+                              if (previewHasError) {
+                                return
+                              }
                               if (previewCanRefresh) {
                                 try {
                                   await refreshDownloadLink(previewFile)
