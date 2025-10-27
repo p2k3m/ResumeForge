@@ -1,20 +1,39 @@
+import { jest } from '@jest/globals'
 import request from 'supertest'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
 import app, {
   setGeneratePdf,
   generatePdf,
   setPlainPdfFallbackOverride,
-  setMinimalPlainPdfBufferGenerator
+  setMinimalPlainPdfBufferGenerator,
+  setS3Client
 } from '../server.js'
 
 const PDF_STUB = Buffer.from('%PDF-1.4\n%âãÏÓ\n1 0 obj\n<<>>\nendobj\nstartxref\n0\n%%EOF')
 
+jest.setTimeout(20000)
+
 describe('render cover letter route', () => {
   const originalGeneratePdf = generatePdf
+  let s3SendMock
+
+  beforeEach(() => {
+    s3SendMock = jest.fn().mockResolvedValue({})
+    setS3Client({
+      send: s3SendMock,
+      config: { requestHandler: { handle: jest.fn() } }
+    })
+  })
 
   afterEach(() => {
     setGeneratePdf(originalGeneratePdf)
     setPlainPdfFallbackOverride()
     setMinimalPlainPdfBufferGenerator()
+    s3SendMock.mockReset()
+  })
+
+  afterAll(() => {
+    setS3Client(null)
   })
 
   it('renders a cover letter PDF using the requested template', async () => {
@@ -37,6 +56,17 @@ describe('render cover letter route', () => {
     expect(Buffer.isBuffer(response.body)).toBe(true)
     expect(Buffer.from(response.body)).toEqual(PDF_STUB)
     expect(response.headers['x-template-id']).toBe('cover_classic')
+    expect(typeof response.headers['x-artifact-key']).toBe('string')
+
+    expect(s3SendMock).toHaveBeenCalledTimes(1)
+    const [command] = s3SendMock.mock.calls[0]
+    expect(command).toBeInstanceOf(PutObjectCommand)
+    expect(command.input.Bucket).toBe(process.env.S3_BUCKET)
+    expect(command.input.ContentType).toBe('application/pdf')
+    expect(Buffer.compare(command.input.Body, PDF_STUB)).toBe(0)
+    expect(command.input.Key).toMatch(/^cv\//)
+    expect(command.input.Key.endsWith('.pdf')).toBe(true)
+    expect(response.headers['x-artifact-key']).toBe(command.input.Key)
   })
 
   it('rejects when cover letter text is missing', async () => {
