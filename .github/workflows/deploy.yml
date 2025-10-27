@@ -712,6 +712,19 @@ jobs:
 
               ensure_stack_ready_for_deploy "waiting for stack cleanup after attempt $deploy_attempt"
 
+              : >"$tmp_err"
+              if ! aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
+                wait_err=$(cat "$tmp_err")
+                if echo "$wait_err" | grep -qi 'does not exist'; then
+                  echo "Stack '$STACK_NAME' no longer exists while waiting for cleanup. Continuing with retry from a clean slate."
+                else
+                  echo "Failed while waiting for stack cleanup to finish: $wait_err" >&2
+                  exit 1
+                fi
+              else
+                echo "Stack '$STACK_NAME' completed cleanup after previous update."
+              fi
+
               deploy_attempt=$((deploy_attempt + 1))
               sleep 15
               continue
