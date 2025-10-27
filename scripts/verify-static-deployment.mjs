@@ -17,6 +17,12 @@ import {
   CLOUDFRONT_FORBIDDEN_ERROR_CODE,
 } from '../lib/cloudfrontAssetCheck.js'
 import { applyStageEnvironment } from '../config/stage.js'
+import {
+  categorizeStaleHashedIndexAssets,
+  resolveHashedIndexAssetRetentionMs,
+  formatDurationForLog,
+  formatAssetAgeForLog,
+} from '../lib/static/hashedIndexAssetRetention.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -429,7 +435,7 @@ async function ensureNoStaleIndexAssets({
     hashedAssets.map((asset) => (typeof asset === 'string' ? asset.trim() : asset)).filter(Boolean),
   )
   const hashedPattern = /^assets\/index-[\w.-]+\.(?:css|js)$/u
-  const stale = []
+  const candidates = []
 
   let continuationToken
   do {
@@ -453,41 +459,72 @@ async function ensureNoStaleIndexAssets({
       if (!hashedPattern.test(relative)) {
         continue
       }
-      if (!hashedSet.has(relative)) {
-        stale.push(relative)
+      if (hashedSet.has(relative)) {
+        continue
       }
+      candidates.push({ key: relative, lastModified: item?.LastModified })
     }
 
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
   } while (continuationToken)
 
-  if (stale.length > 0) {
-    const details = stale.join(', ')
-    if (autoDelete) {
-      await deleteStaleIndexAssets({ s3, bucket, prefix, staleAssets: stale })
-      console.warn(
-        `[verify-static] Deleted ${stale.length} stale hashed index asset${
-          stale.length === 1 ? '' : 's'
-        } under s3://${bucket}/${prefixWithSlash}: ${details}.`,
-      )
-      await ensureNoStaleIndexAssets({
-        s3,
-        bucket,
-        prefix,
-        hashedAssets,
-        autoDelete: false,
-      })
-      return { resolvedByDeletion: true, staleAssets: stale }
-    }
-    throw new Error(
-      `[verify-static] Stale hashed index asset${
-        stale.length === 1 ? '' : 's'
-      } detected under s3://${bucket}/${prefixWithSlash}: ${details}. ` +
-        'Delete the existing objects or rerun the upload script before publishing.',
-    )
+  if (candidates.length === 0) {
+    return { resolvedByDeletion: false, staleAssets: [], retainedAssets: [], retentionMs: 0, protectedByRetention: [] }
   }
 
-  return { resolvedByDeletion: false, staleAssets: [] }
+  const retentionMs = resolveHashedIndexAssetRetentionMs(process.env)
+  const { eligibleForDeletion, protectedByRetention } = categorizeStaleHashedIndexAssets({
+    hashedAssets,
+    candidates,
+    now: Date.now(),
+    retentionMs,
+  })
+
+  if (eligibleForDeletion.length === 0) {
+    return {
+      resolvedByDeletion: false,
+      staleAssets: [],
+      retainedAssets: protectedByRetention.map((entry) => entry.key),
+      retentionMs,
+      protectedByRetention,
+    }
+  }
+
+  const detailList = eligibleForDeletion
+    .map((entry) => {
+      const ageLabel = formatAssetAgeForLog(entry.ageMs)
+      return `${entry.key}${ageLabel ? ` (${ageLabel})` : ''}`
+    })
+    .join(', ')
+
+  if (autoDelete) {
+    await deleteStaleIndexAssets({
+      s3,
+      bucket,
+      prefix,
+      staleAssets: eligibleForDeletion.map((entry) => entry.key),
+    })
+    console.warn(
+      `[verify-static] Deleted ${eligibleForDeletion.length} stale hashed index asset${
+        eligibleForDeletion.length === 1 ? '' : 's'
+      } under s3://${bucket}/${prefixWithSlash}: ${detailList}.`,
+    )
+    return {
+      resolvedByDeletion: true,
+      staleAssets: eligibleForDeletion.map((entry) => entry.key),
+      retainedAssets: protectedByRetention.map((entry) => entry.key),
+      retentionMs,
+      protectedByRetention,
+      deletedAssets: eligibleForDeletion,
+    }
+  }
+
+  throw new Error(
+    `[verify-static] Stale hashed index asset${
+      eligibleForDeletion.length === 1 ? '' : 's'
+    } detected under s3://${bucket}/${prefixWithSlash}: ${detailList}. ` +
+      'Delete the existing objects or rerun the upload script before publishing.',
+  )
 }
 
 async function resolveCloudfrontUrl() {
@@ -790,6 +827,27 @@ async function main() {
     hashedAssets,
     autoDelete: deleteStaleIndexAssets,
   })
+  const retainedAssets = Array.isArray(staleCheck?.retainedAssets)
+    ? staleCheck.retainedAssets
+    : []
+  if (retainedAssets.length > 0) {
+    const retentionDurationLabel = formatDurationForLog(
+      typeof staleCheck?.retentionMs === 'number'
+        ? staleCheck.retentionMs
+        : resolveHashedIndexAssetRetentionMs(process.env),
+    )
+    const protectedDetails = Array.isArray(staleCheck?.protectedByRetention)
+      ? staleCheck.protectedByRetention
+          .map((entry) => `${entry.key} (${formatAssetAgeForLog(entry.ageMs)})`)
+          .join(', ')
+      : retainedAssets.join(', ')
+    console.log(
+      `[verify-static] Retaining ${retainedAssets.length} hashed index asset${
+        retainedAssets.length === 1 ? '' : 's'
+      } within the ${retentionDurationLabel} retention window: ${protectedDetails}.`,
+    )
+  }
+
   if (staleCheck?.resolvedByDeletion) {
     const removedAssets = Array.isArray(staleCheck.staleAssets)
       ? staleCheck.staleAssets.join(', ')
@@ -803,7 +861,7 @@ async function main() {
     } else {
       console.log('[verify-static] Removed stale hashed index assets from the deployment prefix.')
     }
-  } else {
+  } else if (retainedAssets.length === 0) {
     console.log('[verify-static] No stale hashed index assets detected in the deployment prefix.')
   }
 
