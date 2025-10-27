@@ -497,6 +497,8 @@ async function ensureNoStaleIndexAssets({
     })
     .join(', ')
 
+  const flaggedAssets = eligibleForDeletion.map((entry) => ({ key: entry.key, ageMs: entry.ageMs }))
+
   if (autoDelete) {
     await deleteStaleIndexAssets({
       s3,
@@ -515,16 +517,19 @@ async function ensureNoStaleIndexAssets({
       retainedAssets: protectedByRetention.map((entry) => entry.key),
       retentionMs,
       protectedByRetention,
-      deletedAssets: eligibleForDeletion,
+      deletedAssets: flaggedAssets,
     }
   }
 
-  throw new Error(
-    `[verify-static] Stale hashed index asset${
-      eligibleForDeletion.length === 1 ? '' : 's'
-    } detected under s3://${bucket}/${prefixWithSlash}: ${detailList}. ` +
-      'Delete the existing objects or rerun the upload script before publishing.',
-  )
+  return {
+    resolvedByDeletion: false,
+    staleAssets: flaggedAssets.map((entry) => entry.key),
+    retainedAssets: protectedByRetention.map((entry) => entry.key),
+    retentionMs,
+    protectedByRetention,
+    flaggedAssets,
+    staleDetailList: detailList,
+  }
 }
 
 async function resolveCloudfrontUrl() {
@@ -652,7 +657,7 @@ function shouldDeleteStaleIndexAssets({ cliOverride } = {}) {
     }
   }
 
-  return true
+  return false
 }
 
 function parseCliFlags(argv = []) {
@@ -830,6 +835,7 @@ async function main() {
   const retainedAssets = Array.isArray(staleCheck?.retainedAssets)
     ? staleCheck.retainedAssets
     : []
+  const staleAssets = Array.isArray(staleCheck?.staleAssets) ? staleCheck.staleAssets : []
   if (retainedAssets.length > 0) {
     const retentionDurationLabel = formatDurationForLog(
       typeof staleCheck?.retentionMs === 'number'
@@ -861,6 +867,30 @@ async function main() {
     } else {
       console.log('[verify-static] Removed stale hashed index assets from the deployment prefix.')
     }
+  } else if (staleAssets.length > 0) {
+    const flaggedEntries = Array.isArray(staleCheck?.flaggedAssets)
+      ? staleCheck.flaggedAssets
+      : []
+    const detailList = flaggedEntries.length
+      ? flaggedEntries
+          .map((entry) => {
+            const ageLabel = formatAssetAgeForLog(entry.ageMs)
+            return `${entry.key}${ageLabel ? ` (${ageLabel})` : ''}`
+          })
+          .join(', ')
+      : staleAssets.join(', ')
+
+    console.warn(
+      `[verify-static] Detected ${staleAssets.length} hashed index asset${
+        staleAssets.length === 1 ? '' : 's'
+      } older than the retention window under s3://${bucket}/${prefix}/: ${detailList}.`,
+    )
+    console.warn(
+      '[verify-static] Leaving these assets in place to protect clients with cached index.html responses.',
+    )
+    console.warn(
+      '[verify-static] Re-run with --delete-stale-index-assets (or set STATIC_VERIFY_DELETE_STALE_INDEX_ASSETS=true) once it is safe to prune them.',
+    )
   } else if (retainedAssets.length === 0) {
     console.log('[verify-static] No stale hashed index assets detected in the deployment prefix.')
   }
