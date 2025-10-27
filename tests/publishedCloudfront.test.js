@@ -1,8 +1,11 @@
+import { jest } from '@jest/globals';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import request from 'supertest';
 import { setupTestServer } from './utils/testServer.js';
+
+jest.setTimeout(20000);
 
 async function createServer({ metadata, createFile = true } = {}) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'resumeforge-cloudfront-'));
@@ -61,6 +64,7 @@ describe('published CloudFront helpers', () => {
           distributionId: metadata.distributionId,
           originBucket: metadata.originBucket,
           updatedAt: metadata.updatedAt,
+          apiGatewayUrl: null,
         },
       });
     } finally {

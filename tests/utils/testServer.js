@@ -399,6 +399,7 @@ export async function setupTestServer({
       })),
       PutObjectCommand: jest.fn((input) => ({ input, __type: 'PutObjectCommand' })),
       GetObjectCommand: jest.fn((input) => ({ input, __type: 'GetObjectCommand' })),
+      HeadObjectCommand: jest.fn((input) => ({ input, __type: 'HeadObjectCommand' })),
       ListObjectsV2Command: jest.fn((input) => ({ input, __type: 'ListObjectsV2Command' })),
       DeleteObjectsCommand: jest.fn((input) => ({ input, __type: 'DeleteObjectsCommand' })),
       CopyObjectCommand: jest.fn((input) => ({ input, __type: 'CopyObjectCommand' })),
