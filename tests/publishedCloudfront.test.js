@@ -65,6 +65,7 @@ describe('published CloudFront helpers', () => {
           originBucket: metadata.originBucket,
           updatedAt: metadata.updatedAt,
           apiGatewayUrl: null,
+          degraded: false,
         },
       });
     } finally {
