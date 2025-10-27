@@ -2515,7 +2515,7 @@ describe('/api/generate-enhanced-docs', () => {
     expect(res.status).toBe(200);
 
     const templateFallbackMessage =
-      'Could not generate PDF for Modern template, retrying with Professional';
+      'Could not generate PDF for Modern Minimal template, retrying with Professional Edge';
     const populationFallbackMessage =
       'Cover letters were generated using fallback copy because the AI response was incomplete.';
 
@@ -2606,7 +2606,7 @@ describe('generatePdfWithFallback', () => {
     });
     expect(result.template).toBe('modern');
     expect(result.messages).toContain(
-      'Could not generate PDF for Future Vision 2025 template, retrying with Modern'
+      'Could not generate PDF for Future Vision 2025 template, retrying with Modern Minimal'
     );
   });
 
@@ -2630,7 +2630,7 @@ describe('generatePdfWithFallback', () => {
     expect(pdfMock).toHaveBeenCalledTimes(2);
     expect(result.template).toBe('professional');
     expect(result.messages).toContain(
-      'Could not generate PDF for Modern template, retrying with Professional'
+      'Could not generate PDF for Modern Minimal template, retrying with Professional Edge'
     );
   });
 
@@ -2661,7 +2661,7 @@ describe('generatePdfWithFallback', () => {
     expect(pdfMock).toHaveBeenCalledTimes(2);
     expect(result.template).toBe('professional');
     expect(result.messages).toContain(
-      'Could not generate PDF for Future Vision 2025 template, retrying with Professional'
+      'Could not generate PDF for Future Vision 2025 template, retrying with Professional Edge'
     );
   });
 

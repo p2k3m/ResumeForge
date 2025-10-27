@@ -223,6 +223,14 @@ function ensureAxiosResponseInterceptor(client) {
 
 const axiosResponseInterceptor = ensureAxiosResponseInterceptor(axios);
 
+const CV_TEMPLATE_DISPLAY_NAMES = {
+  modern: 'Modern Minimal',
+  professional: 'Professional Edge',
+  classic: 'Classic Heritage',
+  ats: 'ATS Optimized',
+  '2025': 'Future Vision 2025',
+};
+
 const COVER_TEMPLATE_DISPLAY_NAMES = {
   cover_modern: 'Modern Cover Letter',
   cover_classic: 'Classic Cover Letter',
@@ -235,10 +243,14 @@ function formatTemplateDisplayName(templateId) {
   if (!templateId) {
     return '';
   }
-  if (templateId === '2025') {
-    return 'Future Vision 2025';
+  const canonical = canonicalizeCvTemplateId
+    ? canonicalizeCvTemplateId(templateId, '')
+    : String(templateId).trim();
+  const normalized = (canonical || String(templateId)).trim().toLowerCase();
+  if (normalized && CV_TEMPLATE_DISPLAY_NAMES[normalized]) {
+    return CV_TEMPLATE_DISPLAY_NAMES[normalized];
   }
-  return templateId
+  return (canonical || String(templateId))
     .split(/[-_]/)
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
