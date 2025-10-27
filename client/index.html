@@ -5,9 +5,198 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="resumeforge-api-base" content="" />
     <title>ResumeForge</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #f8fafc;
+      }
+      #static-asset-warning {
+        box-sizing: border-box;
+        width: min(720px, calc(100% - 2.5rem));
+        margin: 3.5rem auto;
+        padding: 1.75rem;
+        border-radius: 16px;
+        border: 1px solid rgba(220, 38, 38, 0.25);
+        background: linear-gradient(180deg, #fff5f5 0%, #fffef9 100%);
+        color: #7f1d1d;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+      #static-asset-warning[hidden] {
+        display: none !important;
+      }
+      #static-asset-warning .static-asset-warning__title {
+        margin: 0;
+        font-size: clamp(1.35rem, 3vw, 1.75rem);
+        font-weight: 700;
+      }
+      #static-asset-warning .static-asset-warning__body {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+      #static-asset-warning code {
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          'Liberation Mono', 'Courier New', monospace;
+        background: rgba(255, 255, 255, 0.65);
+        padding: 0.2rem 0.45rem;
+        border-radius: 6px;
+        font-size: 0.95rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #0f172a;
+        }
+        #static-asset-warning {
+          border-color: rgba(248, 113, 113, 0.4);
+          background: linear-gradient(180deg, rgba(248, 113, 113, 0.2) 0%, rgba(248, 113, 113, 0.1) 100%);
+          color: #fee2e2;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+        #static-asset-warning code {
+          background: rgba(15, 23, 42, 0.4);
+          color: #fef2f2;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div
+      id="static-asset-warning"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      hidden
+      data-visible="false"
+    >
+      <h1 class="static-asset-warning__title">We're having trouble loading ResumeForge</h1>
+      <p class="static-asset-warning__body">
+        The static assets required to run the portal could not be downloaded. This often happens when the
+        CDN is temporarily unavailable or a cached bundle was removed before the page refreshed.
+      </p>
+      <p class="static-asset-warning__body">
+        Please refresh the page in a few minutes. If the issue persists, contact support so we can restore
+        access.
+      </p>
+      <p class="static-asset-warning__body" data-static-asset-source-wrapper hidden>
+        Missing file: <code data-static-asset-source></code>
+      </p>
+    </div>
+    <script>
+      ;(function () {
+        const warning = document.getElementById('static-asset-warning')
+        if (!warning) {
+          return
+        }
+
+        const sourceWrapper = warning.querySelector('[data-static-asset-source-wrapper]')
+        const sourceLabel = warning.querySelector('[data-static-asset-source]')
+
+        const logFailure = (sourceText) => {
+          if (sourceText) {
+            console.error('ResumeForge static asset failed to load.', { source: sourceText })
+          } else {
+            console.error('ResumeForge static asset failed to load.')
+          }
+        }
+
+        const revealWarning = (sourceText) => {
+          if (sourceText && sourceLabel && sourceWrapper) {
+            sourceLabel.textContent = sourceText
+            sourceWrapper.hidden = false
+          }
+
+          const wasVisible = warning.dataset.visible === 'true'
+          if (!wasVisible) {
+            warning.dataset.visible = 'true'
+            warning.hidden = false
+          }
+          return wasVisible
+        }
+
+        const describeSource = (element) => {
+          if (!element) {
+            return ''
+          }
+
+          const rawSource =
+            (typeof element.getAttribute === 'function' && element.getAttribute('data-src')) ||
+            element.src ||
+            element.href ||
+            ''
+
+          if (!rawSource) {
+            return ''
+          }
+
+          try {
+            const resolved = new URL(rawSource, window.location.href)
+            if (resolved.origin === window.location.origin) {
+              return `${resolved.pathname}${resolved.search}`
+            }
+            return resolved.href
+          } catch (error) {
+            return rawSource
+          }
+        }
+
+        window.addEventListener(
+          'error',
+          (event) => {
+            if (!event || !event.target) {
+              return
+            }
+
+            const target = event.target
+            const tagName = typeof target.tagName === 'string' ? target.tagName.toLowerCase() : ''
+            const isStylesheet = tagName === 'link' && typeof target.rel === 'string' && target.rel.toLowerCase() === 'stylesheet'
+            const isScript = tagName === 'script'
+
+            if (!isScript && !isStylesheet) {
+              return
+            }
+
+            const sourceText = describeSource(target)
+            revealWarning(sourceText)
+            logFailure(sourceText)
+          },
+          true
+        )
+
+        window.addEventListener('unhandledrejection', (event) => {
+          if (!event || !event.reason) {
+            return
+          }
+
+          const reason = event.reason
+          const message =
+            typeof reason === 'string'
+              ? reason
+              : typeof reason.message === 'string'
+                ? reason.message
+                : typeof reason.error === 'string'
+                  ? reason.error
+                  : ''
+
+          if (!message) {
+            return
+          }
+
+          if (/loading chunk|importing module|Failed to fetch dynamically imported module|module script/i.test(message)) {
+            revealWarning('')
+            logFailure('')
+          }
+        })
+      })()
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
