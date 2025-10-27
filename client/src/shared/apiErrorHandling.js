@@ -37,7 +37,7 @@ export const SERVICE_ERROR_STEP_BY_CODE = Object.freeze(
 
 export const SERVICE_ERROR_STEP_BY_SOURCE = Object.freeze({
   s3: 'download',
-  lambda: 'evaluate',
+  lambda: 'score',
   gemini: 'enhance'
 })
 

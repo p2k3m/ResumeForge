@@ -2744,6 +2744,20 @@ function App() {
   )
   const improvementCount = improvementResults.length
   const downloadCount = outputFiles.length
+  const downloadSuccessCount = useMemo(
+    () => {
+      if (!downloadStates || typeof downloadStates !== 'object') {
+        return 0
+      }
+      return Object.values(downloadStates).reduce((count, state) => {
+        if (!state || typeof state !== 'object') {
+          return count
+        }
+        return state.status === 'completed' ? count + 1 : count
+      }, 0)
+    },
+    [downloadStates]
+  )
   const changeCount = changeLog.length
   const scoreMetricCount = scoreBreakdown.length
   const scoreDashboardReady = scoreMetricCount > 0
@@ -3575,7 +3589,8 @@ function App() {
   )
 
   const flowSteps = useMemo(() => {
-    const downloadComplete = downloadCount > 0
+    const generationComplete = downloadCount > 0
+    const downloadComplete = downloadSuccessCount > 0
     const normalizedErrorMessage = typeof error === 'string' ? error.trim() : ''
     const normalizedErrorCode =
       typeof errorContext?.code === 'string'
@@ -3601,14 +3616,19 @@ function App() {
         description: 'Attach your CV and target JD so we can start analysing.'
       },
       {
-        key: 'evaluate',
-        label: 'Evaluate',
+        key: 'score',
+        label: 'Score',
         description: 'Review the ATS breakdown and baseline selection chances.'
       },
       {
         key: 'enhance',
         label: 'Enhance',
         description: 'Apply targeted rewrites once you understand the current scores.'
+      },
+      {
+        key: 'generate',
+        label: 'Generate',
+        description: 'Produce polished CVs and cover letters tailored to the JD.'
       },
       {
         key: 'download',
@@ -3623,24 +3643,28 @@ function App() {
       const availability =
         step.key === 'upload'
           ? true
-          : step.key === 'evaluate'
+          : step.key === 'score'
             ? uploadComplete
             : step.key === 'enhance'
               ? improvementsUnlocked
-              : step.key === 'download'
+              : step.key === 'generate'
                 ? improvementsUnlocked && canGenerateEnhancedDocs
-                : false
+                : step.key === 'download'
+                  ? generationComplete
+                  : false
 
       const isComplete =
         step.key === 'upload'
           ? uploadComplete
-          : step.key === 'evaluate'
+          : step.key === 'score'
             ? scoreComplete
             : step.key === 'enhance'
               ? canGenerateEnhancedDocs
-              : step.key === 'download'
-                ? downloadComplete
-                : false
+              : step.key === 'generate'
+                ? generationComplete
+                : step.key === 'download'
+                  ? downloadComplete
+                  : false
 
       let status = 'upcoming'
       if (isComplete) {
@@ -3673,10 +3697,10 @@ function App() {
             noteTone = 'info'
           } else if (hasAnalysisData) {
             note = 'Upload complete.'
-              noteTone = 'success'
+            noteTone = 'success'
           }
           break
-        case 'evaluate':
+        case 'score':
           if (isProcessing && !scoreComplete) {
             note = 'Scanning resume against the JD…'
             noteTone = 'info'
@@ -3714,25 +3738,42 @@ function App() {
             noteTone = 'info'
           }
           break
-        case 'download':
-          if (downloadCount > 0) {
-            note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} available.`
+        case 'generate':
+          if (generationComplete) {
+            note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} generated.`
             noteTone = 'success'
+          } else if (isGeneratingDocs) {
+            note = 'Generating enhanced documents…'
+            noteTone = 'info'
+          } else if (
+            improvementsRequireAcceptance &&
+            improvementsUnlocked &&
+            !hasAcceptedImprovement
+          ) {
+            note = 'Accept improvements before generating downloads.'
+            noteTone = 'warning'
+          } else if (coverLetterContentMissing) {
+            note =
+              'Cover letter drafts are blank — open a template to auto-generate personalised text before generating downloads.'
+            noteTone = 'warning'
+          } else if (improvementsUnlocked && canGenerateEnhancedDocs) {
+            note = 'Generate tailored CVs and cover letters when you are ready.'
+            noteTone = 'info'
+          }
+          break
+        case 'download':
+          if (downloadSuccessCount > 0) {
+            note = `${downloadSuccessCount} file${downloadSuccessCount === 1 ? '' : 's'} downloaded.`
+            noteTone = 'success'
+          } else if (generationComplete) {
             if (coverLetterContentMissing) {
               note =
                 'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
               noteTone = 'warning'
+            } else {
+              note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} available.`
+              noteTone = 'info'
             }
-          } else if (improvementsRequireAcceptance && improvementsUnlocked && !hasAcceptedImprovement) {
-            note = 'Accept improvements before generating downloads.'
-            noteTone = 'warning'
-          } else if (!canGenerateEnhancedDocs && improvementsUnlocked) {
-            note = 'Generate enhancements to unlock downloads.'
-            noteTone = 'info'
-          } else if (coverLetterContentMissing) {
-            note =
-              'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
-            noteTone = 'warning'
           }
           break
         default:
@@ -3777,10 +3818,12 @@ function App() {
     improvementsRequireAcceptance,
     improvementsUnlocked,
     isProcessing,
+    isGeneratingDocs,
     queuedText,
     resumeExperienceMissing,
     scoreComplete,
-    uploadComplete
+    uploadComplete,
+    downloadSuccessCount
   ])
 
   const currentPhase = useMemo(() => {
@@ -4029,38 +4072,47 @@ function App() {
     }
 
     const now = Date.now()
-    const nextStates = {}
 
-    outputFiles.forEach((file) => {
-      if (!file || typeof file !== 'object') {
-        return
-      }
-      const stateKey = getDownloadStateKey(file)
-      if (!stateKey) {
-        return
-      }
-      const downloadUrl = typeof file.url === 'string' ? file.url.trim() : ''
-      const expiresAtValue =
-        typeof file.expiresAt === 'string' ? file.expiresAt.trim() : ''
-      const storageKey = typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
+    setDownloadStates((prev) => {
+      const nextStates = {}
 
-      let errorMessage = ''
-
-      if (!downloadUrl) {
-        errorMessage = 'Download link unavailable. Please regenerate the document.'
-      } else if (expiresAtValue) {
-        const expiryDate = new Date(expiresAtValue)
-        if (!Number.isNaN(expiryDate.getTime()) && expiryDate.getTime() <= now) {
-          errorMessage = storageKey
-            ? 'This link expired. Select Download to refresh it automatically.'
-            : 'This link has expired. Regenerate the documents to refresh the download link.'
+      outputFiles.forEach((file) => {
+        if (!file || typeof file !== 'object') {
+          return
         }
-      }
+        const stateKey = getDownloadStateKey(file)
+        if (!stateKey) {
+          return
+        }
+        const downloadUrl = typeof file.url === 'string' ? file.url.trim() : ''
+        const expiresAtValue =
+          typeof file.expiresAt === 'string' ? file.expiresAt.trim() : ''
+        const storageKey = typeof file.storageKey === 'string' ? file.storageKey.trim() : ''
 
-      nextStates[stateKey] = { status: 'idle', error: errorMessage }
+        let errorMessage = ''
+
+        if (!downloadUrl) {
+          errorMessage = 'Download link unavailable. Please regenerate the document.'
+        } else if (expiresAtValue) {
+          const expiryDate = new Date(expiresAtValue)
+          if (!Number.isNaN(expiryDate.getTime()) && expiryDate.getTime() <= now) {
+            errorMessage = storageKey
+              ? 'This link expired. Select Download to refresh it automatically.'
+              : 'This link has expired. Regenerate the documents to refresh the download link.'
+          }
+        }
+
+        const previousState = prev && typeof prev === 'object' ? prev[stateKey] : undefined
+        if (previousState && previousState.status === 'completed' && !errorMessage) {
+          nextStates[stateKey] = previousState
+        } else {
+          nextStates[stateKey] = { status: 'idle', error: errorMessage }
+        }
+      })
+
+      return nextStates
     })
 
-    setDownloadStates(nextStates)
     setIsGeneratingDocs(false)
     setIsCoverLetterDownloading(false)
   }, [outputFiles])
@@ -4821,7 +4873,7 @@ function App() {
           }
           setDownloadStates((prev) => ({
             ...prev,
-            [stateKey]: { status: 'idle', error: '' }
+            [stateKey]: { status: 'completed', error: '' }
           }))
           setPendingDownloadFile(null)
           resetUiAfterDownload()
@@ -4889,7 +4941,7 @@ function App() {
         URL.revokeObjectURL(blobUrl)
         setDownloadStates((prev) => ({
           ...prev,
-          [stateKey]: { status: 'idle', error: '' }
+          [stateKey]: { status: 'completed', error: '' }
         }))
         setPendingDownloadFile(null)
         resetUiAfterDownload()
@@ -8544,10 +8596,10 @@ function App() {
   ]
 
   const allowedDashboardStageKeys = useMemo(() => {
-    if (currentPhase === 'evaluate') {
+    if (currentPhase === 'score') {
       return ['score']
     }
-    if (currentPhase === 'enhance') {
+    if (currentPhase === 'enhance' || currentPhase === 'generate') {
       return ['suggestions', 'changelog']
     }
     return []
@@ -9019,7 +9071,7 @@ function App() {
             })}
           </div>
 
-          {currentPhase === 'evaluate' && activeDashboardStage === 'score' && (
+          {currentPhase === 'score' && activeDashboardStage === 'score' && (
             <DashboardStage
               stageLabel="Score Stage"
               title="Score Overview"
@@ -9248,7 +9300,7 @@ function App() {
           </section>
         )}
 
-        {currentPhase === 'evaluate' && selectionInsights && (
+          {currentPhase === 'score' && selectionInsights && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -9384,7 +9436,7 @@ function App() {
           </section>
         )}
 
-        {currentPhase === 'evaluate' && analysisHighlights.length > 0 && (
+          {currentPhase === 'score' && analysisHighlights.length > 0 && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
             <div>
               <h2 className="text-xl font-semibold text-purple-900">Match Checklist</h2>
@@ -9408,7 +9460,7 @@ function App() {
           </section>
         )}
 
-        {currentPhase === 'evaluate' && match && (
+          {currentPhase === 'score' && match && (
           <section className="space-y-4">
             <div className="rounded-3xl bg-white/80 backdrop-blur border border-purple-200/70 shadow-xl p-6 space-y-4">
               <h3 className="text-xl font-semibold text-purple-900">Skill Coverage Snapshot</h3>
@@ -9732,7 +9784,7 @@ function App() {
           </section>
         )}
 
-        {currentPhase === 'download' &&
+        {currentPhase === 'generate' &&
           outputFiles.length === 0 &&
           improvementsUnlocked &&
           improvementsRequireAcceptance &&
@@ -9750,10 +9802,10 @@ function App() {
           </section>
         )}
 
-          {currentPhase === 'download' && outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
+          {currentPhase === 'generate' && outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
             <section className="space-y-4">
               <header className="space-y-1">
-                <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Download</p>
+                <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Generate</p>
                 <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
                 <p className="text-sm text-purple-700/80">
                 {improvementsRequireAcceptance
@@ -9787,7 +9839,7 @@ function App() {
           {currentPhase === 'download' && outputFiles.length > 0 && (
             <section className="space-y-5">
               <header className="space-y-1">
-                <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Download</p>
+                <p className="caps-label text-xs font-semibold text-purple-500">Step 5 · Download</p>
                 <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
                 <p className="text-sm text-purple-700/80">
                 Download tailored cover letters plus your original and AI-enhanced CVs. Links remain active for 60 minutes.
