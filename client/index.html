@@ -304,6 +304,92 @@
         const sourceWrapper = warning.querySelector('[data-static-asset-source-wrapper]')
         const sourceLabel = warning.querySelector('[data-static-asset-source]')
 
+        const appendCacheBustParam = (source) => {
+          if (!source) {
+            return ''
+          }
+
+          try {
+            const parsed = new URL(source, window.location.href)
+            parsed.searchParams.set('__rf_retry', Date.now().toString(36))
+            return parsed.href
+          } catch (error) {
+            const separator = source.includes('?') ? '&' : '?'
+            return `${source}${separator}__rf_retry=${Date.now().toString(36)}`
+          }
+        }
+
+        const attemptCacheBustingReload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          if (element.dataset?.resumeforgeAssetRetry === 'true') {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const originalSource = describeSource(element)
+          if (!originalSource) {
+            return false
+          }
+
+          const retrySource = appendCacheBustParam(originalSource)
+          if (!retrySource) {
+            return false
+          }
+
+          const parent = element.parentNode
+          if (!parent || typeof parent.replaceChild !== 'function') {
+            return false
+          }
+
+          const replacement = element.cloneNode(true)
+
+          if (isStylesheet) {
+            replacement.href = retrySource
+          } else {
+            replacement.src = retrySource
+          }
+
+          replacement.setAttribute('data-src', retrySource)
+          replacement.dataset.resumeforgeAssetRetry = 'true'
+          replacement.dataset.resumeforgeOriginalSource = originalSource
+
+          element.dataset.resumeforgeAssetRetry = 'true'
+          element.dataset.resumeforgeOriginalSource = originalSource
+
+          try {
+            parent.replaceChild(replacement, element)
+          } catch (error) {
+            try {
+              parent.removeChild(element)
+              parent.appendChild(replacement)
+            } catch (innerError) {
+              return false
+            }
+          }
+
+          try {
+            console.warn('Retrying ResumeForge static asset with cache bust parameter.', {
+              source: originalSource,
+              retry: retrySource
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          return true
+        }
+
         const logFailure = (sourceText) => {
           if (sourceText) {
             console.error('ResumeForge static asset failed to load.', { source: sourceText })
@@ -331,7 +417,13 @@
             return ''
           }
 
+          const originalDatasetSource =
+            typeof element.dataset?.resumeforgeOriginalSource === 'string'
+              ? element.dataset.resumeforgeOriginalSource
+              : ''
+
           const rawSource =
+            originalDatasetSource ||
             (typeof element.getAttribute === 'function' && element.getAttribute('data-src')) ||
             element.src ||
             element.href ||
@@ -365,6 +457,10 @@
             const isScript = tagName === 'script'
 
             if (!isScript && !isStylesheet) {
+              return
+            }
+
+            if (attemptCacheBustingReload(target)) {
               return
             }
 
