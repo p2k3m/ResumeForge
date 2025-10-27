@@ -12,7 +12,8 @@ import { setupTestServer } from '../utils/testServer.js';
 const chromeBinaryPath = typeof process.env.CHROME_BIN === 'string' ? process.env.CHROME_BIN.trim() : '';
 const chromeDriverPath = typeof process.env.CHROMEDRIVER_PATH === 'string' ? process.env.CHROMEDRIVER_PATH.trim() : '';
 const hasChromeBinary = chromeBinaryPath.length > 0;
-const describeIfSupported = hasChromeBinary ? describe : describe.skip;
+const hasChromeDriver = chromeDriverPath.length > 0;
+const describeIfSupported = hasChromeBinary && hasChromeDriver ? describe : describe.skip;
 
 const execFileAsync = promisify(execFile);
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
