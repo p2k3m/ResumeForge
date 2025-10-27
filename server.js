@@ -1342,6 +1342,7 @@ function buildFallbackClientIndexHtml(metadata = null) {
   const canonicalUrl = metadata?.url || '';
   const apiGatewayUrl = metadata?.apiGatewayUrl || '';
   const updatedAt = metadata?.updatedAt || '';
+  const isDegraded = Boolean(metadata?.degraded);
   let canonicalHost = '';
 
   if (canonicalUrl) {
@@ -1361,7 +1362,7 @@ function buildFallbackClientIndexHtml(metadata = null) {
   const safeCanonicalUrl = canonicalUrl ? escapeHtml(canonicalUrl) : '';
   const safeUpdatedAt = updatedAt ? escapeHtml(updatedAt) : '';
 
-  const hasBackupDetails = Boolean(apiGatewayUrl || canonicalHost);
+  const shouldDisplayDegraded = Boolean(isDegraded);
 
   let degradeDetails = '';
   if (safeCanonicalHost) {
@@ -1385,8 +1386,8 @@ function buildFallbackClientIndexHtml(metadata = null) {
       class="fallback__degraded"
       role="alert"
       aria-live="assertive"
-      data-visible="${hasBackupDetails ? 'true' : 'false'}"
-      ${hasBackupDetails ? '' : 'hidden'}
+      data-visible="${shouldDisplayDegraded ? 'true' : 'false'}"
+      ${shouldDisplayDegraded ? '' : 'hidden'}
     >
       <h2>CloudFront fallback active</h2>
       <p>Static assets are being served directly from API Gateway while the CloudFront distribution recovers.</p>
@@ -2752,6 +2753,12 @@ async function loadPublishedCloudfrontMetadata() {
         typeof parsed?.updatedAt === 'string' && parsed.updatedAt.trim()
           ? parsed.updatedAt.trim()
           : null,
+      degraded:
+        typeof parsed?.degraded === 'boolean'
+          ? parsed.degraded
+          : typeof parsed?.degraded === 'string'
+            ? ['true', '1', 'yes'].includes(parsed.degraded.trim().toLowerCase())
+            : false,
     };
 
     if (metadata.url) {
@@ -24970,4 +24977,5 @@ export {
   setCoverLetterFallbackBuilder,
   resetTestState,
   setStaticAssetCacheHeaders,
+  buildFallbackClientIndexHtml,
 };

@@ -4,5 +4,6 @@
   "distributionId": "E3NEWPORTAL789",
   "apiGatewayUrl": "https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod",
   "originBucket": "resume-forge-app-2025",
-  "updatedAt": "2024-10-15T14:45:00.000Z"
+  "updatedAt": "2024-10-15T14:45:00.000Z",
+  "degraded": false
 }
