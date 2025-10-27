@@ -4,6 +4,7 @@ import path from 'node:path'
 import process from 'node:process'
 import { readFile } from 'node:fs/promises'
 import {
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -357,7 +358,71 @@ function ensureHashedIndexAssets(manifest, { manifestKey, bucket }) {
   return hashedAssets
 }
 
-async function ensureNoStaleIndexAssets({ s3, bucket, prefix, hashedAssets }) {
+async function deleteStaleIndexAssets({ s3, bucket, prefix, staleAssets }) {
+  if (!Array.isArray(staleAssets) || staleAssets.length === 0) {
+    return
+  }
+
+  const keys = staleAssets
+    .map((asset) => buildS3Key(prefix, asset))
+    .filter((key) => typeof key === 'string' && key.trim())
+
+  if (keys.length === 0) {
+    return
+  }
+
+  const batchedKeys = []
+  const BATCH_SIZE = 1000
+  for (let i = 0; i < keys.length; i += BATCH_SIZE) {
+    batchedKeys.push(keys.slice(i, i + BATCH_SIZE))
+  }
+
+  const errors = []
+
+  for (const batch of batchedKeys) {
+    try {
+      const response = await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Objects: batch.map((Key) => ({ Key })),
+            Quiet: false,
+          },
+        }),
+      )
+
+      if (Array.isArray(response?.Errors) && response.Errors.length > 0) {
+        for (const deletionError of response.Errors) {
+          const key = deletionError?.Key || '(unknown)'
+          const code = deletionError?.Code || deletionError?.code
+          const message = deletionError?.Message || deletionError?.message
+          const detailParts = [key]
+          if (code || message) {
+            detailParts.push(code || message)
+          }
+          errors.push(detailParts.join(' '))
+        }
+      }
+    } catch (error) {
+      const reason = error?.message || error
+      errors.push(reason)
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(
+      `[verify-static] Failed to delete stale hashed index assets: ${errors.join(', ')}`,
+    )
+  }
+}
+
+async function ensureNoStaleIndexAssets({
+  s3,
+  bucket,
+  prefix,
+  hashedAssets,
+  autoDelete = true,
+}) {
   const prefixWithSlash = prefix.endsWith('/') ? prefix : `${prefix}/`
   const hashedSet = new Set(
     hashedAssets.map((asset) => (typeof asset === 'string' ? asset.trim() : asset)).filter(Boolean),
@@ -397,6 +462,22 @@ async function ensureNoStaleIndexAssets({ s3, bucket, prefix, hashedAssets }) {
 
   if (stale.length > 0) {
     const details = stale.join(', ')
+    if (autoDelete) {
+      await deleteStaleIndexAssets({ s3, bucket, prefix, staleAssets: stale })
+      console.warn(
+        `[verify-static] Deleted ${stale.length} stale hashed index asset${
+          stale.length === 1 ? '' : 's'
+        } under s3://${bucket}/${prefixWithSlash}: ${details}.`,
+      )
+      await ensureNoStaleIndexAssets({
+        s3,
+        bucket,
+        prefix,
+        hashedAssets,
+        autoDelete: false,
+      })
+      return { resolvedByDeletion: true, staleAssets: stale }
+    }
     throw new Error(
       `[verify-static] Stale hashed index asset${
         stale.length === 1 ? '' : 's'
@@ -404,6 +485,8 @@ async function ensureNoStaleIndexAssets({ s3, bucket, prefix, hashedAssets }) {
         'Delete the existing objects or rerun the upload script before publishing.',
     )
   }
+
+  return { resolvedByDeletion: false, staleAssets: [] }
 }
 
 async function resolveCloudfrontUrl() {
@@ -515,10 +598,30 @@ function shouldAllowCloudfrontFailure({ cliOverride } = {}) {
   return false
 }
 
+function shouldDeleteStaleIndexAssets({ cliOverride } = {}) {
+  if (typeof cliOverride === 'boolean') {
+    return cliOverride
+  }
+
+  const overrideCandidates = [
+    process.env.STATIC_VERIFY_DELETE_STALE_INDEX_ASSETS,
+    process.env.DELETE_STALE_INDEX_ASSETS,
+  ]
+
+  for (const candidate of overrideCandidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return isTruthyEnv(candidate)
+    }
+  }
+
+  return true
+}
+
 function parseCliFlags(argv = []) {
   const flags = {
     skipCloudfront: false,
     allowCloudfrontFailure: undefined,
+    deleteStaleIndexAssets: undefined,
   }
 
   if (!Array.isArray(argv)) {
@@ -549,6 +652,16 @@ function parseCliFlags(argv = []) {
 
     if (normalized === '--no-allow-cloudfront-failure') {
       flags.allowCloudfrontFailure = false
+      continue
+    }
+
+    if (normalized === '--delete-stale-index-assets') {
+      flags.deleteStaleIndexAssets = true
+      continue
+    }
+
+    if (normalized === '--no-delete-stale-index-assets') {
+      flags.deleteStaleIndexAssets = false
     }
   }
 
@@ -666,8 +779,32 @@ async function main() {
   await verifyS3Assets({ s3, bucket, manifest })
   console.log('[verify-static] Confirmed all uploaded static assets are accessible via S3.')
 
-  await ensureNoStaleIndexAssets({ s3, bucket, prefix, hashedAssets })
-  console.log('[verify-static] No stale hashed index assets detected in the deployment prefix.')
+  const deleteStaleIndexAssets = shouldDeleteStaleIndexAssets({
+    cliOverride: cliFlags.deleteStaleIndexAssets,
+  })
+  const staleCheck = await ensureNoStaleIndexAssets({
+    s3,
+    bucket,
+    prefix,
+    hashedAssets,
+    autoDelete: deleteStaleIndexAssets,
+  })
+  if (staleCheck?.resolvedByDeletion) {
+    const removedAssets = Array.isArray(staleCheck.staleAssets)
+      ? staleCheck.staleAssets.join(', ')
+      : ''
+    if (removedAssets) {
+      console.log(
+        `[verify-static] Removed stale hashed index asset${
+          staleCheck.staleAssets.length === 1 ? '' : 's'
+        }: ${removedAssets}`,
+      )
+    } else {
+      console.log('[verify-static] Removed stale hashed index assets from the deployment prefix.')
+    }
+  } else {
+    console.log('[verify-static] No stale hashed index assets detected in the deployment prefix.')
+  }
 
   const manifestPrefix = typeof manifest?.prefix === 'string' ? manifest.prefix.trim() : ''
   const candidatePrefixes = [manifestPrefix, prefix]
