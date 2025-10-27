@@ -8,29 +8,49 @@ function normalize(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function resolveNodeEnvStage() {
-  const normalizedNodeEnv = normalize(process.env.NODE_ENV).toLowerCase();
-  if (!normalizedNodeEnv) {
+const STAGE_ALIAS_MAP = new Map(
+  Object.entries({
+    development: 'dev',
+    dev: 'dev',
+    production: 'prod',
+    prod: 'prod',
+    staging: 'stage',
+    stage: 'stage',
+    testing: 'test',
+    test: 'test',
+  }),
+);
+
+function normalizeStageValue(value) {
+  const normalized = normalize(value).toLowerCase();
+  if (!normalized) {
     return '';
   }
-  if (normalizedNodeEnv === 'development' || normalizedNodeEnv === 'dev') {
-    return 'dev';
+
+  if (STAGE_ALIAS_MAP.has(normalized)) {
+    return STAGE_ALIAS_MAP.get(normalized);
   }
-  if (normalizedNodeEnv === 'production' || normalizedNodeEnv === 'prod') {
-    return 'prod';
-  }
-  if (normalizedNodeEnv === 'test') {
-    return 'test';
-  }
-  return normalizedNodeEnv;
+
+  return normalized;
+}
+
+function resolveNodeEnvStage() {
+  const normalizedNodeEnv = normalize(process.env.NODE_ENV);
+  return normalizeStageValue(normalizedNodeEnv);
 }
 
 export function resolveStageName() {
   if (hasValue(process.env.STAGE_NAME)) {
-    return normalize(process.env.STAGE_NAME);
+    const explicit = normalizeStageValue(process.env.STAGE_NAME);
+    if (explicit) {
+      return explicit;
+    }
   }
   if (hasValue(process.env.DEPLOYMENT_ENVIRONMENT)) {
-    return normalize(process.env.DEPLOYMENT_ENVIRONMENT);
+    const envOverride = normalizeStageValue(process.env.DEPLOYMENT_ENVIRONMENT);
+    if (envOverride) {
+      return envOverride;
+    }
   }
   const fromNodeEnv = resolveNodeEnvStage();
   if (fromNodeEnv) {
@@ -41,9 +61,14 @@ export function resolveStageName() {
 
 export function resolveDeploymentEnvironment({ stageName } = {}) {
   if (hasValue(process.env.DEPLOYMENT_ENVIRONMENT)) {
-    return normalize(process.env.DEPLOYMENT_ENVIRONMENT);
+    const envOverride = normalizeStageValue(process.env.DEPLOYMENT_ENVIRONMENT);
+    if (envOverride) {
+      return envOverride;
+    }
   }
-  const resolvedStage = hasValue(stageName) ? normalize(stageName) : resolveStageName();
+  const resolvedStage = hasValue(stageName)
+    ? normalizeStageValue(stageName)
+    : resolveStageName();
   if (resolvedStage) {
     return resolvedStage;
   }
