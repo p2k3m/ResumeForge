@@ -111,6 +111,62 @@ describe('verifyClientAssets', () => {
     expect(assetGetCalls.some(([url]) => url.includes('__cf_verify_bust='))).toBe(true);
   });
 
+  test('adds a cache-busting query parameter when an asset keeps returning 500 errors', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === '/assets/index-d438c9c1.js') {
+        if (method === 'HEAD') {
+          return new Response(null, { status: 500, statusText: 'Internal Server Error' });
+        }
+
+        if (method === 'GET' && target.searchParams.has('__cf_verify_bust')) {
+          return new Response('', { status: 200 });
+        }
+
+        if (method === 'GET') {
+          return new Response(null, { status: 500, statusText: 'Internal Server Error' });
+        }
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
+      const method = (init?.method || 'GET').toUpperCase();
+      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
+    });
+
+    expect(assetGetCalls).toHaveLength(2);
+    expect(assetGetCalls.some(([url]) => url.includes('__cf_verify_bust='))).toBe(true);
+  });
+
   test('falls back to a normal GET request before cache-busting when a HEAD request returns 404', async () => {
     const html = `<!doctype html>
       <html>
