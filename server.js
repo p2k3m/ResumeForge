@@ -20679,13 +20679,130 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
     });
 
     const templateDisplayName = formatCoverTemplateDisplayName(resolvedTemplate);
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const nowIsoString = new Date().toISOString();
+    const timestamp = nowIsoString.replace(/[:.]/g, '-');
     const fileBaseName = buildDocumentFileBaseName({
       type: 'cover_letter',
       templateId: resolvedTemplate,
       variant: variantRaw || `cover-letter${letterIndex}`
     });
     const downloadName = `${fileBaseName || 'cover_letter'}-${timestamp}.pdf`;
+
+    let secrets;
+    let bucket;
+    try {
+      secrets = getSecrets();
+      bucket = secrets.S3_BUCKET;
+    } catch (err) {
+      logStructured('error', 'cover_letter_storage_configuration_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+      return sendError(
+        res,
+        500,
+        'STORAGE_UNAVAILABLE',
+        S3_STORAGE_ERROR_MESSAGE
+      );
+    }
+
+    if (!bucket) {
+      logStructured('error', 'cover_letter_storage_bucket_missing', logContext);
+      return sendError(
+        res,
+        500,
+        'STORAGE_UNAVAILABLE',
+        S3_STORAGE_ERROR_MESSAGE
+      );
+    }
+
+    const s3 = s3Client;
+    if (!s3 || typeof s3.send !== 'function') {
+      logStructured('error', 'cover_letter_storage_client_unavailable', logContext);
+      return sendError(
+        res,
+        500,
+        'STORAGE_UNAVAILABLE',
+        S3_STORAGE_ERROR_MESSAGE
+      );
+    }
+
+    const sanitizedNameSegment = sanitizeName(applicantName) || 'candidate';
+    const ownerSegment = resolveDocumentOwnerSegment({
+      userId: res.locals.userId,
+      sanitizedName: sanitizedNameSegment,
+    });
+    const sessionSegment =
+      sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
+      sanitizeS3KeyComponent(res.locals.requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(req.requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(createIdentifier());
+    const dateSegment = nowIsoString.slice(0, 10);
+    const sessionPrefix = buildDocumentSessionPrefix({
+      ownerSegment,
+      dateSegment,
+      jobSegment: sanitizeJobSegment(jobId),
+      sessionSegment,
+    });
+    const storageKey = buildTemplateScopedPdfKey({
+      basePrefix: sessionPrefix,
+      documentType: 'cover_letter',
+      templateId: resolvedTemplate,
+      variant: variantRaw || `cover-letter${letterIndex}`,
+    });
+
+    try {
+      await sendS3CommandWithRetry(
+        s3,
+        () =>
+          new PutObjectCommand(
+            withEnvironmentTagging({
+              Bucket: bucket,
+              Key: storageKey,
+              Body: buffer,
+              ContentType: 'application/pdf',
+            })
+          ),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 500,
+          maxDelayMs: 5000,
+          jitterMs: 300,
+          retryLogEvent: 'cover_letter_pdf_upload_retry',
+          retryLogContext: {
+            ...logContext,
+            bucket,
+            key: storageKey,
+            template: resolvedTemplate,
+          },
+        }
+      );
+    } catch (uploadErr) {
+      logStructured('error', 'cover_letter_pdf_upload_failed', {
+        ...logContext,
+        bucket,
+        key: storageKey,
+        error: serializeError(uploadErr),
+      });
+      return sendError(
+        res,
+        500,
+        'STORAGE_UNAVAILABLE',
+        S3_STORAGE_ERROR_MESSAGE,
+        {
+          bucket,
+          key: storageKey,
+          reason: uploadErr?.message,
+        }
+      );
+    }
+
+    logStructured('info', 'cover_letter_pdf_uploaded', {
+      ...logContext,
+      bucket,
+      key: storageKey,
+      template: resolvedTemplate,
+    });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Cache-Control', 'no-store');
@@ -20696,6 +20813,7 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
     );
     res.setHeader('X-Template-Id', resolvedTemplate);
     res.setHeader('X-Template-Name', templateDisplayName);
+    res.setHeader('X-Artifact-Key', storageKey);
 
     logStructured('info', 'cover_letter_pdf_rendered', {
       ...logContext,
