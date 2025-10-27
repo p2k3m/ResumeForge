@@ -238,6 +238,14 @@ npm run publish:cloudfront-url -- <stack-name>
 - **`config/published-cloudfront.json`** is regenerated with the latest domain, distribution id, and timestamp. Commit this file (or surface it through your release notes) to broadcast the production URL.
 - The script always issues `/*` invalidations for both the previously published distribution (when one exists) and the active distribution, even when the stack reuses the same distribution id, so caches are busted after every deploy.
 
+If the CDN begins serving 404/500 errors for hashed assets after a deployment, run the automated repair workflow to rebuild the client, upload the refreshed bundles, republish the distribution metadata, and re-verify the `/healthz` endpoint in one pass:
+
+```bash
+npm run repair:cloudfront -- --stack <stack-name>
+```
+
+Pass `--skip-build`, `--skip-upload`, `--skip-publish`, or `--skip-verify` to skip individual steps when you only need a subset of the workflow (for example, to retry verification after manually redeploying the stack).
+
 The recorded CloudFront URL is the entry point shared with users; redirect any legacy bookmarks to this domain to keep traffic on the latest deployment. Keep this README (and `docs/cloudfront-url.md`) updated so support teams and new joiners can confirm the production endpoint without loading the app.
 
 Once the metadata is published, the API exposes two helper endpoints:
