@@ -21057,16 +21057,68 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
       template: resolvedTemplate,
     });
 
-    res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('Content-Length', buffer.length);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${downloadName}"`
-    );
     res.setHeader('X-Template-Id', resolvedTemplate);
     res.setHeader('X-Template-Name', templateDisplayName);
     res.setHeader('X-Artifact-Key', storageKey);
+
+    let signedUrl;
+    try {
+      const rawSignedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: storageKey,
+          ResponseContentDisposition: `attachment; filename="${downloadName}"`,
+          ResponseContentType: 'application/pdf',
+        }),
+        { expiresIn: URL_EXPIRATION_SECONDS }
+      );
+      signedUrl = typeof rawSignedUrl === 'string' ? rawSignedUrl.trim() : '';
+    } catch (signErr) {
+      logStructured('error', 'cover_letter_pdf_sign_failed', {
+        ...logContext,
+        bucket,
+        key: storageKey,
+        template: resolvedTemplate,
+        error: serializeError(signErr),
+      });
+      return sendError(
+        res,
+        500,
+        'STORAGE_UNAVAILABLE',
+        S3_STORAGE_ERROR_MESSAGE,
+        {
+          bucket,
+          key: storageKey,
+          reason: signErr?.message,
+        }
+      );
+    }
+
+    if (!signedUrl) {
+      logStructured('error', 'cover_letter_pdf_signed_url_missing', {
+        ...logContext,
+        bucket,
+        key: storageKey,
+        template: resolvedTemplate,
+      });
+      return sendError(
+        res,
+        500,
+        'STORAGE_UNAVAILABLE',
+        S3_STORAGE_ERROR_MESSAGE,
+        {
+          bucket,
+          key: storageKey,
+          reason: 'Received an empty signed URL while preparing the download.',
+        }
+      );
+    }
+
+    const expiresAt = new Date(
+      Date.now() + URL_EXPIRATION_SECONDS * 1000
+    ).toISOString();
 
     logStructured('info', 'cover_letter_pdf_rendered', {
       ...logContext,
@@ -21075,7 +21127,19 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
       templateCandidates
     });
 
-    return res.status(200).send(buffer);
+    return res.status(200).json({
+      success: true,
+      downloadUrl: signedUrl,
+      signedUrl,
+      fileUrl: signedUrl,
+      typeUrl: `${signedUrl}#cover_letter`,
+      expiresAt,
+      storageKey,
+      templateId: resolvedTemplate,
+      templateName: templateDisplayName,
+      downloadName,
+      generatedAt: nowIsoString,
+    });
   } catch (err) {
     const pdfError = extractPdfGenerationError(err);
     let pdfMessage = '';
