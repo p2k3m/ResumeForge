@@ -264,6 +264,8 @@ describe('resume lifecycle coverage', () => {
       expect(decodeURIComponent(fragment)).toBe(entry.type);
       expect(typeof entry.expiresAt).toBe('string');
       expect(typeof entry.generatedAt).toBe('string');
+      expect(entry.versionHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(entry.versionId).toMatch(/^[0-9]{8}-[0-9]{6}-[0-9a-f]{12}$/);
       if (entry.type === 'cover_letter1' || entry.type === 'cover_letter2') {
         expect(entry.text).toEqual(
           expect.objectContaining({

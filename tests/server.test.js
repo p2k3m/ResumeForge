@@ -792,6 +792,8 @@ describe('/api/process-cv', () => {
       const fragment = entry.typeUrl.slice(entry.typeUrl.indexOf('#') + 1);
       expect(decodeURIComponent(fragment)).toBe(entry.type);
       expect(entry.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(entry.versionHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(entry.versionId).toMatch(/^[0-9]{8}-[0-9]{6}-[0-9a-f]{12}$/);
       expect(entry.templateName).toEqual(expect.any(String));
       expect(entry.templateName.trim().length).toBeGreaterThan(0);
       expect(entry.templateId).toEqual(expect.any(String));
