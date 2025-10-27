@@ -313,10 +313,24 @@ describe('/api/process-cv', () => {
       .filter(
         (cmd) => cmd.key.endsWith('.json') && !cmd.key.includes('/logs/')
       );
-    expect(generatedJsonKeys).toHaveLength(4);
+    expect(generatedJsonKeys).toHaveLength(6);
     generatedJsonKeys.forEach((cmd) => {
       expect(cmd.key).toContain('/artifacts/');
     });
+
+    const jsonArtifactSuffixes = generatedJsonKeys.map((cmd) =>
+      cmd.key.split('/').pop()
+    );
+    expect(jsonArtifactSuffixes).toEqual(
+      expect.arrayContaining([
+        'original.json',
+        'version1.json',
+        'version2.json',
+        'cover-letter1.json',
+        'cover-letter2.json',
+        'changelog.json',
+      ])
+    );
 
     const putCall = mockDynamoSend.mock.calls
       .filter(([cmd]) => cmd.__type === 'PutItemCommand')
