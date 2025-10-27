@@ -1381,6 +1381,8 @@ function buildFallbackClientIndexHtml(metadata = null) {
     degradeDetails += `<p class="fallback__degraded-detail">Last published metadata: <code>${safeUpdatedAt}</code></p>`;
   }
 
+  const backupApiValue = shouldDisplayDegraded ? safeGatewayUrl : '';
+
   const degradeSection = `
     <section
       class="fallback__degraded"
@@ -1396,7 +1398,7 @@ function buildFallbackClientIndexHtml(metadata = null) {
         type="hidden"
         name="resumeforge-backup-api-base"
         data-backup-api-base
-        value="${safeGatewayUrl}"
+        value="${backupApiValue}"
       />
     </section>
   `;
