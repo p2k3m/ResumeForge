@@ -1,12 +1,12 @@
 # Automated Pipeline Repair Script
 
-This repository now includes `scripts/auto-pipeline-repair.mjs`, a Node.js automation utility that can be scheduled from CI/CD to self-heal failing `main` branch workflows.
+This repository now includes `scripts/auto-pipeline-repair.mjs`, a Node.js automation utility that can be scheduled from CI/CD to self-heal failing workflows on your primary branch or on pull requests.
 
 ## Capabilities
 
 The script performs the following high-level workflow:
 
-1. Detect the most recent failed GitHub Actions run on the configured base branch (defaults to `main`).
+1. Detect the most recent failed GitHub Actions run on the configured base branch (defaults to `main`) or a targeted workflow run from the triggering event.
 2. Download and extract the logs, then harvest the lines containing errors for context.
 3. Ask the configured LLM to return a unified diff patch that resolves the failure.
 4. Clone the repository, create an iteration-specific branch, apply the patch, and push it back to origin.
@@ -27,7 +27,7 @@ The script performs the following high-level workflow:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `AUTOFIX_BASE_BRANCH` | `main` | Branch to monitor and target for fixes. |
+| `AUTOFIX_BASE_BRANCH` | `main` | Branch to monitor and target for fixes. Automatically derived from the failed run if not provided. |
 | `AUTOFIX_MODEL` | `gpt-4o-mini` | Model identifier passed to the OpenAI client. |
 | `AUTOFIX_CLONE_URL` | Derived from `GITHUB_TOKEN` | Custom clone URL if HTTPS with embedded token is not desired. |
 | `AUTOFIX_WORKDIR` | Temporary system directory | Parent directory used for clone worktrees. |
@@ -38,10 +38,11 @@ The script performs the following high-level workflow:
 | `AUTOFIX_GIT_USER` / `AUTOFIX_GIT_EMAIL` | `autofix-bot` / `autofix@example.com` | Git identity applied to the fix commits. |
 | `AUTOFIX_PR_TITLE` | `Automated pipeline repair` | Title for generated pull requests. |
 | `AUTOFIX_MERGE_METHOD` | `SQUASH` | Merge method used when auto-merge is enabled (requires auto-merge enabled on the repository). |
+| `AUTOFIX_TARGET_RUN_ID` | _unset_ | When supplied, the script begins with the specific failed workflow run ID (useful for `workflow_run` triggers on pull request failures). |
 
 ## CI Integration
 
-Add a workflow job that triggers on failure or on a schedule to run the script. The job will exit with a non-zero status if:
+Add a workflow job that triggers on failure or on a schedule to run the script. When invoked from a `workflow_run` trigger, pass the failed run ID so the script can immediately remediate that execution. The job will exit with a non-zero status if:
 
 - No fix can be produced within `AUTOFIX_MAX_ITERATIONS` attempts.
 - Required environment variables are missing.
