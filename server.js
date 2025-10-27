@@ -12500,6 +12500,23 @@ function enrichArtifactWithVersionMetadata(target, options) {
   return metadata;
 }
 
+function buildJobDescriptionSnapshot(text, { digest = '', recordedAt } = {}) {
+  const normalizedText =
+    typeof text === 'string' ? text.replace(/\r\n/g, '\n') : '';
+  const snapshot = {
+    text: normalizedText,
+    characterCount: normalizedText.length,
+    lineCount: normalizedText ? normalizedText.split('\n').length : 0,
+  };
+  if (digest) {
+    snapshot.digest = digest;
+  }
+  if (recordedAt) {
+    snapshot.recordedAt = recordedAt;
+  }
+  return snapshot;
+}
+
 function buildTemplateScopedPdfKey({
   basePrefix,
   documentType,
@@ -17073,6 +17090,8 @@ const DOWNLOAD_ARTIFACT_ATTRIBUTE_KEYS = [
   'originalTextKey',
   'enhancedVersion1Key',
   'enhancedVersion2Key',
+  'coverLetter1TextKey',
+  'coverLetter2TextKey',
   'changeLogKey',
 ];
 
@@ -17553,6 +17572,8 @@ async function generateEnhancedDocumentsResponse({
     originalTextKey: readExistingArtifactKey('originalTextKey'),
     enhancedVersion1Key: readExistingArtifactKey('enhancedVersion1Key'),
     enhancedVersion2Key: readExistingArtifactKey('enhancedVersion2Key'),
+    coverLetter1TextKey: readExistingArtifactKey('coverLetter1TextKey'),
+    coverLetter2TextKey: readExistingArtifactKey('coverLetter2TextKey'),
     changeLogKey: readExistingArtifactKey('changeLogKey'),
   };
   let stageMetadataKey = '';
@@ -18439,6 +18460,10 @@ async function generateEnhancedDocumentsResponse({
   const urls = [];
   const downloadArtifacts = [];
   const artifactTimestamp = new Date().toISOString();
+  const jobDescriptionSnapshot = buildJobDescriptionSnapshot(jobDescription, {
+    digest: resolvedJobDescriptionDigest,
+    recordedAt: artifactTimestamp,
+  });
   const uploadedArtifacts = [];
   const textArtifactKeys = {};
   const usedPdfKeys = new Set();
@@ -19046,6 +19071,12 @@ async function generateEnhancedDocumentsResponse({
       artifactDownloadEntry.text = '';
     }
 
+    if (isCvDocument || isCoverLetter) {
+      artifactDownloadEntry.jobDescriptionSnapshot = {
+        ...jobDescriptionSnapshot,
+      };
+    }
+
     const versionInfo = enrichArtifactWithVersionMetadata(
       artifactDownloadEntry,
       {
@@ -19111,6 +19142,29 @@ async function generateEnhancedDocumentsResponse({
 
   const textArtifactPrefix = `${sessionPrefix}artifacts/`;
 
+  const coverLetter1TextForStorage =
+    typeof coverData.cover_letter1 === 'string' ? coverData.cover_letter1 : '';
+  const coverLetter2TextForStorage =
+    typeof coverData.cover_letter2 === 'string' ? coverData.cover_letter2 : '';
+  const coverLetter1FieldsForStorage = mapCoverLetterFields({
+    text: coverLetter1TextForStorage,
+    contactDetails,
+    jobTitle: versionsContext.jobTitle,
+    jobDescription,
+    jobSkills,
+    applicantName,
+    letterIndex: 1,
+  });
+  const coverLetter2FieldsForStorage = mapCoverLetterFields({
+    text: coverLetter2TextForStorage,
+    contactDetails,
+    jobTitle: versionsContext.jobTitle,
+    jobDescription,
+    jobSkills,
+    applicantName,
+    letterIndex: 2,
+  });
+
   const textArtifacts = [
     {
       type: 'original_text',
@@ -19120,6 +19174,7 @@ async function generateEnhancedDocumentsResponse({
         generatedAt: artifactTimestamp,
         version: 'original',
         text: originalResumeForStorage,
+        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
       },
     },
     {
@@ -19131,6 +19186,7 @@ async function generateEnhancedDocumentsResponse({
         version: 'version1',
         text: outputs.version1?.text || '',
         template: generatedTemplates.version1 || template1 || '',
+        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
       },
     },
     {
@@ -19142,6 +19198,33 @@ async function generateEnhancedDocumentsResponse({
         version: 'version2',
         text: outputs.version2?.text || '',
         template: generatedTemplates.version2 || template2 || '',
+        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+      },
+    },
+    {
+      type: 'cover_letter1_text',
+      fileName: 'cover-letter1.json',
+      payload: {
+        jobId,
+        generatedAt: artifactTimestamp,
+        version: 'cover_letter1',
+        text: coverLetter1TextForStorage,
+        template: generatedTemplates.cover_letter1 || coverTemplate1 || '',
+        fields: coverLetter1FieldsForStorage,
+        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+      },
+    },
+    {
+      type: 'cover_letter2_text',
+      fileName: 'cover-letter2.json',
+      payload: {
+        jobId,
+        generatedAt: artifactTimestamp,
+        version: 'cover_letter2',
+        text: coverLetter2TextForStorage,
+        template: generatedTemplates.cover_letter2 || coverTemplate2 || '',
+        fields: coverLetter2FieldsForStorage,
+        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
       },
     },
     {
@@ -19161,6 +19244,7 @@ async function generateEnhancedDocumentsResponse({
         evaluationLogs: normalizedEvaluationLogs,
         enhancementLogs: normalizedEnhancementLogs,
         downloadLogs: normalizedDownloadLogs,
+        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
         ...(sessionScoreSnapshot ? { scores: sessionScoreSnapshot } : {}),
       },
     },
@@ -19207,6 +19291,14 @@ async function generateEnhancedDocumentsResponse({
     } else if (artifact.type === 'version2_text') {
       if (existingArtifactKeys.enhancedVersion2Key && existingArtifactKeys.enhancedVersion2Key !== key) {
         registerStaleArtifactKey(existingArtifactKeys.enhancedVersion2Key);
+      }
+    } else if (artifact.type === 'cover_letter1_text') {
+      if (existingArtifactKeys.coverLetter1TextKey && existingArtifactKeys.coverLetter1TextKey !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.coverLetter1TextKey);
+      }
+    } else if (artifact.type === 'cover_letter2_text') {
+      if (existingArtifactKeys.coverLetter2TextKey && existingArtifactKeys.coverLetter2TextKey !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.coverLetter2TextKey);
       }
     } else if (artifact.type === 'change_log') {
       if (existingArtifactKeys.changeLogKey && existingArtifactKeys.changeLogKey !== key) {
@@ -19406,6 +19498,10 @@ async function generateEnhancedDocumentsResponse({
       urlEntry.text = artifact.text;
     } else if (artifact.type !== 'original_upload') {
       urlEntry.text = '';
+    }
+
+    if (artifact.jobDescriptionSnapshot) {
+      urlEntry.jobDescriptionSnapshot = { ...artifact.jobDescriptionSnapshot };
     }
 
     urls.push(urlEntry);
@@ -19632,6 +19728,8 @@ async function generateEnhancedDocumentsResponse({
     assignKey('originalTextKey', ':originalTextKey', textArtifactKeys.original_text);
     assignKey('enhancedVersion1Key', ':version1TextKey', textArtifactKeys.version1_text);
     assignKey('enhancedVersion2Key', ':version2TextKey', textArtifactKeys.version2_text);
+    assignKey('coverLetter1TextKey', ':coverLetter1TextKey', textArtifactKeys.cover_letter1_text);
+    assignKey('coverLetter2TextKey', ':coverLetter2TextKey', textArtifactKeys.cover_letter2_text);
     assignKey('changeLogKey', ':changeLogTextKey', textArtifactKeys.change_log);
     assignKey('jobDescriptionDigest', ':jobDescriptionDigest', resolvedJobDescriptionDigest);
 
@@ -21918,7 +22016,7 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
         TableName: tableName,
         Key: { linkedinProfileUrl: { S: storedLinkedIn } },
         ProjectionExpression:
-          'jobId, s3Bucket, s3Key, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url, originalTextKey, enhancedVersion1Key, enhancedVersion2Key, changeLogKey, sessionChangeLogKey, sessionId',
+          'jobId, s3Bucket, s3Key, cv1Url, cv2Url, coverLetter1Url, coverLetter2Url, originalTextKey, enhancedVersion1Key, enhancedVersion2Key, coverLetter1TextKey, coverLetter2TextKey, changeLogKey, sessionChangeLogKey, sessionId',
       })
     );
 
@@ -21984,6 +22082,8 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
     registerKey(item.originalTextKey?.S);
     registerKey(item.enhancedVersion1Key?.S);
     registerKey(item.enhancedVersion2Key?.S);
+    registerKey(item.coverLetter1TextKey?.S);
+    registerKey(item.coverLetter2TextKey?.S);
     registerKey(item.changeLogKey?.S);
 
     const sessionChangeLogKey = deriveSessionChangeLogKey({
