@@ -15,6 +15,52 @@
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         background: #f8fafc;
       }
+      #cloudfront-degraded-banner {
+        box-sizing: border-box;
+        width: min(720px, calc(100% - 2.5rem));
+        margin: 2rem auto 0;
+        padding: 1.5rem;
+        border-radius: 16px;
+        border: 1px solid rgba(234, 179, 8, 0.4);
+        background: linear-gradient(180deg, rgba(253, 224, 71, 0.3) 0%, rgba(254, 249, 195, 0.45) 100%);
+        color: #78350f;
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+      #cloudfront-degraded-banner[hidden] {
+        display: none !important;
+      }
+      #cloudfront-degraded-banner .cloudfront-degraded__title {
+        margin: 0;
+        font-size: clamp(1.25rem, 3vw, 1.65rem);
+        font-weight: 700;
+        color: #92400e;
+      }
+      #cloudfront-degraded-banner .cloudfront-degraded__body {
+        margin: 0;
+        font-size: 0.95rem;
+        line-height: 1.55;
+      }
+      #cloudfront-degraded-banner a {
+        color: #b45309;
+        font-weight: 600;
+        text-decoration: none;
+        word-break: break-all;
+      }
+      #cloudfront-degraded-banner a:hover,
+      #cloudfront-degraded-banner a:focus {
+        text-decoration: underline;
+      }
+      #cloudfront-degraded-banner code {
+        font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          'Liberation Mono', 'Courier New', monospace;
+        background: rgba(254, 240, 138, 0.6);
+        padding: 0.2rem 0.45rem;
+        border-radius: 6px;
+        font-size: 0.9rem;
+      }
       #static-asset-warning {
         box-sizing: border-box;
         width: min(720px, calc(100% - 2.5rem));
@@ -54,6 +100,19 @@
         body {
           background: #0f172a;
         }
+        #cloudfront-degraded-banner {
+          border-color: rgba(234, 179, 8, 0.55);
+          background: linear-gradient(180deg, rgba(180, 83, 9, 0.4) 0%, rgba(120, 53, 15, 0.3) 100%);
+          color: #fef3c7;
+          box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        }
+        #cloudfront-degraded-banner code {
+          background: rgba(120, 53, 15, 0.5);
+          color: #fef3c7;
+        }
+        #cloudfront-degraded-banner a {
+          color: #fbbf24;
+        }
         #static-asset-warning {
           border-color: rgba(248, 113, 113, 0.4);
           background: linear-gradient(180deg, rgba(248, 113, 113, 0.2) 0%, rgba(248, 113, 113, 0.1) 100%);
@@ -69,6 +128,32 @@
   </head>
   <body>
     <div id="root"></div>
+    <section
+      id="cloudfront-degraded-banner"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+      hidden
+      data-visible="false"
+    >
+      <h1 class="cloudfront-degraded__title">CloudFront is unavailable — using API Gateway fallback</h1>
+      <p class="cloudfront-degraded__body">
+        ResumeForge routed you directly to the API Gateway so you can continue working while the CDN recovers.
+      </p>
+      <p class="cloudfront-degraded__body" data-cloudfront-domain-wrapper hidden>
+        Primary CloudFront domain: <code data-cloudfront-domain></code>
+      </p>
+      <p class="cloudfront-degraded__body" data-backup-api-wrapper hidden>
+        Backup endpoint:
+        <a data-backup-api-link href="#" rel="noopener noreferrer" target="_blank">
+          <span data-backup-api-text></span>
+        </a>
+      </p>
+      <p class="cloudfront-degraded__body" data-cloudfront-updated-wrapper hidden>
+        Metadata last updated at <time data-cloudfront-updated></time>
+      </p>
+      <input type="hidden" name="resumeforge-backup-api-base" data-backup-api-base value="" />
+    </section>
     <div
       id="static-asset-warning"
       role="alert"
@@ -92,6 +177,125 @@
     </div>
     <script>
       ;(function () {
+        const setBackupInputValue = (value) => {
+          const inputs = document.querySelectorAll('input[data-backup-api-base]')
+          const nextValue = typeof value === 'string' ? value : ''
+          inputs.forEach((input) => {
+            if (input && typeof input.setAttribute === 'function') {
+              input.value = nextValue
+              input.setAttribute('value', nextValue)
+            }
+          })
+        }
+
+        const degradeBanner = document.getElementById('cloudfront-degraded-banner')
+        const degradeDomainWrapper = degradeBanner?.querySelector('[data-cloudfront-domain-wrapper]')
+        const degradeDomainLabel = degradeBanner?.querySelector('[data-cloudfront-domain]')
+        const degradeBackupWrapper = degradeBanner?.querySelector('[data-backup-api-wrapper]')
+        const degradeBackupLink = degradeBanner?.querySelector('[data-backup-api-link]')
+        const degradeBackupText = degradeBanner?.querySelector('[data-backup-api-text]')
+        const degradeUpdatedWrapper = degradeBanner?.querySelector('[data-cloudfront-updated-wrapper]')
+        const degradeUpdated = degradeBanner?.querySelector('[data-cloudfront-updated]')
+
+        const revealDegradeBanner = ({ canonicalHost, backupUrl, updatedAt }) => {
+          if (!degradeBanner) {
+            return
+          }
+
+          if (canonicalHost && degradeDomainWrapper && degradeDomainLabel) {
+            degradeDomainLabel.textContent = canonicalHost
+            degradeDomainWrapper.hidden = false
+          }
+
+          if (backupUrl && degradeBackupWrapper && degradeBackupLink && degradeBackupText) {
+            degradeBackupLink.href = backupUrl
+            degradeBackupText.textContent = backupUrl
+            degradeBackupWrapper.hidden = false
+          }
+
+          if (updatedAt && degradeUpdated && degradeUpdatedWrapper) {
+            degradeUpdated.textContent = updatedAt
+            degradeUpdatedWrapper.hidden = false
+          }
+
+          const wasVisible = degradeBanner.dataset.visible === 'true'
+          if (!wasVisible) {
+            degradeBanner.dataset.visible = 'true'
+            degradeBanner.hidden = false
+          }
+        }
+
+        const applyDegradedState = ({ canonicalUrl, backupUrl, updatedAt }) => {
+          let canonicalHost = ''
+          if (canonicalUrl) {
+            try {
+              canonicalHost = new URL(canonicalUrl, window.location.href).hostname
+            } catch (error) {
+              console.warn('Unable to parse CloudFront metadata URL.', error)
+            }
+          }
+
+          const sanitizedBackup = backupUrl || ''
+
+          if (sanitizedBackup) {
+            setBackupInputValue(sanitizedBackup)
+          }
+
+          if (degradeBanner) {
+            revealDegradeBanner({ canonicalHost, backupUrl: sanitizedBackup, updatedAt })
+          }
+
+          try {
+            window.__RESUMEFORGE_CLOUDFRONT_DEGRADE__ = {
+              canonicalUrl: canonicalUrl || '',
+              backupApiGatewayUrl: sanitizedBackup,
+              detectedAt: updatedAt || new Date().toISOString()
+            }
+          } catch (error) {
+            console.warn('Unable to record CloudFront fallback metadata on the window.', error)
+          }
+        }
+
+        if (degradeBanner) {
+          const host = typeof window.location?.hostname === 'string' ? window.location.hostname : ''
+          const onApiGateway = /\.execute-api\.[^.]+\.amazonaws\.com$/i.test(host)
+
+          if (onApiGateway) {
+            const fallbackOrigin = typeof window.location?.origin === 'string' ? window.location.origin : ''
+
+            const handleMetadata = (payload) => {
+              const canonicalUrl =
+                typeof payload?.cloudfront?.url === 'string' && payload.cloudfront.url.trim()
+                  ? payload.cloudfront.url.trim()
+                  : ''
+              const backupUrl =
+                typeof payload?.cloudfront?.apiGatewayUrl === 'string' && payload.cloudfront.apiGatewayUrl.trim()
+                  ? payload.cloudfront.apiGatewayUrl.trim()
+                  : fallbackOrigin
+              const updatedAt =
+                typeof payload?.cloudfront?.updatedAt === 'string' && payload.cloudfront.updatedAt.trim()
+                  ? payload.cloudfront.updatedAt.trim()
+                  : ''
+
+              applyDegradedState({ canonicalUrl, backupUrl, updatedAt })
+            }
+
+            if (typeof fetch === 'function') {
+              fetch('/api/published-cloudfront', { method: 'GET' })
+                .then((response) => (response && response.ok ? response.json() : null))
+                .then((data) => handleMetadata(data))
+                .catch((error) => {
+                  console.warn('Unable to load published CloudFront metadata.', error)
+                  handleMetadata(null)
+                })
+            } else {
+              handleMetadata(null)
+            }
+          } else {
+            setBackupInputValue('')
+          }
+        }
+
         const warning = document.getElementById('static-asset-warning')
         if (!warning) {
           return

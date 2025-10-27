@@ -2391,6 +2391,53 @@ function App() {
   const [errorRecovery, setErrorRecovery] = useState(null)
   const [errorContext, setErrorContext] = useState({ source: '', code: '', requestId: '' })
   const [errorLogs, setErrorLogs] = useState([])
+  const [environmentHost] = useState(() => {
+    if (typeof window === 'undefined' || !window.location) {
+      return ''
+    }
+    return typeof window.location.hostname === 'string' ? window.location.hostname : ''
+  })
+  const [environmentOrigin] = useState(() => {
+    if (typeof window === 'undefined' || !window.location) {
+      return ''
+    }
+    return typeof window.location.origin === 'string' ? window.location.origin : ''
+  })
+  const [cloudfrontMetadata, setCloudfrontMetadata] = useState(() => {
+    if (typeof window === 'undefined') {
+      return { canonicalUrl: '', canonicalHost: '', apiGatewayUrl: '', updatedAt: '' }
+    }
+    const preload = window.__RESUMEFORGE_CLOUDFRONT_DEGRADE__ || {}
+    const canonicalUrl =
+      typeof preload.canonicalUrl === 'string' && preload.canonicalUrl.trim()
+        ? preload.canonicalUrl.trim()
+        : ''
+    let canonicalHost = ''
+    if (canonicalUrl) {
+      try {
+        canonicalHost = new URL(canonicalUrl, window.location.href).hostname
+      } catch (error) {
+        console.warn('Unable to parse canonical CloudFront URL from preload metadata.', error)
+        canonicalHost = ''
+      }
+    }
+    const apiGatewayUrl =
+      typeof preload.backupApiGatewayUrl === 'string' && preload.backupApiGatewayUrl.trim()
+        ? preload.backupApiGatewayUrl.trim()
+        : typeof window.location?.origin === 'string'
+          ? window.location.origin
+          : ''
+    const detectedAt =
+      typeof preload.detectedAt === 'string' && preload.detectedAt.trim()
+        ? preload.detectedAt.trim()
+        : ''
+    return {
+      canonicalUrl,
+      canonicalHost,
+      apiGatewayUrl,
+      updatedAt: detectedAt
+    }
+  })
   const setError = useCallback((value, options = {}) => {
     const nextMessage =
       typeof value === 'string'
@@ -2446,6 +2493,117 @@ function App() {
       setErrorRecovery(null)
     }
   }, [setErrorContext, setErrorLogs])
+  const cloudfrontFallbackActive = useMemo(() => {
+    if (!environmentHost) {
+      return false
+    }
+    if (/\.execute-api\.[^.]+\.amazonaws\.com$/i.test(environmentHost)) {
+      return true
+    }
+    if (cloudfrontMetadata.canonicalHost) {
+      const canonicalHost = cloudfrontMetadata.canonicalHost
+      const canonicalLooksLikeCloudfront = /\.cloudfront\.net$/i.test(canonicalHost)
+      const locationLooksLikeCloudfront = /\.cloudfront\.net$/i.test(environmentHost)
+      if (canonicalLooksLikeCloudfront && canonicalHost !== environmentHost && !locationLooksLikeCloudfront) {
+        return true
+      }
+    }
+    return false
+  }, [cloudfrontMetadata.canonicalHost, environmentHost])
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return undefined
+    }
+    const value = cloudfrontMetadata.apiGatewayUrl || environmentOrigin || ''
+    const inputs = document.querySelectorAll('input[data-backup-api-base]')
+    inputs.forEach((input) => {
+      if (input) {
+        input.value = value
+        input.setAttribute('value', value)
+      }
+    })
+    return undefined
+  }, [cloudfrontMetadata.apiGatewayUrl, environmentOrigin])
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof fetch !== 'function') {
+      return undefined
+    }
+    let cancelled = false
+    let controller = null
+    if (typeof AbortController === 'function') {
+      controller = new AbortController()
+    }
+    const options = controller ? { signal: controller.signal } : undefined
+    fetch('/api/published-cloudfront', options)
+      .then((response) => (response && response.ok ? response.json() : null))
+      .then((data) => {
+        if (cancelled || !data || !data.cloudfront) {
+          return
+        }
+        const canonicalUrl =
+          typeof data.cloudfront.url === 'string' && data.cloudfront.url.trim()
+            ? data.cloudfront.url.trim()
+            : ''
+        let canonicalHost = ''
+        if (canonicalUrl) {
+          try {
+            canonicalHost = new URL(canonicalUrl, window.location.href).hostname
+          } catch (error) {
+            console.warn('Unable to parse canonical CloudFront URL from API metadata.', error)
+            canonicalHost = ''
+          }
+        }
+        const apiGatewayUrl =
+          typeof data.cloudfront.apiGatewayUrl === 'string' && data.cloudfront.apiGatewayUrl.trim()
+            ? data.cloudfront.apiGatewayUrl.trim()
+            : ''
+        const updatedAt =
+          typeof data.cloudfront.updatedAt === 'string' && data.cloudfront.updatedAt.trim()
+            ? data.cloudfront.updatedAt.trim()
+            : ''
+        setCloudfrontMetadata((prev) => ({
+          canonicalUrl: canonicalUrl || prev.canonicalUrl,
+          canonicalHost: canonicalHost || prev.canonicalHost,
+          apiGatewayUrl: apiGatewayUrl || prev.apiGatewayUrl || environmentOrigin,
+          updatedAt: updatedAt || prev.updatedAt
+        }))
+      })
+      .catch((error) => {
+        if (error?.name !== 'AbortError') {
+          console.warn('Unable to load published CloudFront metadata within the app.', error)
+        }
+      })
+    return () => {
+      cancelled = true
+      if (controller) {
+        controller.abort()
+      }
+    }
+  }, [environmentOrigin])
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+    if (!cloudfrontFallbackActive) {
+      return undefined
+    }
+    try {
+      window.__RESUMEFORGE_CLOUDFRONT_DEGRADE__ = {
+        canonicalUrl: cloudfrontMetadata.canonicalUrl || '',
+        backupApiGatewayUrl: cloudfrontMetadata.apiGatewayUrl || environmentOrigin || '',
+        detectedAt: cloudfrontMetadata.updatedAt || new Date().toISOString()
+      }
+    } catch (error) {
+      console.warn('Unable to update CloudFront fallback metadata on the window.', error)
+    }
+    return undefined
+  }, [
+    cloudfrontFallbackActive,
+    cloudfrontMetadata.apiGatewayUrl,
+    cloudfrontMetadata.canonicalUrl,
+    cloudfrontMetadata.updatedAt,
+    environmentOrigin
+  ])
   const [queuedMessage, setQueuedMessage] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('modern')
   const [previewSuggestion, setPreviewSuggestion] = useState(null)
@@ -8510,6 +8668,55 @@ function App() {
             breakdown with tailored improvements you can accept or reject.
           </p>
         </header>
+
+        {cloudfrontFallbackActive && (
+          <section
+            className="rounded-3xl border border-amber-200 bg-amber-50/80 p-5 shadow-lg flex flex-col gap-2"
+            role="alert"
+            aria-live="assertive"
+          >
+            <h2 className="text-base md:text-lg font-semibold text-amber-900">
+              CloudFront fallback active
+            </h2>
+            <p className="text-sm text-amber-800">
+              We're serving ResumeForge directly from the API Gateway while the CDN recovers.
+            </p>
+            {cloudfrontMetadata.canonicalHost ? (
+              <p className="text-xs text-amber-700">
+                Primary CloudFront domain:{' '}
+                <code className="font-mono break-all text-amber-900">
+                  {cloudfrontMetadata.canonicalHost}
+                </code>
+              </p>
+            ) : null}
+            {cloudfrontMetadata.apiGatewayUrl ? (
+              <p className="text-xs text-amber-700">
+                Share the backup endpoint if teammates can't reach the CDN:{' '}
+                <a
+                  href={cloudfrontMetadata.apiGatewayUrl}
+                  className="font-semibold text-amber-900 underline-offset-2 hover:underline"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {cloudfrontMetadata.apiGatewayUrl}
+                </a>
+              </p>
+            ) : null}
+            {cloudfrontMetadata.updatedAt ? (
+              <p className="text-[0.65rem] uppercase tracking-[0.25em] text-amber-600">
+                Metadata updated at {cloudfrontMetadata.updatedAt}
+              </p>
+            ) : null}
+            <input
+              type="hidden"
+              name="resumeforge-backup-api-base"
+              data-backup-api-base
+              value={cloudfrontMetadata.apiGatewayUrl || environmentOrigin || ''}
+              readOnly
+              aria-hidden="true"
+            />
+          </section>
+        )}
 
         <section className="rounded-3xl border border-slate-200/80 bg-white/70 p-6 shadow-lg">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
