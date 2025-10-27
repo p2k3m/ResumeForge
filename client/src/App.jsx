@@ -50,6 +50,10 @@ import {
 export { BASE_TEMPLATE_OPTIONS, canonicalizeTemplateId } from './templateRegistry.js'
 export { SUPPORTED_RESUME_TEMPLATE_IDS } from './templateRegistry.js'
 
+const TEMPLATE_DISPLAY_NAME_MAP = new Map(
+  BASE_TEMPLATE_OPTIONS.map((option) => [option.id, option.name])
+)
+
 const SCORE_UPDATE_IN_PROGRESS_MESSAGE =
   'Please wait for the current ATS score refresh to finish before applying another improvement.'
 
@@ -1239,8 +1243,18 @@ const buildTemplateRequestContext = (templateContext, selectedTemplate) => {
 
 const formatTemplateName = (id) => {
   if (!id) return 'Custom Template'
-  if (id === '2025') return 'Future Vision 2025'
-  return id
+  const raw = typeof id === 'string' ? id.trim() : String(id || '').trim()
+  if (!raw) return 'Custom Template'
+  const canonical = canonicalizeTemplateId(raw)
+  if (canonical && TEMPLATE_DISPLAY_NAME_MAP.has(canonical)) {
+    return TEMPLATE_DISPLAY_NAME_MAP.get(canonical)
+  }
+  const lower = raw.toLowerCase()
+  if (TEMPLATE_DISPLAY_NAME_MAP.has(lower)) {
+    return TEMPLATE_DISPLAY_NAME_MAP.get(lower)
+  }
+  const normalized = canonical || raw
+  return normalized
     .split(/[-_]/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
