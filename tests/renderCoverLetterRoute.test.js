@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals'
 import request from 'supertest'
-import { PutObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import app, {
   setGeneratePdf,
   generatePdf,
@@ -30,6 +31,7 @@ describe('render cover letter route', () => {
     setPlainPdfFallbackOverride()
     setMinimalPlainPdfBufferGenerator()
     s3SendMock.mockReset()
+    getSignedUrl.mockClear()
   })
 
   afterAll(() => {
@@ -44,6 +46,7 @@ describe('render cover letter route', () => {
 
     const response = await request(app)
       .post('/api/render-cover-letter')
+      .set('Accept', 'application/json')
       .send({
         jobId: 'job-123',
         text: 'Jane Candidate\n\nDear Hiring Manager,\nThank you.\n\nSincerely,\nJane Candidate',
@@ -52,11 +55,20 @@ describe('render cover letter route', () => {
       })
       .expect(200)
 
-    expect(response.headers['content-type']).toMatch(/application\/pdf/)
-    expect(Buffer.isBuffer(response.body)).toBe(true)
-    expect(Buffer.from(response.body)).toEqual(PDF_STUB)
+    expect(response.headers['content-type']).toMatch(/application\/json/)
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: true,
+        downloadUrl: expect.stringContaining('https://example.com/'),
+        storageKey: expect.stringMatching(/^cv\//),
+        templateId: 'cover_classic',
+        templateName: 'Classic Cover Letter',
+        downloadName: expect.stringMatching(/\.pdf$/),
+      })
+    )
     expect(response.headers['x-template-id']).toBe('cover_classic')
     expect(typeof response.headers['x-artifact-key']).toBe('string')
+    expect(response.body.storageKey).toBe(response.headers['x-artifact-key'])
 
     expect(s3SendMock).toHaveBeenCalledTimes(1)
     const [command] = s3SendMock.mock.calls[0]
@@ -67,6 +79,17 @@ describe('render cover letter route', () => {
     expect(command.input.Key).toMatch(/^cv\//)
     expect(command.input.Key.endsWith('.pdf')).toBe(true)
     expect(response.headers['x-artifact-key']).toBe(command.input.Key)
+
+    expect(getSignedUrl).toHaveBeenCalledTimes(1)
+    const [signedClient, signedCommand, signedOptions] = getSignedUrl.mock.calls[0]
+    expect(signedClient).toBeDefined()
+    expect(signedCommand).toBeInstanceOf(GetObjectCommand)
+    expect(signedCommand.input.Bucket).toBe(process.env.S3_BUCKET)
+    expect(signedCommand.input.Key).toBe(command.input.Key)
+    expect(signedCommand.input.ResponseContentDisposition).toContain('attachment; filename="')
+    expect(signedCommand.input.ResponseContentDisposition.endsWith('"')).toBe(true)
+    expect(signedCommand.input.ResponseContentType).toBe('application/pdf')
+    expect(signedOptions).toEqual(expect.objectContaining({ expiresIn: expect.any(Number) }))
   })
 
   it('rejects when cover letter text is missing', async () => {

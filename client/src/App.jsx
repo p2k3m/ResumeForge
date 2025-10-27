@@ -4180,7 +4180,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Accept: 'application/pdf'
+          Accept: 'application/json'
         },
         body: JSON.stringify(payload)
       })
@@ -4223,41 +4223,61 @@ function App() {
         throw error
       }
 
+      const data = await response.json()
       const headerTemplateId = response.headers.get('x-template-id')
       const headerTemplateName = response.headers.get('x-template-name')
       const effectiveTemplateId = canonicalizeCoverTemplateId(
-        headerTemplateId || resolvedTemplateId,
+        data?.templateId || headerTemplateId || resolvedTemplateId,
         resolvedTemplateId
       )
       const effectiveTemplateName =
+        (typeof data?.templateName === 'string' && data.templateName.trim()) ||
         (headerTemplateName && headerTemplateName.trim()) ||
         resolvedTemplateName ||
         formatCoverTemplateName(effectiveTemplateId)
 
-      const blob = await response.blob()
+      const rawDownloadUrlCandidates = [
+        data?.downloadUrl,
+        data?.signedUrl,
+        data?.fileUrl,
+        data?.url,
+        data?.typeUrl
+      ]
+      const downloadUrl = rawDownloadUrlCandidates.find((value) =>
+        typeof value === 'string' && value.trim()
+      )
+      if (!downloadUrl) {
+        throw new Error('Download link was not provided by the server.')
+      }
+
       const fileForName = {
         type,
         fileName: coverLetterEditor.label || type || 'cover-letter',
+        url: downloadUrl,
         templateId: effectiveTemplateId,
         templateName: effectiveTemplateName,
         coverTemplateId: effectiveTemplateId,
         coverTemplateName: effectiveTemplateName
       }
-      const downloadFileName = deriveDownloadFileName(fileForName, presentation, response, {
+      const downloadFileName = deriveDownloadFileName(fileForName, presentation, null, {
         templateName: effectiveTemplateName,
         templateId: effectiveTemplateId,
-        generatedAt: Date.now(),
+        generatedAt:
+          (typeof data?.generatedAt === 'string' && Date.parse(data.generatedAt)) ||
+          Date.now(),
         contentTypeOverride: 'application/pdf',
         forcePdfExtension: true
       })
-      const blobUrl = URL.createObjectURL(blob)
       const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = downloadFileName || 'cover-letter.pdf'
+      link.href = downloadUrl
+      link.rel = 'noopener'
+      link.target = '_blank'
+      if (downloadFileName) {
+        link.download = downloadFileName
+      }
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
-      URL.revokeObjectURL(blobUrl)
       resetUiAfterDownload()
     } catch (err) {
       console.error('Cover letter PDF generation failed', err)
