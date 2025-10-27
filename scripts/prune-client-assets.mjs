@@ -9,6 +9,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const clientDistDir = path.join(projectRoot, 'client', 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 const assetsDir = path.join(clientDistDir, 'assets');
+const MIN_HASHED_VARIANTS_PER_TYPE = 2;
 
 async function readIndexHtml() {
   try {
@@ -48,6 +49,38 @@ async function listAssetEntries() {
   }
 }
 
+async function gatherHashedAssetMetadata(fileNames = []) {
+  const metadata = [];
+
+  for (const name of fileNames) {
+    if (!name.startsWith('index-')) {
+      continue;
+    }
+
+    const ext = path.extname(name);
+    if (ext !== '.js' && ext !== '.css') {
+      continue;
+    }
+
+    const fullPath = path.join(assetsDir, name);
+    try {
+      const stats = await fs.stat(fullPath);
+      metadata.push({
+        name,
+        extension: ext,
+        mtimeMs: Number.isFinite(stats.mtimeMs) ? stats.mtimeMs : 0,
+      });
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return metadata;
+}
+
 async function removeFile(targetPath) {
   try {
     await fs.rm(targetPath, { force: true });
@@ -80,6 +113,36 @@ async function pruneHashedAssets() {
     entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
   );
 
+  const hashedMetadata = await gatherHashedAssetMetadata(fileNames);
+  const fallbackKeep = new Set();
+
+  if (hashedMetadata.length) {
+    const groupedByExtension = hashedMetadata.reduce((acc, item) => {
+      if (!acc.has(item.extension)) {
+        acc.set(item.extension, []);
+      }
+      acc.get(item.extension).push(item);
+      return acc;
+    }, new Map());
+
+    for (const [extension, group] of groupedByExtension.entries()) {
+      group.sort((a, b) => b.mtimeMs - a.mtimeMs);
+      const referencedCount = group.filter((item) =>
+        referencedAssets.has(item.name)
+      ).length;
+      const keepCount = Math.min(
+        group.length,
+        Math.max(MIN_HASHED_VARIANTS_PER_TYPE, referencedCount)
+      );
+
+      for (let index = 0; index < keepCount; index += 1) {
+        fallbackKeep.add(group[index].name);
+      }
+    }
+  }
+
+  const keepSet = new Set([...referencedAssets, ...fallbackKeep]);
+
   const removalTargets = new Set();
 
   for (const name of fileNames) {
@@ -89,7 +152,7 @@ async function pruneHashedAssets() {
 
     if (name.endsWith('.map')) {
       const base = name.slice(0, -4);
-      if (!referencedAssets.has(base)) {
+      if (!keepSet.has(base)) {
         removalTargets.add(path.join(assetsDir, name));
       }
       continue;
@@ -100,7 +163,7 @@ async function pruneHashedAssets() {
       continue;
     }
 
-    if (!referencedAssets.has(name)) {
+    if (!keepSet.has(name)) {
       removalTargets.add(path.join(assetsDir, name));
       const sourcemapName = `${name}.map`;
       if (fileNames.has(sourcemapName)) {
