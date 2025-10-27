@@ -225,7 +225,8 @@ function resolveBucketConfiguration() {
 
   const environmentLabel = deploymentEnvironment || stageName || 'prod'
   const stage = stageName || environmentLabel || 'prod'
-  const prefixCandidate = process.env.STATIC_ASSETS_PREFIX || `static/client/${stage}`
+  const prefixCandidate =
+    process.env.STATIC_ASSETS_PREFIX || `static/client/${stage}/latest`
   const normalizedPrefix = String(prefixCandidate).trim().replace(/^\/+/, '').replace(/\/+$/, '')
   if (!normalizedPrefix) {
     throw new Error('STATIC_ASSETS_PREFIX must resolve to a non-empty value.')
