@@ -1,6 +1,49 @@
 import { jest } from '@jest/globals';
 import { PROXY_BLOCKED_ERROR_CODE, verifyClientAssets } from '../lib/cloudfrontAssetCheck.js';
 
+function extractHashedIndexAssets(html) {
+  const assetPattern =
+    /["']((?:\/?|(?:\.{1,2}\/)+)?(?:[\w.-]+\/)*assets\/index-[\w.-]+\.(?:css|js))(?:\?([^"'\s>]+))?["']/g;
+  const normalizedPaths = new Set();
+
+  let match;
+  while ((match = assetPattern.exec(html)) !== null) {
+    const pathPart = typeof match[1] === 'string' ? match[1].trim() : '';
+    if (!pathPart) {
+      continue;
+    }
+
+    const queryPart = match[2] ? `?${match[2]}` : '';
+
+    let normalizedPath = pathPart;
+    while (/^(?:\.\.\/|\.\/)/.test(normalizedPath)) {
+      normalizedPath = normalizedPath.replace(/^(?:\.\.\/|\.\/)/, '');
+    }
+    normalizedPath = normalizedPath.replace(/^\.\/+/, '');
+
+    if (!normalizedPath.startsWith('/')) {
+      normalizedPath = `/${normalizedPath}`;
+    }
+
+    normalizedPaths.add(`${normalizedPath}${queryPart}`);
+  }
+
+  const allAssets = Array.from(normalizedPaths);
+  const jsAssets = [];
+  const cssAssets = [];
+
+  for (const asset of allAssets) {
+    const basePath = asset.split('?')[0];
+    if (basePath.endsWith('.js')) {
+      jsAssets.push(asset);
+    } else if (basePath.endsWith('.css')) {
+      cssAssets.push(asset);
+    }
+  }
+
+  return { all: allAssets, js: jsAssets, css: cssAssets };
+}
+
 describe('verifyClientAssets', () => {
   test('adds a cache-busting query parameter when an asset initially returns 404', async () => {
     const html = `<!doctype html>
@@ -10,6 +53,9 @@ describe('verifyClientAssets', () => {
         </head>
         <body></body>
       </html>`;
+
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
 
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
@@ -22,7 +68,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 404, statusText: 'Not Found' });
         }
@@ -49,7 +95,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
+      return new URL(url).pathname === jsAssetPath && method === 'GET';
     });
 
     expect(assetGetCalls.some(([url]) => url.includes('__cf_verify_bust='))).toBe(true);
@@ -64,6 +110,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -75,7 +124,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 403, statusText: 'Forbidden' });
         }
@@ -104,7 +153,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
+      return new URL(url).pathname === jsAssetPath && method === 'GET';
     });
 
     expect(assetGetCalls).toHaveLength(2);
@@ -120,6 +169,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -131,7 +183,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 500, statusText: 'Internal Server Error' });
         }
@@ -160,7 +212,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
+      return new URL(url).pathname === jsAssetPath && method === 'GET';
     });
 
     expect(assetGetCalls).toHaveLength(2);
@@ -176,6 +228,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -187,7 +242,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 404, statusText: 'Not Found' });
         }
@@ -214,7 +269,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
+      return new URL(url).pathname === jsAssetPath && method === 'GET';
     });
 
     expect(assetGetCalls).toHaveLength(1);
@@ -230,6 +285,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -241,7 +299,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 500, statusText: 'Internal Server Error' });
         }
@@ -268,7 +326,7 @@ describe('verifyClientAssets', () => {
 
     const assetGetCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'GET';
+      return new URL(url).pathname === jsAssetPath && method === 'GET';
     });
 
     expect(assetGetCalls).toHaveLength(1);
@@ -285,6 +343,10 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+    const [cssAssetPath] = assetPaths.css;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -296,7 +358,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (['/assets/index-d438c9c1.js', '/assets/index-ac104019.css'].includes(target.pathname)) {
+      if ([jsAssetPath, cssAssetPath].includes(target.pathname)) {
         return new Response('', { status: 200 });
       }
 
@@ -324,8 +386,8 @@ describe('verifyClientAssets', () => {
 
     expect(requestedPaths).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ path: '/assets/index-d438c9c1.js', method: 'HEAD' }),
-        expect.objectContaining({ path: '/assets/index-ac104019.css', method: 'HEAD' }),
+        expect.objectContaining({ path: jsAssetPath, method: 'HEAD' }),
+        expect.objectContaining({ path: cssAssetPath, method: 'HEAD' }),
       ]),
     );
   });
@@ -339,6 +401,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -350,7 +415,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 403, statusText: 'Forbidden' });
         }
@@ -373,9 +438,7 @@ describe('verifyClientAssets', () => {
       }),
     ).resolves.toBeUndefined();
 
-    const assetRequests = fetchImpl.mock.calls.filter(([url]) =>
-      url.includes('/assets/index-d438c9c1.js'),
-    );
+    const assetRequests = fetchImpl.mock.calls.filter(([url]) => url.includes(jsAssetPath));
     expect(assetRequests).toHaveLength(2);
     const [, headOptions] = assetRequests[0];
     expect((headOptions?.method || 'GET').toUpperCase()).toBe('HEAD');
@@ -393,6 +456,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -404,7 +470,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response('', { status: 200 });
       }
 
@@ -440,6 +506,9 @@ describe('verifyClientAssets', () => {
 
     let shouldFail = true;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -451,7 +520,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         if (method === 'HEAD' && shouldFail) {
           shouldFail = false;
           return new Response(null, { status: 500, statusText: 'Upstream Error' });
@@ -480,7 +549,7 @@ describe('verifyClientAssets', () => {
 
     const headCalls = fetchImpl.mock.calls.filter(([url, init]) => {
       const method = (init?.method || 'GET').toUpperCase();
-      return new URL(url).pathname === '/assets/index-d438c9c1.js' && method === 'HEAD';
+      return new URL(url).pathname === jsAssetPath && method === 'HEAD';
     });
 
     expect(headCalls).toHaveLength(2);
@@ -495,6 +564,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -506,7 +578,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
 
@@ -533,6 +605,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -544,11 +619,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
+      if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
         return new Response(null, { status: 200 });
       }
 
@@ -568,10 +643,10 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
+      .filter((pathname) => pathname.endsWith(jsAssetPath));
 
-    expect(attemptedPaths).toContain('/assets/index-d438c9c1.js');
-    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain(jsAssetPath);
+    expect(attemptedPaths).toContain(`/static/client/prod/latest${jsAssetPath}`);
   });
 
   test('retries asset verification with manifest prefixes when root path returns 403', async () => {
@@ -583,6 +658,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -594,11 +672,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 403, statusText: 'Access Denied' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
+      if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
         return new Response(null, { status: 200 });
       }
 
@@ -618,10 +696,10 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
+      .filter((pathname) => pathname.endsWith(jsAssetPath));
 
-    expect(attemptedPaths).toContain('/assets/index-d438c9c1.js');
-    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain(jsAssetPath);
+    expect(attemptedPaths).toContain(`/static/client/prod/latest${jsAssetPath}`);
   });
 
   test('retries asset verification with manifest prefixes when root path returns a server error', async () => {
@@ -633,6 +711,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -644,11 +725,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 500, statusText: 'Internal Server Error' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
+      if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
         return new Response(null, { status: 200 });
       }
 
@@ -668,10 +749,10 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
+      .filter((pathname) => pathname.endsWith(jsAssetPath));
 
-    expect(attemptedPaths).toContain('/assets/index-d438c9c1.js');
-    expect(attemptedPaths).toContain('/static/client/prod/latest/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain(jsAssetPath);
+    expect(attemptedPaths).toContain(`/static/client/prod/latest${jsAssetPath}`);
   });
 
   test('attempts suffix variations of manifest prefixes when CDN origin strips leading segments', async () => {
@@ -682,6 +763,9 @@ describe('verifyClientAssets', () => {
         </head>
         <body></body>
       </html>`;
+
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
 
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
@@ -694,15 +778,15 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
 
-      if (target.pathname === '/static/client/prod/latest/assets/index-d438c9c1.js') {
+      if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
         return new Response(null, { status: 403, statusText: 'Forbidden' });
       }
 
-      if (target.pathname === '/client/prod/latest/assets/index-d438c9c1.js') {
+      if (target.pathname === `/client/prod/latest${jsAssetPath}`) {
         return new Response('', { status: 200 });
       }
 
@@ -722,9 +806,9 @@ describe('verifyClientAssets', () => {
 
     const attemptedPaths = fetchImpl.mock.calls
       .map(([url]) => new URL(url).pathname)
-      .filter((pathname) => pathname.includes('index-d438c9c1.js'));
+      .filter((pathname) => pathname.endsWith(jsAssetPath));
 
-    expect(attemptedPaths).toContain('/client/prod/latest/assets/index-d438c9c1.js');
+    expect(attemptedPaths).toContain(`/client/prod/latest${jsAssetPath}`);
   });
 
   test('includes attempted asset path details when all CDN prefixes fail', async () => {
@@ -735,6 +819,9 @@ describe('verifyClientAssets', () => {
         </head>
         <body></body>
       </html>`;
+
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
 
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
@@ -747,7 +834,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname.includes('index-d438c9c1.js')) {
+      if (target.pathname.endsWith(jsAssetPath)) {
         return new Response(null, { status: 403, statusText: 'Forbidden' });
       }
 
@@ -755,11 +842,11 @@ describe('verifyClientAssets', () => {
     });
 
     const expectedPaths = [
-      '/assets/index-d438c9c1.js',
-      '/static/client/prod/latest/assets/index-d438c9c1.js',
-      '/client/prod/latest/assets/index-d438c9c1.js',
-      '/prod/latest/assets/index-d438c9c1.js',
-      '/latest/assets/index-d438c9c1.js',
+      jsAssetPath,
+      `/static/client/prod/latest${jsAssetPath}`,
+      `/client/prod/latest${jsAssetPath}`,
+      `/prod/latest${jsAssetPath}`,
+      `/latest${jsAssetPath}`,
     ];
 
     await expect(
@@ -773,7 +860,7 @@ describe('verifyClientAssets', () => {
       }),
     ).rejects.toMatchObject({
       attemptedAssetPaths: expectedPaths,
-      message: expect.stringContaining('attempted asset paths: /assets/index-d438c9c1.js'),
+      message: expect.stringContaining(`attempted asset paths: ${jsAssetPath}`),
     });
   });
 
@@ -789,6 +876,10 @@ describe('verifyClientAssets', () => {
 
     const observedOrigins = [];
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+    const [cssAssetPath] = assetPaths.css;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -800,7 +891,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname.startsWith('/assets/')) {
+      if ([jsAssetPath, cssAssetPath].some((assetPath) => target.pathname === assetPath)) {
         observedOrigins.push(options?.headers?.Origin ?? null);
 
         if (method === 'HEAD') {
@@ -843,6 +934,9 @@ describe('verifyClientAssets', () => {
         <body></body>
       </html>`;
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -854,7 +948,7 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname === '/assets/index-d438c9c1.js') {
+      if (target.pathname === jsAssetPath) {
         return new Response(null, {
           status: 403,
           statusText: 'Forbidden',
@@ -893,6 +987,9 @@ describe('verifyClientAssets', () => {
       return error;
     };
 
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
     const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
       const method = (options.method || 'GET').toUpperCase();
       const target = new URL(requestUrl);
@@ -904,11 +1001,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
-      if (target.pathname.startsWith('/assets/') && method === 'HEAD') {
+      if (target.pathname === jsAssetPath && method === 'HEAD') {
         throw createNetworkError();
       }
 
-      if (target.pathname.startsWith('/assets/') && method === 'GET') {
+      if (target.pathname === jsAssetPath && method === 'GET') {
         throw createNetworkError();
       }
 
