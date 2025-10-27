@@ -234,6 +234,17 @@ function resolveBucketConfiguration() {
   return { bucket, prefix: normalizedPrefix, stage, deploymentEnvironment: environmentLabel }
 }
 
+const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/
+
+function isImmutableHashedIndexAsset(key) {
+  if (typeof key !== 'string' || !key) {
+    return false
+  }
+
+  const normalizedKey = key.replace(/\\/g, '/').trim()
+  return IMMUTABLE_HASHED_INDEX_ASSET_PATTERN.test(normalizedKey)
+}
+
 function shouldDeleteObjectKey(key, prefix) {
   if (typeof key !== 'string' || !key) {
     return false
@@ -251,6 +262,10 @@ function shouldDeleteObjectKey(key, prefix) {
 
   const sanitized = relativePath.replace(/^\/+/, '')
   if (!sanitized) {
+    return false
+  }
+
+  if (isImmutableHashedIndexAsset(normalizedKey)) {
     return false
   }
 
