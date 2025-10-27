@@ -54,6 +54,14 @@ npm run publish:cloudfront-url -- <stack-name>
 
 This rebuilds the Lambda/API Gateway stack, updates `config/published-cloudfront.json`, and issues cache invalidations so the new CDN becomes the canonical entry point.
 
+To automate the full workflow of rebuilding the client, uploading the refreshed static assets, publishing the distribution metadata, and re-running the health verification, use the repair helper:
+
+```bash
+npm run repair:cloudfront -- --stack <stack-name>
+```
+
+Skip individual steps by appending `--skip-build`, `--skip-upload`, `--skip-publish`, or `--skip-verify` when you only need part of the recovery process (for example, to retry verification after manually redeploying the stack).
+
 ## 4. Share the working domain
 
 Once the verifier succeeds, broadcast the CloudFront URL recorded in `config/published-cloudfront.json` (also mirrored in [`docs/cloudfront-url.md`](cloudfront-url.md)) so the team and candidates use the active distribution.
