@@ -23,10 +23,11 @@ const githubToken = requireEnv('GITHUB_TOKEN');
 const openaiApiKey = requireEnv('OPENAI_API_KEY');
 const repoOwner = requireEnv('REPO_OWNER');
 const repoName = requireEnv('REPO_NAME');
-const baseBranch = process.env.AUTOFIX_BASE_BRANCH || 'main';
+let baseBranch = process.env.AUTOFIX_BASE_BRANCH || null;
 const modelName = process.env.AUTOFIX_MODEL || 'gpt-4o-mini';
 const cloneUrl = process.env.AUTOFIX_CLONE_URL || `https://x-access-token:${githubToken}@github.com/${repoOwner}/${repoName}.git`;
 const workingParentDir = process.env.AUTOFIX_WORKDIR || fs.mkdtempSync(path.join(os.tmpdir(), 'autofix-'));
+const targetRunId = process.env.AUTOFIX_TARGET_RUN_ID ? Number.parseInt(process.env.AUTOFIX_TARGET_RUN_ID, 10) : null;
 
 const octokit = new Octokit({ auth: githubToken });
 const openai = new OpenAI({ apiKey: openaiApiKey });
@@ -40,22 +41,60 @@ function log(message, details) {
   }
 }
 
-async function findLatestFailedRun() {
-  log('Searching for latest failed workflow run on base branch', { baseBranch });
+function resolveBaseBranch(failedRun) {
+  if (!baseBranch) {
+    const pullRequestBase = failedRun.pull_requests?.[0]?.base?.ref;
+    if (pullRequestBase) {
+      baseBranch = pullRequestBase;
+    } else if (failedRun.head_branch) {
+      baseBranch = failedRun.head_branch;
+    }
+  }
+
+  if (!baseBranch) {
+    baseBranch = 'main';
+  }
+
+  return baseBranch;
+}
+
+async function findLatestFailedRun({ excludeRunId } = {}) {
+  const branchToSearch = baseBranch || 'main';
+  log('Searching for latest failed workflow run on base branch', { baseBranch: branchToSearch });
   const { data } = await octokit.actions.listWorkflowRunsForRepo({
     owner: repoOwner,
     repo: repoName,
-    branch: baseBranch,
+    branch: branchToSearch,
     status: 'completed',
     per_page: 50,
   });
 
-  const failedRun = data.workflow_runs.find((run) => run.conclusion === 'failure');
+  const failedRun = data.workflow_runs.find((run) => run.conclusion === 'failure' && run.id !== excludeRunId);
   if (!failedRun) {
     return null;
   }
   log('Located failed workflow run', { runId: failedRun.id, name: failedRun.name, runNumber: failedRun.run_number });
   return failedRun;
+}
+
+async function getTargetRun(runId) {
+  const { data } = await octokit.actions.getWorkflowRun({
+    owner: repoOwner,
+    repo: repoName,
+    run_id: runId,
+  });
+
+  if (data.conclusion !== 'failure') {
+    throw new Error(`Target workflow run ${runId} is not in a failed state`);
+  }
+
+  log('Using targeted failed workflow run', {
+    runId: data.id,
+    headBranch: data.head_branch,
+    event: data.event,
+  });
+
+  return data;
 }
 
 async function downloadLogs(runId) {
@@ -145,9 +184,10 @@ function runGitCommand(args, options = {}) {
 
 function applyPatch({ patchText, iteration }) {
   const branchName = `autofix/run-${Date.now()}-${iteration + 1}`;
+  const branchToClone = baseBranch || 'main';
   const repoDir = fs.mkdtempSync(path.join(workingParentDir, 'repo-'));
-  log('Cloning repository', { repoDir, branchName });
-  runGitCommand(['clone', '--depth=50', '--branch', baseBranch, cloneUrl, repoDir]);
+  log('Cloning repository', { repoDir, branchName, baseBranch: branchToClone });
+  runGitCommand(['clone', '--depth=50', '--branch', branchToClone, cloneUrl, repoDir]);
   runGitCommand(['checkout', '-b', branchName], { cwd: repoDir });
 
   log('Applying patch');
@@ -248,14 +288,15 @@ async function waitForPrMerge(prNumber) {
   throw new Error('Timed out waiting for PR to merge');
 }
 
-async function waitForNewMainRun(previousRunId) {
+async function waitForNewBaseRun(previousRunId) {
   const start = Date.now();
-  log('Waiting for new workflow run on main branch');
+  const branchToMonitor = baseBranch || 'main';
+  log('Waiting for new workflow run on base branch', { branch: branchToMonitor });
   while (Date.now() - start < POLL_TIMEOUT_MS) {
     const { data } = await octokit.actions.listWorkflowRunsForRepo({
       owner: repoOwner,
       repo: repoName,
-      branch: baseBranch,
+      branch: branchToMonitor,
       per_page: 20,
     });
     const run = data.workflow_runs[0];
@@ -271,9 +312,17 @@ async function waitForNewMainRun(previousRunId) {
 async function runAutofixLoop() {
   let iteration = 0;
   let previousFailedRunId = null;
+  let pendingTargetRunId = targetRunId;
 
   while (iteration < MAX_ITERATIONS) {
-    const failedRun = await findLatestFailedRun();
+    let failedRun;
+    if (pendingTargetRunId) {
+      failedRun = await getTargetRun(pendingTargetRunId);
+      pendingTargetRunId = null;
+    } else {
+      failedRun = await findLatestFailedRun({ excludeRunId: previousFailedRunId });
+    }
+
     if (!failedRun) {
       log('No failed workflow run detected. Exiting.');
       return;
@@ -284,6 +333,8 @@ async function runAutofixLoop() {
     }
 
     previousFailedRunId = failedRun.id;
+    const branchForFix = resolveBaseBranch(failedRun);
+    log('Resolved base branch for autofix', { baseBranch: branchForFix, event: failedRun.event });
     const logs = await downloadLogs(failedRun.id);
     const failureSummary = summariseLogs(logs) || 'No explicit error lines detected in logs.';
     const patch = await requestPatch({ failureSummary, iteration, baseSha: failedRun.head_sha });
@@ -299,9 +350,9 @@ async function runAutofixLoop() {
     }
 
     await waitForPrMerge(pr.number);
-    const newRun = await waitForNewMainRun(failedRun.id);
+    const newRun = await waitForNewBaseRun(failedRun.id);
     if (newRun.conclusion === 'success') {
-      log('New main branch workflow run succeeded. Autofix complete.');
+      log('New base branch workflow run succeeded. Autofix complete.');
       return;
     }
 
