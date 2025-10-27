@@ -6,6 +6,8 @@ When the published CloudFront domain stops responding, use the verification help
 
 To skip only the CDN probe while still validating the S3 upload, run `npm run verify:static -- --skip-cloudfront`. This flag mirrors the `SKIP_CLOUDFRONT_VERIFY` environment variable and can be useful when testing from environments that cannot reach CloudFront but where you still want the manifest and S3 checks to execute.
 
+Starting in November 2024, `npm run verify:static` automatically removes stale `assets/index-*.css`/`assets/index-*.js` bundles that linger in the deployment prefix. If previous uploads left behind superseded hashed bundles, the verifier deletes them before the pipeline proceeds and prints the exact keys it removed. Set `STATIC_VERIFY_DELETE_STALE_INDEX_ASSETS=false` (or pass `--no-delete-stale-index-assets`) to keep the read-only behaviour for break-glass audits.
+
 ## 1. Run the verifier
 
 ```bash
