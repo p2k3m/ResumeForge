@@ -34,6 +34,7 @@ async function main() {
   const urlOutput =
     outputs.find((output) => output.OutputKey === 'AppBaseUrl') ||
     outputs.find((output) => output.OutputKey === 'CloudFrontUrl')
+  const apiGatewayOutput = outputs.find((output) => output.OutputKey === 'ApiBaseUrl')
   if (!urlOutput?.OutputValue) {
     console.error(
       'Stack is missing an AppBaseUrl/CloudFrontUrl output. Deploy using the provided SAM template.'
@@ -135,9 +136,16 @@ async function main() {
     distributionId,
     updatedAt: new Date().toISOString()
   }
+
+  if (apiGatewayOutput?.OutputValue) {
+    payload.apiGatewayUrl = apiGatewayOutput.OutputValue
+  }
   await fs.writeFile(publishFile, `${JSON.stringify(payload, null, 2)}\n`)
   console.log(`Published CloudFront URL: ${payload.url}`)
   console.log(`Distribution ${distributionId} is now the active entry point.`)
+  if (payload.apiGatewayUrl) {
+    console.log(`Recorded API Gateway fallback URL: ${payload.apiGatewayUrl}`)
+  }
 }
 
 main().catch((err) => {

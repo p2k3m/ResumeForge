@@ -989,7 +989,7 @@ function clientAssetsAvailable() {
   return false;
 }
 
-const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
+const FALLBACK_CLIENT_INDEX_TEMPLATE = `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -1043,10 +1043,49 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
         border-radius: 8px;
         padding: 1rem;
       }
+      .fallback__degraded {
+        margin: 0 auto 1.5rem;
+        max-width: 40rem;
+        border-radius: 12px;
+        border: 1px solid rgba(234, 179, 8, 0.4);
+        background: linear-gradient(180deg, rgba(253, 224, 71, 0.25) 0%, rgba(253, 224, 71, 0.18) 100%);
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+        padding: 1.5rem;
+      }
+      .fallback__degraded[hidden] {
+        display: none !important;
+      }
+      .fallback__degraded h2 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        font-size: 1.35rem;
+        color: #854d0e;
+      }
+      .fallback__degraded p {
+        margin: 0.5rem 0;
+        font-size: 0.95rem;
+        color: #713f12;
+      }
+      .fallback__degraded code {
+        background: rgba(253, 224, 71, 0.35);
+        border-radius: 6px;
+        padding: 0.1rem 0.35rem;
+      }
+      .fallback__degraded a {
+        color: #92400e;
+        font-weight: 600;
+        text-decoration: none;
+        word-break: break-all;
+      }
+      .fallback__degraded a:hover,
+      .fallback__degraded a:focus {
+        text-decoration: underline;
+      }
     </style>
   </head>
   <body>
     <div id="root" data-status="client-assets-missing"></div>
+    __DEGRADE_SECTION__
     <main class="fallback" role="alert">
       <h1>ResumeForge client rebuilding</h1>
       <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
@@ -1067,10 +1106,83 @@ const FALLBACK_CLIENT_INDEX_HTML = `<!DOCTYPE html>
   </body>
 </html>`;
 
+function buildFallbackClientIndexHtml(metadata = null) {
+  const canonicalUrl = metadata?.url || '';
+  const apiGatewayUrl = metadata?.apiGatewayUrl || '';
+  const updatedAt = metadata?.updatedAt || '';
+  let canonicalHost = '';
+
+  if (canonicalUrl) {
+    try {
+      canonicalHost = new URL(canonicalUrl).hostname;
+    } catch (err) {
+      logStructured('warn', 'fallback_client_invalid_cloudfront_url', {
+        url: canonicalUrl,
+        error: serializeError(err),
+      });
+      canonicalHost = '';
+    }
+  }
+
+  const safeGatewayUrl = apiGatewayUrl ? escapeHtml(apiGatewayUrl) : '';
+  const safeCanonicalHost = canonicalHost ? escapeHtml(canonicalHost) : '';
+  const safeCanonicalUrl = canonicalUrl ? escapeHtml(canonicalUrl) : '';
+  const safeUpdatedAt = updatedAt ? escapeHtml(updatedAt) : '';
+
+  const hasBackupDetails = Boolean(apiGatewayUrl || canonicalHost);
+
+  let degradeDetails = '';
+  if (safeCanonicalHost) {
+    degradeDetails += `<p>Primary CloudFront domain: <code>${safeCanonicalHost}</code></p>`;
+  } else if (safeCanonicalUrl) {
+    degradeDetails += `<p>Primary CloudFront URL: <code>${safeCanonicalUrl}</code></p>`;
+  }
+
+  if (safeGatewayUrl) {
+    degradeDetails += `<p>Share the backup API Gateway endpoint while the CDN recovers: <a href="${safeGatewayUrl}" rel="noopener noreferrer">${safeGatewayUrl}</a></p>`;
+  } else {
+    degradeDetails += '<p>Retrieve the <code>ApiBaseUrl</code> CloudFormation output and share it with teammates so they can bypass CloudFront until service is restored.</p>';
+  }
+
+  if (safeUpdatedAt) {
+    degradeDetails += `<p class="fallback__degraded-detail">Last published metadata: <code>${safeUpdatedAt}</code></p>`;
+  }
+
+  const degradeSection = `
+    <section
+      class="fallback__degraded"
+      role="alert"
+      aria-live="assertive"
+      data-visible="${hasBackupDetails ? 'true' : 'false'}"
+      ${hasBackupDetails ? '' : 'hidden'}
+    >
+      <h2>CloudFront fallback active</h2>
+      <p>Static assets are being served directly from API Gateway while the CloudFront distribution recovers.</p>
+      ${degradeDetails}
+      <input
+        type="hidden"
+        name="resumeforge-backup-api-base"
+        data-backup-api-base
+        value="${safeGatewayUrl}"
+      />
+    </section>
+  `;
+
+  return FALLBACK_CLIENT_INDEX_TEMPLATE.replace('__DEGRADE_SECTION__', degradeSection.trim());
+}
+
 async function getClientIndexHtml() {
   if (!clientAssetsAvailable()) {
     if (!cachedClientIndexHtml) {
-      cachedClientIndexHtml = FALLBACK_CLIENT_INDEX_HTML;
+      let metadata = null;
+      try {
+        metadata = await loadPublishedCloudfrontMetadata();
+      } catch (err) {
+        logStructured('warn', 'fallback_client_metadata_unavailable', {
+          error: serializeError(err),
+        });
+      }
+      cachedClientIndexHtml = buildFallbackClientIndexHtml(metadata || undefined);
     }
     return cachedClientIndexHtml;
   }
@@ -2396,6 +2508,10 @@ async function loadPublishedCloudfrontMetadata() {
         typeof parsed?.distributionId === 'string' && parsed.distributionId.trim()
           ? parsed.distributionId.trim()
           : null,
+      apiGatewayUrl:
+        typeof parsed?.apiGatewayUrl === 'string' && parsed.apiGatewayUrl.trim()
+          ? parsed.apiGatewayUrl.trim()
+          : null,
       originBucket:
         typeof parsed?.originBucket === 'string' && parsed.originBucket.trim()
           ? parsed.originBucket.trim()
@@ -2420,6 +2536,23 @@ async function loadPublishedCloudfrontMetadata() {
           error: serializeError(err),
         });
         metadata.url = null;
+      }
+    }
+
+    if (metadata.apiGatewayUrl) {
+      try {
+        const normalized = new URL(metadata.apiGatewayUrl);
+        const cleanedPath = normalized.pathname?.replace(/\/$/, '') || '';
+        const normalizedUrl = `${normalized.origin}${cleanedPath}${
+          normalized.search || ''
+        }${normalized.hash || ''}`;
+        metadata.apiGatewayUrl = normalizedUrl || normalized.toString();
+      } catch (err) {
+        logStructured('warn', 'published_cloudfront_invalid_api_gateway_url', {
+          url: metadata.apiGatewayUrl,
+          error: serializeError(err),
+        });
+        metadata.apiGatewayUrl = null;
       }
     }
 
