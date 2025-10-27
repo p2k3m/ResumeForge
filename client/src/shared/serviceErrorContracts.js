@@ -42,31 +42,31 @@ export const API_ERROR_CONTRACTS = Object.freeze({
     code: 'DOCUMENT_GENERATION_FAILED',
     friendlyMessage: LAMBDA_PROCESSING_ERROR_MESSAGE,
     service: 'lambda',
-    step: 'evaluate'
+    step: 'generate'
   },
   PROCESSING_FAILED: {
     code: 'PROCESSING_FAILED',
     friendlyMessage: LAMBDA_PROCESSING_ERROR_MESSAGE,
     service: 'lambda',
-    step: 'evaluate'
+    step: 'score'
   },
   GENERATION_FAILED: {
     code: 'GENERATION_FAILED',
     friendlyMessage: LAMBDA_PROCESSING_ERROR_MESSAGE,
     service: 'lambda',
-    step: 'evaluate'
+    step: 'generate'
   },
   PDF_GENERATION_FAILED: {
     code: 'PDF_GENERATION_FAILED',
     friendlyMessage: CV_GENERATION_ERROR_MESSAGE,
     service: 'lambda',
-    step: 'evaluate'
+    step: 'generate'
   },
   COVER_LETTER_GENERATION_FAILED: {
     code: 'COVER_LETTER_GENERATION_FAILED',
     friendlyMessage: COVER_LETTER_GENERATION_ERROR_MESSAGE,
     service: 'lambda',
-    step: 'evaluate'
+    step: 'generate'
   },
   AI_RESPONSE_INVALID: {
     code: 'AI_RESPONSE_INVALID',
