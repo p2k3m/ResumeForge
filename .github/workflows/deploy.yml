@@ -955,3 +955,39 @@ jobs:
         env:
           STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
           STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
+
+      - name: Run deploy health check
+        id: deploy_health_check
+        if: success()
+        run: npm run verify:cloudfront
+
+      - name: Roll back static manifest after failed health check
+        if: failure() && steps.deploy_health_check.outcome == 'failure'
+        env:
+          STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
+          STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          bucket="${STATIC_ASSETS_BUCKET}"
+          prefix="${STATIC_ASSETS_PREFIX%/}"
+
+          if [ -z "$bucket" ] || [ -z "$prefix" ]; then
+            echo "::error::Cannot roll back static assets because the bucket or prefix is not defined."
+            exit 1
+          fi
+
+          manifest_key="$prefix/manifest.json"
+          backup_key="$prefix/manifest.previous.json"
+
+          echo "Attempting to restore manifest from s3://$bucket/$backup_key after failed health check."
+
+          if aws s3api head-object --bucket "$bucket" --key "$backup_key" >/dev/null 2>&1; then
+            aws s3 cp "s3://$bucket/$backup_key" "s3://$bucket/$manifest_key"
+            echo "::warning::Rolled back static manifest to the previous deployment after health check failure."
+          else
+            echo "::error::No backup manifest found at s3://$bucket/$backup_key. Manual intervention is required."
+          fi
+
+          exit 1

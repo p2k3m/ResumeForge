@@ -6,6 +6,7 @@ import { access, readFile, readdir, stat } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   ListObjectsV2Command,
   PutBucketWebsiteCommand,
@@ -45,6 +46,49 @@ function createValidationError(message) {
   const error = new Error(message)
   error.name = 'StaticAssetValidationError'
   return error
+}
+
+async function readStreamToString(stream) {
+  if (!stream) {
+    return ''
+  }
+
+  if (typeof stream.transformToString === 'function') {
+    return stream.transformToString()
+  }
+
+  const chunks = []
+  for await (const chunk of stream) {
+    chunks.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'))
+  }
+
+  return chunks.join('')
+}
+
+function isNotFoundError(error) {
+  if (!error) {
+    return false
+  }
+
+  const statusCode = error?.$metadata?.httpStatusCode
+  if (statusCode === 404) {
+    return true
+  }
+
+  const candidateCodes = [error?.name, error?.Code, error?.code]
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.trim().toUpperCase())
+
+  if (candidateCodes.some((code) => code === 'NOSUCHKEY' || code === 'NO_SUCH_KEY' || code === 'NOTFOUND')) {
+    return true
+  }
+
+  const message = typeof error?.message === 'string' ? error.message.toLowerCase() : ''
+  if (message.includes('no such key') || message.includes('not found')) {
+    return true
+  }
+
+  return false
 }
 
 async function ensureFileExists(filePath, { label } = {}) {
@@ -374,6 +418,7 @@ async function uploadManifest({
   hashedAssets,
 }) {
   const manifestKey = buildS3Key(prefix, 'manifest.json')
+  await backupExistingManifest({ s3, bucket, manifestKey })
   const payload = {
     stage,
     prefix,
@@ -399,6 +444,54 @@ async function uploadManifest({
   )
 
   console.log(`[upload-static] Published manifest to s3://${bucket}/${manifestKey}`)
+}
+
+async function backupExistingManifest({ s3, bucket, manifestKey }) {
+  try {
+    const response = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: manifestKey,
+      }),
+    )
+
+    const raw = await readStreamToString(response.Body)
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      console.log(
+        `[upload-static] Existing manifest at s3://${bucket}/${manifestKey} is empty. Skipping backup before publishing.`,
+      )
+      return
+    }
+
+    let backupKey = manifestKey.replace(/manifest\.json$/u, 'manifest.previous.json')
+    if (!backupKey || backupKey === manifestKey) {
+      backupKey = `${manifestKey}.previous`
+    }
+
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: backupKey,
+        Body: `${trimmed}\n`,
+        ContentType: 'application/json',
+        CacheControl: 'no-cache',
+      }),
+    )
+
+    console.log(`[upload-static] Backed up existing manifest to s3://${bucket}/${backupKey}`)
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      console.log(
+        `[upload-static] No existing manifest found at s3://${bucket}/${manifestKey}. Proceeding without creating a backup.`,
+      )
+      return
+    }
+
+    throw new Error(
+      `[upload-static] Failed to back up existing manifest from s3://${bucket}/${manifestKey}: ${error?.message || error}`,
+    )
+  }
 }
 
 async function main() {
