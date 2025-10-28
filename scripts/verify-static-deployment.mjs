@@ -269,13 +269,14 @@ function extractHashedIndexAssetsFromHtml(html) {
     throw new Error('[verify-static] index.html is empty or unreadable from S3.')
   }
 
-  const assetPattern = /assets\/index-[\w.-]+\.(?:css|js)(?:\?[^"'>\s]+)?/gu
-  const matches = html.match(assetPattern) || []
+  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/giu
   const assets = []
   const seen = new Set()
+  let match
 
-  for (const match of matches) {
-    const normalized = normalizeHashedAssetPath(match)
+  while ((match = assetPattern.exec(html)) !== null) {
+    const [, captured] = match
+    const normalized = normalizeHashedAssetPath(captured)
     if (normalized && !seen.has(normalized)) {
       seen.add(normalized)
       assets.push(normalized)
