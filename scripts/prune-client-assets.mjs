@@ -9,7 +9,8 @@ const projectRoot = path.resolve(__dirname, '..');
 const clientDistDir = path.join(projectRoot, 'client', 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 const assetsDir = path.join(clientDistDir, 'assets');
-const MIN_HASHED_VARIANTS_PER_TYPE = 2;
+const MIN_HASHED_VARIANTS_PER_TYPE = 6;
+const MIN_ASSET_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 async function readIndexHtml() {
   try {
@@ -117,6 +118,7 @@ async function pruneHashedAssets() {
   const fallbackKeep = new Set();
 
   if (hashedMetadata.length) {
+    const retentionThreshold = Date.now() - MIN_ASSET_RETENTION_MS;
     const groupedByExtension = hashedMetadata.reduce((acc, item) => {
       if (!acc.has(item.extension)) {
         acc.set(item.extension, []);
@@ -127,6 +129,11 @@ async function pruneHashedAssets() {
 
     for (const [extension, group] of groupedByExtension.entries()) {
       group.sort((a, b) => b.mtimeMs - a.mtimeMs);
+      for (const item of group) {
+        if (item.mtimeMs >= retentionThreshold) {
+          fallbackKeep.add(item.name);
+        }
+      }
       const referencedCount = group.filter((item) =>
         referencedAssets.has(item.name)
       ).length;
