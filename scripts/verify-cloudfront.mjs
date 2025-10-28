@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js';
+import { resolveCloudfrontAssetPathPrefixes } from '../lib/cloudfrontAssetPrefixes.js';
 import { runPostDeploymentApiTests } from '../lib/postDeploymentApiTests.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,12 +37,21 @@ async function main() {
       console.log(`Verifying provided CloudFront URL: ${targetUrl}`);
     }
 
+    const assetPathPrefixes = resolveCloudfrontAssetPathPrefixes();
+    if (assetPathPrefixes.length > 0) {
+      const suffix = assetPathPrefixes.length === 1 ? '' : 'es';
+      console.log(
+        `Using CloudFront asset prefix fallback${suffix}: ${assetPathPrefixes.join(', ')}`,
+      );
+    }
+
     const verificationResult = await runPostDeploymentApiTests({
       baseUrl: targetUrl,
       healthCheckTimeoutMs: 10000,
       retries: 4,
       retryDelayMs: 30000,
       logger: console,
+      assetPathPrefixes,
     });
     const { health, healthChecks = [], assetChecks = [] } = verificationResult;
 
