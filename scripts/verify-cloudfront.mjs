@@ -94,6 +94,26 @@ async function main() {
   } catch (err) {
     console.error('CloudFront verification failed:');
     console.error(err?.message || err);
+
+    if (err?.url) {
+      console.error(`Failed URL: ${err.url}`);
+    }
+
+    if (typeof err?.status === 'number' && !Number.isNaN(err.status)) {
+      console.error(`HTTP status: ${err.status}`);
+    }
+
+    if (err?.code) {
+      console.error(`Error code: ${err.code}`);
+    }
+
+    if (Array.isArray(err?.attemptedAssetPaths) && err.attemptedAssetPaths.length > 0) {
+      console.error('Attempted asset paths:');
+      for (const assetPath of err.attemptedAssetPaths) {
+        console.error(`- ${assetPath}`);
+      }
+    }
+
     console.error('');
     console.error('Next steps:');
     console.error('- Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output.');
