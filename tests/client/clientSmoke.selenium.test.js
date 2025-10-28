@@ -115,6 +115,11 @@ describeIfSupported('client application smoke test (selenium)', () => {
       const headingText = await heading.getText();
       expect(headingText).toContain('ResumeForge client rebuilding');
 
+      const reassurance = await driver.findElement(
+        By.xpath("//main[contains(@class,'fallback')]//p[contains(., 'All content scoring, ATS, and selection logic works independently of the browser, not tied to asset load state.')]")
+      );
+      expect(await reassurance.isDisplayed()).toBe(true);
+
       const instructions = await driver.findElements(By.css('main.fallback li'));
       expect(instructions.length).toBeGreaterThanOrEqual(3);
 

@@ -12,6 +12,9 @@ function expectValidPortalMarkup(html) {
   if (!hasHashedJs || !hasHashedCss) {
     expect(html).toContain('data-status="client-assets-missing"');
     expect(html).toContain('ResumeForge client rebuilding');
+    expect(html).toContain(
+      'All content scoring, ATS, and selection logic works independently of the browser, not tied to asset load state.'
+    );
   }
 }
 
