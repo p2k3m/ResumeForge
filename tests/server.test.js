@@ -138,6 +138,7 @@ const {
   classifyDocument,
   CHANGE_LOG_FIELD_LIMITS,
   setCoverLetterFallbackBuilder,
+  resetStaticAssetManifestCache,
 } = serverModule;
 const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
 const mammothMock = (await import('mammoth')).default;
@@ -172,6 +173,7 @@ beforeEach(() => {
     data: '<html><title>Software Engineer</title><p>Design and build APIs.</p></html>'
   });
   setCoverLetterFallbackBuilder();
+  resetStaticAssetManifestCache();
   mockS3Send.mockReset();
   mockS3Send.mockResolvedValue({});
   setPlainPdfFallbackOverride();
@@ -288,6 +290,85 @@ describe('static asset fallbacks', () => {
       expect(res.status).toBe(200);
       expect(res.text).toBe(assetBody);
       expect(mockS3Send).toHaveBeenCalledTimes(1);
+    } finally {
+      statSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
+  });
+
+  test('serves the index asset alias via manifest fallback when the primary bundle is missing from S3', async () => {
+    const cssAliasName = 'index-missing.css';
+    const fallbackCssName = 'index-existing.css';
+    const manifestHtml = `<!doctype html><html><head><link rel="stylesheet" href="./assets/${cssAliasName}"></head><body></body></html>`;
+    const testMtime = Date.now() + Math.floor(Math.random() * 1000) + 2000;
+
+    const originalReadFile = fsPromises.readFile;
+    const originalStat = fsPromises.stat;
+
+    const readFileSpy = jest
+      .spyOn(fsPromises, 'readFile')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target === clientIndexPath) {
+          return manifestHtml;
+        }
+        return originalReadFile.call(fsPromises, target, ...args);
+      });
+
+    const statSpy = jest
+      .spyOn(fsPromises, 'stat')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string') {
+          if (target === clientIndexPath) {
+            return { mtimeMs: testMtime };
+          }
+          if (target.endsWith(cssAliasName) || target.endsWith(fallbackCssName)) {
+            const notFound = new Error('Not Found');
+            notFound.code = 'ENOENT';
+            throw notFound;
+          }
+        }
+        return originalStat.call(fsPromises, target, ...args);
+      });
+
+    const fallbackBody = '.fallback { color: #0f0; }';
+
+    mockS3Send
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Bucket).toBe('test-bucket');
+        expect(command.input.Key).toMatch(new RegExp(`assets/${cssAliasName}$`));
+        const error = new Error('NoSuchKey');
+        error.$metadata = { httpStatusCode: 404 };
+        error.name = 'NoSuchKey';
+        return Promise.reject(error);
+      })
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Bucket).toBe('test-bucket');
+        expect(command.input.Key).toMatch(/manifest\.json$/);
+        return Promise.resolve({
+          Body: Readable.from([
+            JSON.stringify({ hashedIndexAssets: [`assets/${fallbackCssName}`] }),
+          ]),
+          ContentType: 'application/json',
+        });
+      })
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Bucket).toBe('test-bucket');
+        expect(command.input.Key).toMatch(new RegExp(`assets/${fallbackCssName}$`));
+        return Promise.resolve({
+          Body: Readable.from([fallbackBody]),
+          ContentType: 'text/css',
+          CacheControl: 'public, max-age=60',
+        });
+      });
+
+    try {
+      const res = await request(app).get('/assets/index-latest.css');
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(fallbackBody);
+      expect(mockS3Send).toHaveBeenCalledTimes(3);
     } finally {
       statSpy.mockRestore();
       readFileSpy.mockRestore();
