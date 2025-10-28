@@ -1535,6 +1535,7 @@ const FALLBACK_CLIENT_INDEX_TEMPLATE = `<!DOCTYPE html>
     <main class="fallback" role="alert">
       <h1>ResumeForge client rebuilding</h1>
       <p>The interactive portal is temporarily unavailable because the compiled client assets could not be located on this server.</p>
+      <p>All content scoring, ATS, and selection logic works independently of the browser, not tied to asset load state.</p>
       <div class="fallback__actions">
         <p>To restore the UI:</p>
         <ul>
