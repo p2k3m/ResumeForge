@@ -21287,12 +21287,14 @@ app.post(
       const jobDescriptionChanged =
         Boolean(storedJobDescriptionDigest && jobDescriptionDigest) &&
         storedJobDescriptionDigest !== jobDescriptionDigest;
-      const refreshSessionArtifacts = wantsNewEnhancement && jobDescriptionChanged;
+      const refreshSessionArtifacts = jobDescriptionChanged || wantsNewEnhancement;
 
       if (refreshSessionArtifacts) {
         logStructured('info', 'generation_session_artifacts_refreshed', {
           ...logContext,
-          reason: 'job_description_changed',
+          reason: jobDescriptionChanged
+            ? 'job_description_changed'
+            : 'explicit_regeneration_requested',
         });
         existingChangeLogEntries = [];
         dismissedChangeLogEntries = [];

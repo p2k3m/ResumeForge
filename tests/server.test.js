@@ -2668,6 +2668,153 @@ describe('/api/generate-enhanced-docs', () => {
     primeDefaultGeminiResponses();
   });
 
+  test('refreshes session artifacts automatically when job description changes', async () => {
+    const existingChangeLog = {
+      version: 1,
+      entries: [
+        {
+          id: 'stale-entry',
+          title: 'Outdated JD change',
+          detail: 'Keep this from being returned.',
+        },
+      ],
+      dismissedEntries: [
+        {
+          id: 'stale-dismissed',
+          title: 'Old dismissed change',
+          rejected: true,
+        },
+      ],
+      coverLetters: {
+        entries: [
+          {
+            id: 'cover_letter1',
+            originalText: 'Old cover letter',
+            editedText: 'Edited cover letter',
+          },
+        ],
+        dismissedEntries: [
+          {
+            id: 'cover_letter2',
+            originalText: 'Second cover letter',
+            editedText: 'Dismissed draft',
+            rejected: true,
+          },
+        ],
+      },
+    };
+
+    const putCommands = [];
+    mockS3Send.mockReset();
+    mockS3Send.mockImplementation((command) => {
+      if (command.__type === 'GetObjectCommand') {
+        if (command.input.Key === 'cv/candidate/session/logs/change-log.json') {
+          return Promise.resolve({
+            Body: Buffer.from(JSON.stringify(existingChangeLog)),
+          });
+        }
+        const err = new Error('NoSuchKey');
+        err.name = 'NoSuchKey';
+        err.$metadata = { httpStatusCode: 404 };
+        throw err;
+      }
+      if (command.__type === 'PutObjectCommand') {
+        putCommands.push(command);
+        return Promise.resolve({});
+      }
+      if (command.__type === 'DeleteObjectCommand') {
+        return Promise.resolve({});
+      }
+      return Promise.resolve({});
+    });
+
+    const updateCommands = [];
+    const oldJobDescription = 'Deliver features for existing platform.';
+    const newJobDescription =
+      'Design systems for a new SaaS product.';
+    const oldDigest = crypto
+      .createHash('sha256')
+      .update(oldJobDescription.replace(/\s+/g, ' ').trim())
+      .digest('hex');
+
+    mockDynamoSend.mockReset();
+    mockDynamoSend.mockImplementation((cmd) => {
+      switch (cmd.__type) {
+        case 'DescribeTableCommand':
+          return Promise.resolve({ Table: { TableStatus: 'ACTIVE' } });
+        case 'GetItemCommand':
+          return Promise.resolve({
+            Item: {
+              jobId: { S: 'job-refresh-auto' },
+              status: { S: 'completed' },
+              s3Bucket: { S: 'test-bucket' },
+              s3Key: { S: 'cv/candidate/session/original.pdf' },
+              sessionChangeLogKey: { S: 'cv/candidate/session/logs/change-log.json' },
+              jobDescriptionDigest: { S: oldDigest },
+            },
+          });
+        case 'UpdateItemCommand':
+          updateCommands.push(cmd);
+          return Promise.resolve({});
+        default:
+          return Promise.resolve({});
+      }
+    });
+
+    primeDefaultGeminiResponses();
+
+    const response = await request(app)
+      .post('/api/generate-enhanced-docs')
+      .send({
+        jobId: 'job-refresh-auto',
+        resumeText: 'Taylor Candidate\nExperience\n- Built new services.',
+        originalResumeText: 'Taylor Candidate\nExperience\n- Built new services.',
+        jobDescriptionText: newJobDescription,
+        jobSkills: ['Architecture'],
+        resumeSkills: ['Architecture'],
+      });
+
+    expect(response.status).toBe(200);
+
+    const changeLogWrites = putCommands.filter(
+      (command) =>
+        command.__type === 'PutObjectCommand' &&
+        typeof command.input?.Key === 'string' &&
+        command.input.Key.endsWith('/artifacts/changelog.json')
+    );
+    expect(changeLogWrites).toHaveLength(1);
+    const storedPayloadRaw = changeLogWrites[0].input.Body;
+    const storedPayloadJson = Buffer.isBuffer(storedPayloadRaw)
+      ? storedPayloadRaw.toString('utf8')
+      : storedPayloadRaw;
+    const storedPayload = JSON.parse(storedPayloadJson);
+    expect(Array.isArray(storedPayload.entries)).toBe(true);
+    expect(storedPayload.entries).toHaveLength(0);
+    expect(Array.isArray(storedPayload.dismissedEntries)).toBe(true);
+    expect(storedPayload.dismissedEntries).toHaveLength(0);
+    expect(Array.isArray(storedPayload.coverLetters.entries)).toBe(true);
+    expect(storedPayload.coverLetters.entries).toHaveLength(0);
+    expect(Array.isArray(storedPayload.coverLetters.dismissedEntries)).toBe(true);
+    expect(storedPayload.coverLetters.dismissedEntries).toHaveLength(0);
+
+    const digestUpdate = updateCommands.find(
+      (cmd) => cmd.input.ExpressionAttributeValues[':jobDescriptionDigest']
+    );
+    expect(digestUpdate).toBeTruthy();
+    const newDigest = crypto
+      .createHash('sha256')
+      .update(newJobDescription.replace(/\s+/g, ' ').trim())
+      .digest('hex');
+    expect(digestUpdate.input.ExpressionAttributeValues[':jobDescriptionDigest'].S).toBe(
+      newDigest
+    );
+
+    mockS3Send.mockReset();
+    mockS3Send.mockResolvedValue({});
+    setupDefaultDynamoMock();
+    primeDefaultGeminiResponses();
+  });
+
   test('persists template vs population errors in stage metadata', async () => {
     mockS3Send.mockClear();
     const originalEnv = process.env.NODE_ENV;
