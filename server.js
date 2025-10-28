@@ -289,6 +289,9 @@ function applyS3ResponseHeaders(res, metadata, assetPath) {
 const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
 
 let cachedIndexAssetManifest;
+const STATIC_MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedStaticManifest;
+let pendingStaticManifestPromise;
 
 function normalizeHashedIndexAssetPath(rawPath) {
   if (typeof rawPath !== 'string') {
@@ -365,6 +368,255 @@ async function loadHashedIndexAssetManifest() {
   }
 
   return cachedIndexAssetManifest?.assets || { js: '', css: '' };
+}
+
+function normalizeManifestHashedAssetPath(assetPath) {
+  if (typeof assetPath !== 'string') {
+    return '';
+  }
+
+  let candidate = assetPath.trim();
+  if (!candidate) {
+    return '';
+  }
+
+  candidate = candidate.replace(/\?.*$/, '').replace(/#.*$/, '');
+
+  while (candidate.startsWith('./')) {
+    candidate = candidate.slice(2);
+  }
+
+  candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
+
+  const match = candidate.match(/^assets\/index-[\w.-]+\.(?:css|js)$/i);
+  if (!match) {
+    return '';
+  }
+
+  return `/${match[0]}`;
+}
+
+function partitionNormalizedManifestAssets(assets = []) {
+  const buckets = { css: [], js: [] };
+  for (const asset of assets) {
+    if (typeof asset !== 'string' || !asset) {
+      continue;
+    }
+    const lower = asset.toLowerCase();
+    if (lower.endsWith('.css')) {
+      buckets.css.push(asset);
+    } else if (lower.endsWith('.js')) {
+      buckets.js.push(asset);
+    }
+  }
+  return buckets;
+}
+
+async function readS3BodyToString(body) {
+  if (!body) {
+    return '';
+  }
+
+  if (typeof body === 'string') {
+    return body;
+  }
+
+  if (Buffer.isBuffer(body)) {
+    return body.toString('utf8');
+  }
+
+  if (typeof body.transformToString === 'function') {
+    try {
+      return await body.transformToString();
+    } catch (error) {
+      logStructured('warn', 'client_asset_manifest_body_transform_failed', {
+        error: serializeError(error),
+      });
+    }
+  }
+
+  if (typeof body.text === 'function') {
+    try {
+      return await body.text();
+    } catch (error) {
+      logStructured('warn', 'client_asset_manifest_body_text_failed', {
+        error: serializeError(error),
+      });
+    }
+  }
+
+  const chunks = [];
+  for await (const chunk of body) {
+    if (chunk === undefined || chunk === null) {
+      continue;
+    }
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  if (chunks.length === 0) {
+    return '';
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function loadStaticAssetManifestFromS3({ forceRefresh = false } = {}) {
+  const now = Date.now();
+
+  if (!forceRefresh && cachedStaticManifest) {
+    const age = now - cachedStaticManifest.fetchedAt;
+    if (age >= 0 && age < STATIC_MANIFEST_CACHE_TTL_MS) {
+      return cachedStaticManifest.data;
+    }
+  }
+
+  if (!forceRefresh && pendingStaticManifestPromise) {
+    try {
+      return await pendingStaticManifestPromise;
+    } catch {
+      return null;
+    }
+  }
+
+  const bucket = resolveStaticAssetBucketCandidate();
+  const prefix = resolveStaticAssetPrefixCandidate();
+
+  if (!bucket || !prefix || !s3Client || typeof s3Client.send !== 'function') {
+    return null;
+  }
+
+  const key = buildStaticAssetKey(prefix, 'manifest.json');
+  const logContext = { bucket, key };
+
+  const fetchPromise = (async () => {
+    try {
+      const response = await sendS3CommandWithRetry(
+        s3Client,
+        () =>
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          }),
+        {
+          retryLogEvent: 'client_asset_manifest_s3_retry',
+          retryLogContext: logContext,
+        },
+      );
+
+      const rawBody = await readS3BodyToString(response?.Body);
+      if (!rawBody) {
+        throw new Error('Static asset manifest was empty.');
+      }
+
+      let parsed;
+      try {
+        parsed = JSON.parse(rawBody);
+      } catch (error) {
+        throw new Error(`Static asset manifest JSON parse failed: ${error?.message || error}`);
+      }
+
+      const hashedAssets = Array.isArray(parsed?.hashedIndexAssets)
+        ? parsed.hashedIndexAssets
+        : [];
+
+      const fallbackAssets = hashedAssets.length
+        ? []
+        : (Array.isArray(parsed?.files) ? parsed.files : [])
+            .map((entry) => {
+              if (!entry) {
+                return '';
+              }
+              if (typeof entry === 'string') {
+                return entry;
+              }
+              if (typeof entry === 'object') {
+                return entry.path || entry.key || '';
+              }
+              return '';
+            })
+            .filter(Boolean);
+
+      const combined = hashedAssets.length ? hashedAssets : fallbackAssets;
+      const normalizedAssets = [];
+      const seen = new Set();
+
+      for (const asset of combined) {
+        const normalized = normalizeManifestHashedAssetPath(asset);
+        if (!normalized || seen.has(normalized)) {
+          continue;
+        }
+        seen.add(normalized);
+        normalizedAssets.push(normalized);
+      }
+
+      const data = {
+        assets: normalizedAssets,
+        byExtension: partitionNormalizedManifestAssets(normalizedAssets),
+      };
+
+      cachedStaticManifest = { fetchedAt: now, data };
+      return data;
+    } catch (error) {
+      if (forceRefresh) {
+        cachedStaticManifest = undefined;
+      }
+      logStructured('warn', 'client_asset_manifest_s3_failed', {
+        ...logContext,
+        error: serializeError(error),
+      });
+      throw error;
+    } finally {
+      pendingStaticManifestPromise = undefined;
+    }
+  })();
+
+  if (!forceRefresh) {
+    pendingStaticManifestPromise = fetchPromise;
+  }
+
+  try {
+    return await fetchPromise;
+  } catch {
+    return null;
+  }
+}
+
+function buildManifestExcludeSet(exclude = []) {
+  const values = Array.isArray(exclude) ? exclude : [exclude];
+  const set = new Set();
+
+  for (const value of values) {
+    const normalized = normalizeManifestHashedAssetPath(value);
+    if (normalized) {
+      set.add(normalized);
+    }
+  }
+
+  return set;
+}
+
+async function resolveFallbackHashedAssetPaths({ extension, exclude = [] } = {}) {
+  const manifest = await loadStaticAssetManifestFromS3();
+  if (!manifest?.byExtension) {
+    return [];
+  }
+
+  const extensionBuckets = manifest.byExtension;
+  const normalizedExtension = extension === 'css' ? 'css' : 'js';
+  const candidates = Array.isArray(extensionBuckets[normalizedExtension])
+    ? extensionBuckets[normalizedExtension]
+    : [];
+  if (!candidates.length) {
+    return [];
+  }
+
+  const excludeSet = buildManifestExcludeSet(exclude);
+  return candidates.filter((candidate) => candidate && !excludeSet.has(candidate));
+}
+
+function resetStaticAssetManifestCache() {
+  cachedStaticManifest = undefined;
+  pendingStaticManifestPromise = undefined;
 }
 
 function resolveClientDistAssetPath(assetPath) {
@@ -532,6 +784,7 @@ async function serveIndexAssetAlias(req, res, next) {
   const extension = match[1].toLowerCase();
   const manifest = await loadHashedIndexAssetManifest();
   const hashedAssetPath = extension === 'css' ? manifest.css : manifest.js;
+  const normalizedHashedAssetPath = normalizeManifestHashedAssetPath(hashedAssetPath);
 
   if (!hashedAssetPath) {
     logStructured('warn', 'client_asset_alias_missing_manifest', {
@@ -570,7 +823,52 @@ async function serveIndexAssetAlias(req, res, next) {
     return;
   }
 
-  logStructured('error', 'client_asset_alias_unavailable', logContext);
+  const fallbackCandidates = await resolveFallbackHashedAssetPaths({
+    extension,
+    exclude: normalizedHashedAssetPath ? [normalizedHashedAssetPath] : [],
+  });
+
+  const attemptedFallbacks = [];
+  for (const candidate of fallbackCandidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    attemptedFallbacks.push(candidate);
+    const fallbackLogContext = {
+      aliasPath: req.path,
+      resolvedPath: candidate,
+      method,
+      manifestFallback: true,
+    };
+
+    if (await serveClientDistAsset({ assetPath: candidate, method, res, logContext: fallbackLogContext })) {
+      return;
+    }
+
+    const servedFallback = await serveHashedIndexAssetFromS3({
+      assetPath: candidate,
+      method,
+      res,
+      logContext: fallbackLogContext,
+      logLabels: {
+        retry: 'client_asset_alias_fallback_s3_retry',
+        headRetry: 'client_asset_alias_fallback_s3_head_retry',
+        served: 'client_asset_alias_fallback_s3_served',
+        headServed: 'client_asset_alias_fallback_s3_head_served',
+        failed: 'client_asset_alias_fallback_s3_failed',
+      },
+    });
+
+    if (servedFallback) {
+      return;
+    }
+  }
+
+  logStructured('error', 'client_asset_alias_unavailable', {
+    ...logContext,
+    fallbackCandidates: attemptedFallbacks,
+  });
   res.status(502).type('text/plain').send('Static assets are temporarily unavailable.');
 }
 
@@ -25196,5 +25494,6 @@ export {
   setCoverLetterFallbackBuilder,
   resetTestState,
   setStaticAssetCacheHeaders,
+  resetStaticAssetManifestCache,
   buildFallbackClientIndexHtml,
 };
