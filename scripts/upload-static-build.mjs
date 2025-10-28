@@ -281,6 +281,56 @@ function resolveBucketConfiguration() {
 
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/
 
+function normalizeClientAssetPath(relativePath) {
+  if (typeof relativePath !== 'string') {
+    return ''
+  }
+
+  const trimmed = relativePath.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  const withoutLeadingDot = trimmed.replace(/^(?:\.\/)+/, '')
+  const withoutLeadingSlash = withoutLeadingDot.replace(/^\/+/, '')
+  return withoutLeadingSlash.replace(/\\/g, '/')
+}
+
+function resolveIndexAssetAliases(hashedAssets) {
+  if (!Array.isArray(hashedAssets) || hashedAssets.length === 0) {
+    return []
+  }
+
+  const normalizedAssets = hashedAssets
+    .map((asset) => normalizeClientAssetPath(asset))
+    .filter((asset) => asset && asset.startsWith('assets/'))
+
+  let cssAsset = ''
+  let jsAsset = ''
+
+  for (const asset of normalizedAssets) {
+    if (!cssAsset && asset.endsWith('.css')) {
+      cssAsset = asset
+    } else if (!jsAsset && asset.endsWith('.js')) {
+      jsAsset = asset
+    }
+
+    if (cssAsset && jsAsset) {
+      break
+    }
+  }
+
+  const aliases = []
+  if (cssAsset && cssAsset !== 'assets/index-latest.css') {
+    aliases.push({ alias: 'assets/index-latest.css', source: cssAsset })
+  }
+  if (jsAsset && jsAsset !== 'assets/index-latest.js') {
+    aliases.push({ alias: 'assets/index-latest.js', source: jsAsset })
+  }
+
+  return aliases
+}
+
 function isImmutableHashedIndexAsset(key) {
   if (typeof key !== 'string' || !key) {
     return false
@@ -407,6 +457,53 @@ async function uploadFiles({ s3, bucket, prefix, files }) {
   return uploaded
 }
 
+async function uploadAliasFiles({ s3, bucket, prefix, aliases }) {
+  if (!Array.isArray(aliases) || aliases.length === 0) {
+    return []
+  }
+
+  const uploadedAliases = []
+
+  for (const entry of aliases) {
+    const aliasPath = normalizeClientAssetPath(entry?.alias)
+    const sourcePath = normalizeClientAssetPath(entry?.source)
+
+    if (!aliasPath || !sourcePath) {
+      continue
+    }
+
+    const absoluteSourcePath = path.join(clientDistDir, sourcePath)
+    await ensureFileExists(absoluteSourcePath, { label: `alias source ${sourcePath}` })
+    const key = buildS3Key(prefix, aliasPath)
+    const contentType = resolveContentType(aliasPath)
+    const cacheControl = 'public, max-age=60, must-revalidate'
+
+    const body = createReadStream(absoluteSourcePath)
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+        CacheControl: cacheControl,
+      }),
+    )
+
+    console.log(
+      `[upload-static] Uploaded alias ${aliasPath} → s3://${bucket}/${key} (${contentType}; ${cacheControl})`,
+    )
+
+    uploadedAliases.push({
+      path: aliasPath,
+      key,
+      contentType,
+      cacheControl,
+    })
+  }
+
+  return uploadedAliases
+}
+
 async function uploadManifest({
   s3,
   bucket,
@@ -516,6 +613,13 @@ async function main() {
   await purgeExistingObjects({ s3, bucket, prefix })
   await configureStaticWebsiteHosting({ s3, bucket })
   const uploadedFiles = await uploadFiles({ s3, bucket, prefix, files })
+  const aliasUploads = await uploadAliasFiles({
+    s3,
+    bucket,
+    prefix,
+    aliases: resolveIndexAssetAliases(hashedAssets),
+  })
+  const allUploadedFiles = [...uploadedFiles, ...aliasUploads]
   await uploadManifest({
     s3,
     bucket,
@@ -523,12 +627,14 @@ async function main() {
     stage,
     deploymentEnvironment,
     buildVersion,
-    uploadedFiles,
+    uploadedFiles: allUploadedFiles,
     hashedAssets,
   })
 
   console.log(
-    `[upload-static] Uploaded ${files.length} static asset${files.length === 1 ? '' : 's'} to s3://${bucket}/${prefix}/`,
+    `[upload-static] Uploaded ${files.length + aliasUploads.length} static asset${
+      files.length + aliasUploads.length === 1 ? '' : 's'
+    } to s3://${bucket}/${prefix}/`,
   )
 }
 
