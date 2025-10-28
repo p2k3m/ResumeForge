@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
+import path from 'node:path';
 import crypto from 'crypto';
 import { Readable } from 'stream';
 import { createTextDigest } from '../lib/resume/utils.js';
@@ -10,6 +12,8 @@ process.env.GEMINI_API_KEY = 'test-key';
 process.env.AWS_REGION = 'us-east-1';
 process.env.CLOUDFRONT_ORIGINS = 'https://test.cloudfront.net';
 process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'false';
+
+const clientIndexPath = path.join(process.cwd(), 'client', 'dist', 'index.html');
 
 const mockS3Send = jest.fn().mockResolvedValue({});
 const getObjectCommandMock = jest.fn((input) => ({ input, __type: 'GetObjectCommand' }));
@@ -231,6 +235,63 @@ describe('static asset fallbacks', () => {
     expect(res.headers['content-length']).toBe('1234');
     expect(res.headers['etag']).toBe('"etag-js"');
     expect(mockS3Send).toHaveBeenCalledTimes(1);
+  });
+
+  test('serves the latest index asset alias via S3 when local files are unavailable', async () => {
+    const cssAliasName = 'index-test-alias.css';
+    const jsAliasName = 'index-test-alias.js';
+    const manifestHtml = `<!doctype html><html><head><link rel="stylesheet" href="./assets/${cssAliasName}"><script type="module" src="./assets/${jsAliasName}"></script></head><body></body></html>`;
+    const testMtime = Date.now() + Math.floor(Math.random() * 1000) + 1000;
+
+    const originalReadFile = fsPromises.readFile;
+    const originalStat = fsPromises.stat;
+
+    const readFileSpy = jest
+      .spyOn(fsPromises, 'readFile')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target === clientIndexPath) {
+          return manifestHtml;
+        }
+        return originalReadFile.call(fsPromises, target, ...args);
+      });
+
+    const statSpy = jest
+      .spyOn(fsPromises, 'stat')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string') {
+          if (target === clientIndexPath) {
+            return { mtimeMs: testMtime };
+          }
+          if (target.endsWith(cssAliasName)) {
+            const notFound = new Error('Not Found');
+            notFound.code = 'ENOENT';
+            throw notFound;
+          }
+        }
+        return originalStat.call(fsPromises, target, ...args);
+      });
+
+    const assetBody = '.alias { color: #f00; }';
+    mockS3Send.mockImplementationOnce((command) => {
+      expect(command.__type).toBe('GetObjectCommand');
+      expect(command.input.Bucket).toBe('test-bucket');
+      expect(command.input.Key).toMatch(new RegExp(`assets/${cssAliasName}$`));
+      return Promise.resolve({
+        Body: Readable.from([assetBody]),
+        ContentType: 'text/css',
+        CacheControl: 'public, max-age=60',
+      });
+    });
+
+    try {
+      const res = await request(app).get('/assets/index-latest.css');
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(assetBody);
+      expect(mockS3Send).toHaveBeenCalledTimes(1);
+    } finally {
+      statSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
   });
 });
 

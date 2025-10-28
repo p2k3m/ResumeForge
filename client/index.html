@@ -323,6 +323,10 @@
 
         const sourceWrapper = warning.querySelector('[data-static-asset-source-wrapper]')
         const sourceLabel = warning.querySelector('[data-static-asset-source]')
+        const aliasPaths = Object.freeze({
+          js: '/assets/index-latest.js',
+          css: '/assets/index-latest.css'
+        })
 
         const appendCacheBustParam = (source) => {
           if (!source) {
@@ -536,6 +540,86 @@
           }
         }
 
+        const attemptAliasReload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          if (element.dataset?.resumeforgeAssetAlias === 'true') {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const aliasPath = isScript ? aliasPaths.js : aliasPaths.css
+          if (!aliasPath) {
+            return false
+          }
+
+          let aliasUrl = aliasPath
+          try {
+            aliasUrl = new URL(aliasPath, window.location.origin).href
+          } catch (error) {
+            // Ignore URL resolution errors and fall back to the raw alias path.
+          }
+
+          const parent = element.parentNode
+          if (!parent || typeof parent.replaceChild !== 'function') {
+            return false
+          }
+
+          const originalSource = describeSource(element)
+          const replacement = element.cloneNode(true)
+
+          if (isStylesheet) {
+            replacement.href = aliasUrl
+          } else {
+            replacement.src = aliasUrl
+          }
+
+          replacement.setAttribute('data-src', aliasUrl)
+          replacement.dataset.resumeforgeAssetRetry = 'true'
+          replacement.dataset.resumeforgeAssetAlias = 'true'
+          if (originalSource) {
+            replacement.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          element.dataset.resumeforgeAssetRetry = 'true'
+          element.dataset.resumeforgeAssetAlias = 'true'
+          if (originalSource && !element.dataset.resumeforgeOriginalSource) {
+            element.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          try {
+            parent.replaceChild(replacement, element)
+          } catch (error) {
+            try {
+              parent.removeChild(element)
+              parent.appendChild(replacement)
+            } catch (innerError) {
+              return false
+            }
+          }
+
+          try {
+            console.warn('Retrying ResumeForge static asset via alias fallback.', {
+              source: originalSource || '',
+              alias: aliasUrl
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          return true
+        }
+
         window.addEventListener(
           'error',
           (event) => {
@@ -549,6 +633,10 @@
             const isScript = tagName === 'script'
 
             if (!isScript && !isStylesheet) {
+              return
+            }
+
+            if (attemptAliasReload(target)) {
               return
             }
 
