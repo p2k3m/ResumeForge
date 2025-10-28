@@ -135,13 +135,13 @@ function extractHashedIndexAssets(html) {
     throw createValidationError('[upload-static] index.html is empty or unreadable.')
   }
 
-  const assetPattern = /assets\/index-[\w.-]+\.(?:css|js)(?:\?[^"'>\s]+)?/g
+  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi
   const assets = new Set()
   let match
   while ((match = assetPattern.exec(html)) !== null) {
-    const [full] = match
-    if (full) {
-      const normalized = full.replace(/\?.*$/, '')
+    const [, captured] = match
+    if (captured) {
+      const normalized = captured.replace(/\?.*$/, '')
       assets.add(normalized)
     }
   }
