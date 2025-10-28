@@ -141,8 +141,10 @@ function extractHashedIndexAssets(html) {
   while ((match = assetPattern.exec(html)) !== null) {
     const [, captured] = match
     if (captured) {
-      const normalized = captured.replace(/\?.*$/, '')
-      assets.add(normalized)
+      const normalized = normalizeClientAssetPath(captured.replace(/\?.*$/, ''))
+      if (HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(normalized)) {
+        assets.add(normalized)
+      }
     }
   }
 
@@ -159,6 +161,56 @@ function extractHashedIndexAssets(html) {
   }
 
   return Array.from(assets)
+}
+
+function selectPrimaryAssetFromList(assets = [], extension) {
+  if (!extension) {
+    return ''
+  }
+
+  for (const asset of assets) {
+    if (asset.endsWith(extension)) {
+      return asset
+    }
+  }
+
+  return ''
+}
+
+function collectHashedAssetCandidates(hashedAssets = [], files = []) {
+  const normalizedFromHtml = Array.isArray(hashedAssets)
+    ? hashedAssets
+        .map((asset) => normalizeClientAssetPath(asset))
+        .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
+    : []
+
+  if (normalizedFromHtml.length) {
+    return normalizedFromHtml
+  }
+
+  const normalizedFiles = Array.isArray(files)
+    ? files
+        .map((asset) => normalizeClientAssetPath(asset))
+        .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
+    : []
+
+  if (!normalizedFiles.length) {
+    return []
+  }
+
+  return [...normalizedFiles].reverse()
+}
+
+export function resolvePrimaryIndexAssets({ hashedAssets = [], files = [] } = {}) {
+  const candidates = collectHashedAssetCandidates(hashedAssets, files)
+
+  const cssAsset = selectPrimaryAssetFromList(candidates, '.css')
+  const jsAsset = selectPrimaryAssetFromList(candidates, '.js')
+
+  return {
+    css: cssAsset,
+    js: jsAsset,
+  }
 }
 
 async function gatherClientAssetFiles() {
@@ -182,7 +234,21 @@ async function gatherClientAssetFiles() {
   }
 
   files.sort((a, b) => a.localeCompare(b))
-  return { files, hashedAssets }
+  const primaryIndexAssets = resolvePrimaryIndexAssets({ hashedAssets, files })
+
+  const manifestHashedAssets = Array.from(
+    new Set(
+      [
+        ...(Array.isArray(hashedAssets) ? hashedAssets : []),
+        primaryIndexAssets.css,
+        primaryIndexAssets.js,
+      ]
+        .map((asset) => normalizeClientAssetPath(asset))
+        .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
+    )
+  )
+
+  return { files, hashedAssets: manifestHashedAssets, primaryIndexAssets }
 }
 
 async function configureStaticWebsiteHosting({ s3, bucket }) {
@@ -280,8 +346,9 @@ function resolveBucketConfiguration() {
 }
 
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/
+const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/index-[\w.-]+\.(?:css|js)$/i
 
-function normalizeClientAssetPath(relativePath) {
+export function normalizeClientAssetPath(relativePath) {
   if (typeof relativePath !== 'string') {
     return ''
   }
@@ -296,28 +363,12 @@ function normalizeClientAssetPath(relativePath) {
   return withoutLeadingSlash.replace(/\\/g, '/')
 }
 
-function resolveIndexAssetAliases(hashedAssets) {
-  if (!Array.isArray(hashedAssets) || hashedAssets.length === 0) {
+export function resolveIndexAssetAliases(primaryAssets) {
+  const cssAsset = normalizeClientAssetPath(primaryAssets?.css)
+  const jsAsset = normalizeClientAssetPath(primaryAssets?.js)
+
+  if (!cssAsset && !jsAsset) {
     return []
-  }
-
-  const normalizedAssets = hashedAssets
-    .map((asset) => normalizeClientAssetPath(asset))
-    .filter((asset) => asset && asset.startsWith('assets/'))
-
-  let cssAsset = ''
-  let jsAsset = ''
-
-  for (const asset of normalizedAssets) {
-    if (!cssAsset && asset.endsWith('.css')) {
-      cssAsset = asset
-    } else if (!jsAsset && asset.endsWith('.js')) {
-      jsAsset = asset
-    }
-
-    if (cssAsset && jsAsset) {
-      break
-    }
   }
 
   const aliases = []
@@ -592,7 +643,7 @@ async function backupExistingManifest({ s3, bucket, manifestKey }) {
 }
 
 async function main() {
-  const { files, hashedAssets } = await gatherClientAssetFiles()
+  const { files, hashedAssets, primaryIndexAssets } = await gatherClientAssetFiles()
   const { bucket, prefix, stage, deploymentEnvironment } = resolveBucketConfiguration()
   const buildVersion = resolveBuildVersion()
   const s3 = new S3Client({})
@@ -617,7 +668,7 @@ async function main() {
     s3,
     bucket,
     prefix,
-    aliases: resolveIndexAssetAliases(hashedAssets),
+    aliases: resolveIndexAssetAliases(primaryIndexAssets),
   })
   const allUploadedFiles = [...uploadedFiles, ...aliasUploads]
   await uploadManifest({
