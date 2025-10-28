@@ -86,6 +86,32 @@ async function main() {
   }
   distributionIdsToInvalidate.add(distributionId)
 
+  const throttlingErrors = new Set(['Throttling', 'ThrottlingException', 'TooManyRequestsException'])
+
+  async function sendWithRetry(command, { attempts = 5, baseDelayMs = 500 } = {}) {
+    let attempt = 0
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        return await cloudFront.send(command)
+      } catch (err) {
+        const isThrottled =
+          throttlingErrors.has(err?.name) || throttlingErrors.has(err?.Code) || err?.$retryable?.throttling
+
+        if (!isThrottled || attempt + 1 >= attempts) {
+          throw err
+        }
+
+        const delay = Math.min(baseDelayMs * 2 ** attempt + Math.random() * 100, 10_000)
+        attempt += 1
+        console.warn(
+          `Throttled by CloudFront while creating invalidation (attempt ${attempt} of ${attempts}); retrying in ${Math.round(delay)}ms`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+  }
+
   for (const targetDistributionId of distributionIdsToInvalidate) {
     const callerReference = `resumeforge-${Date.now()}-${targetDistributionId}`
     const isPrevious = targetDistributionId === previousDistributionId
@@ -106,7 +132,7 @@ async function main() {
     console.log(message)
 
     try {
-      await cloudFront.send(
+      await sendWithRetry(
         new CreateInvalidationCommand({
           DistributionId: targetDistributionId,
           InvalidationBatch: {
