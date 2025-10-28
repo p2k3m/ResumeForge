@@ -328,6 +328,98 @@
           css: '/assets/index-latest.css'
         })
 
+        const normalizeAliasBase = (value) => {
+          if (typeof value !== 'string') {
+            return ''
+          }
+
+          const trimmed = value.trim()
+          if (!trimmed) {
+            return ''
+          }
+
+          try {
+            const resolved = new URL(trimmed, window.location.href)
+            const pathname = resolved.pathname.replace(/\/*$/, '')
+            return `${resolved.origin}${pathname}`
+          } catch (error) {
+            return ''
+          }
+        }
+
+        const joinAliasUrl = (base, aliasPath) => {
+          if (!aliasPath) {
+            return ''
+          }
+
+          if (!base) {
+            return aliasPath
+          }
+
+          const normalizedBase = base.replace(/\/*$/, '')
+          const normalizedPath = aliasPath.startsWith('/') ? aliasPath : `/${aliasPath}`
+          return `${normalizedBase}${normalizedPath}`
+        }
+
+        const resolveAliasBaseCandidates = () => {
+          const candidates = []
+          const seen = new Set()
+
+          const addCandidate = (raw) => {
+            const normalized = normalizeAliasBase(raw)
+            if (!normalized || seen.has(normalized)) {
+              return
+            }
+            seen.add(normalized)
+            candidates.push(normalized)
+          }
+
+          try {
+            const meta = document.querySelector('meta[name="resumeforge-api-base"]')
+            if (meta && typeof meta.getAttribute === 'function') {
+              addCandidate(meta.getAttribute('content'))
+            }
+          } catch (error) {
+            // Ignore metadata parsing errors.
+          }
+
+          try {
+            const inputs = document.querySelectorAll('input[data-backup-api-base]')
+            inputs.forEach((input) => {
+              if (input) {
+                const value =
+                  typeof input.value === 'string'
+                    ? input.value
+                    : typeof input.getAttribute === 'function'
+                      ? input.getAttribute('value')
+                      : ''
+                addCandidate(value)
+              }
+            })
+          } catch (error) {
+            // Ignore backup input parsing errors.
+          }
+
+          addCandidate(window.location.origin || '')
+
+          // Always include an empty base so we eventually retry the alias path as-is.
+          candidates.push('')
+
+          return Object.freeze(candidates)
+        }
+
+        const aliasBaseCandidates = resolveAliasBaseCandidates()
+
+        const buildAliasUrlForAttempt = (aliasPath, attemptIndex) => {
+          if (typeof attemptIndex !== 'number' || attemptIndex < 0) {
+            return { url: aliasPath, base: '' }
+          }
+
+          const base = aliasBaseCandidates[attemptIndex] ?? ''
+          const url = joinAliasUrl(base, aliasPath)
+          return { url, base }
+        }
+
         const appendCacheBustParam = (source) => {
           if (!source) {
             return ''
@@ -563,11 +655,10 @@
             return false
           }
 
-          let aliasUrl = aliasPath
-          try {
-            aliasUrl = new URL(aliasPath, window.location.origin).href
-          } catch (error) {
-            // Ignore URL resolution errors and fall back to the raw alias path.
+          const attemptIndex = Number.parseInt(element.dataset?.resumeforgeAliasAttempt || '0', 10)
+          const { url: aliasUrl, base: aliasBase } = buildAliasUrlForAttempt(aliasPath, attemptIndex)
+          if (!aliasUrl) {
+            return false
           }
 
           const parent = element.parentNode
@@ -587,12 +678,14 @@
           replacement.setAttribute('data-src', aliasUrl)
           replacement.dataset.resumeforgeAssetRetry = 'true'
           replacement.dataset.resumeforgeAssetAlias = 'true'
+          replacement.dataset.resumeforgeAliasAttempt = String(attemptIndex + 1)
           if (originalSource) {
             replacement.dataset.resumeforgeOriginalSource = originalSource
           }
 
           element.dataset.resumeforgeAssetRetry = 'true'
           element.dataset.resumeforgeAssetAlias = 'true'
+          element.dataset.resumeforgeAliasAttempt = String(attemptIndex + 1)
           if (originalSource && !element.dataset.resumeforgeOriginalSource) {
             element.dataset.resumeforgeOriginalSource = originalSource
           }
@@ -611,7 +704,8 @@
           try {
             console.warn('Retrying ResumeForge static asset via alias fallback.', {
               source: originalSource || '',
-              alias: aliasUrl
+              alias: aliasUrl,
+              base: aliasBase
             })
           } catch (error) {
             // Ignore logging errors in constrained environments.
