@@ -54,16 +54,20 @@ Open [`config/published-cloudfront.json`](../config/published-cloudfront.json) a
 
 ## 3. Redeploy if necessary
 
-If the CloudFront distribution was removed or replaced, redeploy the SAM stack and republish the fresh metadata:
+If the CloudFront distribution was removed or replaced, redeploy the SAM stack and republish the fresh metadata. When the CDN
+starts pointing at the wrong S3 bucket (for example, an older artifact bucket that no longer receives uploads), redeploy the
+stack using the current bucket name so the CloudFront origin is wired back to the latest assets. After the redeploy, clear any
+lingering distributions so traffic cannot fall back to the stale domain:
 
 ```bash
 sam validate
 sam build --use-container
-sam deploy --guided
-npm run publish:cloudfront-url -- <stack-name>
+sam deploy --guided # supply the current S3 bucket name when prompted for DataBucketName
+npm run publish:cloudfront-url -- <stack-name> # publishes the active domain and invalidates the new distribution
+aws cloudfront list-distributions --query 'DistributionList.Items[].Id' # confirm and remove or disable old distributions
 ```
 
-This rebuilds the Lambda/API Gateway stack, updates `config/published-cloudfront.json`, and issues cache invalidations so the new CDN becomes the canonical entry point.
+This rebuilds the Lambda/API Gateway stack, updates `config/published-cloudfront.json`, and issues cache invalidations so the new CDN becomes the canonical entry point. Removing or disabling outdated distributions prevents browsers or DNS caches from resolving to the wrong bucket after the redeploy.
 
 To automate the full workflow of rebuilding the client, uploading the refreshed static assets, publishing the distribution metadata, and re-running the health verification, use the repair helper:
 
