@@ -2690,6 +2690,10 @@ function App() {
   const resetAnalysisState = useCallback(() => {
     analysisContextRef.current = { hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' }
     pendingImprovementRescoreRef.current = []
+    setDownloadStates({})
+    setDownloadGeneratedAt('')
+    setPendingDownloadFile(null)
+    setCoverLetterReviewState({})
     updateOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
@@ -2719,10 +2723,21 @@ function App() {
     setResumeHistory([])
     setPreviewSuggestion(null)
     setPreviewFile(null)
+    setPreviewActionBusy(false)
+    setPreviewActiveAction('')
     setEnhanceAllSummaryText('')
     setIsCoverLetterDownloading(false)
     setActiveDashboardStage('score')
-  }, [setActiveDashboardStage, updateOutputFiles])
+  }, [
+    setActiveDashboardStage,
+    setCoverLetterReviewState,
+    setDownloadGeneratedAt,
+    setDownloadStates,
+    setPendingDownloadFile,
+    setPreviewActionBusy,
+    setPreviewActiveAction,
+    updateOutputFiles
+  ])
   const resetUiAfterDownload = useCallback(
     (message = POST_DOWNLOAD_INVITE_MESSAGE) => {
       resetAnalysisState()
