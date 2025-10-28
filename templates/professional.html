@@ -7,14 +7,20 @@
     @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700&display=swap');
 
     :root {
-      --bg: #eef2f7;
-      --sheet: #ffffff;
-      --accent: #1d3557;
-      --accent-soft: rgba(29, 53, 87, 0.08);
-      --border: #d7dee8;
-      --text: #1f2a37;
-      --muted: #556072;
-      --highlight: #f3f5fb;
+      --page-bg: #edf1f8;
+      --canvas: #ffffff;
+      --ink: #101827;
+      --muted: #4b5563;
+      --accent: #e67a15;
+      --accent-strong: #c35c02;
+      --border: rgba(15, 23, 42, 0.12);
+      --divider: rgba(148, 163, 184, 0.35);
+      --shadow: 0 30px 70px rgba(15, 23, 42, 0.18);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --gradient: linear-gradient(120deg, rgba(17, 24, 39, 0.92), rgba(30, 64, 175, 0.92));
+      --gradient-soft: linear-gradient(135deg, rgba(17, 24, 39, 0.08), rgba(30, 64, 175, 0.05));
     }
 
     * {
@@ -23,63 +29,141 @@
 
     body {
       margin: 0;
-      padding: clamp(32px, 6vw, 72px);
+      padding: clamp(32px, 6vw, 80px);
       font-family: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(30, 64, 175, 0.15), transparent 55%),
+        radial-gradient(circle at bottom left, rgba(230, 122, 21, 0.12), transparent 60%),
+        var(--page-bg);
+      color: var(--ink);
     }
 
-    .resume-wrapper {
-      max-width: 960px;
+    .resume-shell {
+      max-width: 1000px;
       margin: 0 auto;
-      background: var(--sheet);
-      border-radius: 28px;
-      padding: clamp(48px, 6vw, 64px);
-      box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
-      border: 1px solid rgba(209, 213, 219, 0.6);
-    }
-
-    header {
+      background: var(--canvas);
+      border-radius: var(--radius-xl);
+      padding: clamp(48px, 6vw, 72px);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(148, 163, 184, 0.25);
       display: grid;
-      gap: 10px;
-      border-bottom: 2px solid var(--border);
-      padding-bottom: 28px;
-      margin-bottom: clamp(32px, 5vw, 44px);
+      gap: clamp(32px, 5vw, 44px);
+      position: relative;
+      overflow: hidden;
     }
 
-    header h1 {
-      margin: 0;
-      font-size: clamp(2.4rem, 4vw, 3.2rem);
-      color: var(--accent);
-      letter-spacing: -0.01em;
+    .resume-shell::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--gradient-soft);
+      pointer-events: none;
     }
 
-    header p {
+    .hero {
+      position: relative;
+      z-index: 1;
+      padding: clamp(28px, 4vw, 36px);
+      border-radius: var(--radius-lg);
+      background: var(--gradient);
+      color: #f8fafc;
+      display: grid;
+      gap: clamp(20px, 3vw, 28px);
+    }
+
+    .hero__meta {
+      display: grid;
+      gap: 12px;
+    }
+
+    .hero__badge {
+      justify-self: start;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(230, 122, 21, 0.18);
+      border: 1px solid rgba(248, 250, 252, 0.24);
+      color: #fde68a;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero h1 {
       margin: 0;
-      color: var(--muted);
+      font-size: clamp(2.6rem, 4vw, 3.4rem);
+      letter-spacing: -0.015em;
+    }
+
+    .hero__headline,
+    .hero__title,
+    .hero__note {
+      margin: 0;
       font-size: 1.05rem;
-      max-width: 50ch;
+      line-height: 1.6;
+      color: rgba(226, 232, 240, 0.92);
     }
 
-    .sections {
+    .hero__note {
+      font-size: 0.95rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: rgba(248, 250, 252, 0.75);
+    }
+
+    .hero__contact {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+    }
+
+    .hero__contact li {
+      font-size: 0.95rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(248, 250, 252, 0.85);
+      position: relative;
+      padding-left: 18px;
+    }
+
+    .hero__contact li::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(230, 122, 21, 0.75);
+      transform: translateY(-50%);
+    }
+
+    .resume-sections {
+      position: relative;
+      z-index: 1;
       display: grid;
-      gap: clamp(20px, 3vw, 32px);
+      gap: clamp(22px, 3vw, 32px);
     }
 
-    @media (min-width: 940px) {
-      .sections {
+    @media (min-width: 960px) {
+      .resume-sections {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         align-items: start;
       }
     }
 
     .section-card {
-      border: 1px solid var(--border);
-      border-radius: 20px;
+      border-radius: var(--radius-lg);
       padding: clamp(24px, 3vw, 32px);
-      background: var(--highlight);
+      background: rgba(248, 250, 252, 0.92);
+      border: 1px solid rgba(148, 163, 184, 0.26);
+      box-shadow: inset 0 0 0 1px rgba(230, 122, 21, 0.08);
       display: grid;
-      gap: 16px;
+      gap: 18px;
       position: relative;
       overflow: hidden;
     }
@@ -88,9 +172,9 @@
       content: '';
       position: absolute;
       inset: 0;
-      background: linear-gradient(135deg, rgba(29, 53, 87, 0.12), transparent 60%);
+      background: linear-gradient(135deg, rgba(30, 64, 175, 0.09), transparent 60%);
       opacity: 0;
-      transition: opacity 200ms ease;
+      transition: opacity 180ms ease;
       pointer-events: none;
     }
 
@@ -100,48 +184,49 @@
 
     .section-card--wide {
       grid-column: 1 / -1;
-      background: #fff;
-      border: 1px solid rgba(29, 53, 87, 0.22);
-      box-shadow: inset 0 0 0 1px rgba(29, 53, 87, 0.08);
+      background: #ffffff;
+      border: 1px solid rgba(30, 64, 175, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(230, 122, 21, 0.12);
     }
 
     .section-header {
       display: flex;
       align-items: baseline;
-      gap: 12px;
+      gap: 14px;
     }
 
     .section-header h2 {
       margin: 0;
       font-size: 1.25rem;
-      color: var(--accent);
-      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
+      color: var(--ink);
+      font-weight: 700;
     }
 
     .section-header .rule {
       flex: 1;
       height: 2px;
-      background: linear-gradient(90deg, rgba(29, 53, 87, 0.4), transparent);
+      background: linear-gradient(90deg, rgba(230, 122, 21, 0.6), transparent);
     }
 
     ul {
       list-style: none;
-      padding: 0;
       margin: 0;
+      padding: 0;
       display: grid;
-      gap: 12px;
+      gap: 14px;
     }
 
     li {
       display: grid;
       grid-template-columns: auto 1fr;
-      gap: 12px;
+      gap: 14px;
       align-items: start;
       white-space: pre-wrap;
-      line-height: 1.6;
-      color: var(--text);
+      line-height: 1.7;
+      color: var(--ink);
+      font-size: 1rem;
     }
 
     .section-item--contact,
@@ -151,13 +236,54 @@
       grid-template-columns: 1fr;
     }
 
+    .section--contact {
+      display: none;
+    }
+
+    .section--experience .dot {
+      display: none;
+    }
+
     .dot {
-      width: 0.9rem;
-      height: 0.9rem;
+      width: 0.85rem;
+      height: 0.85rem;
       border-radius: 50%;
-      border: 1px solid rgba(29, 53, 87, 0.3);
-      background: var(--accent-soft);
+      background: rgba(230, 122, 21, 0.18);
+      border: 1px solid rgba(16, 24, 39, 0.18);
       margin-top: 6px;
+      position: relative;
+      box-shadow: 0 0 0 4px rgba(230, 122, 21, 0.07);
+    }
+
+    .section--experience .section-item {
+      position: relative;
+      padding-left: 10px;
+    }
+
+    .section--experience .section-item::before {
+      content: '';
+      position: absolute;
+      top: 0.7rem;
+      left: -3px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(30, 64, 175, 0.85);
+      box-shadow: 0 0 0 4px rgba(30, 64, 175, 0.14);
+    }
+
+    .section--experience .section-item::after {
+      content: '';
+      position: absolute;
+      top: 1.6rem;
+      left: 1px;
+      width: 2px;
+      bottom: -1.6rem;
+      background: linear-gradient(180deg, rgba(30, 64, 175, 0.25), transparent 90%);
+    }
+
+    .section--experience .section-item:last-child::after {
+      display: none;
     }
 
     .item-text {
@@ -171,7 +297,7 @@
     }
 
     strong {
-      color: var(--accent);
+      color: var(--accent-strong);
     }
 
     em {
@@ -181,17 +307,61 @@
 
     .tab {
       display: inline-block;
-      width: 1.5em;
+      width: 1.4em;
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff;
+      }
+
+      .resume-shell {
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+        padding: 48px 60px;
+      }
+
+      .hero {
+        background: #111827;
+      }
+
+      .section-card,
+      .section-card--wide {
+        background: #ffffff;
+        box-shadow: none;
+      }
+
+      .section--contact {
+        display: none !important;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="resume-wrapper">
-    <header>
-      <h1>{{name}}</h1>
-      <p>Executive-ready presentation balancing clarity, hierarchy, and ATS compliance.</p>
+  <div class="resume-shell">
+    <header class="hero">
+      <div class="hero__meta">
+        <span class="hero__badge">Business Portfolio • Updated Oct 2025</span>
+        <h1>{{name}}</h1>
+        {{#if headline}}
+        <p class="hero__headline">{{headline}}</p>
+        {{/if}}
+        {{#if title}}
+        <p class="hero__title">{{title}}</p>
+        {{/if}}
+        <p class="hero__note">Boardroom-ready storytelling calibrated for October 2025 hiring cycles.</p>
+      </div>
+      {{#if contactLines.length}}
+      <ul class="hero__contact">
+        {{#each contactLines}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+      {{/if}}
     </header>
-    <main class="sections">
+    <main class="resume-sections">
       {{#each sections}}
       <section class="section-card {{#if @first}}section-card--wide{{/if}} {{sectionClass}}">
         {{#if heading}}

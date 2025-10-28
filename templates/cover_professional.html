@@ -7,14 +7,17 @@
     @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700&display=swap');
 
     :root {
-      --bg: #eef2f7;
-      --sheet: #ffffff;
-      --accent: #1d3557;
-      --accent-soft: rgba(29, 53, 87, 0.08);
-      --border: #d7dee8;
-      --text: #1f2a37;
-      --muted: #556072;
-      --highlight: #f3f5fb;
+      --page-bg: #edf1f8;
+      --canvas: #ffffff;
+      --ink: #111827;
+      --muted: #4b5563;
+      --accent: #e67a15;
+      --accent-strong: #c35c02;
+      --border: rgba(15, 23, 42, 0.12);
+      --shadow: 0 30px 70px rgba(15, 23, 42, 0.18);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --gradient: linear-gradient(120deg, rgba(17, 24, 39, 0.94), rgba(30, 64, 175, 0.9));
     }
 
     * {
@@ -24,10 +27,13 @@
     body {
       margin: 0;
       min-height: 100vh;
-      padding: clamp(32px, 6vw, 72px);
+      padding: clamp(32px, 6vw, 80px);
       font-family: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      background:
+        radial-gradient(circle at top right, rgba(30, 64, 175, 0.15), transparent 55%),
+        radial-gradient(circle at bottom left, rgba(230, 122, 21, 0.12), transparent 60%),
+        var(--page-bg);
+      color: var(--ink);
       display: flex;
       justify-content: center;
       align-items: flex-start;
@@ -35,35 +41,70 @@
 
     .letter-wrapper {
       width: 100%;
-      max-width: 760px;
-      background: var(--sheet);
-      border-radius: 28px;
-      padding: clamp(48px, 6vw, 64px);
-      box-shadow: 0 24px 50px rgba(15, 23, 42, 0.12);
-      border: 1px solid rgba(209, 213, 219, 0.6);
+      max-width: 780px;
+      background: var(--canvas);
+      border-radius: var(--radius-xl);
+      padding: clamp(52px, 6vw, 76px);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(148, 163, 184, 0.25);
       display: grid;
-      gap: clamp(28px, 4vw, 36px);
+      gap: clamp(32px, 4vw, 40px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .letter-wrapper::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(17, 24, 39, 0.05), rgba(30, 64, 175, 0.08));
+      pointer-events: none;
     }
 
     .letter-header {
-      border-bottom: 2px solid var(--border);
-      padding-bottom: 28px;
+      position: relative;
+      z-index: 1;
+      padding: clamp(28px, 4vw, 36px);
+      border-radius: var(--radius-lg);
+      background: var(--gradient);
+      color: #f8fafc;
       display: grid;
-      gap: 10px;
+      gap: clamp(18px, 3vw, 26px);
     }
 
     .letter-header h1 {
       margin: 0;
-      font-size: clamp(2.2rem, 4vw, 3rem);
-      color: var(--accent);
-      letter-spacing: -0.01em;
+      font-size: clamp(2.3rem, 4vw, 3.1rem);
+      letter-spacing: -0.015em;
     }
 
-    .letter-tagline {
+    .letter-badge {
+      justify-self: start;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(230, 122, 21, 0.18);
+      border: 1px solid rgba(248, 250, 252, 0.24);
+      color: #fde68a;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .letter-tagline,
+    .letter-title,
+    .letter-note {
       margin: 0;
-      color: var(--muted);
       font-size: 1.05rem;
-      max-width: 48ch;
+      line-height: 1.6;
+      color: rgba(226, 232, 240, 0.92);
+    }
+
+    .letter-note {
+      font-size: 0.95rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: rgba(248, 250, 252, 0.75);
     }
 
     .letter-contact {
@@ -72,23 +113,39 @@
       list-style: none;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 16px;
+      gap: 10px 18px;
     }
 
     .letter-contact li {
       font-size: 0.95rem;
       font-weight: 600;
-      color: var(--accent);
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      color: rgba(248, 250, 252, 0.85);
+      position: relative;
+      padding-left: 18px;
+    }
+
+    .letter-contact li::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(230, 122, 21, 0.75);
+      transform: translateY(-50%);
     }
 
     .letter-body {
+      position: relative;
+      z-index: 1;
       display: grid;
-      gap: 18px;
+      gap: 22px;
       font-size: 1.05rem;
-      line-height: 1.75;
-      color: var(--text);
+      line-height: 1.8;
+      color: var(--ink);
     }
 
     .letter-body p {
@@ -97,7 +154,7 @@
     }
 
     .letter-body p strong {
-      color: var(--accent);
+      color: var(--accent-strong);
     }
 
     @media print {
@@ -110,7 +167,11 @@
         box-shadow: none;
         border-radius: 0;
         border: none;
-        padding: 48px 56px;
+        padding: 48px 60px;
+      }
+
+      .letter-header {
+        background: #111827;
       }
     }
   </style>
@@ -118,13 +179,15 @@
 <body>
   <div class="letter-wrapper">
     <header class="letter-header">
+      <span class="letter-badge">Executive Correspondence • Updated Oct 2025</span>
       <h1>{{name}}</h1>
       {{#if headline}}
       <p class="letter-tagline">{{headline}}</p>
       {{/if}}
       {{#if title}}
-      <p class="letter-tagline">{{title}}</p>
+      <p class="letter-title">{{title}}</p>
       {{/if}}
+      <p class="letter-note">Strategic narrative aligned to October 2025 hiring expectations.</p>
       {{#if contactLines.length}}
       <ul class="letter-contact">
         {{#each contactLines}}
