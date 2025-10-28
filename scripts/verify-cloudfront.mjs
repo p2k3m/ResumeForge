@@ -36,17 +36,50 @@ async function main() {
       console.log(`Verifying provided CloudFront URL: ${targetUrl}`);
     }
 
-    const { health } = await runPostDeploymentApiTests({
+    const verificationResult = await runPostDeploymentApiTests({
       baseUrl: targetUrl,
       healthCheckTimeoutMs: 10000,
       retries: 4,
       retryDelayMs: 30000,
       logger: console,
     });
-    console.log(
-      `CloudFront distribution responded with status "${health.payload.status}" at ${health.url}.`
-    );
-    console.log('Verified client assets are accessible after deployment.');
+    const { health, healthChecks = [], assetChecks = [] } = verificationResult;
+
+    const reportedHealthChecks =
+      Array.isArray(healthChecks) && healthChecks.length > 0
+        ? healthChecks
+        : health
+          ? [
+              {
+                profile: 'browser',
+                label: 'browser',
+                result: health,
+              },
+            ]
+          : [];
+
+    for (const entry of reportedHealthChecks) {
+      const { result, label } = entry;
+      const status = result?.payload?.status ?? 'unknown';
+      const urlForLog = result?.url ?? targetUrl;
+      console.log(
+        `CloudFront distribution responded with status "${status}" at ${urlForLog} via ${
+          label || entry.profile || 'unknown'
+        } user agent.`
+      );
+    }
+
+    if (Array.isArray(assetChecks) && assetChecks.length > 0) {
+      for (const entry of assetChecks) {
+        console.log(
+          `Verified client assets (/, /assets/index-*.js) via ${
+            entry.label || entry.profile || 'unknown'
+          } user agent.`
+        );
+      }
+    } else {
+      console.log('Verified client assets are accessible after deployment.');
+    }
     process.exit(0);
   } catch (err) {
     console.error('CloudFront verification failed:');
