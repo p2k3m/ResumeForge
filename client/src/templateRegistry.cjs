@@ -1,7 +1,12 @@
 const TEMPLATE_ALIASES = {
   ucmo: 'classic',
   vibrant: 'modern',
-  creative: 'modern'
+  creative: 'modern',
+  futuristic: '2025',
+  'future-vision-2025': '2025',
+  'futurevision2025': '2025',
+  'resume-futuristic': '2025',
+  'resume_futuristic': '2025'
 }
 
 const SUPPORTED_RESUME_TEMPLATE_IDS = new Set([
