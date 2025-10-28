@@ -296,6 +296,26 @@
           }
         }
 
+        const HARD_REFRESH_PARAM = '__rf_refresh'
+        const HARD_REFRESH_STORAGE_KEY = '__resumeforge_last_hard_refresh'
+        const HARD_REFRESH_MIN_INTERVAL_MS = 5 * 60 * 1000
+
+        try {
+          const currentUrl = new URL(window.location.href)
+          if (currentUrl.searchParams.has(HARD_REFRESH_PARAM)) {
+            currentUrl.searchParams.delete(HARD_REFRESH_PARAM)
+            if (typeof window.history?.replaceState === 'function') {
+              window.history.replaceState(
+                null,
+                document.title,
+                `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`
+              )
+            }
+          }
+        } catch (error) {
+          // Ignore URL parsing errors in constrained environments.
+        }
+
         const warning = document.getElementById('static-asset-warning')
         if (!warning) {
           return
@@ -398,6 +418,78 @@
           }
         }
 
+        const recordHardRefreshAttempt = () => {
+          try {
+            const storage = window.sessionStorage || window.localStorage
+            if (!storage) {
+              return
+            }
+
+            storage.setItem(
+              HARD_REFRESH_STORAGE_KEY,
+              Date.now().toString()
+            )
+          } catch (error) {
+            // Ignore storage errors (private mode, etc.)
+          }
+        }
+
+        const shouldAttemptHardRefresh = () => {
+          try {
+            const storage = window.sessionStorage || window.localStorage
+            if (!storage) {
+              return true
+            }
+
+            const rawTimestamp = storage.getItem(HARD_REFRESH_STORAGE_KEY)
+            if (!rawTimestamp) {
+              return true
+            }
+
+            const parsed = Number.parseInt(rawTimestamp, 10)
+            if (!Number.isFinite(parsed)) {
+              return true
+            }
+
+            return Date.now() - parsed >= HARD_REFRESH_MIN_INTERVAL_MS
+          } catch (error) {
+            return true
+          }
+        }
+
+        const attemptHardRefresh = () => {
+          if (!shouldAttemptHardRefresh()) {
+            return false
+          }
+
+          try {
+            const current = new URL(window.location.href)
+            if (!current.searchParams.has(HARD_REFRESH_PARAM)) {
+              current.searchParams.set(
+                HARD_REFRESH_PARAM,
+                Date.now().toString(36)
+              )
+            } else {
+              current.searchParams.set(
+                HARD_REFRESH_PARAM,
+                Date.now().toString(36)
+              )
+            }
+
+            recordHardRefreshAttempt()
+            window.location.replace(current.href)
+            return true
+          } catch (error) {
+            try {
+              recordHardRefreshAttempt()
+              window.location.reload()
+              return true
+            } catch (innerError) {
+              return false
+            }
+          }
+        }
+
         const revealWarning = (sourceText) => {
           if (sourceText && sourceLabel && sourceWrapper) {
             sourceLabel.textContent = sourceText
@@ -465,6 +557,11 @@
             }
 
             const sourceText = describeSource(target)
+
+            if (attemptHardRefresh()) {
+              return
+            }
+
             revealWarning(sourceText)
             logFailure(sourceText)
           },
