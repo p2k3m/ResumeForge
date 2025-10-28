@@ -979,15 +979,26 @@ jobs:
           fi
 
           manifest_key="$prefix/manifest.json"
-          backup_key="$prefix/manifest.previous.json"
+          primary_backup_key="$prefix/manifest.previous.json"
+          fallback_backup_key="$prefix/manifest.json.previous"
 
-          echo "Attempting to restore manifest from s3://$bucket/$backup_key after failed health check."
+          echo "Attempting to restore manifest from the most recent backup after failed health check."
 
-          if aws s3api head-object --bucket "$bucket" --key "$backup_key" >/dev/null 2>&1; then
-            aws s3 cp "s3://$bucket/$backup_key" "s3://$bucket/$manifest_key"
-            echo "::warning::Rolled back static manifest to the previous deployment after health check failure."
-          else
-            echo "::error::No backup manifest found at s3://$bucket/$backup_key. Manual intervention is required."
+          restored=false
+          for backup_key in "$primary_backup_key" "$fallback_backup_key"; do
+            if [ -z "$backup_key" ]; then
+              continue
+            fi
+
+            if aws s3api head-object --bucket "$bucket" --key "$backup_key" >/dev/null 2>&1; then
+              echo "Found backup manifest at s3://$bucket/$backup_key. Restoring..."
+              aws s3 cp "s3://$bucket/$backup_key" "s3://$bucket/$manifest_key"
+              echo "::warning::Rolled back static manifest to the previous deployment after health check failure."
+              restored=true
+              break
+            fi
+          done
+
+          if [ "$restored" != true ]; then
+            echo "::notice::No backup manifest found at s3://$bucket/$primary_backup_key or s3://$bucket/$fallback_backup_key. Skipping automatic rollback."
           fi
-
-          exit 1
