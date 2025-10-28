@@ -240,6 +240,15 @@ npm run publish:cloudfront-url -- <stack-name>
 
 If the CDN begins serving 404/500 errors for hashed assets after a deployment, run the automated repair workflow to rebuild the client, upload the refreshed bundles, republish the distribution metadata, and re-verify the `/healthz` endpoint in one pass:
 
+> **Immediate response for `/assets/index-*.js` 404s:** Treat a missing hashed bundle as a publish/verify emergency. As soon as you see CloudFront return `404` for `assets/index-*.js` (or `.css`) paths, republish the distribution metadata and rerun the static verifier so cached manifests and CDN metadata realign:
+>
+> ```bash
+> npm run publish:cloudfront-url -- <stack-name>
+> npm run verify:static
+> ```
+>
+> Publishing refreshes `config/published-cloudfront.json` and re-issues cache invalidations, while the verifier confirms that the manifest, S3 objects, and CDN all agree on the active bundles. Escalate to the full repair helper below if the 404 persists after the publish/verify cycle.
+
 ```bash
 npm run repair:cloudfront -- --stack <stack-name>
 ```
