@@ -18013,7 +18013,7 @@ app.get('/api/published-cloudfront', async (req, res) => {
 
     const shouldForceDegraded = !metadata.url && metadata.apiGatewayUrl;
     const responseMetadata = shouldForceDegraded
-      ? { ...metadata, degraded: metadata.degraded ?? true }
+      ? { ...metadata, degraded: true }
       : metadata;
 
     res.setHeader('Cache-Control', 'no-store');
