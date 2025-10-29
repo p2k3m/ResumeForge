@@ -2,7 +2,9 @@ import {
   resolvePrimaryIndexAssets,
   resolveIndexAssetAliases,
   shouldDeleteObjectKey,
+  verifyUploadedAssets,
 } from '../scripts/upload-static-build.mjs'
+import { HeadObjectCommand } from '@aws-sdk/client-s3'
 
 describe('resolvePrimaryIndexAssets', () => {
   it('prefers hashed assets discovered in index.html', () => {
@@ -107,5 +109,67 @@ describe('shouldDeleteObjectKey', () => {
   it('continues to delete unrelated objects when purging the prefix', () => {
     expect(shouldDeleteObjectKey('static/client/prod/latest/index.html', prefix)).toBe(true)
     expect(shouldDeleteObjectKey('static/client/prod/latest/404.html', prefix)).toBe(true)
+  })
+})
+
+describe('verifyUploadedAssets', () => {
+  class FakeS3Client {
+    constructor(responses = []) {
+      this.responses = Array.from(responses)
+      this.commands = []
+    }
+
+    async send(command) {
+      this.commands.push(command)
+      if (this.responses.length === 0) {
+        return {}
+      }
+
+      const response = this.responses.shift()
+      if (response instanceof Error) {
+        throw response
+      }
+
+      return response ?? {}
+    }
+  }
+
+  it('issues a HEAD request for each uploaded asset', async () => {
+    const client = new FakeS3Client([{}, {}])
+    const uploads = [
+      { path: 'index.html', key: 'static/client/prod/latest/index.html' },
+      { path: 'assets/index-abc123.js', key: 'static/client/prod/latest/assets/index-abc123.js' },
+    ]
+
+    await expect(
+      verifyUploadedAssets({ s3: client, bucket: 'my-bucket', uploads }),
+    ).resolves.toBeUndefined()
+
+    expect(client.commands).toHaveLength(2)
+    for (const command of client.commands) {
+      expect(command).toBeInstanceOf(HeadObjectCommand)
+      expect(command.input).toEqual(
+        expect.objectContaining({ Bucket: 'my-bucket' }),
+      )
+    }
+    expect(client.commands[0].input.Key).toBe('static/client/prod/latest/index.html')
+    expect(client.commands[1].input.Key).toBe(
+      'static/client/prod/latest/assets/index-abc123.js',
+    )
+  })
+
+  it('throws an error when a verification request fails', async () => {
+    const error = Object.assign(new Error('Not Found'), {
+      $metadata: { httpStatusCode: 404 },
+      name: 'NotFound',
+    })
+    const client = new FakeS3Client([error])
+    const uploads = [
+      { path: 'index.html', key: 'static/client/prod/latest/index.html' },
+    ]
+
+    await expect(
+      verifyUploadedAssets({ s3: client, bucket: 'missing-bucket', uploads }),
+    ).rejects.toThrow('[upload-static] 1 uploaded asset failed verification.')
   })
 })

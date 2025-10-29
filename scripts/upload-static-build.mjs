@@ -8,6 +8,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutBucketWebsiteCommand,
   PutObjectCommand,
@@ -599,6 +600,75 @@ async function uploadAliasFiles({ s3, bucket, prefix, aliases }) {
   return uploadedAliases
 }
 
+export async function verifyUploadedAssets({ s3, bucket, uploads }) {
+  if (!Array.isArray(uploads) || uploads.length === 0) {
+    console.log(
+      `[upload-static] No uploaded assets to verify for s3://${bucket || '<unknown>'}/`,
+    )
+    return
+  }
+
+  const failures = []
+
+  for (const upload of uploads) {
+    const key = typeof upload?.key === 'string' ? upload.key.trim() : ''
+    if (!key) {
+      continue
+    }
+
+    try {
+      await s3.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        }),
+      )
+    } catch (error) {
+      const pathLabel =
+        typeof upload?.path === 'string' && upload.path.trim()
+          ? upload.path.trim()
+          : key
+
+      const statusCode = error?.$metadata?.httpStatusCode
+      const errorCode = error?.name || error?.Code || error?.code
+      const reason = error?.message || String(error)
+
+      console.error(
+        `[upload-static] Verification failed for ${pathLabel} (s3://${bucket}/${key}): ${reason}`,
+      )
+
+      failures.push({ path: pathLabel, key, statusCode, errorCode, reason })
+    }
+  }
+
+  if (failures.length > 0) {
+    const failureSummary = failures
+      .map((failure) => {
+        const details = [
+          typeof failure.statusCode === 'number' && !Number.isNaN(failure.statusCode)
+            ? `status ${failure.statusCode}`
+            : '',
+          failure.errorCode ? `code ${failure.errorCode}` : '',
+        ]
+          .filter(Boolean)
+          .join(', ')
+
+        const suffix = details ? ` (${details})` : ''
+        const reason = failure.reason ? ` — ${failure.reason}` : ''
+        return `- ${failure.path} → s3://${bucket}/${failure.key}${suffix}${reason}`
+      })
+      .join('\n')
+
+    throw new Error(
+      `[upload-static] ${failures.length} uploaded asset${failures.length === 1 ? '' : 's'} failed verification.\n${failureSummary}`,
+    )
+  }
+
+  console.log(
+    `[upload-static] Verified ${uploads.length} uploaded asset${uploads.length === 1 ? '' : 's'} are accessible in s3://${bucket}/`,
+  )
+}
+
 async function uploadManifest({
   s3,
   bucket,
@@ -715,6 +785,7 @@ async function main() {
     aliases: resolveIndexAssetAliases(primaryIndexAssets),
   })
   const allUploadedFiles = [...uploadedFiles, ...aliasUploads]
+  await verifyUploadedAssets({ s3, bucket, uploads: allUploadedFiles })
   await uploadManifest({
     s3,
     bucket,
