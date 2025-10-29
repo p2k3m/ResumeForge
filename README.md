@@ -205,6 +205,8 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 >
 > Origin bucket: `resume-forge-app-2025`
 >
+> API Gateway fallback: `https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`
+>
 > Published: 15 October 2024 at 14:45 UTC (from [`config/published-cloudfront.json`](config/published-cloudfront.json)).
 
 The canonical domain is tracked in `config/published-cloudfront.json` and mirrored here so anyone with repository access can retrieve the production URL without opening the app.
