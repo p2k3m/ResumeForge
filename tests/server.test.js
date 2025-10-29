@@ -265,23 +265,35 @@ describe('static asset fallbacks', () => {
       });
 
     const assetBody = '.alias { color: #f00; }';
-    mockS3Send.mockImplementationOnce((command) => {
-      expect(command.__type).toBe('GetObjectCommand');
-      expect(command.input.Bucket).toBe('test-bucket');
-      expect(command.input.Key).toMatch(new RegExp(`assets/${cssAliasName}$`));
-      return Promise.resolve({
-        Body: Readable.from([assetBody]),
-        ContentType: 'text/css',
-        CacheControl: 'public, max-age=60',
+    mockS3Send
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Bucket).toBe('test-bucket');
+        expect(command.input.Key).toMatch(/manifest\.json$/);
+        return Promise.resolve({
+          Body: Readable.from([
+            JSON.stringify({ hashedIndexAssets: [`assets/${cssAliasName}`] }),
+          ]),
+          ContentType: 'application/json',
+        });
+      })
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Bucket).toBe('test-bucket');
+        expect(command.input.Key).toMatch(new RegExp(`assets/${cssAliasName}$`));
+        return Promise.resolve({
+          Body: Readable.from([assetBody]),
+          ContentType: 'text/css',
+          CacheControl: 'public, max-age=60',
+        });
       });
-    });
 
     try {
       const res = await request(app).get('/assets/index-latest.css');
       expect(res.status).toBe(200);
       expect(res.text).toBe(assetBody);
       expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
-      expect(mockS3Send).toHaveBeenCalledTimes(1);
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
     } finally {
       statSpy.mockRestore();
       readFileSpy.mockRestore();
@@ -392,22 +404,27 @@ describe('static asset fallbacks', () => {
       .mockImplementationOnce((command) => {
         expect(command.__type).toBe('GetObjectCommand');
         expect(command.input.Bucket).toBe('test-bucket');
+        expect(command.input.Key).toMatch(/manifest\.json$/);
+        return Promise.resolve({
+          Body: Readable.from([
+            JSON.stringify({
+              hashedIndexAssets: [
+                `assets/${cssAliasName}`,
+                `assets/${fallbackCssName}`,
+              ],
+            }),
+          ]),
+          ContentType: 'application/json',
+        });
+      })
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Bucket).toBe('test-bucket');
         expect(command.input.Key).toMatch(new RegExp(`assets/${cssAliasName}$`));
         const error = new Error('NoSuchKey');
         error.$metadata = { httpStatusCode: 404 };
         error.name = 'NoSuchKey';
         return Promise.reject(error);
-      })
-      .mockImplementationOnce((command) => {
-        expect(command.__type).toBe('GetObjectCommand');
-        expect(command.input.Bucket).toBe('test-bucket');
-        expect(command.input.Key).toMatch(/manifest\.json$/);
-        return Promise.resolve({
-          Body: Readable.from([
-            JSON.stringify({ hashedIndexAssets: [`assets/${fallbackCssName}`] }),
-          ]),
-          ContentType: 'application/json',
-        });
       })
       .mockImplementationOnce((command) => {
         expect(command.__type).toBe('GetObjectCommand');
