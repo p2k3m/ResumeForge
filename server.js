@@ -17986,6 +17986,47 @@ app.get('/api/published-cloudfront', async (req, res) => {
   }
 });
 
+app.get('/api/static-manifest', async (req, res) => {
+  const shouldForceRefresh = (() => {
+    const raw = typeof req.query?.refresh === 'string' ? req.query.refresh.trim() : '';
+    if (!raw) {
+      return false;
+    }
+    return /^(?:1|true|yes|force)$/i.test(raw);
+  })();
+
+  try {
+    const manifest = await loadStaticAssetManifestFromS3({
+      forceRefresh: shouldForceRefresh,
+    });
+
+    if (!manifest || !Array.isArray(manifest.assets) || manifest.assets.length === 0) {
+      return sendError(
+        res,
+        503,
+        'STATIC_MANIFEST_UNAVAILABLE',
+        'Static asset manifest is not currently available. Please try again shortly.'
+      );
+    }
+
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({
+      success: true,
+      manifest,
+    });
+  } catch (err) {
+    logStructured('error', 'static_asset_manifest_lookup_failed', {
+      error: serializeError(err),
+    });
+    return sendError(
+      res,
+      503,
+      'STATIC_MANIFEST_UNAVAILABLE',
+      'Static asset manifest is not currently available. Please try again shortly.'
+    );
+  }
+});
+
 app.get(['/redirect/latest', '/go/cloudfront'], async (req, res) => {
   try {
     const metadata = await loadPublishedCloudfrontMetadata();

@@ -433,6 +433,76 @@ describe('static asset fallbacks', () => {
   });
 });
 
+describe('static asset manifest endpoint', () => {
+  test('returns manifest data when available', async () => {
+    const manifestPayload = {
+      hashedIndexAssets: ['assets/index-123abc.css', 'assets/index-123abc.js']
+    };
+
+    mockS3Send.mockImplementationOnce((command) => {
+      expect(command.__type).toBe('GetObjectCommand');
+      expect(command.input.Key).toMatch(/manifest\.json$/);
+      return Promise.resolve({
+        Body: Readable.from([JSON.stringify(manifestPayload)]),
+        ContentType: 'application/json'
+      });
+    });
+
+    const res = await request(app).get('/api/static-manifest');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body.success).toBe(true);
+    expect(res.body.manifest.assets).toEqual([
+      '/assets/index-123abc.css',
+      '/assets/index-123abc.js'
+    ]);
+    expect(res.body.manifest.byExtension).toEqual({
+      css: ['/assets/index-123abc.css'],
+      js: ['/assets/index-123abc.js']
+    });
+  });
+
+  test('allows forcing a manifest refresh via query parameter', async () => {
+    const manifestPayload = {
+      hashedIndexAssets: ['assets/index-789def.js']
+    };
+
+    mockS3Send.mockImplementationOnce(() =>
+      Promise.resolve({
+        Body: Readable.from([JSON.stringify(manifestPayload)]),
+        ContentType: 'application/json'
+      })
+    );
+
+    const first = await request(app).get('/api/static-manifest');
+    expect(first.status).toBe(200);
+
+    mockS3Send.mockImplementationOnce(() =>
+      Promise.resolve({
+        Body: Readable.from([JSON.stringify(manifestPayload)]),
+        ContentType: 'application/json'
+      })
+    );
+
+    const second = await request(app).get('/api/static-manifest?refresh=1');
+    expect(second.status).toBe(200);
+    expect(mockS3Send).toHaveBeenCalledTimes(2);
+  });
+
+  test('returns 503 when manifest is unavailable', async () => {
+    mockS3Send.mockImplementationOnce(() =>
+      Promise.reject(new Error('manifest not found'))
+    );
+
+    const res = await request(app).get('/api/static-manifest');
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({
+      code: 'STATIC_MANIFEST_UNAVAILABLE'
+    });
+  });
+});
+
 describe('/api/process-cv', () => {
   test('handles DynamoDB table lifecycle', async () => {
     mockDynamoSend

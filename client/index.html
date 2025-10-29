@@ -350,6 +350,147 @@
           css: '/assets/index-latest.css'
         })
 
+        const MANIFEST_ERROR_BACKOFF_MS = 5000
+        const manifestState = {
+          loaded: false,
+          promise: null,
+          lastErrorAt: 0,
+          candidatesByExtension: { js: [], css: [] }
+        }
+
+        const normalizeManifestCandidate = (value) => {
+          if (typeof value !== 'string') {
+            return ''
+          }
+
+          let candidate = value.trim()
+          if (!candidate) {
+            return ''
+          }
+
+          candidate = candidate.replace(/[#?].*$/, '')
+          candidate = candidate.replace(/^(?:\.\/)+/g, '')
+          candidate = candidate.replace(/^(?:\.\.\/)+/g, '')
+          candidate = candidate.replace(/^\/+/, '')
+          candidate = candidate.replace(/\\/g, '/')
+
+          if (!candidate) {
+            return ''
+          }
+
+          return candidate.startsWith('/') ? candidate : `/${candidate}`
+        }
+
+        const categorizeManifestCandidates = (values) => {
+          const buckets = { js: [], css: [] }
+          const seen = new Set()
+
+          const append = (normalized) => {
+            if (!normalized || seen.has(normalized)) {
+              return
+            }
+
+            seen.add(normalized)
+
+            if (/\.js$/i.test(normalized)) {
+              buckets.js.push(normalized)
+            } else if (/\.css$/i.test(normalized)) {
+              buckets.css.push(normalized)
+            }
+          }
+
+          if (Array.isArray(values)) {
+            values.forEach((value) => {
+              append(normalizeManifestCandidate(value))
+            })
+          }
+
+          return buckets
+        }
+
+        const resolveManifestPayload = (payload) => {
+          if (!payload || typeof payload !== 'object') {
+            return null
+          }
+
+          if (payload.manifest && typeof payload.manifest === 'object') {
+            return resolveManifestPayload(payload.manifest)
+          }
+
+          if (payload.data && typeof payload.data === 'object') {
+            return resolveManifestPayload(payload.data)
+          }
+
+          return payload
+        }
+
+        const ensureManifestCandidatesLoaded = () => {
+          if (manifestState.loaded) {
+            return manifestState.promise || Promise.resolve(manifestState.candidatesByExtension)
+          }
+
+          if (manifestState.promise) {
+            return manifestState.promise
+          }
+
+          const now = Date.now()
+          if (manifestState.lastErrorAt && now - manifestState.lastErrorAt < MANIFEST_ERROR_BACKOFF_MS) {
+            return null
+          }
+
+          if (typeof fetch !== 'function') {
+            manifestState.loaded = true
+            return Promise.resolve(manifestState.candidatesByExtension)
+          }
+
+          manifestState.promise = (async () => {
+            try {
+              const response = await fetch('/api/static-manifest', {
+                cache: 'no-store',
+                credentials: 'omit'
+              })
+
+              if (!response || !response.ok) {
+                manifestState.lastErrorAt = Date.now()
+                return manifestState.candidatesByExtension
+              }
+
+              let payload
+              try {
+                payload = await response.json()
+              } catch (error) {
+                manifestState.lastErrorAt = Date.now()
+                return manifestState.candidatesByExtension
+              }
+
+              const manifest = resolveManifestPayload(payload)
+              const combined = Array.isArray(manifest?.hashedIndexAssets) && manifest.hashedIndexAssets.length
+                ? manifest.hashedIndexAssets
+                : Array.isArray(manifest?.assets)
+                  ? manifest.assets
+                  : []
+
+              manifestState.candidatesByExtension = categorizeManifestCandidates(combined)
+              manifestState.loaded = true
+              manifestState.lastErrorAt = 0
+              return manifestState.candidatesByExtension
+            } catch (error) {
+              manifestState.lastErrorAt = Date.now()
+              return manifestState.candidatesByExtension
+            } finally {
+              manifestState.promise = null
+            }
+          })()
+
+          return manifestState.promise
+        }
+
+        try {
+          ensureManifestCandidatesLoaded()
+        } catch (error) {
+          // Ignore manifest prefetch failures in constrained environments.
+        }
+
         const normalizeAliasBase = (value) => {
           if (typeof value !== 'string') {
             return ''
@@ -771,7 +912,7 @@
           }
         }
 
-        const attemptAliasReload = (element) => {
+        function attemptAliasReload(element) {
           if (!element || typeof element.tagName !== 'string') {
             return false
           }
@@ -880,6 +1021,154 @@
           return true
         }
 
+        const attemptManifestReload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const extension = isStylesheet ? 'css' : 'js'
+          const originalSource = describeSource(element)
+
+          const applyCandidates = (candidates) => {
+            const list = Array.isArray(candidates?.[extension]) ? candidates[extension] : []
+            if (!list.length) {
+              return false
+            }
+
+            const rawAttempt = element.dataset?.resumeforgeManifestAttempt || '0'
+            const parsedAttempt = Number.parseInt(rawAttempt, 10)
+            const startIndex = Number.isFinite(parsedAttempt) && parsedAttempt >= 0 ? parsedAttempt : 0
+
+            for (let index = startIndex; index < list.length; index += 1) {
+              const candidate = list[index]
+              if (!candidate) {
+                continue
+              }
+
+              let normalizedCandidate = candidate
+              try {
+                const resolved = new URL(candidate, window.location.href)
+                normalizedCandidate =
+                  resolved.origin === window.location.origin
+                    ? `${resolved.pathname}${resolved.search}`
+                    : resolved.href
+              } catch (error) {
+                normalizedCandidate = candidate
+              }
+
+              if (normalizedCandidate && originalSource && normalizedCandidate === originalSource) {
+                element.dataset.resumeforgeManifestAttempt = String(index + 1)
+                continue
+              }
+
+              const parent = element.parentNode
+              if (!parent || typeof parent.replaceChild !== 'function') {
+                return false
+              }
+
+              const replacement = element.cloneNode(true)
+
+              if (isStylesheet) {
+                replacement.href = candidate
+              } else {
+                replacement.src = candidate
+              }
+
+              replacement.setAttribute('data-src', candidate)
+              replacement.dataset.resumeforgeAssetRetry = 'true'
+              replacement.dataset.resumeforgeAssetManifest = 'true'
+              replacement.dataset.resumeforgeManifestAttempt = String(index + 1)
+              if (originalSource) {
+                replacement.dataset.resumeforgeOriginalSource = originalSource
+              }
+
+              element.dataset.resumeforgeAssetRetry = 'true'
+              element.dataset.resumeforgeAssetManifest = 'true'
+              element.dataset.resumeforgeManifestAttempt = String(index + 1)
+              if (originalSource && !element.dataset.resumeforgeOriginalSource) {
+                element.dataset.resumeforgeOriginalSource = originalSource
+              }
+
+              try {
+                parent.replaceChild(replacement, element)
+              } catch (error) {
+                try {
+                  parent.removeChild(element)
+                  parent.appendChild(replacement)
+                } catch (innerError) {
+                  return false
+                }
+              }
+
+              try {
+                console.warn('Retrying ResumeForge static asset via manifest fallback.', {
+                  source: originalSource || '',
+                  manifest: candidate
+                })
+              } catch (error) {
+                // Ignore logging errors in constrained environments.
+              }
+
+              return true
+            }
+
+            return false
+          }
+
+          if (applyCandidates(manifestState.candidatesByExtension)) {
+            return true
+          }
+
+          const promise = ensureManifestCandidatesLoaded()
+          if (!promise) {
+            return false
+          }
+
+          promise
+            .then((candidates) => {
+              if (!candidates) {
+                attemptAliasReload(element)
+                return
+              }
+
+              const connected = (() => {
+                if (!element) {
+                  return false
+                }
+                if (typeof element.isConnected === 'boolean') {
+                  return element.isConnected
+                }
+                const root = document?.documentElement
+                if (!root || typeof root.contains !== 'function') {
+                  return true
+                }
+                return root.contains(element)
+              })()
+
+              if (!connected) {
+                return
+              }
+
+              if (!applyCandidates(candidates)) {
+                attemptAliasReload(element)
+              }
+            })
+            .catch(() => {
+              attemptAliasReload(element)
+            })
+
+          return true
+        }
+
         window.addEventListener(
           'error',
           (event) => {
@@ -893,6 +1182,10 @@
             const isScript = tagName === 'script'
 
             if (!isScript && !isStylesheet) {
+              return
+            }
+
+            if (attemptManifestReload(target)) {
               return
             }
 
