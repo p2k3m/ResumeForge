@@ -289,9 +289,17 @@ function extractHashedIndexAssetsFromHtml(html) {
 
   const cssCount = assets.filter((asset) => asset.endsWith('.css')).length
   const jsCount = assets.filter((asset) => asset.endsWith('.js')).length
-  if (cssCount === 0 || jsCount === 0) {
+  if (jsCount === 0) {
     throw new Error(
-      `[verify-static] index.html must reference hashed CSS and JS bundles. Found ${cssCount} CSS and ${jsCount} JS assets.`,
+      `[verify-static] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${
+        jsCount === 1 ? '' : 's'
+      }.`,
+    )
+  }
+
+  if (cssCount === 0) {
+    console.warn(
+      '[verify-static] index.html does not reference a hashed CSS bundle; skipping CSS validation for this release.',
     )
   }
 

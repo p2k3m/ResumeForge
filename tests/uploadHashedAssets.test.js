@@ -90,4 +90,44 @@ describe('gatherHashedAssetUploadEntries', () => {
       'assets/index-1e47f298.css.map',
     ])
   })
+
+  it('allows builds that inline CSS and only reference hashed JS bundles', async () => {
+    const distDir = path.join(tempDir, 'dist-inline')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <body>
+          <script src="/assets/index-0da0d266.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(
+      path.join(assetsDir, 'index-0da0d266.js'),
+      '/* index-0da0d266.js */',
+      'utf8',
+    )
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    try {
+      const result = await gatherHashedAssetUploadEntries({
+        assetsDirectory: assetsDir,
+        indexHtmlPath: path.join(distDir, 'index.html'),
+      })
+
+      expect(result.referencedAssets).toEqual(['assets/index-0da0d266.js'])
+      expect(result.entries.map((entry) => entry.relativePath)).toEqual([
+        'assets/index-0da0d266.js',
+      ])
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[upload-hashed-assets] index.html does not reference a hashed CSS bundle; skipping CSS uploads.',
+      )
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
 })

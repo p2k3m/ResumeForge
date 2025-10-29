@@ -345,9 +345,63 @@
 
         const sourceWrapper = warning.querySelector('[data-static-asset-source-wrapper]')
         const sourceLabel = warning.querySelector('[data-static-asset-source]')
+
+        const detectHashedIndexCssPresence = () => {
+          try {
+            const links = document.querySelectorAll('link[rel~="stylesheet"]')
+            for (const link of links) {
+              if (!link) {
+                continue
+              }
+
+              const rawHref =
+                typeof link.getAttribute === 'function'
+                  ? link.getAttribute('href') || link.href
+                  : link.href
+
+              if (!rawHref) {
+                continue
+              }
+
+              let candidate = String(rawHref).trim()
+              if (!candidate) {
+                continue
+              }
+
+              try {
+                const resolved = new URL(candidate, window.location.href)
+                candidate = `${resolved.pathname}${resolved.search}`
+              } catch (error) {
+                // Ignore URL resolution failures and fall back to the raw href.
+              }
+
+              candidate = candidate.replace(/[#?].*$/, '')
+              candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '')
+              candidate = candidate.replace(/^\/+/, '')
+              candidate = candidate.replace(/\\/g, '/')
+
+              if (/^assets\/index-(?!latest(?:\.|$))[\w.-]+\.css$/i.test(candidate)) {
+                return true
+              }
+            }
+          } catch (error) {
+            // Ignore stylesheet detection errors in constrained environments.
+          }
+
+          return false
+        }
+
+        const hasInlineIndexCss = detectHashedIndexCssPresence()
+        try {
+          if (typeof window !== 'undefined') {
+            window.__RESUMEFORGE_HAS_INDEX_CSS__ = hasInlineIndexCss
+          }
+        } catch (error) {
+          // Ignore globals that cannot be set in restricted environments.
+        }
         const aliasPaths = Object.freeze({
           js: '/assets/index-latest.js',
-          css: '/assets/index-latest.css'
+          css: hasInlineIndexCss ? '/assets/index-latest.css' : ''
         })
 
         const MANIFEST_ERROR_BACKOFF_MS = 5000
@@ -1355,7 +1409,10 @@
     <script type="module">
       const DEV_ENTRY_SOURCE = '/src/main.jsx'
       const PROD_ENTRY_SOURCE = '/assets/index-latest.js'
-      const PROD_STYLESHEET_HREF = '/assets/index-latest.css'
+      const PROD_STYLESHEET_HREF =
+        typeof window !== 'undefined' && window.__RESUMEFORGE_HAS_INDEX_CSS__
+          ? '/assets/index-latest.css'
+          : ''
 
       const detectDevEnvironment = () => {
         try {
