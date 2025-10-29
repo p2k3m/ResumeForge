@@ -45,11 +45,11 @@ describe('published CloudFront helpers', () => {
   test('responds with published metadata when available', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3p4q5r6s7t8u9.cloudfront.net/',
+      url: 'https://d109hwmzrqr39w.cloudfront.net/',
       distributionId: 'E3NEWPORTAL789',
-      updatedAt: '2024-10-15T14:45:00.000Z',
+      updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
-      originPath: '/',
+      originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -59,9 +59,9 @@ describe('published CloudFront helpers', () => {
         success: true,
         cloudfront: {
           stackName: metadata.stackName,
-          url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
-          fileUrl: 'https://d3p4q5r6s7t8u9.cloudfront.net',
-          typeUrl: 'https://d3p4q5r6s7t8u9.cloudfront.net#download',
+          url: 'https://d109hwmzrqr39w.cloudfront.net',
+          fileUrl: 'https://d109hwmzrqr39w.cloudfront.net',
+          typeUrl: 'https://d109hwmzrqr39w.cloudfront.net#download',
           distributionId: metadata.distributionId,
           originBucket: metadata.originBucket,
           originPath: metadata.originPath,
@@ -78,9 +78,9 @@ describe('published CloudFront helpers', () => {
   test('defaults the origin path to root when omitted', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+      url: 'https://d109hwmzrqr39w.cloudfront.net',
       distributionId: 'E3NEWPORTAL789',
-      updatedAt: '2024-10-15T14:45:00.000Z',
+      updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
     };
     const { app, cleanup } = await createServer({ metadata });
@@ -96,17 +96,17 @@ describe('published CloudFront helpers', () => {
   test('redirects callers to the published domain', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3p4q5r6s7t8u9.cloudfront.net/prod',
+      url: 'https://d109hwmzrqr39w.cloudfront.net/prod',
       distributionId: 'E3NEWPORTAL789',
-      updatedAt: '2024-10-15T14:45:00.000Z',
+      updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
-      originPath: '/',
+      originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
       const response = await request(app).get('/go/cloudfront');
       expect(response.status).toBe(308);
-      expect(response.headers.location).toBe('https://d3p4q5r6s7t8u9.cloudfront.net/prod');
+      expect(response.headers.location).toBe('https://d109hwmzrqr39w.cloudfront.net/prod');
     } finally {
       await cleanup();
     }
@@ -115,11 +115,11 @@ describe('published CloudFront helpers', () => {
   test('allows redirecting to a specific path on the published domain', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+      url: 'https://d109hwmzrqr39w.cloudfront.net',
       distributionId: 'E3NEWPORTAL789',
-      updatedAt: '2024-10-15T14:45:00.000Z',
+      updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
-      originPath: '/',
+      originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -128,7 +128,7 @@ describe('published CloudFront helpers', () => {
         .query({ path: 'api/process-cv' });
       expect(response.status).toBe(308);
       expect(response.headers.location).toBe(
-        'https://d3p4q5r6s7t8u9.cloudfront.net/api/process-cv'
+        'https://d109hwmzrqr39w.cloudfront.net/api/process-cv'
       );
     } finally {
       await cleanup();
@@ -138,11 +138,11 @@ describe('published CloudFront helpers', () => {
   test('keeps published metadata accessible when only the client app service is active', async () => {
     const metadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+      url: 'https://d109hwmzrqr39w.cloudfront.net',
       distributionId: 'E3NEWPORTAL789',
-      updatedAt: '2024-10-15T14:45:00.000Z',
+      updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
-      originPath: '/',
+      originPath: '/static/client/prod/latest',
     };
 
     process.env.ACTIVE_SERVICES = 'clientApp';

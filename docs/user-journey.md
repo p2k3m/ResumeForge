@@ -2,7 +2,7 @@
 
 This guide walks a candidate through ResumeForge end to end so every action has a clearly defined outcome.
 
-> **Start here:** [`https://d3p4q5r6s7t8u9.cloudfront.net`](https://d3p4q5r6s7t8u9.cloudfront.net) is the active CloudFront entry point (fronting the `resume-forge-app-2025` bucket at root path `/`). Share this link with candidates so they always land on the latest deployment. Run `npm run verify:cloudfront` after each publish to confirm the CDN is still answering `/healthz` before sending traffic. If CloudFront is degraded, route urgent requests through the API Gateway fallback at [`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`](https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod) until the CDN recovers.
+> **Start here:** [`https://d109hwmzrqr39w.cloudfront.net`](https://d109hwmzrqr39w.cloudfront.net) is the active CloudFront entry point (fronting the `resume-forge-app-2025` bucket at origin path `/static/client/prod/latest`). Share this link with candidates so they always land on the latest deployment. Run `npm run verify:cloudfront` after each publish to confirm the CDN is still answering `/healthz` before sending traffic. If CloudFront is degraded, route urgent requests through the API Gateway fallback at [`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`](https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod) until the CDN recovers.
 >
 > Last verified: 20 September 2024 at 09:30 UTC per [`config/published-cloudfront.json`](../config/published-cloudfront.json).
 
