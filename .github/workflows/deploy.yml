@@ -53,6 +53,10 @@ jobs:
             echo "SAM_STACK_NAME secret is required" >&2
             exit 1
           fi
+          if [ -z "${CLOUDFRONT_DISTRIBUTION_ID:-}" ]; then
+            echo "CLOUDFRONT_DISTRIBUTION_ID secret is required to invalidate the cache after deployment" >&2
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -151,6 +155,9 @@ jobs:
             echo "* Status: ${{ job.status }}"
             if [ "${{ steps.resolve_domain.outputs.url }}" != "" ]; then
               echo "* CloudFront domain: ${{ steps.resolve_domain.outputs.url }}"
+            fi
+            if [ "${CLOUDFRONT_DISTRIBUTION_ID}" != "" ]; then
+              echo "* CloudFront invalidation: Triggered for distribution ${CLOUDFRONT_DISTRIBUTION_ID} (/*)"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
