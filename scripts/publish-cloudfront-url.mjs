@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { CloudFormationClient, DescribeStacksCommand, DescribeStackResourceCommand } from '@aws-sdk/client-cloudformation'
-import { CloudFrontClient, CreateInvalidationCommand } from '@aws-sdk/client-cloudfront'
+import {
+  CloudFrontClient,
+  CreateInvalidationCommand,
+  GetDistributionConfigCommand,
+} from '@aws-sdk/client-cloudfront'
 import fs from 'fs/promises'
 import path from 'path'
 import process from 'process'
@@ -156,6 +160,19 @@ async function main() {
   }
 
   await fs.mkdir(path.dirname(publishFile), { recursive: true })
+  let originDetails = null
+  try {
+    originDetails = await resolveDistributionOrigin({
+      cloudFront,
+      distributionId,
+    })
+  } catch (err) {
+    console.warn(
+      'Unable to resolve CloudFront origin configuration from the distribution; falling back to environment metadata.',
+      err?.message ? `(${err.message})` : ''
+    )
+  }
+
   const payload = {
     stackName,
     url: urlOutput.OutputValue,
@@ -168,14 +185,14 @@ async function main() {
     payload.apiGatewayUrl = apiGatewayOutput.OutputValue
   }
 
-  const originBucket = typeof process.env.S3_BUCKET === 'string'
-    ? process.env.S3_BUCKET.trim()
-    : ''
-
+  const originBucket = selectOriginBucket({ originDetails, previous })
   if (originBucket) {
     payload.originBucket = originBucket
-  } else if (previous?.originBucket) {
-    payload.originBucket = previous.originBucket
+  }
+
+  const originPath = selectOriginPath({ originDetails, previous, hasOriginBucket: Boolean(payload.originBucket) })
+  if (originPath) {
+    payload.originPath = originPath
   }
   await fs.writeFile(publishFile, `${JSON.stringify(payload, null, 2)}\n`)
   console.log(`Published CloudFront URL: ${payload.url}`)
@@ -186,9 +203,146 @@ async function main() {
   if (payload.originBucket) {
     console.log(`Recorded CloudFront origin bucket: ${payload.originBucket}`)
   }
+  if (payload.originPath) {
+    console.log(`Recorded CloudFront origin path: ${payload.originPath}`)
+  }
 }
 
 main().catch((err) => {
   console.error(err)
   process.exitCode = 1
 })
+
+function hasValue(value) {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function normalizeOriginPath(pathValue) {
+  if (!hasValue(pathValue)) {
+    return '/'
+  }
+
+  const trimmed = pathValue.trim().replace(/\/+$/, '')
+  const withoutLeading = trimmed.replace(/^\/+/, '')
+  if (!withoutLeading) {
+    return '/'
+  }
+
+  return `/${withoutLeading}`
+}
+
+function deriveBucketFromDomain(domainName) {
+  if (!hasValue(domainName)) {
+    return ''
+  }
+
+  const trimmed = domainName.trim()
+  const s3Match = trimmed.match(
+    /^(?<bucket>[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/i
+  )
+
+  if (s3Match?.groups?.bucket) {
+    return s3Match.groups.bucket
+  }
+
+  if (!trimmed.includes('.')) {
+    return trimmed
+  }
+
+  return ''
+}
+
+async function resolveDistributionOrigin({ cloudFront, distributionId }) {
+  if (!cloudFront || !hasValue(distributionId)) {
+    return null
+  }
+
+  const response = await cloudFront.send(
+    new GetDistributionConfigCommand({ Id: distributionId })
+  )
+
+  const origins = response?.DistributionConfig?.Origins?.Items || []
+  if (!origins.length) {
+    return null
+  }
+
+  const candidates = [
+    ...origins.filter((origin) => origin?.S3OriginConfig),
+    ...origins.filter((origin) => !origin?.S3OriginConfig),
+  ]
+
+  for (const origin of candidates) {
+    const bucket = deriveBucketFromDomain(origin?.DomainName)
+    if (!bucket) {
+      continue
+    }
+
+    const path = normalizeOriginPath(origin?.OriginPath)
+    return {
+      bucket,
+      path,
+    }
+  }
+
+  return null
+}
+
+function selectOriginBucket({ originDetails, previous }) {
+  if (originDetails?.bucket) {
+    return originDetails.bucket
+  }
+
+  const envCandidates = [
+    process.env.STATIC_ASSETS_BUCKET,
+    process.env.DATA_BUCKET,
+    process.env.S3_BUCKET,
+  ]
+
+  for (const candidate of envCandidates) {
+    const sanitized = sanitizeBucketCandidate(candidate)
+    if (sanitized) {
+      return sanitized
+    }
+  }
+
+  const previousBucket = sanitizeBucketCandidate(previous?.originBucket)
+  if (previousBucket) {
+    return previousBucket
+  }
+
+  return ''
+}
+
+function selectOriginPath({ originDetails, previous, hasOriginBucket }) {
+  if (originDetails?.path) {
+    return originDetails.path
+  }
+
+  if (hasOriginBucket) {
+    if (hasValue(previous?.originPath)) {
+      return normalizeOriginPath(previous.originPath)
+    }
+    return '/'
+  }
+
+  return ''
+}
+
+function sanitizeBucketCandidate(value) {
+  if (!hasValue(value)) {
+    return ''
+  }
+
+  let trimmed = value.trim()
+  if (trimmed.toLowerCase().startsWith('s3://')) {
+    trimmed = trimmed.slice(5)
+  }
+
+  trimmed = trimmed.replace(/^\/+/, '')
+  if (!trimmed) {
+    return ''
+  }
+
+  const bucket = trimmed.split(/[\/]/, 1)[0]
+  return bucket || ''
+}

@@ -11,6 +11,7 @@ describe('CloudFront documentation snapshots', () => {
   )
   const publishedUrl = metadata.url
   const originBucket = metadata.originBucket
+  const originPath = metadata.originPath || '/'
 
   it('mirrors the published URL in the README snapshot', () => {
     const readme = loadFile('README.md')
@@ -19,6 +20,9 @@ describe('CloudFront documentation snapshots', () => {
     )
     expect(readme).toContain(
       `> Origin bucket: \`${originBucket}\``
+    )
+    expect(readme).toContain(
+      `> Origin path: \`${originPath}\``
     )
   })
 
@@ -34,6 +38,7 @@ describe('CloudFront documentation snapshots', () => {
       expect(contents).toContain(publishedUrl)
       if (docPath === 'docs/cloudfront-url.md') {
         expect(contents).toContain(originBucket)
+        expect(contents).toContain(originPath)
       }
     })
   })

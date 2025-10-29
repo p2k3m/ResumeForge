@@ -3231,6 +3231,20 @@ function sanitizeAllowedOrigins(value) {
   return sanitized;
 }
 
+function normalizePublishedOriginPath(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '/';
+  }
+
+  const sanitized = `/${trimmed.replace(/^\/+/, '').replace(/\/+$/, '')}`;
+  return sanitized || '/';
+}
+
 function parseAllowedOrigins(value) {
   const parsed = sanitizeAllowedOrigins(value);
   return parsed.length ? parsed : resolveDefaultAllowedOrigins();
@@ -3333,6 +3347,10 @@ async function loadPublishedCloudfrontMetadata() {
         typeof parsed?.originBucket === 'string' && parsed.originBucket.trim()
           ? parsed.originBucket.trim()
           : null,
+      originPath:
+        typeof parsed?.originPath === 'string'
+          ? normalizePublishedOriginPath(parsed.originPath)
+          : null,
       updatedAt:
         typeof parsed?.updatedAt === 'string' && parsed.updatedAt.trim()
           ? parsed.updatedAt.trim()
@@ -3344,6 +3362,10 @@ async function loadPublishedCloudfrontMetadata() {
             ? ['true', '1', 'yes'].includes(parsed.degraded.trim().toLowerCase())
             : false,
     };
+
+    if (metadata.originBucket && !metadata.originPath) {
+      metadata.originPath = '/';
+    }
 
     if (metadata.url) {
       try {
