@@ -1963,7 +1963,7 @@ function buildFallbackClientIndexHtml(metadata = null) {
     degradeDetails += `<p class="fallback__degraded-detail">Last published metadata: <code>${safeUpdatedAt}</code></p>`;
   }
 
-  const backupApiValue = shouldDisplayDegraded ? safeGatewayUrl : '';
+  const backupApiValue = safeGatewayUrl;
 
   const degradeSection = `
     <section
