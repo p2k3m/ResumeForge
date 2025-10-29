@@ -755,6 +755,63 @@ describe('verifyClientAssets', () => {
     expect(attemptedPaths).toContain(`/static/client/prod/latest${jsAssetPath}`);
   });
 
+  test('backs off manifest prefixes by trimming trailing segments when needed', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === jsAssetPath) {
+        return new Response(null, { status: 404, statusText: 'Not Found' });
+      }
+
+      if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
+        return new Response(null, { status: 403, statusText: 'Forbidden' });
+      }
+
+      if (target.pathname === `/static/client/prod${jsAssetPath}`) {
+        return new Response(null, { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        assetPathPrefixes: ['static/client/prod/latest'],
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const attemptedPaths = fetchImpl.mock.calls
+      .map(([url]) => new URL(url).pathname)
+      .filter((pathname) => pathname.endsWith(jsAssetPath));
+
+    expect(attemptedPaths).toContain(`/static/client/prod/latest${jsAssetPath}`);
+    expect(attemptedPaths).toContain(`/static/client/prod${jsAssetPath}`);
+  });
+
   test('attempts suffix variations of manifest prefixes when CDN origin strips leading segments', async () => {
     const html = `<!doctype html>
       <html>
