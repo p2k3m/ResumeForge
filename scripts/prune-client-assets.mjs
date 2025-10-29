@@ -102,12 +102,12 @@ async function pruneHashedAssets() {
     if (html) {
       console.warn('[prune-client-assets] No hashed index assets referenced; skipping prune.');
     }
-    return;
+    return html;
   }
 
   const entries = await listAssetEntries();
   if (!entries.length) {
-    return;
+    return html;
   }
 
   const fileNames = new Set(
@@ -180,7 +180,7 @@ async function pruneHashedAssets() {
   }
 
   if (removalTargets.size === 0) {
-    return;
+    return html;
   }
 
   for (const target of removalTargets) {
@@ -192,9 +192,111 @@ async function pruneHashedAssets() {
       removalTargets.size === 1 ? '' : 's'
     }.`
   );
+
+  return html;
 }
 
-pruneHashedAssets().catch((error) => {
+function normalizePrimaryIndexAssetPath(assetPath) {
+  if (typeof assetPath !== 'string') {
+    return '';
+  }
+
+  let candidate = assetPath.trim();
+  if (!candidate) {
+    return '';
+  }
+
+  candidate = candidate.replace(/\?.*$/, '').replace(/#.*$/, '');
+  candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '');
+  candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
+
+  const match = candidate.match(/^assets\/index-[\w.-]+\.(?:css|js)$/i);
+  if (!match) {
+    return '';
+  }
+
+  return match[0];
+}
+
+function extractPrimaryIndexAssetsFromHtml(html) {
+  const manifest = { css: '', js: '' };
+  if (typeof html !== 'string' || !html.trim()) {
+    return manifest;
+  }
+
+  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi;
+  let match;
+
+  while ((match = assetPattern.exec(html)) !== null) {
+    const candidate = normalizePrimaryIndexAssetPath(match[1]);
+    if (!candidate) {
+      continue;
+    }
+
+    if (candidate.endsWith('.css') && !manifest.css) {
+      manifest.css = candidate;
+    } else if (candidate.endsWith('.js') && !manifest.js) {
+      manifest.js = candidate;
+    }
+
+    if (manifest.css && manifest.js) {
+      break;
+    }
+  }
+
+  return manifest;
+}
+
+async function ensurePrimaryIndexAliases(html) {
+  const aliasCandidates = [
+    { type: 'css', alias: 'assets/index-latest.css' },
+    { type: 'js', alias: 'assets/index-latest.js' },
+  ];
+
+  if (typeof html !== 'string' || !html.trim()) {
+    return;
+  }
+
+  const manifest = extractPrimaryIndexAssetsFromHtml(html);
+
+  for (const { type, alias } of aliasCandidates) {
+    const source = manifest[type];
+    if (!source) {
+      console.warn(
+        `[prune-client-assets] Skipping ${alias}; unable to determine primary ${type.toUpperCase()} asset.`,
+      );
+      continue;
+    }
+
+    if (!alias.startsWith('assets/')) {
+      continue;
+    }
+
+    const sourcePath = path.join(clientDistDir, source);
+    const aliasPath = path.join(clientDistDir, alias);
+
+    try {
+      await fs.mkdir(path.dirname(aliasPath), { recursive: true });
+      await fs.copyFile(sourcePath, aliasPath);
+      console.log(`[prune-client-assets] Updated ${alias} → ${source}.`);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        console.warn(
+          `[prune-client-assets] Unable to update ${alias}; source asset ${source} was not found.`,
+        );
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+async function run() {
+  const html = await pruneHashedAssets();
+  await ensurePrimaryIndexAliases(html);
+}
+
+run().catch((error) => {
   console.error('[prune-client-assets] Failed to prune client assets:', error);
   process.exitCode = 1;
 });
