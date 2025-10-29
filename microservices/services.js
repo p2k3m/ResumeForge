@@ -83,6 +83,8 @@ export const services = {
       { method: 'HEAD', path: '/robots.txt' },
       { method: 'GET', path: '/service-worker.js' },
       { method: 'HEAD', path: '/service-worker.js' },
+      { method: 'GET', path: '/api/published-cloudfront' },
+      { method: 'HEAD', path: '/api/published-cloudfront' },
       { method: 'GET', path: '/assets*' },
       { method: 'HEAD', path: '/assets*' },
       { method: 'GET', path: '/fonts*' },
