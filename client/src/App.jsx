@@ -8760,15 +8760,20 @@ function App() {
     { key: 'changelog', label: 'Change Log', count: changeLogCount, ready: changeLogCount > 0 }
   ]
 
+  const isEnhancementReviewPhase =
+    currentPhase === 'enhance' ||
+    currentPhase === 'generate' ||
+    currentPhase === 'download'
+
   const allowedDashboardStageKeys = useMemo(() => {
     if (currentPhase === 'score') {
       return ['score']
     }
-    if (currentPhase === 'enhance' || currentPhase === 'generate') {
+    if (isEnhancementReviewPhase) {
       return ['suggestions', 'changelog']
     }
     return []
-  }, [currentPhase])
+  }, [currentPhase, isEnhancementReviewPhase])
 
   const filteredDashboardStageOptions = useMemo(
     () => dashboardStageOptions.filter((stage) => allowedDashboardStageKeys.includes(stage.key)),
@@ -9291,7 +9296,7 @@ function App() {
             </DashboardStage>
           )}
 
-          {currentPhase === 'enhance' && activeDashboardStage === 'suggestions' && (
+          {isEnhancementReviewPhase && activeDashboardStage === 'suggestions' && (
             <DashboardStage
               stageLabel="Suggestions Stage"
               title="Review AI Suggestions"
@@ -9349,7 +9354,7 @@ function App() {
             </DashboardStage>
           )}
 
-          {currentPhase === 'enhance' && activeDashboardStage === 'changelog' && (
+          {isEnhancementReviewPhase && activeDashboardStage === 'changelog' && (
             <DashboardStage
               stageLabel="Change Log Stage"
               title="Track accepted changes"
