@@ -439,10 +439,90 @@
           // Always include an empty base so we eventually retry the alias path as-is.
           candidates.push('')
 
-          return Object.freeze(candidates)
+          return candidates
         }
 
         const aliasBaseCandidates = resolveAliasBaseCandidates()
+        const aliasBaseSeen = new Set(aliasBaseCandidates)
+
+        const addAliasBaseCandidate = (value) => {
+          const normalized = normalizeAliasBase(value)
+          if (!normalized || aliasBaseSeen.has(normalized)) {
+            return false
+          }
+          aliasBaseSeen.add(normalized)
+          aliasBaseCandidates.push(normalized)
+          return true
+        }
+
+        let aliasMetadataLoaded = false
+        let aliasMetadataPromise = null
+
+        const ensureAliasMetadataLoaded = () => {
+          if (aliasMetadataLoaded) {
+            return aliasMetadataPromise || Promise.resolve(false)
+          }
+
+          if (aliasMetadataPromise) {
+            return aliasMetadataPromise
+          }
+
+          aliasMetadataPromise = (async () => {
+            try {
+              if (typeof fetch !== 'function') {
+                return false
+              }
+
+              const response = await fetch('/api/published-cloudfront', {
+                cache: 'no-store',
+                credentials: 'omit'
+              })
+
+              if (!response || !response.ok) {
+                return false
+              }
+
+              let payload
+              try {
+                payload = await response.json()
+              } catch (error) {
+                return false
+              }
+
+              const metadata =
+                payload && typeof payload === 'object' && payload.cloudfront
+                  ? payload.cloudfront
+                  : payload
+
+              const candidates = []
+              if (metadata && typeof metadata === 'object') {
+                if (typeof metadata.apiGatewayUrl === 'string') {
+                  candidates.push(metadata.apiGatewayUrl)
+                }
+                if (typeof metadata.url === 'string') {
+                  candidates.push(metadata.url)
+                }
+              }
+
+              let added = false
+              for (const candidate of candidates) {
+                if (addAliasBaseCandidate(candidate)) {
+                  added = true
+                }
+              }
+
+              return added
+            } catch (error) {
+              return false
+            } finally {
+              aliasMetadataLoaded = true
+            }
+          })().finally(() => {
+            aliasMetadataPromise = null
+          })
+
+          return aliasMetadataPromise
+        }
 
         const buildAliasUrlForAttempt = (aliasPath, attemptIndex) => {
           if (typeof attemptIndex !== 'number' || attemptIndex < 0) {
@@ -677,6 +757,29 @@
           }
 
           if (attemptIndex >= aliasBaseCandidates.length) {
+            ensureAliasMetadataLoaded()
+              .then((added) => {
+                if (!added) {
+                  return
+                }
+                if (!element) {
+                  return
+                }
+                if (typeof element.isConnected === 'boolean') {
+                  if (!element.isConnected) {
+                    return
+                  }
+                } else {
+                  const root = document?.documentElement
+                  if (!root || typeof root.contains !== 'function' || !root.contains(element)) {
+                    return
+                  }
+                }
+                attemptAliasReload(element)
+              })
+              .catch(() => {
+                // Ignore metadata lookup failures and allow other fallbacks to proceed.
+              })
             return false
           }
 
