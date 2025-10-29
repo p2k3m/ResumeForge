@@ -2,7 +2,7 @@
 
 When the published CloudFront domain stops responding, use the verification helper to confirm whether the CDN is reachable and serving the expected health payload. The runbook below walks through verifying the outage, validating the recorded metadata, and republishing a working distribution.
 
-> **Break-glass override:** If CloudFront refuses to serve newly uploaded assets but you must move forward temporarily (for example, during an ongoing AWS outage), export `ALLOW_CLOUDFRONT_VERIFY_FAILURE=true` *or* pass `--allow-cloudfront-failure` to `npm run verify:static`. The script will still attempt the CDN checks and log the failures, but it will exit successfully so the pipeline can continue. Remove the override and rerun the verifier as soon as the CDN stabilizes so production traffic is never switched to an unverified distribution.
+> **Break-glass override:** If CloudFront refuses to serve newly uploaded assets but you must move forward temporarily (for example, during an ongoing AWS outage), export `ALLOW_CLOUDFRONT_VERIFY_FAILURE=true` *or* pass `--allow-cloudfront-failure` to either `npm run verify:cloudfront` or `npm run verify:static`. The scripts will still attempt the CDN checks and log the failures, but they will exit successfully so the pipeline can continue. Remove the override and rerun the verifier as soon as the CDN stabilizes so production traffic is never switched to an unverified distribution.
 
 To skip only the CDN probe while still validating the S3 upload, run `npm run verify:static -- --skip-cloudfront`. This flag mirrors the `SKIP_CLOUDFRONT_VERIFY` environment variable and can be useful when testing from environments that cannot reach CloudFront but where you still want the manifest and S3 checks to execute.
 
