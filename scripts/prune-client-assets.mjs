@@ -9,6 +9,7 @@ const projectRoot = path.resolve(__dirname, '..');
 const clientDistDir = path.join(projectRoot, 'client', 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 const assetsDir = path.join(clientDistDir, 'assets');
+const publishedCloudfrontSourcePath = resolvePublishedCloudfrontSourcePath();
 const MIN_HASHED_VARIANTS_PER_TYPE = 6;
 const MIN_ASSET_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
@@ -291,9 +292,93 @@ async function ensurePrimaryIndexAliases(html) {
   }
 }
 
+function resolvePublishedCloudfrontSourcePath() {
+  const override = process.env.PUBLISHED_CLOUDFRONT_PATH;
+  if (typeof override === 'string' && override.trim()) {
+    return path.isAbsolute(override) ? override.trim() : path.join(projectRoot, override.trim());
+  }
+  return path.join(projectRoot, 'config', 'published-cloudfront.json');
+}
+
+async function loadPublishedCloudfrontMetadata() {
+  if (!publishedCloudfrontSourcePath) {
+    return null;
+  }
+
+  try {
+    const raw = await fs.readFile(publishedCloudfrontSourcePath, 'utf8');
+    if (!raw.trim()) {
+      return null;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (error) {
+      console.warn(
+        `[prune-client-assets] Skipping published CloudFront metadata fallback; JSON parse failed for ${publishedCloudfrontSourcePath}.`,
+        error,
+      );
+      return null;
+    }
+
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      console.warn(
+        `[prune-client-assets] Published CloudFront metadata not found at ${publishedCloudfrontSourcePath}; skipping static fallback.`,
+      );
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function ensurePublishedCloudfrontFallback() {
+  const metadata = await loadPublishedCloudfrontMetadata();
+  if (!metadata) {
+    return;
+  }
+
+  const payload = {
+    success: true,
+    cloudfront: metadata,
+  };
+
+  const serialized = `${JSON.stringify(payload, null, 2)}\n`;
+  const targets = [
+    path.join(clientDistDir, 'api', 'published-cloudfront'),
+    path.join(clientDistDir, 'api', 'published-cloudfront.json'),
+  ];
+
+  for (const target of targets) {
+    try {
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(target, serialized, 'utf8');
+      const relativeTarget = path.relative(clientDistDir, target) || path.basename(target);
+      console.log(
+        `[prune-client-assets] Updated ${relativeTarget.replace(/\\/g, '/')} from config/published-cloudfront.json.`,
+      );
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        console.warn(
+          `[prune-client-assets] Unable to write ${target}; ensure the client build completed successfully.`,
+        );
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 async function run() {
   const html = await pruneHashedAssets();
   await ensurePrimaryIndexAliases(html);
+  await ensurePublishedCloudfrontFallback();
 }
 
 run().catch((error) => {
