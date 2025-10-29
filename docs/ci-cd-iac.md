@@ -13,12 +13,18 @@ This document outlines the shared expectations for automating ResumeForge deploy
 
 * **Static analysis** – All JavaScript and TypeScript code paths are linted during CI. Pipelines must run `npm run lint` (or the workspace equivalent) and fail the build on unfixable issues. Auto-fixable problems should be corrected within the pipeline before packaging artifacts.
 * **Automated testing** – CI executes unit and integration test suites. Infrastructure templates are validated with `sam validate` or `cdk synth` as part of the workflow to catch configuration issues before deployment.
+* **GitHub Actions automation** – `.github/workflows/ci.yml` installs dependencies with `npm ci`, runs the aggregated `npm run test:ci` suite (lint, unit, integration, e2e, and template verification), and validates the SAM template with `sam validate --lint`. Coverage reports are uploaded as build artifacts and the workflow writes a concise job summary so failing checks surface actionable diagnostics inside the pull request.
 
 ## Continuous Delivery
 
 * **Staged deployments** – Deployments flow through sandbox and staging environments before production. Each stage uses the same SAM/CDK stack definitions to guarantee parity.
 * **Post-deploy verification** – After a stack update completes, the pipeline invokes `/healthz` and `/api/process-cv` endpoints to confirm application readiness. Failures trigger an automatic rollback or raise an incident before traffic is shifted.
 * **CloudFront cache management** – Every production deployment issues a CloudFront invalidation (`/*`) to flush cached assets and API responses. Automate this as part of the release pipeline so new code and configuration are visible immediately. All post-deploy cache is invalidated with a `/*` path after each deployment to guarantee the CDN stops serving stale artifacts before traffic returns to the site.
+* **GitHub Actions deployment workflow** – `.github/workflows/deploy.yml` performs manual (`workflow_dispatch`) deployments. The workflow assumes the configured AWS role, rebuilds Lambda and client assets, deploys the SAM stack, and issues a CloudFront invalidation. Passing the resolved distribution domain directly into `npm run verify:cloudfront` keeps CDN health checks inside the pipeline. Inputs allow operators to skip the pre-deploy tests during emergency fixes or temporarily ignore CloudFront verification errors while an incident is mitigated.
+
+## Operations and observability enhancements
+
+The GitHub Actions workflows publish job summaries so responders can review failure context without downloading artifacts. CI uploads the LCOV coverage file for local inspection when tests fail, while the deployment job records the target environment and CloudFront domain in its summary. Together these additions shorten the feedback loop for triaging build failures and verifying production readiness.
 
 ## Operational Guardrails
 
