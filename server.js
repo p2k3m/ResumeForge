@@ -141,7 +141,7 @@ function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
 }
 
 const HASHED_INDEX_ASSET_PATH_PATTERN =
-  /^\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/i;
+  /^\/assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/i;
 
 function resolveStaticAssetBucketCandidate() {
   const candidates = [

@@ -23,6 +23,8 @@ describe('resolvePrimaryIndexAssets', () => {
   it('falls back to the newest hashed assets discovered in the file list when the HTML manifest is empty', () => {
     const hashedAssets = []
     const files = [
+      'assets/index-latest.css',
+      'assets/index-latest.js',
       'assets/index-20240101.css',
       'assets/index-20240101.js',
       'assets/index-20240215.css',
@@ -35,6 +37,21 @@ describe('resolvePrimaryIndexAssets', () => {
 
     expect(manifest.css).toBe('assets/index-20240320.css')
     expect(manifest.js).toBe('assets/index-20240320.js')
+  })
+
+  it('ignores alias bundles when selecting fallback assets', () => {
+    const manifest = resolvePrimaryIndexAssets({
+      hashedAssets: [],
+      files: [
+        'assets/index-latest.css',
+        'assets/index-latest.js',
+        'assets/index-abc123.css',
+        'assets/index-abc123.js',
+      ],
+    })
+
+    expect(manifest.css).toBe('assets/index-abc123.css')
+    expect(manifest.js).toBe('assets/index-abc123.js')
   })
 
   it('handles windows-style paths when selecting fallback assets', () => {
