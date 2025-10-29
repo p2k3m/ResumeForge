@@ -369,6 +369,21 @@
           }
         }
 
+        const normalizeAliasOriginPath = (value) => {
+          if (typeof value !== 'string') {
+            return ''
+          }
+
+          const trimmed = value.trim()
+          if (!trimmed || trimmed === '/') {
+            return ''
+          }
+
+          const prefixed = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+          const withoutTrailing = prefixed.replace(/\/+$/, '')
+          return withoutTrailing || ''
+        }
+
         const joinAliasUrl = (base, aliasPath) => {
           if (!aliasPath) {
             return ''
@@ -504,11 +519,21 @@
                 }
               }
 
+              const originPath = normalizeAliasOriginPath(metadata?.originPath)
+
               let added = false
               for (const candidate of candidates) {
                 if (addAliasBaseCandidate(candidate)) {
                   added = true
                 }
+
+                if (candidate && originPath && addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
+                  added = true
+                }
+              }
+
+              if (originPath && addAliasBaseCandidate(joinAliasUrl('', originPath))) {
+                added = true
               }
 
               return added
