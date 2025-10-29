@@ -18002,7 +18002,7 @@ async function handleImprovementBatchRequest(req, res) {
 app.get('/api/published-cloudfront', async (req, res) => {
   try {
     const metadata = await loadPublishedCloudfrontMetadata();
-    if (!metadata?.url) {
+    if (!metadata || (!metadata.url && !metadata.apiGatewayUrl)) {
       return sendError(
         res,
         404,
@@ -18010,10 +18010,16 @@ app.get('/api/published-cloudfront', async (req, res) => {
         'No CloudFront URL has been published yet. Run npm run publish:cloudfront-url after deploying.'
       );
     }
+
+    const shouldForceDegraded = !metadata.url && metadata.apiGatewayUrl;
+    const responseMetadata = shouldForceDegraded
+      ? { ...metadata, degraded: metadata.degraded ?? true }
+      : metadata;
+
     res.setHeader('Cache-Control', 'no-store');
     return res.json({
       success: true,
-      cloudfront: metadata,
+      cloudfront: responseMetadata,
     });
   } catch (err) {
     logStructured('error', 'published_cloudfront_lookup_failed', {
