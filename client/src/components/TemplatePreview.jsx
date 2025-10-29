@@ -9,6 +9,45 @@ import getCoverTemplateStyle, {
 
 const cx = (...classes) => classes.filter(Boolean).join(' ')
 
+const toTitleCase = (value, fallbackLabel) => {
+  if (typeof value !== 'string') return fallbackLabel
+  const trimmed = value.trim()
+  if (!trimmed) return fallbackLabel
+  return trimmed
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+const collectDownloadsByTemplate = (downloadsByTemplate, normalizer) => {
+  if (!downloadsByTemplate) return []
+  const aggregated = new Map()
+  const appendEntry = (templateKey, files) => {
+    const normalizedId = normalizer(templateKey)
+    if (!normalizedId) return
+    const list = Array.isArray(files)
+      ? files.filter((file) => file && typeof file === 'object')
+      : []
+    if (!list.length) return
+    const existing = aggregated.get(normalizedId) || []
+    aggregated.set(normalizedId, [...existing, ...list])
+  }
+  if (downloadsByTemplate instanceof Map) {
+    for (const [templateKey, files] of downloadsByTemplate.entries()) {
+      appendEntry(templateKey, files)
+    }
+  } else if (typeof downloadsByTemplate === 'object') {
+    Object.entries(downloadsByTemplate).forEach(([templateKey, files]) => {
+      appendEntry(templateKey, files)
+    })
+  }
+  return Array.from(aggregated.entries()).map(([templateId, files]) => ({
+    templateId,
+    downloads: files
+  }))
+}
+
 const RESUME_TO_COVER_TEMPLATE = {
   modern: 'cover_modern',
   professional: 'cover_professional',
@@ -620,6 +659,16 @@ function TemplatePreview({
   const hasCustomResumeComparison = normalizedResumeComparisonSelections.length >= 2
   const hasCustomCoverComparison = normalizedCoverComparisonSelections.length >= 2
 
+  const resumeDownloadEntries = useMemo(() => {
+    if (!showDownloadActions) return []
+    return collectDownloadsByTemplate(resumeDownloadsByTemplate, normalizeResumeTemplateId)
+  }, [resumeDownloadsByTemplate, showDownloadActions])
+
+  const coverDownloadEntries = useMemo(() => {
+    if (!showDownloadActions) return []
+    return collectDownloadsByTemplate(coverDownloadsByTemplate, normalizeCoverTemplateIdValue)
+  }, [coverDownloadsByTemplate, showDownloadActions])
+
   const resolveResumeDownloads = (templateId) => {
     if (!showDownloadActions) return []
     const normalizedId = normalizeResumeTemplateId(templateId)
@@ -671,7 +720,7 @@ function TemplatePreview({
     })
   }
 
-  const resumeCards = hasCustomResumeComparison
+  const baseResumeCards = hasCustomResumeComparison
     ? normalizedResumeComparisonSelections.map((option, index) => {
         const style = getResumePreviewStyle(option?.id)
         const isApplied = option?.id === normalizedSelectedResumeId
@@ -703,7 +752,46 @@ function TemplatePreview({
           : [])
       ]
 
-  const coverCards = hasCustomCoverComparison
+  const resumeCardTemplateIds = new Set(
+    baseResumeCards.map((card) => card.option?.id).filter(Boolean)
+  )
+  if (previewResumeOption?.id) {
+    resumeCardTemplateIds.add(previewResumeOption.id)
+  }
+
+  const additionalResumeCards = showDownloadActions
+    ? resumeDownloadEntries
+        .filter(({ templateId, downloads }) =>
+          templateId && downloads?.length && !resumeCardTemplateIds.has(templateId)
+        )
+        .map(({ templateId, downloads }) => {
+          const option =
+            normalizedResumeTemplates.find((item) => item.id === templateId) || {
+              id: templateId,
+              name: toTitleCase(templateId, 'CV Template'),
+              description: ''
+            }
+          const style = getResumePreviewStyle(templateId)
+          const isApplied = templateId === normalizedSelectedResumeId
+          return {
+            key: `download-resume-${templateId}`,
+            label: 'Download-ready CV',
+            option,
+            style,
+            note: isApplied
+              ? 'This template is currently selected for your downloads.'
+              : 'Preview this CV style above to apply it to your downloads.',
+            canApply: !isApplied && Boolean(onResumeTemplateApply),
+            downloads
+          }
+        })
+    : []
+
+  const resumeCards = showDownloadActions
+    ? [...baseResumeCards, ...additionalResumeCards]
+    : baseResumeCards
+
+  const baseCoverCards = hasCustomCoverComparison
     ? normalizedCoverComparisonSelections.map((option, index) => {
         const style = getCoverTemplateStyle(option?.id) || DEFAULT_COVER_TEMPLATE_STYLE
         const isApplied = option?.id === coverTemplateId
@@ -736,6 +824,48 @@ function TemplatePreview({
             ]
           : [])
       ]
+
+  const coverCardTemplateIds = new Set(
+    baseCoverCards.map((card) => card.option?.id).filter(Boolean)
+  )
+  if (previewCoverOption?.id) {
+    coverCardTemplateIds.add(previewCoverOption.id)
+  }
+
+  const additionalCoverCards = showDownloadActions
+    ? coverDownloadEntries
+        .filter(({ templateId, downloads }) =>
+          templateId && downloads?.length && !coverCardTemplateIds.has(templateId)
+        )
+        .map(({ templateId, downloads }) => {
+          const option =
+            normalizedCoverTemplates.find((item) => item.id === templateId) || {
+              id: templateId,
+              name: toTitleCase(templateId, 'Cover Letter'),
+              description: ''
+            }
+          const style = getCoverTemplateStyle(templateId) || DEFAULT_COVER_TEMPLATE_STYLE
+          const isApplied = templateId === coverTemplateId
+          const note = isApplied
+            ? 'This cover letter style is currently selected for your downloads.'
+            : isCoverLinkedToResume
+            ? 'Preview this cover letter style to sync it with your selected CV downloads.'
+            : 'Preview this cover letter style to use it for your downloads.'
+          return {
+            key: `download-cover-${templateId}`,
+            label: 'Download-ready cover letter',
+            option,
+            style,
+            note,
+            canApply: !isApplied && Boolean(onCoverTemplateApply),
+            downloads
+          }
+        })
+    : []
+
+  const coverCards = showDownloadActions
+    ? [...baseCoverCards, ...additionalCoverCards]
+    : baseCoverCards
 
   const resumeGridColumns = hasCustomResumeComparison
     ? 'md:grid-cols-2'

@@ -153,4 +153,48 @@ describe('TemplatePreview comparison support', () => {
       .parentElement
     expect(footer).toHaveClass('bg-slate-900')
   })
+
+  it('surfaces download actions for every template with generated files', () => {
+    const resumeDownloads = {
+      modern: [
+        {
+          url: 'https://cdn.example.com/modern.pdf',
+          presentation: { label: 'Modern CV', badgeText: 'Latest' }
+        }
+      ],
+      classic: [
+        {
+          url: 'https://cdn.example.com/classic.pdf',
+          presentation: { label: 'Classic CV', badgeText: 'Polished' }
+        }
+      ]
+    }
+    const coverDownloads = {
+      cover_modern: [
+        {
+          url: 'https://cdn.example.com/cover-modern.pdf',
+          presentation: { label: 'Modern Cover', badgeText: 'Latest' }
+        }
+      ],
+      cover_classic: [
+        {
+          url: 'https://cdn.example.com/cover-classic.pdf',
+          presentation: { label: 'Classic Cover', badgeText: 'Polished' }
+        }
+      ]
+    }
+
+    renderComponent({
+      showDownloadActions: true,
+      resumeDownloadsByTemplate: resumeDownloads,
+      coverDownloadsByTemplate: coverDownloads,
+      onDownloadPreview: jest.fn()
+    })
+
+    expect(screen.getAllByText(/Preview & download/i)).toHaveLength(4)
+    expect(screen.getByRole('heading', { name: 'Classic' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Classic Cover' })).toBeInTheDocument()
+    expect(screen.getByText(/Download-ready CV/i)).toBeInTheDocument()
+    expect(screen.getByText(/Download-ready cover letter/i)).toBeInTheDocument()
+  })
 })
