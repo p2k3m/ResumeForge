@@ -802,10 +802,19 @@ async function serveIndexAssetAlias(req, res, next) {
 
   const extension = match[1].toLowerCase();
   const manifest = await loadHashedIndexAssetManifest();
-  const hashedAssetPath = extension === 'css' ? manifest.css : manifest.js;
-  const normalizedHashedAssetPath = normalizeManifestHashedAssetPath(hashedAssetPath);
+  let hashedAssetPath = extension === 'css' ? manifest.css : manifest.js;
+  let normalizedHashedAssetPath = normalizeManifestHashedAssetPath(hashedAssetPath);
+  let manifestFallbackCandidates = [];
 
-  if (!hashedAssetPath) {
+  if (!normalizedHashedAssetPath) {
+    manifestFallbackCandidates = await resolveFallbackHashedAssetPaths({ extension });
+    if (manifestFallbackCandidates.length > 0) {
+      hashedAssetPath = manifestFallbackCandidates.shift();
+      normalizedHashedAssetPath = normalizeManifestHashedAssetPath(hashedAssetPath);
+    }
+  }
+
+  if (!normalizedHashedAssetPath) {
     logStructured('warn', 'client_asset_alias_missing_manifest', {
       aliasPath: req.path,
       extension,
@@ -851,10 +860,12 @@ async function serveIndexAssetAlias(req, res, next) {
     return;
   }
 
-  const fallbackCandidates = await resolveFallbackHashedAssetPaths({
-    extension,
-    exclude: normalizedHashedAssetPath ? [normalizedHashedAssetPath] : [],
-  });
+  const fallbackCandidates = manifestFallbackCandidates.length
+    ? manifestFallbackCandidates
+    : await resolveFallbackHashedAssetPaths({
+        extension,
+        exclude: normalizedHashedAssetPath ? [normalizedHashedAssetPath] : [],
+      });
 
   const attemptedFallbacks = [];
   for (const candidate of fallbackCandidates) {
