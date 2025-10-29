@@ -425,6 +425,34 @@ export function resolveIndexAssetAliases(primaryAssets) {
   return aliases
 }
 
+export function ensureIndexAliasCoverage(uploads) {
+  const normalizedUploads = new Set()
+
+  if (Array.isArray(uploads)) {
+    for (const entry of uploads) {
+      const candidate = normalizeClientAssetPath(entry?.path ?? entry)
+      if (candidate) {
+        normalizedUploads.add(candidate)
+      }
+    }
+  }
+
+  const missingAliases = []
+  for (const alias of INDEX_ASSET_ALIAS_PATHS) {
+    if (!normalizedUploads.has(alias)) {
+      missingAliases.push(alias)
+    }
+  }
+
+  if (missingAliases.length > 0) {
+    const aliasSummary = missingAliases.map((alias) => `"${alias}"`).join(', ')
+    const plural = missingAliases.length === 1 ? '' : 's'
+    throw createValidationError(
+      `[upload-static] Missing required index alias bundle${plural}: ${aliasSummary}. Run "npm run build:client" before deploying so the client build can regenerate the hashed index assets.`,
+    )
+  }
+}
+
 function isImmutableHashedIndexAsset(key) {
   if (typeof key !== 'string' || !key) {
     return false
@@ -793,6 +821,7 @@ async function main() {
     aliases: resolveIndexAssetAliases(primaryIndexAssets),
   })
   const allUploadedFiles = [...uploadedFiles, ...aliasUploads]
+  ensureIndexAliasCoverage(allUploadedFiles)
   await verifyUploadedAssets({ s3, bucket, uploads: allUploadedFiles })
   await uploadManifest({
     s3,
