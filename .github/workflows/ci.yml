@@ -59,27 +59,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ -f coverage/lcov.info ]; then
-            node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
-const fs = require('fs');
-const reportPath = 'coverage/lcov.info';
-const contents = fs.readFileSync(reportPath, 'utf8');
-let covered = 0;
-let total = 0;
-for (const line of contents.split('\n')) {
-  if (line.startsWith('DA:')) {
-    total += 1;
-    const [, data] = line.split(':');
-    const [, hits] = data.split(',');
-    if (Number(hits) > 0) {
-      covered += 1;
-    }
-  }
-}
-const percent = total === 0 ? 0 : ((covered / total) * 100).toFixed(2);
-console.log('\n```');
-console.log(`Line coverage: ${percent}% (${covered}/${total})`);
-console.log('```');
-NODE
+            node --eval 'const fs = require("fs"); const contents = fs.readFileSync("coverage/lcov.info", "utf8"); let covered = 0; let total = 0; for (const line of contents.split("\n")) { if (line.startsWith("DA:")) { total += 1; const [, data] = line.split(":"); const [, hits] = data.split(","); if (Number(hits) > 0) { covered += 1; } } } const percent = total === 0 ? 0 : ((covered / total) * 100).toFixed(2); console.log("\n```"); console.log(`Line coverage: ${percent}% (${covered}/${total})`); console.log("```");' >> "$GITHUB_STEP_SUMMARY"
           else
             echo "\nCoverage report was not generated." >> "$GITHUB_STEP_SUMMARY"
           fi
