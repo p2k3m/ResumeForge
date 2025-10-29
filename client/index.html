@@ -539,6 +539,98 @@
           return `${normalizedBase}${normalizedPath}`
         }
 
+        const extractAwsRegionFromUrl = (value) => {
+          if (typeof value !== 'string') {
+            return ''
+          }
+
+          const trimmed = value.trim()
+          if (!trimmed) {
+            return ''
+          }
+
+          try {
+            const resolved = new URL(trimmed, window.location.href)
+            const host = (resolved.hostname || '').toLowerCase()
+            if (!host) {
+              return ''
+            }
+
+            const executeMatch = host.match(/^[^.]+\.execute-api\.([a-z0-9-]+)\.amazonaws\.com$/)
+            if (executeMatch && executeMatch[1]) {
+              return executeMatch[1]
+            }
+
+            const s3WebsiteMatch = host.match(/\.s3[.-]website[.-]([a-z0-9-]+)\.amazonaws\.com$/)
+            if (s3WebsiteMatch && s3WebsiteMatch[1]) {
+              return s3WebsiteMatch[1]
+            }
+
+            const s3Match = host.match(/\.s3[.-]([a-z0-9-]+)\.amazonaws\.com$/)
+            if (s3Match && s3Match[1]) {
+              return s3Match[1]
+            }
+
+            const segments = host.split('.')
+            for (const segment of segments) {
+              if (/^[a-z]{2}-[a-z0-9-]+-[0-9]+$/.test(segment)) {
+                return segment
+              }
+            }
+          } catch (error) {
+            return ''
+          }
+
+          return ''
+        }
+
+        const buildS3BaseCandidates = (bucket, regions = []) => {
+          if (typeof bucket !== 'string') {
+            return []
+          }
+
+          const trimmedBucket = bucket.trim()
+          if (!trimmedBucket) {
+            return []
+          }
+
+          const normalizedBucket = trimmedBucket
+          const bases = []
+          const seen = new Set()
+
+          const addBase = (candidate) => {
+            if (!candidate || seen.has(candidate)) {
+              return
+            }
+            seen.add(candidate)
+            bases.push(candidate)
+          }
+
+          addBase(`https://${normalizedBucket}.s3.amazonaws.com`)
+
+          if (Array.isArray(regions)) {
+            regions.forEach((regionValue) => {
+              if (!regionValue) {
+                return
+              }
+
+              const region = String(regionValue).trim().toLowerCase()
+              if (!region) {
+                return
+              }
+
+              addBase(`https://${normalizedBucket}.s3.${region}.amazonaws.com`)
+              addBase(`https://${normalizedBucket}.s3-${region}.amazonaws.com`)
+              addBase(`https://${normalizedBucket}.s3-website.${region}.amazonaws.com`)
+              addBase(`https://${normalizedBucket}.s3-website-${region}.amazonaws.com`)
+              addBase(`https://s3.${region}.amazonaws.com/${normalizedBucket}`)
+              addBase(`https://s3-${region}.amazonaws.com/${normalizedBucket}`)
+            })
+          }
+
+          return bases
+        }
+
         const resolveAliasBaseCandidates = () => {
           const candidates = []
           const seen = new Set()
@@ -661,6 +753,22 @@
               }
 
               const originPath = normalizeAliasOriginPath(metadata?.originPath)
+              const regionHints = new Set()
+
+              const apiRegion = extractAwsRegionFromUrl(metadata?.apiGatewayUrl)
+              if (apiRegion) {
+                regionHints.add(apiRegion)
+              }
+
+              const urlRegion = extractAwsRegionFromUrl(metadata?.url)
+              if (urlRegion) {
+                regionHints.add(urlRegion)
+              }
+
+              const bucketBases = buildS3BaseCandidates(
+                typeof metadata?.originBucket === 'string' ? metadata.originBucket : '',
+                Array.from(regionHints),
+              )
 
               let added = false
               for (const candidate of candidates) {
@@ -669,6 +777,15 @@
                 }
 
                 if (candidate && originPath && addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
+                  added = true
+                }
+              }
+
+              for (const base of bucketBases) {
+                if (addAliasBaseCandidate(base)) {
+                  added = true
+                }
+                if (originPath && addAliasBaseCandidate(joinAliasUrl(base, originPath))) {
                   added = true
                 }
               }
