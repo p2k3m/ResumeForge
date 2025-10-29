@@ -375,6 +375,18 @@
           }
 
           try {
+            const explicitGlobal =
+              typeof window.__RESUMEFORGE_API_BASE_URL__ === 'string'
+                ? window.__RESUMEFORGE_API_BASE_URL__.trim()
+                : ''
+            if (explicitGlobal) {
+              addCandidate(explicitGlobal)
+            }
+          } catch (error) {
+            // Ignore global override parsing issues.
+          }
+
+          try {
             const meta = document.querySelector('meta[name="resumeforge-api-base"]')
             if (meta && typeof meta.getAttribute === 'function') {
               addCandidate(meta.getAttribute('content'))
@@ -637,7 +649,12 @@
             return false
           }
 
-          if (element.dataset?.resumeforgeAssetAlias === 'true') {
+          const attemptIndex = Number.parseInt(element.dataset?.resumeforgeAliasAttempt || '0', 10)
+          if (!Number.isFinite(attemptIndex) || attemptIndex < 0) {
+            return false
+          }
+
+          if (attemptIndex >= aliasBaseCandidates.length) {
             return false
           }
 
@@ -655,7 +672,6 @@
             return false
           }
 
-          const attemptIndex = Number.parseInt(element.dataset?.resumeforgeAliasAttempt || '0', 10)
           const { url: aliasUrl, base: aliasBase } = buildAliasUrlForAttempt(aliasPath, attemptIndex)
           if (!aliasUrl) {
             return false
