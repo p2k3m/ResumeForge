@@ -134,4 +134,29 @@ describe('published CloudFront helpers', () => {
       await cleanup();
     }
   });
+
+  test('keeps published metadata accessible when only the client app service is active', async () => {
+    const metadata = {
+      stackName: 'ResumeForge',
+      url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+      distributionId: 'E3NEWPORTAL789',
+      updatedAt: '2024-10-15T14:45:00.000Z',
+      originBucket: 'resume-forge-app-2025',
+      originPath: '/',
+    };
+
+    process.env.ACTIVE_SERVICES = 'clientApp';
+    const { app, cleanup } = await createServer({ metadata });
+    try {
+      const response = await request(app).get('/api/published-cloudfront');
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        success: true,
+        cloudfront: expect.objectContaining({ url: metadata.url }),
+      });
+    } finally {
+      delete process.env.ACTIVE_SERVICES;
+      await cleanup();
+    }
+  });
 });
