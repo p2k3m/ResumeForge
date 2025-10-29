@@ -75,6 +75,35 @@ describe('published CloudFront helpers', () => {
     }
   });
 
+  test('returns API metadata when the CloudFront URL is unavailable', async () => {
+    const metadata = {
+      stackName: 'ResumeForge',
+      apiGatewayUrl: 'https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod',
+      originBucket: 'resume-forge-app-2025',
+      originPath: '/static/client/prod/latest',
+    };
+    const { app, cleanup } = await createServer({ metadata });
+    try {
+      const response = await request(app).get('/api/published-cloudfront');
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        success: true,
+        cloudfront: {
+          stackName: metadata.stackName,
+          url: null,
+          distributionId: null,
+          originBucket: metadata.originBucket,
+          originPath: metadata.originPath,
+          updatedAt: null,
+          apiGatewayUrl: metadata.apiGatewayUrl,
+          degraded: true,
+        },
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
   test('defaults the origin path to root when omitted', async () => {
     const metadata = {
       stackName: 'ResumeForge',
