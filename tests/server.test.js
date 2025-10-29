@@ -289,6 +289,7 @@ describe('static asset fallbacks', () => {
       const res = await request(app).get('/assets/index-latest.css');
       expect(res.status).toBe(200);
       expect(res.text).toBe(assetBody);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
       expect(mockS3Send).toHaveBeenCalledTimes(1);
     } finally {
       statSpy.mockRestore();
@@ -368,6 +369,7 @@ describe('static asset fallbacks', () => {
       const res = await request(app).get('/assets/index-latest.css');
       expect(res.status).toBe(200);
       expect(res.text).toBe(fallbackBody);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
       expect(mockS3Send).toHaveBeenCalledTimes(3);
     } finally {
       statSpy.mockRestore();
