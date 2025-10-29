@@ -333,16 +333,43 @@ function resolveBucketConfiguration() {
     )
   }
 
-  const environmentLabel = deploymentEnvironment || stageName || 'prod'
-  const stage = stageName || environmentLabel || 'prod'
-  const prefixCandidate =
-    process.env.STATIC_ASSETS_PREFIX || `static/client/${stage}/latest`
-  const normalizedPrefix = String(prefixCandidate).trim().replace(/^\/+/, '').replace(/\/+$/, '')
+  const normalizePrefixSegment = (value) => {
+    if (typeof value !== 'string') {
+      return ''
+    }
+
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return ''
+    }
+
+    return trimmed
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9.-]/g, '-')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
+
+  const normalizedEnvironment = normalizePrefixSegment(deploymentEnvironment)
+  const normalizedStage = normalizePrefixSegment(stageName)
+  const baseSegment = normalizedEnvironment || normalizedStage || 'prod'
+  const prefixSource =
+    process.env.STATIC_ASSETS_PREFIX || `static/client/${baseSegment}/latest`
+  const normalizedPrefix = String(prefixSource).trim().replace(/^\/+/, '').replace(/\/+$/, '')
   if (!normalizedPrefix) {
     throw new Error('STATIC_ASSETS_PREFIX must resolve to a non-empty value.')
   }
 
-  return { bucket, prefix: normalizedPrefix, stage, deploymentEnvironment: environmentLabel }
+  const effectiveStage = stageName || normalizedStage || baseSegment
+  const effectiveEnvironment = deploymentEnvironment || stageName || baseSegment
+
+  return {
+    bucket,
+    prefix: normalizedPrefix,
+    stage: effectiveStage,
+    deploymentEnvironment: effectiveEnvironment,
+  }
 }
 
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/

@@ -159,6 +159,24 @@ function resolveStaticAssetBucketCandidate() {
   return undefined;
 }
 
+function normalizeStaticAssetPrefixSegment(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  return trimmed
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 function resolveStaticAssetPrefixCandidate() {
   const explicit = readEnvValue('STATIC_ASSETS_PREFIX');
   if (explicit) {
@@ -172,7 +190,10 @@ function resolveStaticAssetPrefixCandidate() {
     stageName ||
     'prod';
 
-  const base = (stageName || environmentLabel || 'prod').trim();
+  const normalizedEnvironment = normalizeStaticAssetPrefixSegment(environmentLabel);
+  const normalizedStage = normalizeStaticAssetPrefixSegment(stageName);
+  const base = normalizedEnvironment || normalizedStage || 'prod';
+
   return `static/client/${base}/latest`;
 }
 

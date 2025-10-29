@@ -48,6 +48,12 @@ describe('resolveCloudfrontAssetPathPrefixes', () => {
     expect(resolveCloudfrontAssetPathPrefixes()).toEqual(['custom/static/path']);
   });
 
+  test('uses deployment environment when it differs from stage name', async () => {
+    applyOverrides({ STAGE_NAME: 'blue', DEPLOYMENT_ENVIRONMENT: 'prod' });
+    const { resolveCloudfrontAssetPathPrefixes } = await import('../lib/cloudfrontAssetPrefixes.js');
+    expect(resolveCloudfrontAssetPathPrefixes()).toEqual(['static/client/prod/latest']);
+  });
+
   test('merges manual overrides with fallback prefix and removes duplicates', async () => {
     applyOverrides({
       STAGE_NAME: 'prod',
