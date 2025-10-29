@@ -49,6 +49,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-10-15T14:45:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originPath: '/',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -63,11 +64,30 @@ describe('published CloudFront helpers', () => {
           typeUrl: 'https://d3p4q5r6s7t8u9.cloudfront.net#download',
           distributionId: metadata.distributionId,
           originBucket: metadata.originBucket,
+          originPath: metadata.originPath,
           updatedAt: metadata.updatedAt,
           apiGatewayUrl: null,
           degraded: false,
         },
       });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('defaults the origin path to root when omitted', async () => {
+    const metadata = {
+      stackName: 'ResumeForge',
+      url: 'https://d3p4q5r6s7t8u9.cloudfront.net',
+      distributionId: 'E3NEWPORTAL789',
+      updatedAt: '2024-10-15T14:45:00.000Z',
+      originBucket: 'resume-forge-app-2025',
+    };
+    const { app, cleanup } = await createServer({ metadata });
+    try {
+      const response = await request(app).get('/api/published-cloudfront');
+      expect(response.status).toBe(200);
+      expect(response.body.cloudfront.originPath).toBe('/');
     } finally {
       await cleanup();
     }
@@ -80,6 +100,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-10-15T14:45:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originPath: '/',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -98,6 +119,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-10-15T14:45:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originPath: '/',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
