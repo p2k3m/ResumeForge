@@ -1,6 +1,7 @@
 import {
   resolvePrimaryIndexAssets,
   resolveIndexAssetAliases,
+  ensureIndexAliasCoverage,
   shouldDeleteObjectKey,
   verifyUploadedAssets,
 } from '../scripts/upload-static-build.mjs'
@@ -82,6 +83,28 @@ describe('resolveIndexAssetAliases', () => {
     expect(resolveIndexAssetAliases({ css: 'assets/index-abc123.css' })).toEqual([
       { alias: 'assets/index-latest.css', source: 'assets/index-abc123.css' },
     ])
+  })
+})
+
+describe('ensureIndexAliasCoverage', () => {
+  it('passes when both aliases are present in the upload list', () => {
+    expect(() =>
+      ensureIndexAliasCoverage([
+        { path: 'index.html' },
+        { path: 'assets/index-latest.css' },
+        { path: 'assets/index-latest.js' },
+      ]),
+    ).not.toThrow()
+  })
+
+  it('throws a validation error when an alias is missing', () => {
+    expect(() => ensureIndexAliasCoverage([{ path: 'assets/index-latest.js' }])).toThrow(
+      '[upload-static] Missing required index alias bundle: "assets/index-latest.css".',
+    )
+  })
+
+  it('normalizes primitive path entries when verifying aliases', () => {
+    expect(() => ensureIndexAliasCoverage(['assets/index-latest.css', 'assets/index-latest.js'])).not.toThrow()
   })
 })
 
