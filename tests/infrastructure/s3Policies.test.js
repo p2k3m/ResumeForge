@@ -56,6 +56,51 @@ describe('infrastructure S3 access policies', () => {
     expect(allowPutStatement).toBeDefined();
   });
 
+  test('DataBucket policy allows public read access for client assets', () => {
+    const bucketPolicy = template?.Resources?.DataBucketPolicy;
+    expect(bucketPolicy).toBeDefined();
+
+    const statements = bucketPolicy.Properties?.PolicyDocument?.Statement || [];
+    const allowPublicAssetsStatement = statements.find((statement) => {
+      if (!statement || statement.Effect !== 'Allow') return false;
+      const actions = Array.isArray(statement.Action)
+        ? statement.Action
+        : [statement.Action].filter(Boolean);
+      const principal = statement.Principal;
+      const resource = statement.Resource;
+
+      const hasAssetsResource = (() => {
+        if (!resource) return false;
+        if (typeof resource === 'string') {
+          return resource.includes('/assets/*');
+        }
+        const extractStrings = (value) => {
+          if (typeof value === 'string') return [value];
+          if (value?.['Fn::Sub']) {
+            const subValue = value['Fn::Sub'];
+            if (typeof subValue === 'string') return [subValue];
+            if (Array.isArray(subValue)) {
+              const [template] = subValue;
+              return typeof template === 'string' ? [template] : [];
+            }
+          }
+          return [];
+        };
+
+        if (resource['Fn::If']) {
+          const [, whenTrue, whenFalse] = resource['Fn::If'];
+          const candidates = [...extractStrings(whenTrue), ...extractStrings(whenFalse)];
+          return candidates.length > 0 && candidates.every((value) => value.includes('/assets/*'));
+        }
+        return false;
+      })();
+
+      return principal === '*' && actions.includes('s3:GetObject') && hasAssetsResource;
+    });
+
+    expect(allowPublicAssetsStatement).toBeDefined();
+  });
+
   test('ResumeForge function IAM policies include s3:PutObject access', () => {
     const lambda = template?.Resources?.ResumeForgeFunction;
     expect(lambda).toBeDefined();
@@ -74,5 +119,15 @@ describe('infrastructure S3 access policies', () => {
     });
 
     expect(hasPutObject).toBe(true);
+  });
+
+  test('DataBucket allows public access policies to take effect', () => {
+    const dataBucket = template?.Resources?.DataBucket;
+    expect(dataBucket).toBeDefined();
+
+    const publicAccessBlock = dataBucket.Properties?.PublicAccessBlockConfiguration;
+    expect(publicAccessBlock).toBeDefined();
+    expect(publicAccessBlock.BlockPublicPolicy).toBe(false);
+    expect(publicAccessBlock.RestrictPublicBuckets).toBe(false);
   });
 });
