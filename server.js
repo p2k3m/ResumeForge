@@ -211,6 +211,97 @@ function buildStaticAssetKey(prefix, requestPath) {
   return combined.replace(/\/{2,}/g, '/');
 }
 
+function escapeHtmlAttributeValue(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function updateAttributeInTag(tag, attribute, value) {
+  if (!tag || !attribute) {
+    return tag;
+  }
+
+  const escapedValue = escapeHtmlAttributeValue(value);
+  const attributePattern = new RegExp(`(${attribute}\\s*=\\s*)(["'])[^"']*(\\2)`, 'i');
+  if (attributePattern.test(tag)) {
+    return tag.replace(attributePattern, (_, prefix, quote, suffixQuote) => {
+      return `${prefix}${quote}${escapedValue}${suffixQuote}`;
+    });
+  }
+
+  const closing = tag.endsWith('/>') ? '/>' : '>';
+  const withoutClosing = tag.slice(0, tag.length - closing.length);
+  return `${withoutClosing} ${attribute}="${escapedValue}"${closing}`;
+}
+
+function updateTagAttribute(html, { tagName, matchAttribute, matchValue, attribute, value }) {
+  if (!html || !tagName || !matchAttribute || !matchValue || !attribute) {
+    return html;
+  }
+
+  const pattern = new RegExp(
+    `<${tagName}\\b[^>]*${matchAttribute}\\s*=\\s*(["'])${matchValue.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\1[^>]*>`,
+    'i',
+  );
+
+  return html.replace(pattern, (match) => updateAttributeInTag(match, attribute, value));
+}
+
+function normalizeMetadataUrlForEmbedding(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const resolved = new URL(trimmed);
+    const normalizedPath = resolved.pathname ? resolved.pathname.replace(/\/+$/, '') : '';
+    const base = `${resolved.origin}${normalizedPath}`;
+    return `${base}${resolved.search || ''}${resolved.hash || ''}`;
+  } catch (error) {
+    return trimmed;
+  }
+}
+
+function embedPublishedCloudfrontMetadataIntoHtml(html, metadata) {
+  if (!metadata || typeof html !== 'string' || !html) {
+    return html;
+  }
+
+  const apiBase = normalizeMetadataUrlForEmbedding(metadata.apiGatewayUrl);
+  const fallbackBase = apiBase || normalizeMetadataUrlForEmbedding(metadata.url);
+
+  if (!apiBase && !fallbackBase) {
+    return html;
+  }
+
+  let updatedHtml = html;
+  if (apiBase) {
+    updatedHtml = updateTagAttribute(updatedHtml, {
+      tagName: 'meta',
+      matchAttribute: 'name',
+      matchValue: 'resumeforge-api-base',
+      attribute: 'content',
+      value: apiBase,
+    });
+  }
+
+  if (fallbackBase) {
+    const pattern = /<input\b[^>]*data-backup-api-base[^>]*>/gi;
+    updatedHtml = updatedHtml.replace(pattern, (match) => updateAttributeInTag(match, 'value', fallbackBase));
+  }
+
+  return updatedHtml;
+}
+
 async function streamS3BodyToResponse(body, res) {
   if (!body) {
     res.end();
@@ -2050,7 +2141,19 @@ async function getClientIndexHtml() {
     return cachedClientIndexHtml;
   }
 
-  const html = await fs.readFile(clientIndexPath, 'utf8');
+  let html = await fs.readFile(clientIndexPath, 'utf8');
+
+  try {
+    const metadata = await loadPublishedCloudfrontMetadata();
+    if (metadata) {
+      html = embedPublishedCloudfrontMetadataIntoHtml(html, metadata);
+    }
+  } catch (err) {
+    logStructured('warn', 'client_index_metadata_embed_failed', {
+      error: serializeError(err),
+    });
+  }
+
   if (process.env.NODE_ENV !== 'development') {
     cachedClientIndexHtml = html;
   }
