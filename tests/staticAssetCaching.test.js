@@ -25,4 +25,19 @@ describe('setStaticAssetCacheHeaders', () => {
 
     expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
   });
+
+  test('disables caching for index alias requests', () => {
+    const res = createResponseMock();
+
+    setStaticAssetCacheHeaders(
+      res,
+      '/assets/index-123abc.js',
+      '/assets/index-latest.js'
+    );
+
+    expect(res.setHeader).toHaveBeenCalledWith(
+      'Cache-Control',
+      'no-cache, no-store, must-revalidate'
+    );
+  });
 });

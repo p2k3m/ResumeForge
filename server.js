@@ -121,9 +121,18 @@ const knownResumeIdentifiers = new Set();
 
 const IMMUTABLE_STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
+const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
+const CLIENT_INDEX_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
 
-function setStaticAssetCacheHeaders(res, assetPath) {
-  const extension = path.extname(assetPath).toLowerCase();
+function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
+  const effectivePath = typeof requestPath === 'string' ? requestPath : assetPath;
+
+  if (INDEX_ASSET_ALIAS_PATH_PATTERN.test(effectivePath || '')) {
+    res.setHeader('Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
+    return;
+  }
+
+  const extension = path.extname(assetPath || '').toLowerCase();
   if (extension && !STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST.has(extension)) {
     res.setHeader('Cache-Control', IMMUTABLE_STATIC_ASSET_CACHE_CONTROL);
   } else {
@@ -241,7 +250,7 @@ async function streamS3BodyToResponse(body, res) {
   res.end();
 }
 
-function applyS3ResponseHeaders(res, metadata, assetPath) {
+function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPath) {
   const {
     ContentType,
     CacheControl,
@@ -262,7 +271,11 @@ function applyS3ResponseHeaders(res, metadata, assetPath) {
   if (CacheControl) {
     res.setHeader('Cache-Control', CacheControl);
   } else {
-    setStaticAssetCacheHeaders(res, assetPath);
+    setStaticAssetCacheHeaders(res, assetPath, requestPath);
+  }
+
+  if (INDEX_ASSET_ALIAS_PATH_PATTERN.test((requestPath || assetPath || '').toString())) {
+    res.setHeader('Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
   }
 
   if (ContentLength !== undefined) {
@@ -285,8 +298,6 @@ function applyS3ResponseHeaders(res, metadata, assetPath) {
     }
   }
 }
-
-const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
 
 let cachedIndexAssetManifest;
 const STATIC_MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -625,7 +636,13 @@ function resolveClientDistAssetPath(assetPath) {
   return path.join(clientDistDir, withoutLeadingSlashes);
 }
 
-async function serveClientDistAsset({ assetPath, method, res, logContext }) {
+async function serveClientDistAsset({
+  assetPath,
+  method,
+  res,
+  logContext,
+  requestPath,
+}) {
   if (!assetPath) {
     return false;
   }
@@ -634,7 +651,7 @@ async function serveClientDistAsset({ assetPath, method, res, logContext }) {
 
   try {
     const stats = await fs.stat(fullPath);
-    setStaticAssetCacheHeaders(res, assetPath);
+    setStaticAssetCacheHeaders(res, assetPath, requestPath);
     const contentType = mime.lookup(assetPath);
     if (contentType) {
       res.setHeader('Content-Type', contentType);
@@ -671,6 +688,7 @@ async function serveHashedIndexAssetFromS3({
   res,
   logContext: baseLogContext = {},
   logLabels = {},
+  requestPath,
 }) {
   const bucket = resolveStaticAssetBucketCandidate();
   const prefix = resolveStaticAssetPrefixCandidate();
@@ -712,7 +730,7 @@ async function serveHashedIndexAssetFromS3({
         },
       );
 
-      applyS3ResponseHeaders(res, headResult, assetPath);
+      applyS3ResponseHeaders(res, headResult, assetPath, requestPath);
       res.status(200).end();
       logStructured('info', labels.headServed, logContext);
       return true;
@@ -731,7 +749,7 @@ async function serveHashedIndexAssetFromS3({
       },
     );
 
-    applyS3ResponseHeaders(res, objectResult, assetPath);
+    applyS3ResponseHeaders(res, objectResult, assetPath, requestPath);
     res.status(200);
     await streamS3BodyToResponse(objectResult.Body, res);
     logStructured('info', labels.served, logContext);
@@ -760,6 +778,7 @@ async function tryServeHashedIndexAssetFromS3(req, res, next) {
     assetPath: req.path,
     method,
     res,
+    requestPath: req.path,
   });
 
   if (served) {
@@ -801,7 +820,15 @@ async function serveIndexAssetAlias(req, res, next) {
     method,
   };
 
-  if (await serveClientDistAsset({ assetPath: hashedAssetPath, method, res, logContext })) {
+  if (
+    await serveClientDistAsset({
+      assetPath: hashedAssetPath,
+      method,
+      res,
+      logContext,
+      requestPath: req.path,
+    })
+  ) {
     return;
   }
 
@@ -817,6 +844,7 @@ async function serveIndexAssetAlias(req, res, next) {
       headServed: 'client_asset_alias_s3_head_served',
       failed: 'client_asset_alias_s3_failed',
     },
+    requestPath: req.path,
   });
 
   if (servedFromS3) {
@@ -842,7 +870,15 @@ async function serveIndexAssetAlias(req, res, next) {
       manifestFallback: true,
     };
 
-    if (await serveClientDistAsset({ assetPath: candidate, method, res, logContext: fallbackLogContext })) {
+    if (
+      await serveClientDistAsset({
+        assetPath: candidate,
+        method,
+        res,
+        logContext: fallbackLogContext,
+        requestPath: req.path,
+      })
+    ) {
       return;
     }
 
@@ -858,6 +894,7 @@ async function serveIndexAssetAlias(req, res, next) {
         headServed: 'client_asset_alias_fallback_s3_head_served',
         failed: 'client_asset_alias_fallback_s3_failed',
       },
+      requestPath: req.path,
     });
 
     if (servedFallback) {
@@ -17945,6 +17982,7 @@ if (shouldServeClientAppRoutes) {
   app.get('/', async (req, res) => {
     try {
       const html = await getClientIndexHtml();
+      res.setHeader('Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
       res.type('html').send(html);
     } catch (err) {
       logStructured('error', 'client_ui_load_failed', {
