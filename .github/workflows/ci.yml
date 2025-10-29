@@ -34,7 +34,7 @@ jobs:
       - name: Setup AWS SAM CLI
         uses: aws-actions/setup-sam@v2
         with:
-          version: latest
+          version: '1.*'
 
       - name: Validate infrastructure template
         run: sam validate --template template.yaml --lint
