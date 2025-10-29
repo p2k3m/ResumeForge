@@ -38,6 +38,7 @@ Failed to reach https://d3p4q5r6s7t8u9.cloudfront.net/healthz: fetch failed
 
 Next steps:
 - Confirm the recorded domain in config/published-cloudfront.json matches the most recent deployment output (the current distribution fronts the `resume-forge-app-2025` bucket).
+- Share the recorded API Gateway fallback (`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`) with stakeholders so support can route around the outage while CloudFront recovers.
 - If the distribution was replaced or removed, redeploy the SAM stack and republish the CloudFront URL:
     sam validate
     sam build --use-container

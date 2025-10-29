@@ -160,17 +160,31 @@ async function main() {
     stackName,
     url: urlOutput.OutputValue,
     distributionId,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    degraded: false
   }
 
   if (apiGatewayOutput?.OutputValue) {
     payload.apiGatewayUrl = apiGatewayOutput.OutputValue
+  }
+
+  const originBucket = typeof process.env.S3_BUCKET === 'string'
+    ? process.env.S3_BUCKET.trim()
+    : ''
+
+  if (originBucket) {
+    payload.originBucket = originBucket
+  } else if (previous?.originBucket) {
+    payload.originBucket = previous.originBucket
   }
   await fs.writeFile(publishFile, `${JSON.stringify(payload, null, 2)}\n`)
   console.log(`Published CloudFront URL: ${payload.url}`)
   console.log(`Distribution ${distributionId} is now the active entry point.`)
   if (payload.apiGatewayUrl) {
     console.log(`Recorded API Gateway fallback URL: ${payload.apiGatewayUrl}`)
+  }
+  if (payload.originBucket) {
+    console.log(`Recorded CloudFront origin bucket: ${payload.originBucket}`)
   }
 }
 
