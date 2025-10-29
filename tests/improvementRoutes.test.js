@@ -153,6 +153,14 @@ describe('targeted improvement routes', () => {
         }),
       })
     );
+    expect(response.body.validation).toEqual(
+      expect.objectContaining({
+        jobAlignment: expect.objectContaining({
+          status: 'passed',
+          matchedSkills: expect.arrayContaining(['Leadership']),
+        }),
+      })
+    );
     expect(typeof response.body.selectionProbabilityBefore).toBe('number');
     expect(typeof response.body.selectionProbabilityAfter).toBe('number');
     expect(typeof response.body.selectionProbabilityDelta).toBe('number');
@@ -231,6 +239,14 @@ describe('targeted improvement routes', () => {
         added: expect.arrayContaining(['Azure Administrator Associate']),
         removed: expect.arrayContaining([]),
         reason: ['Elevated certifications for cloud leadership.'],
+      })
+    );
+    expect(response.body.validation).toEqual(
+      expect.objectContaining({
+        jobAlignment: expect.objectContaining({
+          status: 'skipped',
+          reason: 'No JD keywords were supplied for validation.',
+        }),
       })
     );
     expect(response.body.rescore).toEqual(
@@ -325,6 +341,14 @@ describe('targeted improvement routes', () => {
         reason: expect.arrayContaining([
           'Rewrote experience bullets to surface Lead Software Engineer responsibilities and highlight the JD-aligned additions.'
         ]),
+      })
+    );
+    expect(response.body.validation).toEqual(
+      expect.objectContaining({
+        jobAlignment: expect.objectContaining({
+          status: 'passed',
+          matchedSkills: expect.arrayContaining(['Leadership', 'Cloud Architecture']),
+        }),
       })
     );
   });

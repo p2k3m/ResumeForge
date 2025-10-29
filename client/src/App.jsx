@@ -214,6 +214,67 @@ function toUniqueList(items) {
   return output
 }
 
+function normalizeImprovementValidation(validation) {
+  if (!validation || typeof validation !== 'object') {
+    return { jobAlignment: { status: 'unknown', matchedSkills: [], coveredSkills: [], reason: '' } }
+  }
+
+  const jobAlignmentSource =
+    validation.jobAlignment && typeof validation.jobAlignment === 'object'
+      ? validation.jobAlignment
+      : {}
+
+  const allowedStatuses = ['passed', 'failed', 'skipped', 'unknown']
+  const statusInput = typeof jobAlignmentSource.status === 'string' ? jobAlignmentSource.status.trim().toLowerCase() : 'unknown'
+  const status = allowedStatuses.includes(statusInput) ? statusInput : 'unknown'
+
+  const matchedSkills = toUniqueList(jobAlignmentSource.matchedSkills)
+  const coveredSkills = toUniqueList(jobAlignmentSource.coveredSkills)
+  const beforeMissingSkills = toUniqueList(jobAlignmentSource.beforeMissingSkills)
+  const afterMissingSkills = toUniqueList(jobAlignmentSource.afterMissingSkills)
+  const reason = typeof jobAlignmentSource.reason === 'string' ? jobAlignmentSource.reason.trim() : ''
+  const jobTitleMatched = jobAlignmentSource.jobTitleMatched === true
+  const scoreDelta =
+    typeof jobAlignmentSource.scoreDelta === 'number' && Number.isFinite(jobAlignmentSource.scoreDelta)
+      ? jobAlignmentSource.scoreDelta
+      : null
+  const overallScoreDelta =
+    typeof jobAlignmentSource.overallScoreDelta === 'number' &&
+    Number.isFinite(jobAlignmentSource.overallScoreDelta)
+      ? jobAlignmentSource.overallScoreDelta
+      : null
+
+  return {
+    jobAlignment: {
+      status,
+      reason,
+      matchedSkills,
+      coveredSkills,
+      beforeMissingSkills,
+      afterMissingSkills,
+      jobTitleMatched,
+      scoreDelta,
+      overallScoreDelta
+    }
+  }
+}
+
+function resolveImprovementValidationStatus(validation) {
+  const status = validation?.jobAlignment?.status
+  if (typeof status === 'string') {
+    const normalized = status.trim().toLowerCase()
+    if (['passed', 'failed', 'skipped', 'unknown'].includes(normalized)) {
+      return normalized
+    }
+  }
+  return 'unknown'
+}
+
+function improvementValidationPassed(validation) {
+  const status = resolveImprovementValidationStatus(validation)
+  return status === 'passed' || status === 'skipped'
+}
+
 function formatReadableList(items) {
   const list = toUniqueList(Array.isArray(items) ? items : [items])
   if (!list.length) return ''
@@ -2103,6 +2164,52 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
     if (!Array.isArray(suggestion.improvementSummary)) return []
     return suggestion.improvementSummary.map((segment) => buildActionableHint(segment)).filter(Boolean)
   }, [suggestion.improvementSummary])
+  const normalizedValidation = useMemo(
+    () => normalizeImprovementValidation(suggestion.validation),
+    [suggestion.validation]
+  )
+  const jobAlignment = normalizedValidation.jobAlignment || {}
+  const validationStatus = resolveImprovementValidationStatus(normalizedValidation)
+  const validationLabel = (() => {
+    switch (validationStatus) {
+      case 'passed':
+        return 'JD alignment confirmed'
+      case 'failed':
+        return 'Needs JD alignment'
+      case 'skipped':
+        return 'JD validation unavailable'
+      default:
+        return 'JD validation pending'
+    }
+  })()
+  const validationToneClass =
+    validationStatus === 'passed'
+      ? 'text-emerald-700'
+      : validationStatus === 'failed'
+        ? 'text-rose-600'
+        : 'text-slate-600'
+  const validationMessage = (() => {
+    if (jobAlignment.reason) {
+      return jobAlignment.reason
+    }
+    if (validationStatus === 'failed') {
+      return 'No JD keywords matched this rewrite.'
+    }
+    if (validationStatus === 'skipped') {
+      return 'No JD keywords were supplied to validate this section.'
+    }
+    if (validationStatus === 'unknown') {
+      return 'Validation pending — rerun ATS scoring once improvements are applied.'
+    }
+    return ''
+  })()
+  const validationHighlights = useMemo(() => {
+    const highlights = [
+      ...(Array.isArray(jobAlignment.matchedSkills) ? jobAlignment.matchedSkills : []),
+      ...(Array.isArray(jobAlignment.coveredSkills) ? jobAlignment.coveredSkills : [])
+    ]
+    return toUniqueList(highlights)
+  }, [jobAlignment.coveredSkills, jobAlignment.matchedSkills])
   const areaImpactRows = useMemo(() => {
     const overallSummary = suggestion?.rescoreSummary?.overall
     if (!overallSummary || typeof overallSummary !== 'object') {
@@ -2213,6 +2320,20 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
           <p className="mt-1 text-indigo-800 whitespace-pre-wrap">{suggestion.afterExcerpt || '—'}</p>
         </div>
       </div>
+      <div className="rounded-lg border border-purple-200/70 bg-white/70 p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+          JD Alignment Check
+        </p>
+        <p className={`text-sm font-semibold ${validationToneClass}`}>{validationLabel}</p>
+        {validationMessage && (
+          <p className="mt-1 text-xs text-purple-700/80">{validationMessage}</p>
+        )}
+        {validationHighlights.length > 0 && (
+          <p className="mt-2 text-xs text-purple-700/80">
+            Reinforced keywords: {validationHighlights.join(', ')}
+          </p>
+        )}
+      </div>
       <div className="rounded-lg border border-purple-200/70 bg-purple-50/60 p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
           AI added/modified these · Learn this for your interview
@@ -2304,6 +2425,7 @@ function App() {
   const [outputFiles, setOutputFiles] = useState([])
   const [downloadGeneratedAt, setDownloadGeneratedAt] = useState('')
   const [downloadStates, setDownloadStates] = useState({})
+  const [artifactsUploaded, setArtifactsUploaded] = useState(false)
   const [match, setMatch] = useState(null)
   const [scoreBreakdown, setScoreBreakdown] = useState([])
   const [baselineScoreBreakdown, setBaselineScoreBreakdown] = useState([])
@@ -2694,6 +2816,7 @@ function App() {
     setDownloadGeneratedAt('')
     setPendingDownloadFile(null)
     setCoverLetterReviewState({})
+    setArtifactsUploaded(false)
     updateOutputFiles([])
     setMatch(null)
     setScoreBreakdown([])
@@ -2794,9 +2917,11 @@ function App() {
   )
   const improvementCount = improvementResults.length
   const downloadCount = outputFiles.length
+  const downloadsReady = artifactsUploaded && downloadCount > 0
+  const visibleDownloadCount = downloadsReady ? downloadCount : 0
   const downloadSuccessCount = useMemo(
     () => {
-      if (!downloadStates || typeof downloadStates !== 'object') {
+      if (!downloadsReady || !downloadStates || typeof downloadStates !== 'object') {
         return 0
       }
       return Object.values(downloadStates).reduce((count, state) => {
@@ -2806,7 +2931,7 @@ function App() {
         return state.status === 'completed' ? count + 1 : count
       }, 0)
     },
-    [downloadStates]
+    [downloadStates, downloadsReady]
   )
   const changeCount = changeLog.length
   const scoreMetricCount = scoreBreakdown.length
@@ -2830,7 +2955,11 @@ function App() {
     scoreDashboardReady || matchHasAtsScore || matchHasSelectionProbability
   const queuedText = typeof queuedMessage === 'string' ? queuedMessage.trim() : ''
   const hasAnalysisData =
-    scoreMetricCount > 0 || hasMatch || improvementCount > 0 || downloadCount > 0 || changeCount > 0
+    scoreMetricCount > 0 ||
+    hasMatch ||
+    improvementCount > 0 ||
+    visibleDownloadCount > 0 ||
+    changeCount > 0
   const uploadReady = hasCvFile && hasManualJobDescriptionInput
   const uploadComplete =
     uploadReady ||
@@ -2850,13 +2979,18 @@ function App() {
     improvementsUnlocked &&
     Boolean(resumeText && resumeText.trim()) &&
     Boolean(jobDescriptionText && jobDescriptionText.trim())
-  const hasAcceptedImprovement = useMemo(
-    () => improvementResults.some((item) => item.accepted === true),
+  const acceptedImprovements = useMemo(
+    () => improvementResults.filter((item) => item.accepted === true),
     [improvementResults]
   )
+  const hasAcceptedImprovement = acceptedImprovements.length > 0
+  const acceptedImprovementsValidated = useMemo(
+    () => acceptedImprovements.every((item) => improvementValidationPassed(item.validation)),
+    [acceptedImprovements]
+  )
   const hasPendingImprovementRescore = useMemo(
-    () => improvementResults.some((item) => item.accepted === true && item.rescorePending),
-    [improvementResults]
+    () => acceptedImprovements.some((item) => item.rescorePending),
+    [acceptedImprovements]
   )
   const hasPendingImprovementDecisions = useMemo(
     () => improvementResults.some((item) => item.accepted === null),
@@ -2867,8 +3001,10 @@ function App() {
     [improvementResults]
   )
   const canGenerateEnhancedDocs = useMemo(
-    () => !improvementsRequireAcceptance || hasAcceptedImprovement,
-    [improvementsRequireAcceptance, hasAcceptedImprovement]
+    () =>
+      !improvementsRequireAcceptance ||
+      (hasAcceptedImprovement && acceptedImprovementsValidated),
+    [improvementsRequireAcceptance, hasAcceptedImprovement, acceptedImprovementsValidated]
   )
 
   const formattedCvFileSize = useMemo(() => {
@@ -3649,8 +3785,8 @@ function App() {
   )
 
   const flowSteps = useMemo(() => {
-    const generationComplete = downloadCount > 0
-    const downloadComplete = downloadSuccessCount > 0
+    const generationComplete = downloadsReady
+    const downloadComplete = generationComplete && downloadSuccessCount > 0
     const normalizedErrorMessage = typeof error === 'string' ? error.trim() : ''
     const normalizedErrorCode =
       typeof errorContext?.code === 'string'
@@ -3802,7 +3938,7 @@ function App() {
           break
         case 'generate':
           if (generationComplete) {
-            note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} generated.`
+            note = `${visibleDownloadCount} file${visibleDownloadCount === 1 ? '' : 's'} generated.`
             noteTone = 'success'
           } else if (isGeneratingDocs) {
             note = 'Generating enhanced documents…'
@@ -3810,9 +3946,11 @@ function App() {
           } else if (
             improvementsRequireAcceptance &&
             improvementsUnlocked &&
-            !hasAcceptedImprovement
+            (!hasAcceptedImprovement || !acceptedImprovementsValidated)
           ) {
-            note = 'Accept improvements before generating downloads.'
+            note = acceptedImprovementsValidated
+              ? 'Accept improvements before generating downloads.'
+              : 'Review JD alignment on accepted improvements before generating downloads.'
             noteTone = 'warning'
           } else if (coverLetterContentMissing) {
             note =
@@ -3833,9 +3971,12 @@ function App() {
                 'Cover letter drafts are blank — open a template to auto-generate personalised text before downloading.'
               noteTone = 'warning'
             } else {
-              note = `${downloadCount} file${downloadCount === 1 ? '' : 's'} available.`
+              note = `${visibleDownloadCount} file${visibleDownloadCount === 1 ? '' : 's'} available.`
               noteTone = 'info'
             }
+          } else if (improvementsUnlocked && canGenerateEnhancedDocs) {
+            note = 'Generate the latest documents to unlock downloads.'
+            noteTone = 'info'
           }
           break
         default:
@@ -3876,7 +4017,8 @@ function App() {
     changeCount,
     canGenerateEnhancedDocs,
     coverLetterContentMissing,
-    downloadCount,
+    acceptedImprovementsValidated,
+    downloadsReady,
     error,
     errorContext,
     stageErrors,
@@ -3894,6 +4036,7 @@ function App() {
     resumeExperienceMissing,
     scoreComplete,
     uploadComplete,
+    visibleDownloadCount,
     downloadSuccessCount
   ])
 
@@ -5565,7 +5708,8 @@ function App() {
               ? entry.scoreDelta
               : null,
           rescorePending: Boolean(entry?.rescorePending),
-          rescoreError: typeof entry?.rescoreError === 'string' ? entry.rescoreError : ''
+          rescoreError: typeof entry?.rescoreError === 'string' ? entry.rescoreError : '',
+          validation: normalizeImprovementValidation(entry?.validation)
         }))
 
         setImprovementResults(hydrated)
@@ -5884,6 +6028,7 @@ function App() {
         allowEmptyUrls: true
       })
       updateOutputFiles(outputFilesValue, { generatedAt: data?.generatedAt })
+      setArtifactsUploaded(Boolean(data?.artifactsUploaded || outputFilesValue.length > 0))
       const { drafts: analysisCoverLetterDrafts, originals: analysisCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(outputFilesValue)
       setCoverLetterDrafts(analysisCoverLetterDrafts)
@@ -6214,6 +6359,7 @@ function App() {
       allowEmptyUrls: true
     })
     updateOutputFiles(outputFilesValue, { generatedAt: snapshot?.generatedAt })
+    setArtifactsUploaded(Boolean(snapshot?.artifactsUploaded || outputFilesValue.length > 0))
 
     const snapshotCoverDrafts =
       snapshot.coverLetterDrafts && typeof snapshot.coverLetterDrafts === 'object'
@@ -7173,6 +7319,7 @@ function App() {
     deriveServiceContextFromError,
     persistChangeLogEntry,
     rescoreAfterImprovement,
+    setArtifactsUploaded,
     setChangeLog,
     setError,
     setImprovementResults
@@ -7236,12 +7383,23 @@ function App() {
         return false
       }
 
+      const validationStatus = resolveImprovementValidationStatus(suggestion.validation)
+      if (validationStatus === 'failed') {
+        const reason =
+          (suggestion?.validation?.jobAlignment?.reason &&
+            suggestion.validation.jobAlignment.reason.trim()) ||
+          'This improvement does not align with the job description. Review the suggestion before accepting.'
+        setError(reason, { stage: 'enhance' })
+        return false
+      }
+
       if (scoreUpdateLockRef.current) {
         setError(SCORE_UPDATE_IN_PROGRESS_MESSAGE, { stage: 'score' })
         return false
       }
 
       scoreUpdateLockRef.current = true
+      setArtifactsUploaded(false)
       try {
         const id = suggestion.id
         const updatedResumeDraft = suggestion.updatedResume || resumeText
@@ -7701,8 +7859,14 @@ function App() {
       })
       return
     }
-    if (improvementsRequireAcceptance && !hasAcceptedImprovement) {
-      setError('Accept at least one improvement before generating the enhanced documents.', {
+    if (
+      improvementsRequireAcceptance &&
+      (!hasAcceptedImprovement || !acceptedImprovementsValidated)
+    ) {
+      const message = !hasAcceptedImprovement
+        ? 'Accept at least one improvement before generating the enhanced documents.'
+        : 'Confirm the JD-aligned improvements before generating the enhanced documents.'
+      setError(message, {
         stage: 'generate'
       })
       return
@@ -7713,6 +7877,7 @@ function App() {
 
     setIsGeneratingDocs(true)
     setError('', { stage: 'generate' })
+    setArtifactsUploaded(false)
     try {
       const {
         canonicalTemplate,
@@ -7811,6 +7976,7 @@ function App() {
         allowEmptyUrls: true
       })
       updateOutputFiles(urlsValue, { generatedAt: data?.generatedAt })
+      setArtifactsUploaded(Boolean(data?.artifactsUploaded || urlsValue.length > 0))
       const { drafts: generatedCoverLetterDrafts, originals: generatedCoverLetterOriginals } =
         deriveCoverLetterStateFromFiles(urlsValue)
       setCoverLetterDrafts(generatedCoverLetterDrafts)
@@ -8021,6 +8187,7 @@ function App() {
     }
   }, [
     API_BASE_URL,
+    acceptedImprovementsValidated,
     hasAcceptedImprovement,
     improvementsRequireAcceptance,
     improvementsUnlocked,
@@ -8037,7 +8204,8 @@ function App() {
     certificateInsights,
     templateContext,
     updateOutputFiles,
-    selectedTemplate
+    selectedTemplate,
+    setArtifactsUploaded
   ])
 
   const handleAcceptImprovement = useCallback(
@@ -8291,6 +8459,7 @@ function App() {
           setCoverLetterOriginals(improvementCoverOriginals)
           setDownloadStates({})
         }
+        setArtifactsUploaded(Boolean(data?.artifactsUploaded))
         const templateContextValue = normalizeTemplateContext(
           data && typeof data.templateContext === 'object' ? data.templateContext : null
         )
@@ -8345,7 +8514,8 @@ function App() {
             rescoreSummary: normalizeRescoreSummary(item?.rescore || item?.rescoreSummary),
             scoreDelta: null,
             rescorePending: false,
-            rescoreError: ''
+            rescoreError: '',
+            validation: normalizeImprovementValidation(item?.validation)
           }
         })
         if (latestEnhanceAllSummary) {
@@ -8408,6 +8578,7 @@ function App() {
       formatEnhanceAllSummary,
       setActiveImprovement,
       setActiveImprovementBatchKeys,
+      setArtifactsUploaded,
       setCoverLetterDrafts,
       setCoverLetterOriginals,
       setDownloadStates,
@@ -10006,7 +10177,7 @@ function App() {
           </section>
         )}
 
-          {currentPhase === 'download' && outputFiles.length > 0 && (
+          {currentPhase === 'download' && downloadsReady && (
             <section className="space-y-5">
               <header className="space-y-1">
                 <p className="caps-label text-xs font-semibold text-purple-500">Step 5 · Download</p>

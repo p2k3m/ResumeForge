@@ -5573,6 +5573,129 @@ const IMPROVEMENT_CONFIG = {
   },
 };
 
+function normalizeStringArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[,\n;]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function createKeywordMatcher(keywords) {
+  const normalized = normalizeStringArray(keywords);
+  if (!normalized.length) {
+    return () => [];
+  }
+  const patterns = normalized.map((keyword) => {
+    const escaped = escapeRegExp(keyword.toLowerCase());
+    return new RegExp(`\\b${escaped}\\b`, 'i');
+  });
+  return (text = '') => {
+    const source = String(text || '');
+    const matches = [];
+    for (let index = 0; index < normalized.length; index += 1) {
+      const keyword = normalized[index];
+      const pattern = patterns[index];
+      if (!keyword || !pattern) continue;
+      if (pattern.test(source)) {
+        matches.push(keyword);
+      }
+    }
+    return Array.from(new Set(matches));
+  };
+}
+
+function buildImprovementValidation(type, context = {}, options = {}) {
+  const jobSkills = normalizeStringArray(options.jobSkills);
+  const jobTitle = typeof options.jobTitle === 'string' ? options.jobTitle.trim() : '';
+  const jobDescription = typeof options.jobDescription === 'string' ? options.jobDescription : '';
+  const afterExcerpt = typeof context.afterExcerpt === 'string' ? context.afterExcerpt : '';
+  const updatedResume = typeof context.updatedResume === 'string' ? context.updatedResume : '';
+  const rescoreSummary = context.rescore && typeof context.rescore === 'object' ? context.rescore : {};
+
+  const searchableText = `${afterExcerpt}\n${updatedResume}`.toLowerCase();
+  const matchKeywords = createKeywordMatcher(jobSkills);
+  const matchedSkills = matchKeywords(searchableText);
+  const jobTitleMatched = jobTitle
+    ? new RegExp(`\\b${escapeRegExp(jobTitle.toLowerCase())}\\b`, 'i').test(searchableText)
+    : false;
+
+  const sectionBeforeMissing = normalizeStringArray(
+    rescoreSummary?.section?.before?.missingSkills
+  );
+  const sectionAfterMissing = normalizeStringArray(
+    rescoreSummary?.section?.after?.missingSkills
+  );
+  const coveredSkills = normalizeStringArray(rescoreSummary?.section?.delta?.coveredSkills);
+  const sectionScoreDelta = Number.isFinite(rescoreSummary?.section?.delta?.score)
+    ? Number(rescoreSummary.section.delta.score)
+    : null;
+  const overallScoreDelta = Number.isFinite(rescoreSummary?.overall?.delta?.score)
+    ? Number(rescoreSummary.overall.delta.score)
+    : null;
+
+  const improvedMissing =
+    sectionAfterMissing.length > 0 || sectionBeforeMissing.length > 0
+      ? sectionAfterMissing.length < sectionBeforeMissing.length
+      : false;
+  const improvedSectionScore = typeof sectionScoreDelta === 'number' && sectionScoreDelta > 0;
+  const improvedOverallScore = typeof overallScoreDelta === 'number' && overallScoreDelta > 0;
+
+  const hasSignals = jobSkills.length > 0 || Boolean(jobTitle);
+  const passedValidation =
+    matchedSkills.length > 0 ||
+    coveredSkills.length > 0 ||
+    improvedMissing ||
+    improvedSectionScore ||
+    improvedOverallScore ||
+    jobTitleMatched;
+
+  let status = hasSignals ? 'failed' : 'skipped';
+  if (passedValidation) {
+    status = 'passed';
+  }
+
+  let reason = '';
+  if (status === 'passed') {
+    if (jobTitleMatched && matchedSkills.length === 0 && coveredSkills.length === 0) {
+      reason = 'Headline now mirrors the target JD title.';
+    } else if (matchedSkills.length > 0 || coveredSkills.length > 0) {
+      reason = 'JD keywords are reinforced within this section.';
+    } else {
+      reason = 'Section scoring improved against the JD benchmarks.';
+    }
+  } else if (status === 'failed') {
+    reason = 'No JD keywords matched and section alignment did not improve.';
+  } else {
+    reason = 'No JD keywords were supplied for validation.';
+  }
+
+  return {
+    jobAlignment: {
+      status,
+      reason,
+      matchedSkills,
+      coveredSkills,
+      jobTitleMatched,
+      beforeMissingSkills: sectionBeforeMissing,
+      afterMissingSkills: sectionAfterMissing,
+      scoreDelta: sectionScoreDelta,
+      overallScoreDelta,
+      jobTitle,
+      jobSkills,
+      jobDescription,
+    },
+  };
+}
+
 function condensePromptValue(value, maxLength = 600) {
   if (Array.isArray(value)) {
     return condensePromptValue(
@@ -17365,6 +17488,21 @@ async function handleImprovementRequest(type, req, res) {
       urls: assetUrls,
     };
 
+    responsePayload.validation = buildImprovementValidation(
+      type,
+      {
+        beforeExcerpt: normalizedBeforeExcerpt,
+        afterExcerpt: normalizedAfterExcerpt,
+        updatedResume: result.updatedResume,
+        rescore: rescoreSummary,
+      },
+      {
+        jobSkills,
+        jobTitle: jobTitleInput || payload.targetTitle || '',
+        jobDescription,
+      }
+    );
+
     responsePayload.scores = sessionScores;
 
     if (templateContextOutput) {
@@ -17663,6 +17801,21 @@ async function handleImprovementBatchRequest(req, res) {
         improvementConfig,
       );
 
+      const validation = buildImprovementValidation(
+        type,
+        {
+          beforeExcerpt: normalizedBeforeExcerpt,
+          afterExcerpt: normalizedAfterExcerpt,
+          updatedResume: updatedResumeText,
+          rescore: rescoreSummary,
+        },
+        {
+          jobSkills,
+          jobTitle: jobTitleInput || payload.targetTitle || '',
+          jobDescription,
+        }
+      );
+
       results.push({
         success: true,
         type,
@@ -17677,6 +17830,7 @@ async function handleImprovementBatchRequest(req, res) {
         originalTitle: originalTitleInput || currentTitleInput,
         modifiedTitle: jobTitleInput || currentTitleInput,
         llmTrace: improvementResult.llmTrace || null,
+        validation,
       });
 
       currentResumeText = updatedResumeText;
@@ -20892,6 +21046,8 @@ async function generateEnhancedDocumentsResponse({
     jobId,
     urlExpiresInSeconds: normalizedUrls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
     urls: normalizedUrls,
+    artifactCount: normalizedUrls.length,
+    artifactsUploaded: normalizedUrls.length > 0,
     sessionPointer: canonicalSessionPointer,
     applicantName,
     originalScore: originalSkillCoverage,
