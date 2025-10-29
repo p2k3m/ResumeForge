@@ -39,15 +39,6 @@ jest.unstable_mockModule('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: getSignedUrlMock
 }));
 
-jest.unstable_mockModule('@aws-sdk/client-secrets-manager', () => ({
-  SecretsManagerClient: jest.fn(() => ({
-    send: jest.fn().mockResolvedValue({
-      SecretString: JSON.stringify({ BUCKET: 'test-bucket', GEMINI_API_KEY: 'test-key' })
-    })
-  })),
-  GetSecretValueCommand: jest.fn()
-}));
-
 const mockDynamoSend = jest.fn();
 jest.unstable_mockModule('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn(() => ({ send: mockDynamoSend })),

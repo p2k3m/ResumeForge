@@ -91,7 +91,7 @@ The runtime looks for the following keys:
 
 ## Security, access, and compliance guardrails
 
-- **Environment-driven configuration only.** The application refuses to start (locally) or deploy (via CloudFormation rules) when required environment variables, IAM inputs, or secrets are missing. All sensitive values continue to flow through environment variables or AWS Secrets Manager.
+- **Environment-driven configuration only.** The application refuses to start (locally) or deploy (via CloudFormation rules) when required environment variables or IAM inputs are missing. All sensitive values flow through environment variables that should be sourced from encrypted GitHub repository secrets during CI/CD.
 - **Automatic API protection.** The SAM template now enforces throttling at the API Gateway stage and provisions an AWS WAFv2 rate-based Web ACL when no external ARN is supplied, blocking abusive clients by IP without any Lambda-level permissions.
 - **Sanitised uploads.** Every incoming résumé (PDF/DOC/DOCX) is scrubbed of embedded metadata before it is persisted to S3, protecting applicant privacy even if the original file contains author details or document history.
 - **Scoped IAM policies.** Lambda execution roles are reduced to the minimal S3 (`s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, `s3:ListBucket`) and DynamoDB permissions required per function; unused WAF permissions have been removed.
@@ -424,17 +424,9 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 | `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
 | `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
 | `RESUMEFORGE_DATA_BUCKET` | Globally unique S3 bucket name passed to the `DataBucketName` parameter. |
-| `RESUMEFORGE_SECRET_NAME` | Name of the AWS Secrets Manager secret that stores runtime configuration. The secret must contain a `GEMINI_API_KEY` field. |
+| `GEMINI_API_KEY` | Gemini API key injected into Lambda and server environments. |
 
-The Secrets Manager entry referenced by `RESUMEFORGE_SECRET_NAME` should store a JSON object, for example:
-
-```json
-{
-  "GEMINI_API_KEY": "<api-key-value>"
-}
-```
-
-If you prefer to supply the Gemini API key directly (for local testing or bespoke deployments), pass a value to the `GeminiApiKey` parameter instead of configuring a secret. The CloudFormation template enforces that at least one of these sources is provided.
+Provide the same secrets when running locally by exporting environment variables (for example, through `.env` files that are excluded from version control).
 
 Optional secrets:
 
