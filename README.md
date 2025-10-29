@@ -320,6 +320,8 @@ Before packaging or uploading build artifacts, run through this quick checklist 
 
 Use `npm run build:all` (or `make build-all`) to wipe previous artifacts via `npm run clean` before rebuilding. Running `npm run clean` on its own removes cached coverage reports, stale SAM builds, and old client bundles so subsequent builds start from a pristine workspace.
 
+When iterating quickly on the React portal, run `npm run watch:cloudfront -- --stack <stack-name>` after exporting the required AWS credentials. The watcher rebuilds the client bundle, uploads the refreshed assets, and republishes the CloudFront metadata every time a file in `client/` changes so the CDN stays aligned with the latest code.
+
 ### Post-deployment verification
 
 1. Confirm that the CloudFormation outputs include `ApiBaseUrl`. This is the canonical URL for the deployed serverless API.
@@ -364,6 +366,7 @@ Use `npm run build:all` (or `make build-all`) to wipe previous artifacts via `np
 | Build Lambda + client bundles | `npm run build` | `make build` |
 | Build after cleaning | `npm run build:all` | `make build-all` |
 | Deploy with cached SAM layers | `npm run deploy:sam` | `make deploy` |
+| Watch for client code changes and republish assets | `npm run watch:cloudfront -- --stack <stack-name>` | — |
 
 ## Upload Restrictions
 - Maximum file size: 5&nbsp;MB
