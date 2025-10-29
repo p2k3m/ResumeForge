@@ -234,10 +234,7 @@ const ResumeCard = ({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="caps-label text-xs font-semibold text-purple-500">{label}</p>
-          <h3
-            className="text-xl font-bold text-purple-800"
-            aria-label={!isPreviewLabel && label ? `${headingText} — ${label}` : undefined}
-          >
+          <h3 className="text-xl font-bold text-purple-800">
             {headingText}
           </h3>
           {option?.description && (
@@ -318,10 +315,7 @@ const CoverCard = ({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="caps-label text-xs font-semibold text-purple-500">{label}</p>
-          <h3
-            className="text-xl font-bold text-purple-800"
-            aria-label={!isPreviewLabel && label ? `${headingText} — ${label}` : undefined}
-          >
+          <h3 className="text-xl font-bold text-purple-800">
             {headingText}
           </h3>
           {option?.description && (
