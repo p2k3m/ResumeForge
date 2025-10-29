@@ -30,7 +30,7 @@ function extractReferencedAssets(html) {
     return referenced;
   }
 
-  const assetPattern = /assets\/(index-[\w.-]+\.(?:css|js))(?:\?[^"'\s>]+)?/g;
+  const assetPattern = /assets\/(index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'\s>]+)?/g;
   let match;
   while ((match = assetPattern.exec(html)) !== null) {
     referenced.add(match[1]);
@@ -210,7 +210,7 @@ function normalizePrimaryIndexAssetPath(assetPath) {
   candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '');
   candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
 
-  const match = candidate.match(/^assets\/index-[\w.-]+\.(?:css|js)$/i);
+  const match = candidate.match(/^assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i);
   if (!match) {
     return '';
   }
@@ -224,7 +224,7 @@ function extractPrimaryIndexAssetsFromHtml(html) {
     return manifest;
   }
 
-  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi;
+  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi;
   let match;
 
   while ((match = assetPattern.exec(html)) !== null) {

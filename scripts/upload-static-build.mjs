@@ -135,7 +135,7 @@ function extractHashedIndexAssets(html) {
     throw createValidationError('[upload-static] index.html is empty or unreadable.')
   }
 
-  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi
+  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi
   const assets = new Set()
   let match
   while ((match = assetPattern.exec(html)) !== null) {
@@ -306,7 +306,7 @@ function determineCacheControl(relativePath) {
   if (normalized === 'service-worker.js') {
     return 'no-cache, no-store, must-revalidate'
   }
-  if (/assets\/index-[\w.-]+\.(?:css|js)$/.test(normalized)) {
+  if (/assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/.test(normalized)) {
     return 'public, max-age=31536000, immutable'
   }
   if (/assets\/.*\.(?:woff2?|ttf|otf|eot|svg)$/i.test(normalized)) {
@@ -372,8 +372,8 @@ function resolveBucketConfiguration() {
   }
 }
 
-const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/
-const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/index-[\w.-]+\.(?:css|js)$/i
+const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/
+const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
 const INDEX_ASSET_ALIAS_PATHS = new Set(['assets/index-latest.css', 'assets/index-latest.js'])
 
 export function normalizeClientAssetPath(relativePath) {

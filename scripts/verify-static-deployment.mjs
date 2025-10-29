@@ -184,7 +184,7 @@ function normalizeHashedAssetPath(value) {
     return null
   }
 
-  if (!/^assets\/index-[\w.-]+\.(?:css|js)$/u.test(normalized)) {
+  if (!/^assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/u.test(normalized)) {
     return null
   }
 
@@ -248,7 +248,7 @@ function normalizeHashedIndexAssets(manifest) {
       continue
     }
     const normalizedPath = trimmed.replace(/^\/+/, '').replace(/\\/g, '/')
-    const match = normalizedPath.match(/assets\/index-[\w.-]+\.(?:css|js)$/u)
+    const match = normalizedPath.match(/assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/u)
     if (!match) {
       continue
     }
@@ -269,7 +269,7 @@ function extractHashedIndexAssetsFromHtml(html) {
     throw new Error('[verify-static] index.html is empty or unreadable from S3.')
   }
 
-  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/giu
+  const assetPattern = /(?:src|href)=["']([^"']*assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/giu
   const assets = []
   const seen = new Set()
   let match
@@ -435,7 +435,7 @@ async function ensureNoStaleIndexAssets({
   const hashedSet = new Set(
     hashedAssets.map((asset) => (typeof asset === 'string' ? asset.trim() : asset)).filter(Boolean),
   )
-  const hashedPattern = /^assets\/index-[\w.-]+\.(?:css|js)$/u
+  const hashedPattern = /^assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/u
   const candidates = []
 
   let continuationToken
