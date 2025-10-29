@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react'
 import { execSync } from 'node:child_process'
 import { applyStageEnvironment } from '../config/stage.js'
 
+const resolvedApiBase =
+  typeof process.env.VITE_API_BASE_URL === 'string'
+    ? process.env.VITE_API_BASE_URL
+    : process.env.RESUMEFORGE_API_BASE_URL
+
+if (typeof process.env.VITE_API_BASE_URL === 'undefined') {
+  process.env.VITE_API_BASE_URL = resolvedApiBase || ''
+}
+
 function resolveBuildVersion() {
   if (process.env.VITE_BUILD_VERSION) {
     return process.env.VITE_BUILD_VERSION
