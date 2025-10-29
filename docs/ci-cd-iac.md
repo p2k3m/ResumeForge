@@ -29,7 +29,7 @@ The GitHub Actions workflows publish job summaries so responders can review fail
 ## Operational Guardrails
 
 * **Observability hooks** – Pipelines publish deployment metadata (commit SHA, artifact version, environment) to CloudWatch Logs and monitoring dashboards to provide traceability for operational responders.
-* **Secrets management** – Sensitive configuration stays in AWS Secrets Manager or SSM Parameter Store. The CI/CD system retrieves secrets at deploy time and never commits secrets to the repository.
+* **Secrets management** – Sensitive configuration is supplied through encrypted GitHub repository secrets and injected as environment variables during CI/CD. No credentials are committed to the repository.
 
 ## Local Development Experience
 
