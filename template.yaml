@@ -128,9 +128,6 @@ Conditions:
   CreateDataBucketCondition: !Equals [!Ref CreateDataBucket, 'true']
   EnableProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
   UseSecretName: !Not [!Equals [!Ref SecretName, '']]
-  SecretIsArn: !And
-    - !Condition UseSecretName
-    - !Equals [!Select [0, !Split [":", !Ref SecretName]], 'arn']
   UseProvidedWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
   CreateDefaultWebAcl: !Not [!Condition UseProvidedWebAcl]
   IsProductionStage: !Equals [!Ref StageName, 'prod']
@@ -422,10 +419,7 @@ Resources:
         - !If
           - UseSecretName
           - SecretsManagerReadPolicy:
-              SecretArn: !If
-                - SecretIsArn
-                - !Ref SecretName
-                - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
+              SecretId: !Ref SecretName
           - !Ref AWS::NoValue
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
