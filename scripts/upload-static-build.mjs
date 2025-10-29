@@ -306,6 +306,12 @@ function determineCacheControl(relativePath) {
   if (normalized === 'service-worker.js') {
     return 'no-cache, no-store, must-revalidate'
   }
+  if (
+    normalized === 'api/published-cloudfront' ||
+    normalized === 'api/published-cloudfront.json'
+  ) {
+    return 'no-store'
+  }
   if (/assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/.test(normalized)) {
     return 'public, max-age=31536000, immutable'
   }
@@ -503,6 +509,12 @@ function resolveContentType(relativePath) {
   if (typeof lookup === 'string' && lookup.trim()) {
     return lookup
   }
+
+  const normalized = relativePath.replace(/\\/g, '/')
+  if (normalized === 'api/published-cloudfront') {
+    return 'application/json'
+  }
+
   return 'application/octet-stream'
 }
 
