@@ -374,6 +374,7 @@ function resolveBucketConfiguration() {
 
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/index-[\w.-]+\.(?:css|js)(?:\.map)?$/
 const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/index-[\w.-]+\.(?:css|js)$/i
+const INDEX_ASSET_ALIAS_PATHS = new Set(['assets/index-latest.css', 'assets/index-latest.js'])
 
 export function normalizeClientAssetPath(relativePath) {
   if (typeof relativePath !== 'string') {
@@ -418,7 +419,7 @@ function isImmutableHashedIndexAsset(key) {
   return IMMUTABLE_HASHED_INDEX_ASSET_PATTERN.test(normalizedKey)
 }
 
-function shouldDeleteObjectKey(key, prefix) {
+export function shouldDeleteObjectKey(key, prefix) {
   if (typeof key !== 'string' || !key) {
     return false
   }
@@ -435,6 +436,10 @@ function shouldDeleteObjectKey(key, prefix) {
 
   const sanitized = relativePath.replace(/^\/+/, '')
   if (!sanitized) {
+    return false
+  }
+
+  if (INDEX_ASSET_ALIAS_PATHS.has(sanitized)) {
     return false
   }
 

@@ -1,4 +1,8 @@
-import { resolvePrimaryIndexAssets, resolveIndexAssetAliases } from '../scripts/upload-static-build.mjs'
+import {
+  resolvePrimaryIndexAssets,
+  resolveIndexAssetAliases,
+  shouldDeleteObjectKey,
+} from '../scripts/upload-static-build.mjs'
 
 describe('resolvePrimaryIndexAssets', () => {
   it('prefers hashed assets discovered in index.html', () => {
@@ -59,5 +63,32 @@ describe('resolveIndexAssetAliases', () => {
     expect(resolveIndexAssetAliases({ css: 'assets/index-abc123.css' })).toEqual([
       { alias: 'assets/index-latest.css', source: 'assets/index-abc123.css' },
     ])
+  })
+})
+
+describe('shouldDeleteObjectKey', () => {
+  const prefix = 'static/client/prod/latest/'
+
+  it('preserves hashed index bundles to avoid accidental eviction', () => {
+    expect(
+      shouldDeleteObjectKey('static/client/prod/latest/assets/index-abc123.css', prefix),
+    ).toBe(false)
+    expect(
+      shouldDeleteObjectKey('static/client/prod/latest/assets/index-abc123.js', prefix),
+    ).toBe(false)
+  })
+
+  it('keeps alias bundles in place so they can be atomically replaced', () => {
+    expect(
+      shouldDeleteObjectKey('static/client/prod/latest/assets/index-latest.css', prefix),
+    ).toBe(false)
+    expect(
+      shouldDeleteObjectKey('static/client/prod/latest/assets/index-latest.js', prefix),
+    ).toBe(false)
+  })
+
+  it('continues to delete unrelated objects when purging the prefix', () => {
+    expect(shouldDeleteObjectKey('static/client/prod/latest/index.html', prefix)).toBe(true)
+    expect(shouldDeleteObjectKey('static/client/prod/latest/404.html', prefix)).toBe(true)
   })
 })
