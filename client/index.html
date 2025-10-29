@@ -3,7 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="resumeforge-api-base" content="" />
+    <meta name="resumeforge-api-base" content="%VITE_API_BASE_URL%" />
+    <script>
+      ;(function setResumeForgeApiBase() {
+        try {
+          const meta = document.querySelector('meta[name="resumeforge-api-base"]');
+          if (!meta || typeof meta.getAttribute !== 'function') {
+            return;
+          }
+
+          const raw = meta.getAttribute('content') || '';
+          const normalized = typeof raw === 'string' ? raw.trim() : '';
+          if (!normalized || normalized === 'undefined' || normalized === 'null') {
+            return;
+          }
+
+          if (typeof window !== 'undefined') {
+            window.__RESUMEFORGE_API_BASE_URL__ = normalized;
+          }
+        } catch (error) {
+          // Ignore runtime errors caused by constrained environments.
+        }
+      })();
+    </script>
     <title>ResumeForge</title>
     <style>
       :root {
