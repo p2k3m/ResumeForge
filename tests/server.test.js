@@ -498,7 +498,10 @@ describe('static asset manifest endpoint', () => {
     const res = await request(app).get('/api/static-manifest');
     expect(res.status).toBe(503);
     expect(res.body).toMatchObject({
-      code: 'STATIC_MANIFEST_UNAVAILABLE'
+      success: false,
+      error: {
+        code: 'STATIC_MANIFEST_UNAVAILABLE'
+      }
     });
   });
 });
