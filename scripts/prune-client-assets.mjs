@@ -338,15 +338,15 @@ async function loadPublishedCloudfrontMetadata() {
   }
 }
 
-async function ensurePublishedCloudfrontFallback() {
-  const metadata = await loadPublishedCloudfrontMetadata();
-  if (!metadata) {
+async function ensurePublishedCloudfrontFallback({ metadata } = {}) {
+  const resolvedMetadata = metadata || (await loadPublishedCloudfrontMetadata());
+  if (!resolvedMetadata) {
     return;
   }
 
   const payload = {
     success: true,
-    cloudfront: metadata,
+    cloudfront: resolvedMetadata,
   };
 
   const serialized = `${JSON.stringify(payload, null, 2)}\n`;
@@ -375,10 +375,140 @@ async function ensurePublishedCloudfrontFallback() {
   }
 }
 
+function normalizeMetadataUrl(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const resolved = new URL(trimmed);
+    const normalizedPath = resolved.pathname ? resolved.pathname.replace(/\/+$/, '') : '';
+    const base = `${resolved.origin}${normalizedPath}`;
+    return `${base}${resolved.search || ''}${resolved.hash || ''}`;
+  } catch (error) {
+    return trimmed;
+  }
+}
+
+function escapeAttributeValue(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function updateAttributeInTag(tag, attribute, value) {
+  if (!tag || !attribute) {
+    return tag;
+  }
+
+  const escapedValue = escapeAttributeValue(value);
+  const attributePattern = new RegExp(`(${attribute}\\s*=\\s*)(["'])([^"']*)(\\2)`, 'i');
+  if (attributePattern.test(tag)) {
+    return tag.replace(attributePattern, (_, prefix, quote, _existing, suffixQuote) => {
+      return `${prefix}${quote}${escapedValue}${suffixQuote}`;
+    });
+  }
+
+  const closing = tag.endsWith('/>') ? '/>' : '>';
+  const withoutClosing = tag.slice(0, tag.length - closing.length);
+  return `${withoutClosing} ${attribute}="${escapedValue}"${closing}`;
+}
+
+function updateTagAttribute(html, { tagName, matchAttribute, matchValue, attribute, value }) {
+  if (!html || !tagName || !matchAttribute || !matchValue || !attribute) {
+    return html;
+  }
+
+  const pattern = new RegExp(
+    `<${tagName}\\b[^>]*${matchAttribute}\\s*=\\s*(["'])${matchValue.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\1[^>]*>`,
+    'i',
+  );
+
+  return html.replace(pattern, (match) => updateAttributeInTag(match, attribute, value));
+}
+
+function updateMetaApiBase(html, apiBase) {
+  if (!apiBase) {
+    return html;
+  }
+  return updateTagAttribute(html, {
+    tagName: 'meta',
+    matchAttribute: 'name',
+    matchValue: 'resumeforge-api-base',
+    attribute: 'content',
+    value: apiBase,
+  });
+}
+
+function updateBackupApiInputs(html, apiBase) {
+  if (!apiBase) {
+    return html;
+  }
+
+  const pattern = /<input\b[^>]*data-backup-api-base[^>]*>/gi;
+  return html.replace(pattern, (match) => updateAttributeInTag(match, 'value', apiBase));
+}
+
+async function embedPublishedCloudfrontMetadata({ metadata, html }) {
+  if (!metadata) {
+    return;
+  }
+
+  const apiBase = normalizeMetadataUrl(metadata.apiGatewayUrl);
+  const fallbackBase = apiBase || normalizeMetadataUrl(metadata.url);
+
+  if (!apiBase && !fallbackBase) {
+    return;
+  }
+
+  let workingHtml = html;
+  if (!workingHtml || typeof workingHtml !== 'string') {
+    try {
+      workingHtml = await fs.readFile(clientIndexPath, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        console.warn('[prune-client-assets] client/dist/index.html missing; unable to embed metadata.');
+        return;
+      }
+      throw error;
+    }
+  }
+
+  let updatedHtml = workingHtml;
+  const withMeta = updateMetaApiBase(updatedHtml, apiBase);
+  if (withMeta !== updatedHtml) {
+    updatedHtml = withMeta;
+  }
+
+  const withInput = updateBackupApiInputs(updatedHtml, fallbackBase);
+  if (withInput !== updatedHtml) {
+    updatedHtml = withInput;
+  }
+
+  if (updatedHtml === workingHtml) {
+    return;
+  }
+
+  await fs.writeFile(clientIndexPath, updatedHtml, 'utf8');
+  console.log('[prune-client-assets] Embedded published CloudFront metadata into client index.');
+}
+
 async function run() {
   const html = await pruneHashedAssets();
   await ensurePrimaryIndexAliases(html);
-  await ensurePublishedCloudfrontFallback();
+  const metadata = await loadPublishedCloudfrontMetadata();
+  if (metadata) {
+    await ensurePublishedCloudfrontFallback({ metadata });
+    await embedPublishedCloudfrontMetadata({ metadata, html });
+  }
 }
 
 run().catch((error) => {
