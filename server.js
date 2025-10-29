@@ -377,7 +377,7 @@ function extractPrimaryIndexAssets(html) {
   return manifest;
 }
 
-async function loadHashedIndexAssetManifest() {
+async function loadLocalHashedIndexAssetManifest() {
   try {
     const stats = await fs.stat(clientIndexPath);
     const mtimeMs = Number.isFinite(stats?.mtimeMs) ? stats.mtimeMs : 0;
@@ -400,6 +400,48 @@ async function loadHashedIndexAssetManifest() {
   }
 
   return cachedIndexAssetManifest?.assets || { js: '', css: '' };
+}
+
+function selectManifestHashedIndexAsset(manifest, extension) {
+  if (!manifest || typeof manifest !== 'object') {
+    return '';
+  }
+
+  const normalizedExtension = extension === 'css' ? 'css' : 'js';
+  const buckets =
+    manifest.byExtension && typeof manifest.byExtension === 'object'
+      ? manifest.byExtension
+      : {};
+  const candidates = Array.isArray(buckets[normalizedExtension])
+    ? buckets[normalizedExtension]
+    : [];
+
+  for (const candidate of candidates) {
+    const normalized = normalizeManifestHashedAssetPath(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
+async function loadHashedIndexAssetManifest() {
+  const manifest = await loadStaticAssetManifestFromS3();
+  const hashedFromManifest = {
+    css: selectManifestHashedIndexAsset(manifest, 'css'),
+    js: selectManifestHashedIndexAsset(manifest, 'js'),
+  };
+
+  if (hashedFromManifest.css && hashedFromManifest.js) {
+    return hashedFromManifest;
+  }
+
+  const localManifest = await loadLocalHashedIndexAssetManifest();
+  return {
+    css: hashedFromManifest.css || localManifest.css || '',
+    js: hashedFromManifest.js || localManifest.js || '',
+  };
 }
 
 function normalizeManifestHashedAssetPath(assetPath) {
