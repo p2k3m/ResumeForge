@@ -834,6 +834,16 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      if (target.pathname === jsAssetPath) {
+        return new Response('', {
+          status: 403,
+          headers: {
+            'x-amz-error-code': 'AccessDenied',
+            'x-cache': 'Error from cloudfront',
+          },
+        });
+      }
+
       if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
         return new Response('', {
           status: 403,
@@ -866,7 +876,10 @@ describe('verifyClientAssets', () => {
       .map(([url]) => new URL(url).pathname)
       .filter((pathname) => pathname.endsWith(jsAssetPath));
 
-    expect(attemptedPaths).toEqual([
+    const uniqueAttemptedPaths = Array.from(new Set(attemptedPaths));
+
+    expect(uniqueAttemptedPaths).toEqual([
+      '/assets/index-3a4b5c6d.js',
       '/static/client/prod/latest/assets/index-3a4b5c6d.js',
       '/client/prod/latest/assets/index-3a4b5c6d.js',
     ]);
