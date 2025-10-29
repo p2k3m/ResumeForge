@@ -811,6 +811,67 @@ describe('verifyClientAssets', () => {
     expect(attemptedPaths).toContain(`/client/prod/latest${jsAssetPath}`);
   });
 
+  test('continues to fallback prefixes when CloudFront responds with AccessDenied', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <script type="module" src="/assets/index-3a4b5c6d.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname === `/static/client/prod/latest${jsAssetPath}`) {
+        return new Response('', {
+          status: 403,
+          headers: {
+            'x-amz-error-code': 'AccessDenied',
+            'x-cache': 'Error from cloudfront',
+          },
+        });
+      }
+
+      if (target.pathname === `/client/prod/latest${jsAssetPath}`) {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        assetPathPrefixes: ['static/client/prod/latest'],
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).resolves.toBeUndefined();
+
+    const attemptedPaths = fetchImpl.mock.calls
+      .map(([url]) => new URL(url).pathname)
+      .filter((pathname) => pathname.endsWith(jsAssetPath));
+
+    expect(attemptedPaths).toEqual([
+      '/static/client/prod/latest/assets/index-3a4b5c6d.js',
+      '/client/prod/latest/assets/index-3a4b5c6d.js',
+    ]);
+  });
+
   test('includes attempted asset path details when all CDN prefixes fail', async () => {
     const html = `<!doctype html>
       <html>
