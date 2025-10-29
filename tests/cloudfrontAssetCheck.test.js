@@ -978,6 +978,12 @@ describe('verifyClientAssets', () => {
       `/client/prod/latest${jsAssetPath}`,
       `/prod/latest${jsAssetPath}`,
       `/latest${jsAssetPath}`,
+      `/static/client/prod${jsAssetPath}`,
+      `/static/client${jsAssetPath}`,
+      `/static${jsAssetPath}`,
+      `/client/prod${jsAssetPath}`,
+      `/client${jsAssetPath}`,
+      `/prod${jsAssetPath}`,
     ];
 
     await expect(
