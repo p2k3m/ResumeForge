@@ -419,14 +419,14 @@ Resources:
                 - !Sub arn:aws:s3:::${DataBucketName}/*
         - DynamoDBCrudPolicy:
             TableName: !Ref ResumeTableName
-        - !If
-          - UseSecretName
-          - SecretsManagerReadPolicy:
-              SecretArn: !If
+        - SecretsManagerReadPolicy:
+            SecretArn: !If
+              - UseSecretName
+              - !If
                 - SecretIsArn
                 - !Ref SecretName
                 - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${SecretName}*
-          - !Ref AWS::NoValue
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:dummy-placeholder
       Layers:
         - !Sub arn:aws:lambda:${AWS::Region}:580247275435:layer:LambdaInsightsExtension:${LambdaInsightsLayerVersion}
       Tags:
