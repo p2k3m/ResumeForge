@@ -1,1004 +1,157 @@
-name: CI and Deploy
+name: Deploy
 
 on:
-  push:
-    branches:
-      - v2
-  pull_request:
-    branches:
-      - v2
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment to deploy"
+        type: choice
+        default: staging
+        options:
+          - dev
+          - staging
+          - prod
+      skip_tests:
+        description: "Skip running the test suite before deployment"
+        type: boolean
+        default: false
+      allow_cloudfront_failure:
+        description: "Allow CloudFront verification to fail without failing the workflow"
+        type: boolean
+        default: false
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-
 jobs:
-  test:
-    name: Install and test
-    runs-on: ubuntu-latest
-    env:
-      NODE_VERSION: '18'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Clean workspace artifacts
-        run: npm run clean || true
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            client/package-lock.json
-
-      - name: Install server dependencies
-        run: npm ci
-
-      - name: Verify code quality and tests
-        run: npm run verify
-
-      - name: Security audit (server)
-        run: npm audit --omit=dev --audit-level=critical
-
-      - name: Install client dependencies
-        run: npm ci
-        working-directory: client
-
-      - name: Security audit (client)
-        run: npm audit --omit=dev --audit-level=critical
-        working-directory: client
-
-      - name: Set up AWS SAM CLI
-        uses: aws-actions/setup-sam@v2
-
-      - name: Cache SAM build artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            .aws-sam/cache
-            ~/.cache/aws-sam
-          key: sam-${{ runner.os }}-${{ hashFiles('template.yaml', 'lambdas/**/*.js', 'lambda.js', 'lib/**/*.js') }}
-          restore-keys: |
-            sam-${{ runner.os }}-
-
-      - name: Build serverless application
-        run: sam build --cached --parallel
-
-      - name: Remove AWS credential cache artifacts
-        run: rm -rf ~/.aws/credentials ~/.aws/config || true
-
-      - name: Build all project assets
-        run: npm run build:all
-
-      - name: Upload client build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist
-          if-no-files-found: error
-
   deploy:
-    name: Deploy to AWS
+    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
     runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push'
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    permissions:
+      contents: read
+      id-token: write
     env:
-      NODE_VERSION: '18'
-      STAGE_NAME: ${{ secrets.RESUMEFORGE_STAGE_NAME || 'prod' }}
-      STACK_NAME: ${{ secrets.RESUMEFORGE_STACK_NAME }}
-      DATA_BUCKET: ${{ secrets.RESUMEFORGE_DATA_BUCKET }}
-      TABLE_NAME: ${{ secrets.RESUMEFORGE_TABLE_NAME || 'ResumeForge' }}
-      SECRET_NAME: ${{ secrets.RESUMEFORGE_SECRET_NAME || 'ResumeForge' }}
-      PRIMARY_REGION: ${{ secrets.RESUMEFORGE_PRIMARY_REGION || secrets.AWS_REGION || 'us-east-1' }}
-      SECONDARY_REGION: ${{ secrets.RESUMEFORGE_SECONDARY_REGION || 'us-west-2' }}
-      PROVISIONED_CONCURRENCY: ${{ secrets.RESUMEFORGE_PROVISIONED_CONCURRENCY || '0' }}
+      NODE_VERSION: '20'
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      SAM_STACK_NAME: ${{ secrets.SAM_STACK_NAME }}
+      SAM_DEPLOY_ARGS: ${{ secrets.SAM_DEPLOY_ARGS }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+      TARGET_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+      ALLOW_CLOUDFRONT_VERIFY_FAILURE: ${{ github.event.inputs.allow_cloudfront_failure }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Validate required deployment secrets
-        shell: bash
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          STACK_NAME: ${{ secrets.RESUMEFORGE_STACK_NAME }}
-          DATA_BUCKET: ${{ secrets.RESUMEFORGE_DATA_BUCKET }}
-          SECRET_NAME: ${{ secrets.RESUMEFORGE_SECRET_NAME }}
+      - name: Validate deployment secrets
         run: |
           set -euo pipefail
-
-          declare -a missing=()
-          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_REGION STACK_NAME DATA_BUCKET SECRET_NAME; do
-            if [ -z "${!name:-}" ]; then
-              missing+=("$name")
-            fi
-          done
-
-          if [ "${#missing[@]}" -ne 0 ]; then
-            printf '::error::Missing required secrets: %s\n' "${missing[*]}"
-            printf '%s\n' \
-              "To resolve this failure, open your repository in GitHub and navigate to:" \
-              "  Settings → Secrets and variables → Actions → New repository secret" \
-              "Add each missing secret listed above with the correct value. The AWS access key ID and" \
-              "secret access key can be copied from the AWS IAM console under the associated user or" \
-              "deployment role. After saving the secrets, re-run this workflow."
+          if [ -z "${AWS_REGION:-}" ]; then
+            echo "AWS_REGION secret is required" >&2
+            exit 1
+          fi
+          if [ -z "${SAM_STACK_NAME:-}" ]; then
+            echo "SAM_STACK_NAME secret is required" >&2
             exit 1
           fi
 
-      - name: Set up Node.js
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            client/package-lock.json
 
-      - name: Install server dependencies
+      - name: Install dependencies
         run: npm ci
 
-      - name: Install client dependencies
-        run: npm ci
-        working-directory: client
+      - name: Run verification suite
+        if: github.event.inputs.skip_tests != 'true'
+        run: npm run verify
 
-      - name: Build client bundle
-        run: npm run build
-        working-directory: client
-
-      - name: Set up AWS SAM CLI
+      - name: Setup AWS SAM CLI
         uses: aws-actions/setup-sam@v2
-
-      - name: Cache SAM build artifacts
-        uses: actions/cache@v4
         with:
-          path: |
-            .aws-sam/cache
-            ~/.cache/aws-sam
-          key: sam-${{ runner.os }}-${{ hashFiles('template.yaml', 'lambdas/**/*.js', 'lambda.js', 'lib/**/*.js') }}
-          restore-keys: |
-            sam-${{ runner.os }}-
+          version: latest
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          role-session-name: ResumeForgeDeploy
 
-      - name: Validate runtime configuration environment
-        run: node scripts/check-required-runtime-env.mjs
+      - name: Prepare deployment artifacts
         env:
-          SECRET_NAME: ${{ env.SECRET_NAME }}
-
-      - name: Build serverless application
-        run: sam build
-
-      - name: Deploy stack
-        shell: bash
+          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
         run: |
           set -euo pipefail
+          npm run predeploy:sam
+          sam build --template-file template.yaml --cached --parallel
 
-          tmp_err=$(mktemp)
-          tmp_deploy_log=$(mktemp)
-          trap 'rm -f "$tmp_err" "$tmp_deploy_log"' EXIT
-
-          wait_for_terminal_stack_status() {
-            local status="$1"
-
-            if [ "$status" = "DELETE_IN_PROGRESS" ]; then
-              echo "Stack '$STACK_NAME' is deleting. Waiting for CloudFormation to finish..."
-              : >"$tmp_err"
-              if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                echo "CloudFormation reports the stack deletion is complete."
-                status="DELETE_COMPLETE"
-              else
-                local wait_err
-                wait_err=$(cat "$tmp_err")
-                if echo "$wait_err" | grep -qi "does not exist"; then
-                  echo "Stack '$STACK_NAME' finished deleting while waiting."
-                  status="DELETE_COMPLETE"
-                else
-                  echo "$wait_err" >&2
-                  exit 1
-                fi
-              fi
-            fi
-
-            while [[ "$status" == *_IN_PROGRESS ]]; do
-              echo "Stack '$STACK_NAME' currently in progress ($status). Waiting for completion..."
-              sleep 15
-              : >"$tmp_err"
-              if status=$(aws cloudformation describe-stacks \
-                  --stack-name "$STACK_NAME" \
-                  --query "Stacks[0].StackStatus" \
-                  --output text 2>"$tmp_err"); then
-                echo "Current stack status: $status"
-              else
-                local describe_err
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi "does not exist"; then
-                  echo "Stack '$STACK_NAME' no longer exists. Proceeding with fresh deployment."
-                  status="DELETE_COMPLETE"
-                  break
-                else
-                  echo "$describe_err" >&2
-                  exit 1
-                fi
-              fi
-            done
-
-            printf '%s' "$status"
-          }
-
-          wait_for_change_set_ready() {
-            local change_set_name="$1"
-            local context="$2"
-
-            while :; do
-              : >"$tmp_err"
-              local describe_json
-              if ! describe_json=$(aws cloudformation describe-change-set \
-                  --stack-name "$STACK_NAME" \
-                  --change-set-name "$change_set_name" \
-                  --output json 2>"$tmp_err"); then
-                local describe_err
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi 'does not exist'; then
-                  echo "Change set '$change_set_name' no longer exists while waiting ($context)."
-                  return 1
-                fi
-
-                echo "$describe_err" >&2
-                exit 1
-              fi
-
-              local status
-              status=$(python -c "import json, sys; data=json.load(sys.stdin); sys.stdout.write(data.get('Status',''))" <<<"$describe_json")
-
-              if [[ "$status" == *_IN_PROGRESS ]]; then
-                echo "Change set '$change_set_name' still in progress ($status) while $context. Waiting for completion..."
-                sleep 10
-                continue
-              fi
-
-              echo "Change set '$change_set_name' reached status $status while $context."
-              return 0
-            done
-          }
-
-          cleanup_description_conflicts() {
-            local context="$1"
-            local list_output
-
-            : >"$tmp_err"
-            if ! list_output=$(aws cloudformation list-change-sets \
-                --stack-name "$STACK_NAME" \
-                --output json 2>"$tmp_err"); then
-              local list_err
-              list_err=$(cat "$tmp_err")
-              if echo "$list_err" | grep -qi 'does not exist'; then
-                return
-              fi
-
-              echo "$list_err" >&2
-              exit 1
-            fi
-
-            local change_set_names
-            change_set_names=$(python -c "import json, sys; data=json.load(sys.stdin); names=[s.get('ChangeSetName') for s in data.get('Summaries', []) if s.get('Status') == 'FAILED' and s.get('ChangeSetName')]; sys.stdout.write('\\n'.join(names))" <<<"$list_output")
-
-            if [ -z "$change_set_names" ]; then
-              return
-            fi
-
-            local deleted_any=false
-            while IFS= read -r change_set_name; do
-              [ -n "$change_set_name" ] || continue
-
-              : >"$tmp_err"
-              local describe_json
-              if ! describe_json=$(aws cloudformation describe-change-set \
-                  --stack-name "$STACK_NAME" \
-                  --change-set-name "$change_set_name" \
-                  --output json 2>"$tmp_err"); then
-                local describe_err
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi 'does not exist'; then
-                  continue
-                fi
-
-                echo "$describe_err" >&2
-                exit 1
-              fi
-
-              local should_delete
-              should_delete=$(python -c "import json, sys; data=json.load(sys.stdin); status=data.get('Status', ''); reason=(data.get('StatusReason') or '').lower(); sys.stdout.write('yes' if status == 'FAILED' and 'mismatch with existing attribute description' in reason else '')" <<<"$describe_json")
-
-              if [ "$should_delete" = "yes" ]; then
-                wait_for_change_set_ready "$change_set_name" "cleaning up description conflicts $context" || continue
-
-                echo "Deleting leftover change set '$change_set_name' $context due to description mismatch..."
-                : >"$tmp_err"
-                if aws cloudformation delete-change-set \
-                    --stack-name "$STACK_NAME" \
-                    --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
-                  echo "Deleted change set '$change_set_name'."
-                  deleted_any=true
-                else
-                  local delete_err
-                  delete_err=$(cat "$tmp_err")
-                  if echo "$delete_err" | grep -qi 'does not exist'; then
-                    echo "Change set '$change_set_name' already deleted."
-                  else
-                    echo "Failed to delete change set '$change_set_name': $delete_err" >&2
-                    exit 1
-                  fi
-                fi
-              fi
-            done <<<"$change_set_names"
-
-            if [ "$deleted_any" = "true" ]; then
-              echo "Waiting for CloudFormation to finalize change set cleanup ($context)..."
-              sleep 10
-            fi
-          }
-
-          ensure_stack_ready_for_deploy() {
-            local context="$1"
-
-            : >"$tmp_err"
-            if stack_status=$(aws cloudformation describe-stacks \
-                --stack-name "$STACK_NAME" \
-                --query "Stacks[0].StackStatus" \
-                --output text 2>"$tmp_err"); then
-              echo "Found existing stack '$STACK_NAME' with status: $stack_status ($context)"
-
-              if [[ "$stack_status" == *_IN_PROGRESS ]]; then
-                echo "Stack '$STACK_NAME' currently in progress ($stack_status) while $context. Waiting for completion..."
-                stack_status=$(wait_for_terminal_stack_status "$stack_status")
-                echo "Stack '$STACK_NAME' reached terminal status: $stack_status while $context."
-              fi
-
-              if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
-                echo "Stack in $stack_status state while $context. Deleting before continuing."
-                aws cloudformation delete-stack --stack-name "$STACK_NAME"
-                if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                  echo "Stack deletion complete while $context."
-                else
-                  local delete_err
-                  delete_err=$(cat "$tmp_err")
-                  if echo "$delete_err" | grep -qi "does not exist"; then
-                    echo "Stack '$STACK_NAME' was deleted while waiting during $context."
-                  else
-                    echo "Failed to delete stack '$STACK_NAME' while $context: $delete_err" >&2
-                    exit 1
-                  fi
-                fi
-                stack_status="DELETE_COMPLETE"
-              elif [[ "$stack_status" == *_FAILED ]]; then
-                echo "Stack '$STACK_NAME' is in failure state ($stack_status) while $context. Resolve the issue in AWS before redeploying." >&2
-                exit 1
-              elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
-                echo "Stack '$STACK_NAME' was deleted while $context. Proceeding with fresh deployment."
-              fi
-            else
-              local describe_err
-              describe_err=$(cat "$tmp_err")
-              if echo "$describe_err" | grep -qi "does not exist"; then
-                echo "Stack '$STACK_NAME' does not exist while $context. Proceeding with deployment."
-                stack_status="DELETE_COMPLETE"
-              else
-                echo "$describe_err" >&2
-                exit 1
-              fi
-            fi
-          }
-
-          ensure_stack_ready_for_deploy "initial status check"
-
-          : >"$tmp_err"
-
-          cleanup_description_conflicts "before starting deployment attempts"
-
-          create_data_bucket='true'
-          if aws s3api head-bucket --bucket "$DATA_BUCKET" 1>/dev/null 2>"$tmp_err"; then
-            echo "S3 bucket '$DATA_BUCKET' already exists. Reusing without creation."
-            create_data_bucket='false'
-          else
-            bucket_err=$(cat "$tmp_err")
-            if echo "$bucket_err" | grep -Eqi 'Not Found|NoSuchBucket|404'; then
-              echo "S3 bucket '$DATA_BUCKET' not found. It will be created by the stack."
-              create_data_bucket='true'
-            else
-              echo "$bucket_err" >&2
-              exit 1
-            fi
+      - name: Deploy SAM stack
+        env:
+          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          extra_args=()
+          if [ -n "${SAM_DEPLOY_ARGS:-}" ]; then
+            # shellcheck disable=SC2206
+            extra_args=(${SAM_DEPLOY_ARGS})
           fi
+          sam deploy \
+            --template-file template.yaml \
+            --stack-name "$SAM_STACK_NAME" \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            "${extra_args[@]}"
 
-          : >"$tmp_err"
-
-          create_resume_table='true'
-          if aws dynamodb describe-table --table-name "$TABLE_NAME" 1>/dev/null 2>"$tmp_err"; then
-            echo "DynamoDB table '$TABLE_NAME' already exists. Reusing without creation."
-            create_resume_table='false'
-          else
-            table_err=$(cat "$tmp_err")
-            if echo "$table_err" | grep -qi 'ResourceNotFoundException'; then
-              echo "DynamoDB table '$TABLE_NAME' not found. It will be created by the stack."
-              create_resume_table='true'
-            else
-              echo "$table_err" >&2
-              exit 1
-            fi
-          fi
-
-          : >"$tmp_err"
-
-          max_deploy_attempts=5
-          deploy_attempt=1
-          deploy_succeeded=false
-          while [ "$deploy_attempt" -le "$max_deploy_attempts" ]; do
-            ensure_stack_ready_for_deploy "preparing for sam deploy attempt $deploy_attempt"
-            echo "Starting sam deploy attempt $deploy_attempt of $max_deploy_attempts"
-            : >"$tmp_deploy_log"
-
-            if sam deploy \
-                --stack-name "$STACK_NAME" \
-                --resolve-s3 \
-                --capabilities CAPABILITY_IAM \
-                --no-confirm-changeset \
-                --no-fail-on-empty-changeset \
-                --force-upload \
-                --parameter-overrides \
-                  PrimaryRegion="$PRIMARY_REGION" \
-                  SecondaryRegion="$SECONDARY_REGION" \
-                  ProvisionedConcurrency="$PROVISIONED_CONCURRENCY" \
-                  StageName="$STAGE_NAME" \
-                  DataBucketName="$DATA_BUCKET" \
-                  ResumeTableName="$TABLE_NAME" \
-                  SecretName="$SECRET_NAME" \
-                  CreateDataBucket="$create_data_bucket" \
-                  CreateResumeTable="$create_resume_table" \
-                2>&1 | tee "$tmp_deploy_log"; then
-              echo "sam deploy completed successfully on attempt $deploy_attempt"
-              deploy_succeeded=true
-              break
-            fi
-
-            deploy_err=$(cat "$tmp_deploy_log")
-
-            # sam deploy may emit ANSI color codes when running in a TTY. These escape
-            # sequences prevent the grep patterns below from matching reliably (for
-            # example, the word "ChangeSet" may appear as "\x1b[0mChangeSet"). Strip
-            # the sequences before normalizing whitespace so detection works even when
-            # colors are enabled.
-            deploy_err_stripped=$(printf '%s\n' "$deploy_err" | \
-              python -c "import re, sys; ansi_escape = re.compile(r'\\x1B\\[[0-?]*[ -/]*[@-~]'); sys.stdout.write(ansi_escape.sub('', sys.stdin.read()))"
-            )
-
-            deploy_err_normalized=$(printf '%s\n' "$deploy_err_stripped" | tr '\r\n' '  ' | tr -s ' ')
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi "AlreadyExistsException" && \
-               printf '%s\n' "$deploy_err_normalized" | grep -Eqi "mismatch with existing attribute description"; then
-              echo "sam deploy reported a change set description mismatch. Attempting to remove the conflicting change set before retrying..."
-
-              change_set_name=$(printf '%s\n' "$deploy_err_stripped" |
-                python -c "import re, sys; data=sys.stdin.read(); match=re.search(r'ChangeSet\\s+([^\\s]+)', data, re.IGNORECASE); print(match.group(1) if match else '')")
-
-              if [ -n "$change_set_name" ]; then
-                if wait_for_change_set_ready "$change_set_name" "handling description mismatch"; then
-                  : >"$tmp_err"
-                  if aws cloudformation delete-change-set \
-                      --stack-name "$STACK_NAME" \
-                      --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
-                    echo "Deleted conflicting change set '$change_set_name'."
-                  else
-                    delete_change_set_err=$(cat "$tmp_err")
-                    if echo "$delete_change_set_err" | grep -qi 'does not exist'; then
-                      echo "Conflicting change set '$change_set_name' no longer exists."
-                    else
-                      echo "Failed to delete change set '$change_set_name': $delete_change_set_err" >&2
-                      exit 1
-                    fi
-                  fi
-                else
-                  echo "Conflicting change set '$change_set_name' disappeared before it could be deleted."
-                fi
-              else
-                echo "Unable to determine the conflicting change set name from sam deploy output. Running cleanup routine..."
-              fi
-
-              cleanup_description_conflicts "after handling change set description mismatch"
-              ensure_stack_ready_for_deploy "after cleaning change set description mismatch"
-
-              if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
-                echo "Unable to resolve change set description mismatch after $max_deploy_attempts attempts." >&2
-                exit 1
-              fi
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-
-            elif printf '%s\n' "$deploy_err_normalized" | grep -Eqi "is in (CREATE|UPDATE|DELETE|ROLLBACK)_IN_PROGRESS state"; then
-              if [ "$deploy_attempt" -eq "$max_deploy_attempts" ]; then
-                echo "Stack remained busy after $max_deploy_attempts attempts. Aborting deployment." >&2
-                exit 1
-              fi
-
-              echo "Stack update or deletion currently in progress. Waiting for CloudFormation to finish before retrying..."
-              : >"$tmp_err"
-              if stack_status=$(aws cloudformation describe-stacks \
-                  --stack-name "$STACK_NAME" \
-                  --query "Stacks[0].StackStatus" \
-                  --output text 2>"$tmp_err"); then
-                stack_status=$(wait_for_terminal_stack_status "$stack_status")
-                echo "Stack reached terminal status: $stack_status"
-
-                if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
-                  echo "Stack in $stack_status state after waiting. Deleting before retrying deployment..."
-                  aws cloudformation delete-stack --stack-name "$STACK_NAME"
-                  if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                    echo "Stack deletion complete after waiting for rollback."
-                  else
-                    delete_err=$(cat "$tmp_err")
-                    if echo "$delete_err" | grep -qi "does not exist"; then
-                      echo "Stack '$STACK_NAME' was deleted while waiting for rollback cleanup."
-                    else
-                      echo "Failed to delete stack after waiting for rollback to complete: $delete_err" >&2
-                      exit 1
-                    fi
-                  fi
-                elif [[ "$stack_status" == *_FAILED ]]; then
-                  echo "Stack '$STACK_NAME' finished waiting in failure state ($stack_status). Resolve the AWS-side issue before redeploying." >&2
-                  exit 1
-                elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
-                  echo "Stack '$STACK_NAME' fully deleted while waiting for rollback."
-                fi
-              else
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi "does not exist"; then
-                  echo "Stack '$STACK_NAME' was deleted while waiting. Proceeding with fresh deployment."
-                else
-                  echo "$describe_err" >&2
-                  exit 1
-                fi
-              fi
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            : >"$tmp_err"
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'AlreadyExistsException' && \
-               printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'ChangeSet [^ ]* cannot be created due to a mismatch with existing attribute Description'; then
-              change_set_name=$(printf '%s\n' "$deploy_err_stripped" | sed -n "s/.*ChangeSet[[:space:]]\([^[:space:]]*\)[[:space:]].*/\1/p" | head -n1)
-
-              if [ -n "$change_set_name" ]; then
-                wait_for_change_set_ready "$change_set_name" "handling conflicting change set from sam deploy" || true
-
-                echo "Existing change set '$change_set_name' has conflicting description. Deleting before retrying..."
-                : >"$tmp_err"
-                if aws cloudformation delete-change-set \
-                    --stack-name "$STACK_NAME" \
-                    --change-set-name "$change_set_name" 1>/dev/null 2>"$tmp_err"; then
-                  echo "Deleted conflicting change set '$change_set_name'."
-                else
-                  delete_conflict_err=$(cat "$tmp_err")
-                  if echo "$delete_conflict_err" | grep -qi "does not exist"; then
-                    echo "Change set '$change_set_name' no longer exists. Proceeding with retry."
-                  else
-                    echo "Failed to delete conflicting change set: $delete_conflict_err" >&2
-                    exit 1
-                  fi
-                fi
-              else
-                echo "sam deploy reported an AlreadyExistsException but the change set name could not be determined. Attempting to locate conflicting change sets via AWS CLI..."
-              fi
-
-              cleanup_description_conflicts "after sam deploy reported a conflicting change set"
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'Stack template with stack id' && \
-               printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'does not exist'; then
-              echo "sam deploy reported that the stack template no longer exists. Checking stack status before retrying..."
-
-              : >"$tmp_err"
-              if stack_status=$(aws cloudformation describe-stacks \
-                  --stack-name "$STACK_NAME" \
-                  --query "Stacks[0].StackStatus" \
-                  --output text 2>"$tmp_err"); then
-                stack_status=$(wait_for_terminal_stack_status "$stack_status")
-                echo "Stack reached terminal status after template missing error: $stack_status"
-
-                if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
-                  echo "Stack in $stack_status state after template missing error. Deleting before retry."
-                  aws cloudformation delete-stack --stack-name "$STACK_NAME"
-                  if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                    echo "Stack deletion complete. Retrying deployment from a clean slate."
-                  else
-                    delete_err=$(cat "$tmp_err")
-                    echo "Failed to delete stack after template missing error: $delete_err" >&2
-                    exit 1
-                  fi
-                elif [ "$stack_status" = "DELETE_COMPLETE" ]; then
-                  echo "Stack already deleted after template missing error. Proceeding with fresh deployment."
-                fi
-              else
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi "does not exist"; then
-                  echo "Stack '$STACK_NAME' no longer exists after template missing error. Proceeding with fresh deployment."
-                else
-                  echo "$describe_err" >&2
-                  exit 1
-                fi
-              fi
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'ROLLBACK_IN_PROGRESS'; then
-              echo "Stack is currently rolling back. Waiting for rollback to finish before retrying..."
-              : >"$tmp_err"
-              if stack_status=$(aws cloudformation describe-stacks \
-                  --stack-name "$STACK_NAME" \
-                  --query "Stacks[0].StackStatus" \
-                  --output text 2>"$tmp_err"); then
-                stack_status=$(wait_for_terminal_stack_status "$stack_status")
-                echo "Stack reached terminal status: $stack_status"
-              else
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi "does not exist"; then
-                  echo "Stack '$STACK_NAME' was deleted during rollback. Proceeding with fresh deployment."
-                  stack_status="DELETE_COMPLETE"
-                else
-                  echo "$describe_err" >&2
-                  exit 1
-                fi
-              fi
-
-              if [ "$stack_status" = "ROLLBACK_COMPLETE" ] || [ "$stack_status" = "UPDATE_ROLLBACK_COMPLETE" ]; then
-                echo "Stack in $stack_status state after rollback. Deleting before retrying deployment..."
-                aws cloudformation delete-stack --stack-name "$STACK_NAME"
-                if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                  echo "Stack deletion complete after rollback."
-                else
-                  delete_err=$(cat "$tmp_err")
-                  if echo "$delete_err" | grep -qi "does not exist"; then
-                    echo "Stack '$STACK_NAME' already deleted."
-                  else
-                    echo "Failed to delete stack after rollback: $delete_err" >&2
-                    exit 1
-                  fi
-                fi
-              fi
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            if printf '%s\n' "$deploy_err_normalized" | grep -Eqi 'UPDATE_ROLLBACK_COMPLETE|ROLLBACK_COMPLETE'; then
-              echo "sam deploy failed because the stack entered a rollback-complete state. Deleting stack '$STACK_NAME' before retrying..."
-              aws cloudformation delete-stack --stack-name "$STACK_NAME"
-              if aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                echo "Stack deletion complete. Retrying deployment from a clean slate."
-              else
-                delete_err=$(cat "$tmp_err")
-                echo "Failed to delete stack after rollback: $delete_err" >&2
-                exit 1
-              fi
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            if printf '%s\n' "$deploy_err_normalized" | grep -qi 'UPDATE_COMPLETE_CLEANUP_IN_PROGRESS'; then
-              echo "sam deploy failed because the stack is still completing a previous update. Waiting for cleanup to finish before retrying..."
-
-              ensure_stack_ready_for_deploy "waiting for stack cleanup after attempt $deploy_attempt"
-
-              : >"$tmp_err"
-              if ! aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME" 1>/dev/null 2>"$tmp_err"; then
-                wait_err=$(cat "$tmp_err")
-                if echo "$wait_err" | grep -qi 'does not exist'; then
-                  echo "Stack '$STACK_NAME' no longer exists while waiting for cleanup. Continuing with retry from a clean slate."
-                else
-                  echo "Failed while waiting for stack cleanup to finish: $wait_err" >&2
-                  exit 1
-                fi
-              else
-                echo "Stack '$STACK_NAME' completed cleanup after previous update."
-              fi
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            if printf '%s\n' "$deploy_err_normalized" | grep -qi "InvalidChangeSetStatus" && \
-               printf '%s\n' "$deploy_err_normalized" | grep -qi "\[OBSOLETE\]"; then
-              echo "sam deploy reported an obsolete change set. Inspecting status..."
-
-              change_set_arn=$(printf '%s\n' "$deploy_err" | \
-                sed -n 's/.*\(arn:aws:cloudformation:[^ ]*changeSet[^ ]*\).*/\1/p' | head -n1)
-
-              if [ -z "$change_set_arn" ]; then
-                echo "Unable to determine change set ARN from sam deploy output. Aborting." >&2
-                exit 1
-              fi
-
-              describe_reason=''
-              : >"$tmp_err"
-              if ! describe_reason=$(aws cloudformation describe-change-set \
-                    --stack-name "$STACK_NAME" \
-                    --change-set-name "$change_set_arn" \
-                    --query 'StatusReason' \
-                    --output text 2>"$tmp_err"); then
-                describe_err=$(cat "$tmp_err")
-                echo "Failed to describe change set $change_set_arn: $describe_err" >&2
-                exit 1
-              fi
-
-              if printf '%s\n' "$describe_reason" | grep -Eqi 'did.?n.t contain changes|No updates'; then
-                echo "Change set is obsolete because no updates were detected. Treating deployment as already up-to-date."
-                if aws cloudformation delete-change-set \
-                    --stack-name "$STACK_NAME" \
-                    --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
-                  echo "Deleted obsolete change set $change_set_arn"
-                else
-                  delete_change_set_err=$(cat "$tmp_err")
-                  if ! echo "$delete_change_set_err" | grep -qi "does not exist"; then
-                    echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
-                    exit 1
-                  fi
-                fi
-
-                deploy_succeeded=true
-                break
-              fi
-
-              if aws cloudformation delete-change-set \
-                  --stack-name "$STACK_NAME" \
-                  --change-set-name "$change_set_arn" 1>/dev/null 2>"$tmp_err"; then
-                echo "Deleted obsolete change set $change_set_arn"
-              else
-                delete_change_set_err=$(cat "$tmp_err")
-                if echo "$delete_change_set_err" | grep -qi "does not exist"; then
-                  echo "Change set $change_set_arn no longer exists. Continuing with retry."
-                else
-                  echo "Failed to delete obsolete change set: $delete_change_set_err" >&2
-                  exit 1
-                fi
-              fi
-
-              : >"$tmp_err"
-              if stack_status=$(aws cloudformation describe-stacks \
-                  --stack-name "$STACK_NAME" \
-                  --query "Stacks[0].StackStatus" \
-                  --output text 2>"$tmp_err"); then
-                stack_status=$(wait_for_terminal_stack_status "$stack_status")
-                echo "Stack reached terminal status after deleting obsolete change set: $stack_status"
-              else
-                describe_err=$(cat "$tmp_err")
-                if echo "$describe_err" | grep -qi "does not exist"; then
-                  echo "Stack '$STACK_NAME' no longer exists after deleting change set. Proceeding with retry."
-                else
-                  echo "$describe_err" >&2
-                  exit 1
-                fi
-              fi
-
-              deploy_attempt=$((deploy_attempt + 1))
-              sleep 15
-              continue
-            fi
-
-            echo "$deploy_err" >&2
-            exit 1
-          done
-
-          if [ "$deploy_succeeded" != "true" ]; then
-            echo "sam deploy failed after $max_deploy_attempts attempts." >&2
+      - name: Resolve CloudFront domain
+        id: resolve_domain
+        if: env.CLOUDFRONT_DISTRIBUTION_ID != ''
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          set -euo pipefail
+          domain=$(aws cloudfront get-distribution --id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --query 'Distribution.DomainName' --output text)
+          if [ -z "$domain" ]; then
+            echo "Unable to resolve CloudFront domain for distribution $CLOUDFRONT_DISTRIBUTION_ID" >&2
             exit 1
           fi
+          url="https://$domain"
+          echo "Resolved CloudFront domain: $url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      - name: Publish deployment URLs
-        id: deployment_urls
-        shell: bash
+      - name: Invalidate CloudFront cache
+        if: env.CLOUDFRONT_DISTRIBUTION_ID != ''
         env:
-          STACK_NAME: ${{ env.STACK_NAME }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ env.CLOUDFRONT_DISTRIBUTION_ID }}
         run: |
           set -euo pipefail
+          aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --paths '/*'
 
-          aws cloudformation describe-stacks --stack-name "$STACK_NAME" --output json > describe.json
+      - name: Verify CloudFront distribution
+        if: steps.resolve_domain.outputs.url != ''
+        env:
+          ALLOW_CLOUDFRONT_VERIFY_FAILURE: ${{ env.ALLOW_CLOUDFRONT_VERIFY_FAILURE }}
+        run: npm run verify:cloudfront -- ${{ steps.resolve_domain.outputs.url }}
 
-          python <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          with Path('describe.json').open() as fh:
-              data = json.load(fh)
-
-          stacks = data.get('Stacks', [])
-          if not stacks:
-              raise SystemExit('Unable to find stack description for deployment outputs.')
-
-          outputs = {item['OutputKey']: item['OutputValue'] for item in stacks[0].get('Outputs', [])}
-          app_url = outputs.get('AppBaseUrl') or outputs.get('CloudFrontUrl', '')
-          api_url = outputs.get('ApiBaseUrl', '')
-
-          summary_path = Path(os.environ['GITHUB_STEP_SUMMARY'])
-          summary_lines = ['\n## Deployment URLs\n']
-          if app_url:
-              summary_lines.append(f"- **App URL:** {app_url}\n")
-          if api_url:
-              summary_lines.append(f"- **API base URL:** {api_url}\n")
-          if len(summary_lines) == 1:
-              summary_lines.append('- No deployment URLs were returned by the stack outputs.\n')
-
-          with summary_path.open('a', encoding='utf-8') as fh:
-              fh.write(''.join(summary_lines))
-
-          output_path = Path(os.environ['GITHUB_OUTPUT'])
-          with output_path.open('a', encoding='utf-8') as fh:
-              fh.write(f"app_url={app_url}\n")
-              fh.write(f"api_url={api_url}\n")
-
-          notice_parts = []
-          if app_url:
-              notice_parts.append(f"App URL: {app_url}")
-          if api_url:
-              notice_parts.append(f"API URL: {api_url}")
-
-          if notice_parts:
-              print(f"::notice title=Deployment URLs::{ ' | '.join(notice_parts) }")
-          else:
-              print('::warning::Deployment succeeded but no URLs were returned in the stack outputs.')
-          PY
-
-          rm -f describe.json
-
-      - name: Verify health endpoint availability
-        if: steps.deployment_urls.outputs.api_url != ''
-        shell: bash
+      - name: Publish deployment summary
+        if: always()
         run: |
-          set -euo pipefail
-
-          base_url='${{ steps.deployment_urls.outputs.api_url }}'
-          health_url="$base_url/healthz"
-          echo "Checking API health endpoint at $health_url"
-
-          tmp_err=$(mktemp)
-          trap 'rm -f "$tmp_err"' EXIT
-
-          if ! response=$(curl \
-              --retry 5 \
-              --retry-delay 10 \
-              --fail \
-              --silent \
-              --show-error \
-              "$health_url" 2>"$tmp_err"); then
-            err_output=$(cat "$tmp_err")
-            echo "::error::Health check failed after multiple retries."
-            if [ -n "$err_output" ]; then
-              echo "Curl reported:\n$err_output"
+          {
+            echo "## ResumeForge deployment"
+            echo
+            echo "* Environment: ${{ env.TARGET_ENVIRONMENT }}"
+            echo "* Status: ${{ job.status }}"
+            if [ "${{ steps.resolve_domain.outputs.url }}" != "" ]; then
+              echo "* CloudFront domain: ${{ steps.resolve_domain.outputs.url }}"
             fi
-            cat <<'EOF'
-          The deployed API endpoint is not returning a successful response for /healthz.
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          Next steps to diagnose the issue:
-          - Open the AWS CloudWatch Logs for the deployed Lambda function to review recent invocation errors.
-          - Confirm that the stack outputs include the expected ApiBaseUrl and that the stage name in API Gateway matches the deployed stage.
-          - Verify in the API Gateway console that the /healthz route is deployed and returning HTTP 200. Re-run this workflow after addressing the issue.
-          EOF
-            exit 1
-          fi
 
-          echo "Health check response: $response"
-
-      - name: Publish CloudFront URL
-        if: success()
-        shell: bash
-        env:
-          STACK_NAME: ${{ env.STACK_NAME }}
-        run: |
-          set -euo pipefail
-
-          npm run publish:cloudfront-url -- "$STACK_NAME"
-
-          summary_path="${GITHUB_STEP_SUMMARY:-}"
-          if [ -n "$summary_path" ]; then
-            {
-              printf '\n## Published CloudFront Distribution\n\n'
-              printf 'The active distribution details have been written to `config/published-cloudfront.json`.\n\n'
-              printf '```json\n'
-              cat config/published-cloudfront.json
-              printf '```\n'
-            } >>"$summary_path"
-          fi
-
-      - name: Upload published CloudFront metadata
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: published-cloudfront
-          path: config/published-cloudfront.json
-          if-no-files-found: error
-
-      - name: Upload static build artifacts to S3
-        if: success()
-        run: npm run upload:static
-        env:
-          STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
-          STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
-          BUILD_VERSION: ${{ github.sha }}
-
-      - name: Verify static asset availability
-        if: success()
-        run: npm run verify:static
-        env:
-          STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
-          STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
-
-      - name: Run deploy health check
-        id: deploy_health_check
-        if: success()
-        run: npm run verify:cloudfront
-
-      - name: Roll back static manifest after failed health check
-        if: failure() && steps.deploy_health_check.outcome == 'failure'
-        env:
-          STATIC_ASSETS_BUCKET: ${{ env.DATA_BUCKET }}
-          STATIC_ASSETS_PREFIX: static/client/${{ env.STAGE_NAME }}/latest
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          bucket="${STATIC_ASSETS_BUCKET}"
-          prefix="${STATIC_ASSETS_PREFIX%/}"
-
-          if [ -z "$bucket" ] || [ -z "$prefix" ]; then
-            echo "::error::Cannot roll back static assets because the bucket or prefix is not defined."
-            exit 1
-          fi
-
-          manifest_key="$prefix/manifest.json"
-          primary_backup_key="$prefix/manifest.previous.json"
-          fallback_backup_key="$prefix/manifest.json.previous"
-
-          echo "Attempting to restore manifest from the most recent backup after failed health check."
-
-          restored=false
-          for backup_key in "$primary_backup_key" "$fallback_backup_key"; do
-            if [ -z "$backup_key" ]; then
-              continue
-            fi
-
-            if aws s3api head-object --bucket "$bucket" --key "$backup_key" >/dev/null 2>&1; then
-              echo "Found backup manifest at s3://$bucket/$backup_key. Restoring..."
-              aws s3 cp "s3://$bucket/$backup_key" "s3://$bucket/$manifest_key"
-              echo "::warning::Rolled back static manifest to the previous deployment after health check failure."
-              restored=true
-              break
-            fi
-          done
-
-          if [ "$restored" != true ]; then
-            echo "::notice::No backup manifest found at s3://$bucket/$primary_backup_key or s3://$bucket/$fallback_backup_key. Skipping automatic rollback."
-          fi
