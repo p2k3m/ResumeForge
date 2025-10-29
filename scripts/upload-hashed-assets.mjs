@@ -86,13 +86,20 @@ export async function gatherHashedAssetUploadEntries({
     throw new Error('[upload-hashed-assets] index.html does not reference any hashed index assets.')
   }
 
-  const hasCssReference = referencedAssets.some((asset) => asset.endsWith('.css'))
-  const hasJsReference = referencedAssets.some((asset) => asset.endsWith('.js'))
-  if (!hasCssReference || !hasJsReference) {
+  const cssCount = referencedAssets.filter((asset) => asset.endsWith('.css')).length
+  const jsCount = referencedAssets.filter((asset) => asset.endsWith('.js')).length
+
+  if (jsCount === 0) {
     throw new Error(
-      `[upload-hashed-assets] index.html must reference hashed CSS and JS bundles. Found ${
-        referencedAssets.filter((asset) => asset.endsWith('.css')).length
-      } CSS and ${referencedAssets.filter((asset) => asset.endsWith('.js')).length} JS assets.`,
+      `[upload-hashed-assets] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${
+        jsCount === 1 ? '' : 's'
+      }.`,
+    )
+  }
+
+  if (cssCount === 0) {
+    console.warn(
+      '[upload-hashed-assets] index.html does not reference a hashed CSS bundle; skipping CSS uploads.',
     )
   }
 
