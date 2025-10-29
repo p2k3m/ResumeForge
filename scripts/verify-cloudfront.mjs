@@ -8,6 +8,48 @@ import { runPostDeploymentApiTests } from '../lib/postDeploymentApiTests.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function hasValue(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function parseBooleanFlag(value) {
+  if (!hasValue(value)) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return ['1', 'true', 'yes', 'y', 'on'].includes(normalized);
+}
+
+function parseArguments(argv = []) {
+  const result = {
+    targetUrl: '',
+    allowFailure: false,
+  };
+
+  for (const entry of argv) {
+    if (!hasValue(entry)) {
+      continue;
+    }
+
+    if (entry === '--allow-cloudfront-failure' || entry === '--allow-cloudfront-verify-failure') {
+      result.allowFailure = true;
+      continue;
+    }
+
+    if (entry.startsWith('--allow-cloudfront-failure=')) {
+      result.allowFailure = parseBooleanFlag(entry.split('=').slice(1).join('='));
+      continue;
+    }
+
+    if (!entry.startsWith('-') && !result.targetUrl) {
+      result.targetUrl = entry;
+      continue;
+    }
+  }
+
+  return result;
+}
+
 async function readPublishedMetadata() {
   const filePath = path.resolve(__dirname, '../config/published-cloudfront.json');
   const raw = await fs.readFile(filePath, 'utf8');
@@ -22,9 +64,13 @@ async function readPublishedMetadata() {
 }
 
 async function main() {
+  let allowFailureFlag = false;
   try {
-    const argUrl = process.argv[2];
-    let targetUrl = typeof argUrl === 'string' ? argUrl.trim() : '';
+    const parsed = parseArguments(process.argv.slice(2));
+    const { targetUrl: cliTargetUrl } = parsed;
+    allowFailureFlag = parsed.allowFailure;
+
+    let targetUrl = hasValue(cliTargetUrl) ? cliTargetUrl.trim() : '';
 
     if (!targetUrl) {
       const metadata = await readPublishedMetadata();
@@ -123,6 +169,23 @@ async function main() {
     console.error('    sam deploy --guided');
     console.error('    npm run publish:cloudfront-url -- <stack-name>');
     console.error('- See docs/troubleshooting-cloudfront.md for a detailed runbook.');
+
+    const allowFailureEnv = parseBooleanFlag(process.env.ALLOW_CLOUDFRONT_VERIFY_FAILURE);
+    const allowFailure = allowFailureEnv || allowFailureFlag;
+
+    if (allowFailure) {
+      console.error(
+        'Continuing because ALLOW_CLOUDFRONT_VERIFY_FAILURE is enabled (or --allow-cloudfront-failure was supplied).',
+      );
+      console.error(
+        'Re-run npm run verify:cloudfront without the override once the distribution is reachable.',
+      );
+      process.exit(0);
+    }
+
+    console.error(
+      'Set ALLOW_CLOUDFRONT_VERIFY_FAILURE=true (or pass --allow-cloudfront-failure) to bypass this failure temporarily.',
+    );
     process.exit(1);
   }
 }
