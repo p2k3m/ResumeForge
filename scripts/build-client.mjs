@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyStageEnvironment } from '../config/stage.js'
+import { uploadHashedIndexAssets } from './upload-hashed-assets.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -54,6 +55,11 @@ function buildClient() {
   runCommand('npm run build', { cwd: clientDir, env: process.env })
 }
 
-ensureDir(clientNodeModules)
-ensureClientDependencies()
-buildClient()
+async function main() {
+  ensureDir(clientNodeModules)
+  ensureClientDependencies()
+  buildClient()
+  await uploadHashedIndexAssets()
+}
+
+await main()
