@@ -2,7 +2,15 @@
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import process from 'node:process'
-import { access, readFile, readdir, stat } from 'node:fs/promises'
+import {
+  access,
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  stat,
+  writeFile,
+} from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import {
   DeleteObjectsCommand,
@@ -24,6 +32,11 @@ const clientIndexPath = path.join(clientDistDir, 'index.html')
 const serviceWorkerPath = path.join(clientDistDir, 'service-worker.js')
 const errorDocumentPath = path.join(clientDistDir, '404.html')
 const assetsDir = path.join(clientDistDir, 'assets')
+const publishedCloudfrontPath = path.join(
+  projectRoot,
+  'config',
+  'published-cloudfront.json',
+)
 
 function resolveBuildVersion() {
   const candidates = [
@@ -276,6 +289,35 @@ async function gatherClientAssetFiles() {
     await ensureFileExists(absolutePath, { label: `referenced asset ${assetPath}` })
   }
 
+  const existingFiles = await walkDirectory(clientDistDir)
+  if (existingFiles.length === 0) {
+    throw createValidationError('[upload-static] No files were found in client/dist. Build the client before uploading.')
+  }
+
+  const primaryIndexAssets = resolvePrimaryIndexAssets({
+    hashedAssets,
+    files: existingFiles,
+  })
+
+  for (const assetPath of [primaryIndexAssets.css, primaryIndexAssets.js]) {
+    if (!assetPath) {
+      continue
+    }
+    const normalized = normalizeClientAssetPath(assetPath)
+    if (!normalized) {
+      continue
+    }
+    const absolutePath = path.join(clientDistDir, normalized)
+    await ensureFileExists(absolutePath, { label: `resolved asset ${normalized}` })
+  }
+
+  await ensureIndexAliasArtifacts({
+    distDir: clientDistDir,
+    primaryAssets: primaryIndexAssets,
+  })
+
+  await ensurePublishedCloudfrontFallbackInDist({ distDir: clientDistDir })
+
   for (const aliasPath of INDEX_ASSET_ALIAS_PATHS) {
     const absoluteAliasPath = path.join(clientDistDir, aliasPath)
     await ensureFileExists(absoluteAliasPath, { label: `index alias ${aliasPath}` })
@@ -287,7 +329,6 @@ async function gatherClientAssetFiles() {
   }
 
   files.sort((a, b) => a.localeCompare(b))
-  const primaryIndexAssets = resolvePrimaryIndexAssets({ hashedAssets, files })
 
   const manifestHashedAssets = Array.from(
     new Set(
@@ -494,6 +535,91 @@ export function resolveIndexAssetAliases(primaryAssets) {
   }
 
   return aliases
+}
+
+async function ensureIndexAliasArtifacts({
+  distDir = clientDistDir,
+  primaryAssets,
+} = {}) {
+  const aliases = resolveIndexAssetAliases(primaryAssets)
+  if (!aliases.length) {
+    return
+  }
+
+  for (const { alias, source } of aliases) {
+    if (!alias || !source) {
+      continue
+    }
+
+    const normalizedSource = normalizeClientAssetPath(source)
+    if (!normalizedSource) {
+      continue
+    }
+
+    const sourcePath = path.join(distDir, normalizedSource)
+    const aliasPath = path.join(distDir, alias)
+
+    await ensureFileExists(sourcePath, {
+      label: `resolved asset ${normalizedSource}`,
+    })
+
+    await mkdir(path.dirname(aliasPath), { recursive: true })
+    await copyFile(sourcePath, aliasPath)
+  }
+}
+
+async function loadPublishedCloudfrontMetadataForDist() {
+  let raw
+  try {
+    raw = await readFile(publishedCloudfrontPath, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw createValidationError(
+        '[upload-static] config/published-cloudfront.json is missing. Run "npm run publish:cloudfront-url" before uploading.',
+      )
+    }
+    throw error
+  }
+
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    throw createValidationError(
+      '[upload-static] config/published-cloudfront.json is empty. Run "npm run publish:cloudfront-url" before uploading.',
+    )
+  }
+
+  let parsed
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch (error) {
+    throw createValidationError(
+      `[upload-static] Unable to parse config/published-cloudfront.json: ${error?.message || error}`,
+    )
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw createValidationError(
+      '[upload-static] config/published-cloudfront.json must contain an object with the published metadata.',
+    )
+  }
+
+  return parsed
+}
+
+async function ensurePublishedCloudfrontFallbackInDist({
+  distDir = clientDistDir,
+} = {}) {
+  const metadata = await loadPublishedCloudfrontMetadataForDist()
+  const payload = `${JSON.stringify({ success: true, cloudfront: metadata }, null, 2)}\n`
+  const targets = [
+    path.join(distDir, 'api', 'published-cloudfront'),
+    path.join(distDir, 'api', 'published-cloudfront.json'),
+  ]
+
+  for (const target of targets) {
+    await mkdir(path.dirname(target), { recursive: true })
+    await writeFile(target, payload, 'utf8')
+  }
 }
 
 export function ensureIndexAliasCoverage(uploads) {
