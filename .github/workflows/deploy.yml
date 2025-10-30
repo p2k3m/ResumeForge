@@ -91,6 +91,7 @@ jobs:
           STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
         run: |
           set -euo pipefail
+          npm run clean
           npm run predeploy:sam
           sam build --template-file template.yaml --cached --parallel
 
