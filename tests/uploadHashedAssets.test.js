@@ -44,8 +44,10 @@ describe('uploadHashedIndexAssets', () => {
     'BUILD_VERSION',
     'DATA_BUCKET',
     'S3_BUCKET',
+    'PUBLISHED_CLOUDFRONT_PATH',
   ]
   const originalEnv = {}
+  let metadataPath
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hashed-upload-exec-'))
@@ -53,6 +55,19 @@ describe('uploadHashedIndexAssets', () => {
     for (const key of envKeys) {
       originalEnv[key] = process.env[key]
     }
+
+    metadataPath = path.join(tempDir, 'published-cloudfront.json')
+    const defaultMetadata = {
+      stackName: 'ResumeForge',
+      url: 'https://d109hwmzrqr39w.cloudfront.net',
+      distributionId: 'E3NEWPORTAL789',
+      originBucket: 'resume-forge-app-2025',
+      originRegion: 'ap-south-1',
+      originPath: '/static/client/prod/latest',
+      updatedAt: '2024-11-05T09:30:00.000Z',
+    }
+    await fs.writeFile(metadataPath, JSON.stringify(defaultMetadata), 'utf8')
+    process.env.PUBLISHED_CLOUDFRONT_PATH = metadataPath
 
     sendMock = jest
       .spyOn(S3Client.prototype, 'send')
@@ -125,6 +140,10 @@ describe('uploadHashedIndexAssets', () => {
       indexHtmlPath: path.join(distDir, 'index.html'),
       quiet: true,
     })
+
+    const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
+    expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
+    expect(updatedIndex).toContain('"url":"https://d109hwmzrqr39w.cloudfront.net"')
 
     const cssAlias = await fs.readFile(path.join(assetsDir, 'index-latest.css'), 'utf8')
     const jsAlias = await fs.readFile(path.join(assetsDir, 'index-latest.js'), 'utf8')
@@ -206,6 +225,10 @@ describe('uploadHashedIndexAssets', () => {
 
     expect(result.bucket).toBe('resume-forge-app-2025')
     expect(result.prefix).toBe('static/client/prod/latest')
+
+    const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
+    expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
+    expect(updatedIndex).toContain('"originBucket":"resume-forge-app-2025"')
 
     const putCommands = sendMock.mock.calls
       .map(([command]) => command)

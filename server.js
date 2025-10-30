@@ -118,6 +118,7 @@ import { stripUploadMetadata } from './lib/uploads/metadata.js';
 import createS3StreamingStorage from './lib/uploads/s3StreamingStorage.js';
 import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 import { notifyMissingClientAssets } from './lib/deploy/notifications.js';
+import { embedCloudfrontMetadataIntoHtml } from './lib/cloudfront/metadata.js';
 
 const knownResumeIdentifiers = new Set();
 let missingClientAssetsNotificationSent = false;
@@ -126,7 +127,6 @@ const IMMUTABLE_STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutabl
 const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
 const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
 const CLIENT_INDEX_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
-const CLOUDFRONT_METADATA_SCRIPT_ID = 'resumeforge-cloudfront-metadata';
 
 function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
   const effectivePath = typeof requestPath === 'string' ? requestPath : assetPath;
@@ -226,123 +226,6 @@ function buildStaticAssetKey(prefix, requestPath) {
 
   const combined = `${normalizedPrefix}/${sanitizedPath}`;
   return combined.replace(/\/{2,}/g, '/');
-}
-
-function escapeHtmlAttributeValue(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function updateAttributeInTag(tag, attribute, value) {
-  if (!tag || !attribute) {
-    return tag;
-  }
-
-  const escapedValue = escapeHtmlAttributeValue(value);
-  const attributePattern = new RegExp(`(${attribute}\\s*=\\s*)(["'])[^"']*(\\2)`, 'i');
-  if (attributePattern.test(tag)) {
-    return tag.replace(attributePattern, (_, prefix, quote, suffixQuote) => {
-      return `${prefix}${quote}${escapedValue}${suffixQuote}`;
-    });
-  }
-
-  const closing = tag.endsWith('/>') ? '/>' : '>';
-  const withoutClosing = tag.slice(0, tag.length - closing.length);
-  return `${withoutClosing} ${attribute}="${escapedValue}"${closing}`;
-}
-
-function updateTagAttribute(html, { tagName, matchAttribute, matchValue, attribute, value }) {
-  if (!html || !tagName || !matchAttribute || !matchValue || !attribute) {
-    return html;
-  }
-
-  const pattern = new RegExp(
-    `<${tagName}\\b[^>]*${matchAttribute}\\s*=\\s*(["'])${matchValue.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\1[^>]*>`,
-    'i',
-  );
-
-  return html.replace(pattern, (match) => updateAttributeInTag(match, attribute, value));
-}
-
-function normalizeMetadataUrlForEmbedding(value) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  try {
-    const resolved = new URL(trimmed);
-    const normalizedPath = resolved.pathname ? resolved.pathname.replace(/\/+$/, '') : '';
-    const base = `${resolved.origin}${normalizedPath}`;
-    return `${base}${resolved.search || ''}${resolved.hash || ''}`;
-  } catch (error) {
-    return trimmed;
-  }
-}
-
-function embedPublishedCloudfrontMetadataIntoHtml(html, metadata) {
-  if (!metadata || typeof html !== 'string' || !html) {
-    return html;
-  }
-
-  const apiBase = normalizeMetadataUrlForEmbedding(metadata.apiGatewayUrl);
-  const fallbackBase = apiBase || normalizeMetadataUrlForEmbedding(metadata.url);
-
-  if (!apiBase && !fallbackBase) {
-    return html;
-  }
-
-  let updatedHtml = html;
-  if (apiBase) {
-    updatedHtml = updateTagAttribute(updatedHtml, {
-      tagName: 'meta',
-      matchAttribute: 'name',
-      matchValue: 'resumeforge-api-base',
-      attribute: 'content',
-      value: apiBase,
-    });
-  }
-
-  if (fallbackBase) {
-    const pattern = /<input\b[^>]*data-backup-api-base[^>]*>/gi;
-    updatedHtml = updatedHtml.replace(pattern, (match) => updateAttributeInTag(match, 'value', fallbackBase));
-  }
-
-  try {
-    const payload = JSON.stringify({ success: true, cloudfront: metadata });
-    const safePayload = payload.replace(/</g, '\\u003c').replace(/-->/g, '--\\u003e');
-    const scriptContent = `window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = ${safePayload};`;
-    const safeScript = scriptContent.replace(/<\/script/gi, '\\u003c/script');
-    const scriptTag = `<script id="${CLOUDFRONT_METADATA_SCRIPT_ID}">${safeScript}</script>`;
-    const scriptPattern = new RegExp(
-      `<script\\b[^>]*id=["']${CLOUDFRONT_METADATA_SCRIPT_ID}["'][^>]*>[\\s\\S]*?<\\/script>`,
-      'i',
-    );
-
-    if (scriptPattern.test(updatedHtml)) {
-      updatedHtml = updatedHtml.replace(scriptPattern, scriptTag);
-    } else if (updatedHtml.includes('</head>')) {
-      updatedHtml = updatedHtml.replace('</head>', `${scriptTag}\n</head>`);
-    } else if (updatedHtml.includes('</body>')) {
-      updatedHtml = updatedHtml.replace('</body>', `${scriptTag}\n</body>`);
-    } else {
-      updatedHtml += scriptTag;
-    }
-  } catch (error) {
-    logStructured('warn', 'client_index_metadata_embed_script_failed', {
-      error: serializeError(error),
-    });
-  }
-
-  return updatedHtml;
 }
 
 async function streamS3BodyToResponse(body, res) {
@@ -2256,7 +2139,7 @@ async function getClientIndexHtml() {
   try {
     const metadata = await loadPublishedCloudfrontMetadata();
     if (metadata) {
-      html = embedPublishedCloudfrontMetadataIntoHtml(html, metadata);
+      html = embedCloudfrontMetadataIntoHtml(html, metadata);
     }
   } catch (err) {
     logStructured('warn', 'client_index_metadata_embed_failed', {
