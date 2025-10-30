@@ -903,16 +903,12 @@ export async function uploadHashedIndexAssets(options = {}) {
 
   const configuration = await resolveHashedAssetUploadConfiguration({ metadata: effectiveMetadata })
   if (!configuration) {
-    if (!options?.quiet) {
-      console.log(
-        '[upload-hashed-assets] No static asset bucket configured; generated index-latest aliases locally and skipped hashed asset upload.',
-      )
-    }
-    return {
-      uploaded: [],
-      aliases: aliasEntries.map((entry) => entry.relativePath),
-      supplementary: supplementaryEntries.map((entry) => entry.relativePath),
-    }
+    throw new Error(
+      [
+        '[upload-hashed-assets] Unable to resolve a static asset bucket/prefix.',
+        'Configure STATIC_ASSETS_BUCKET/STATIC_ASSETS_PREFIX or populate config/published-cloudfront.json before uploading.',
+      ].join(' '),
+    )
   }
 
   const versionLabel = resolveBuildVersionLabel()

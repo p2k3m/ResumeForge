@@ -250,6 +250,42 @@ describe('uploadHashedIndexAssets', () => {
     expect(sendMock).toHaveBeenCalled()
   })
 
+  it('throws when no static asset destination can be resolved', async () => {
+    delete process.env.STATIC_ASSETS_BUCKET
+    delete process.env.STATIC_ASSETS_PREFIX
+    delete process.env.DATA_BUCKET
+    delete process.env.S3_BUCKET
+    await fs.rm(metadataPath, { force: true })
+
+    const distDir = path.join(tempDir, 'dist-no-destination')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251029.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251029.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+
+    await expect(
+      uploadHashedIndexAssets({
+        distDirectory: distDir,
+        assetsDirectory: assetsDir,
+        indexHtmlPath: path.join(distDir, 'index.html'),
+        quiet: true,
+      }),
+    ).rejects.toThrow('Unable to resolve a static asset bucket/prefix')
+  })
+
   it('generates degraded CloudFront metadata when published metadata is unavailable', async () => {
     process.env.STAGE_NAME = 'prod'
     process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
