@@ -2,7 +2,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { jest } from '@jest/globals'
-import { HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import {
+  HeadBucketCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
 import {
   extractHashedIndexAssetReferences,
   gatherHashedAssetUploadEntries,
@@ -56,6 +61,9 @@ describe('uploadHashedIndexAssets', () => {
           return {}
         }
         if (command instanceof PutObjectCommand) {
+          return {}
+        }
+        if (command instanceof HeadObjectCommand) {
           return {}
         }
         throw new Error(`Unexpected command: ${command?.constructor?.name ?? 'unknown'}`)
