@@ -131,7 +131,7 @@ async function ensureDirectoryPopulated(directory, { label } = {}) {
   return visibleEntries
 }
 
-function extractHashedIndexAssets(html) {
+export function extractHashedIndexAssets(html) {
   if (typeof html !== 'string' || !html.trim()) {
     throw createValidationError('[upload-static] index.html is empty or unreadable.')
   }
@@ -164,8 +164,10 @@ function extractHashedIndexAssets(html) {
   }
 
   if (cssCount === 0) {
-    console.warn(
-      '[upload-static] index.html does not reference a hashed CSS bundle; proceeding without uploading a CSS alias.',
+    throw createValidationError(
+      `[upload-static] index.html must reference at least one hashed CSS bundle. Found ${cssCount} CSS asset${
+        cssCount === 1 ? '' : 's'
+      }.`,
     )
   }
 
