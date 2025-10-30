@@ -118,7 +118,7 @@ import { stripUploadMetadata } from './lib/uploads/metadata.js';
 import createS3StreamingStorage from './lib/uploads/s3StreamingStorage.js';
 import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 import { notifyMissingClientAssets } from './lib/deploy/notifications.js';
-import { embedCloudfrontMetadataIntoHtml } from './lib/cloudfront/metadata.js';
+import { embedCloudfrontMetadataIntoHtml, ensureMetaApiBase } from './lib/cloudfront/metadata.js';
 
 const knownResumeIdentifiers = new Set();
 let missingClientAssetsNotificationSent = false;
@@ -2281,6 +2281,8 @@ async function getClientIndexHtml() {
   }
 
   let html = await fs.readFile(clientIndexPath, 'utf8');
+
+  html = ensureMetaApiBase(html);
 
   try {
     const metadata = await loadPublishedCloudfrontMetadata();
