@@ -116,8 +116,10 @@ import { resolveServiceForRoute } from './microservices/services.js';
 import { stripUploadMetadata } from './lib/uploads/metadata.js';
 import createS3StreamingStorage from './lib/uploads/s3StreamingStorage.js';
 import { withRequiredLogAttributes } from './lib/logging/attributes.js';
+import { notifyMissingClientAssets } from './lib/deploy/notifications.js';
 
 const knownResumeIdentifiers = new Set();
+let missingClientAssetsNotificationSent = false;
 
 const IMMUTABLE_STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
@@ -4151,6 +4153,16 @@ if (shouldServeClientAppRoutes) {
     logStructured('warn', 'client_build_missing', {
       path: clientIndexPath,
     });
+    if (!missingClientAssetsNotificationSent) {
+      missingClientAssetsNotificationSent = true;
+      notifyMissingClientAssets({
+        source: 'api_bootstrap',
+        clientIndexPath,
+        deploymentEnvironment: getDeploymentEnvironment(),
+      }).catch((err) => {
+        console.error('Failed to publish missing client assets notification', err);
+      });
+    }
   }
   app.use(tryServeHashedIndexAssetFromS3);
 } else if (declaredActiveServices.length) {
