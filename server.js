@@ -971,19 +971,23 @@ async function tryServeHashedIndexAssetFromS3(req, res, next) {
   return next();
 }
 
-async function serveIndexAssetAlias(req, res, next) {
-  const match = INDEX_ASSET_ALIAS_PATH_PATTERN.exec(req.path || '');
-  if (!match) {
-    return next();
+async function handleIndexAssetAliasRequest({
+  aliasPath,
+  method,
+  res,
+  requestPath,
+  logContext: additionalLogContext = {},
+  logLabels = {},
+  onMissingManifest,
+  onUnavailable,
+}) {
+  const normalizedAliasPath = typeof aliasPath === 'string' ? aliasPath : '';
+  if (!normalizedAliasPath) {
+    return false;
   }
 
-  const method = (req.method || 'GET').toUpperCase();
-  if (method !== 'GET' && method !== 'HEAD') {
-    res.status(405).setHeader('Allow', 'GET, HEAD').end();
-    return;
-  }
-
-  const extension = match[1].toLowerCase();
+  const aliasLower = normalizedAliasPath.toLowerCase();
+  const extension = aliasLower.endsWith('.css') ? 'css' : 'js';
   const manifest = await loadHashedIndexAssetManifest();
   const manifestHashedAssetPath = extension === 'css' ? manifest.css : manifest.js;
   let remoteHashedAssetPath = extension === 'css' ? manifest.rawCss : manifest.rawJs;
@@ -1015,18 +1019,31 @@ async function serveIndexAssetAlias(req, res, next) {
 
   if (!normalizedHashedAssetPath) {
     logStructured('warn', 'client_asset_alias_missing_manifest', {
-      aliasPath: req.path,
+      aliasPath: normalizedAliasPath,
       extension,
     });
+
+    if (typeof onMissingManifest === 'function') {
+      const handled = await onMissingManifest({
+        aliasPath: normalizedAliasPath,
+        extension,
+        res,
+      });
+      if (handled) {
+        return true;
+      }
+    }
+
     res.status(503).type('text/plain').send('Static assets are temporarily unavailable.');
-    return;
+    return true;
   }
 
   const logContext = {
-    aliasPath: req.path,
+    aliasPath: normalizedAliasPath,
     resolvedPath: normalizedHashedAssetPath,
     s3Key: remoteHashedAssetPath,
     method,
+    ...additionalLogContext,
   };
 
   if (
@@ -1035,29 +1052,32 @@ async function serveIndexAssetAlias(req, res, next) {
       method,
       res,
       logContext,
-      requestPath: req.path,
+      requestPath,
     })
   ) {
-    return;
+    return true;
   }
+
+  const aliasLabels = {
+    retry: 'client_asset_alias_s3_retry',
+    headRetry: 'client_asset_alias_s3_head_retry',
+    served: 'client_asset_alias_s3_served',
+    headServed: 'client_asset_alias_s3_head_served',
+    failed: 'client_asset_alias_s3_failed',
+    ...logLabels,
+  };
 
   const servedFromS3 = await serveHashedIndexAssetFromS3({
     assetPath: remoteHashedAssetPath,
     method,
     res,
     logContext,
-    logLabels: {
-      retry: 'client_asset_alias_s3_retry',
-      headRetry: 'client_asset_alias_s3_head_retry',
-      served: 'client_asset_alias_s3_served',
-      headServed: 'client_asset_alias_s3_head_served',
-      failed: 'client_asset_alias_s3_failed',
-    },
-    requestPath: req.path,
+    logLabels: aliasLabels,
+    requestPath,
   });
 
   if (servedFromS3) {
-    return;
+    return true;
   }
 
   const fallbackCandidates = manifestFallbackCandidates.length
@@ -1082,10 +1102,9 @@ async function serveIndexAssetAlias(req, res, next) {
 
     attemptedFallbacks.push(remoteCandidate);
     const fallbackLogContext = {
-      aliasPath: req.path,
+      ...logContext,
       resolvedPath: normalizedCandidate,
       s3Key: remoteCandidate,
-      method,
       manifestFallback: true,
     };
 
@@ -1095,10 +1114,10 @@ async function serveIndexAssetAlias(req, res, next) {
         method,
         res,
         logContext: fallbackLogContext,
-        requestPath: req.path,
+        requestPath,
       })
     ) {
-      return;
+      return true;
     }
 
     const servedFallback = await serveHashedIndexAssetFromS3({
@@ -1113,11 +1132,23 @@ async function serveIndexAssetAlias(req, res, next) {
         headServed: 'client_asset_alias_fallback_s3_head_served',
         failed: 'client_asset_alias_fallback_s3_failed',
       },
-      requestPath: req.path,
+      requestPath,
     });
 
     if (servedFallback) {
-      return;
+      return true;
+    }
+  }
+
+  if (typeof onUnavailable === 'function') {
+    const handled = await onUnavailable({
+      aliasPath: normalizedAliasPath,
+      logContext,
+      attemptedFallbacks,
+      res,
+    });
+    if (handled) {
+      return true;
     }
   }
 
@@ -1126,6 +1157,60 @@ async function serveIndexAssetAlias(req, res, next) {
     fallbackCandidates: attemptedFallbacks,
   });
   res.status(502).type('text/plain').send('Static assets are temporarily unavailable.');
+  return true;
+}
+
+async function serveIndexAssetAlias(req, res, next) {
+  if (!INDEX_ASSET_ALIAS_PATH_PATTERN.test(req.path || '')) {
+    return next();
+  }
+
+  const method = (req.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.status(405).setHeader('Allow', 'GET, HEAD').end();
+    return;
+  }
+
+  await handleIndexAssetAliasRequest({
+    aliasPath: req.path,
+    method,
+    res,
+    requestPath: req.path,
+  });
+}
+
+function normalizeStaticProxyAssetPath(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  let candidate = value.trim();
+  if (!candidate) {
+    return '';
+  }
+
+  candidate = candidate.replace(/[#?].*$/, '');
+
+  while (/^(?:\.\.\/|\.\/)/.test(candidate)) {
+    candidate = candidate.replace(/^(?:\.\.\/|\.\/)/, '');
+  }
+
+  candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
+  if (!candidate) {
+    return '';
+  }
+
+  const withLeadingSlash = candidate.startsWith('/') ? candidate : `/${candidate}`;
+
+  if (INDEX_ASSET_ALIAS_PATH_PATTERN.test(withLeadingSlash)) {
+    return withLeadingSlash;
+  }
+
+  if (HASHED_INDEX_ASSET_PATH_PATTERN.test(withLeadingSlash)) {
+    return withLeadingSlash;
+  }
+
+  return '';
 }
 
 const extractText = extractResumeText;
@@ -18207,6 +18292,100 @@ app.get('/api/published-cloudfront', async (req, res) => {
       'Unable to load the published CloudFront metadata.'
     );
   }
+});
+
+app.get('/api/static-proxy', async (req, res) => {
+  const rawAssetPath =
+    typeof req.query?.asset === 'string'
+      ? req.query.asset
+      : typeof req.query?.path === 'string'
+        ? req.query.path
+        : '';
+  const normalizedAssetPath = normalizeStaticProxyAssetPath(rawAssetPath);
+
+  if (!normalizedAssetPath) {
+    return sendError(
+      res,
+      400,
+      'INVALID_STATIC_ASSET_PATH',
+      'Provide a valid static asset path to proxy.',
+    );
+  }
+
+  const method = (req.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.status(405).setHeader('Allow', 'GET, HEAD').end();
+    return;
+  }
+
+  if (INDEX_ASSET_ALIAS_PATH_PATTERN.test(normalizedAssetPath)) {
+    await handleIndexAssetAliasRequest({
+      aliasPath: normalizedAssetPath,
+      method,
+      res,
+      requestPath: normalizedAssetPath,
+      logContext: { proxy: true },
+      logLabels: {
+        retry: 'client_asset_alias_proxy_s3_retry',
+        headRetry: 'client_asset_alias_proxy_s3_head_retry',
+        served: 'client_asset_alias_proxy_s3_served',
+        headServed: 'client_asset_alias_proxy_s3_head_served',
+        failed: 'client_asset_alias_proxy_s3_failed',
+      },
+      onUnavailable: async ({ logContext, attemptedFallbacks }) => {
+        logStructured('error', 'client_asset_alias_proxy_unavailable', {
+          ...(logContext || {}),
+          fallbackCandidates: attemptedFallbacks,
+        });
+        res
+          .status(502)
+          .type('text/plain')
+          .send('Static assets are temporarily unavailable.');
+        return true;
+      },
+    });
+    return;
+  }
+
+  const logContext = {
+    path: normalizedAssetPath,
+    method,
+    proxy: true,
+  };
+
+  if (
+    await serveClientDistAsset({
+      assetPath: normalizedAssetPath,
+      method,
+      res,
+      logContext,
+      requestPath: normalizedAssetPath,
+    })
+  ) {
+    return;
+  }
+
+  const servedFromS3 = await serveHashedIndexAssetFromS3({
+    assetPath: normalizedAssetPath,
+    method,
+    res,
+    logContext,
+    logLabels: {
+      retry: 'client_asset_proxy_s3_retry',
+      headRetry: 'client_asset_proxy_s3_head_retry',
+      served: 'client_asset_proxy_s3_served',
+      headServed: 'client_asset_proxy_s3_head_served',
+      failed: 'client_asset_proxy_s3_failed',
+    },
+    requestPath: normalizedAssetPath,
+  });
+
+  if (servedFromS3) {
+    return;
+  }
+
+  logStructured('error', 'client_asset_proxy_unavailable', logContext);
+  res.status(502).type('text/plain').send('Static assets are temporarily unavailable.');
 });
 
 app.get('/api/static-manifest', async (req, res) => {
