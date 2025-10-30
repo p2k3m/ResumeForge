@@ -123,6 +123,7 @@ const IMMUTABLE_STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutabl
 const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
 const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
 const CLIENT_INDEX_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
+const CLOUDFRONT_METADATA_SCRIPT_ID = 'resumeforge-cloudfront-metadata';
 
 function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
   const effectivePath = typeof requestPath === 'string' ? requestPath : assetPath;
@@ -310,6 +311,32 @@ function embedPublishedCloudfrontMetadataIntoHtml(html, metadata) {
   if (fallbackBase) {
     const pattern = /<input\b[^>]*data-backup-api-base[^>]*>/gi;
     updatedHtml = updatedHtml.replace(pattern, (match) => updateAttributeInTag(match, 'value', fallbackBase));
+  }
+
+  try {
+    const payload = JSON.stringify({ success: true, cloudfront: metadata });
+    const safePayload = payload.replace(/</g, '\\u003c').replace(/-->/g, '--\\u003e');
+    const scriptContent = `window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = ${safePayload};`;
+    const safeScript = scriptContent.replace(/<\/script/gi, '\\u003c/script');
+    const scriptTag = `<script id="${CLOUDFRONT_METADATA_SCRIPT_ID}">${safeScript}</script>`;
+    const scriptPattern = new RegExp(
+      `<script\\b[^>]*id=["']${CLOUDFRONT_METADATA_SCRIPT_ID}["'][^>]*>[\\s\\S]*?<\\/script>`,
+      'i',
+    );
+
+    if (scriptPattern.test(updatedHtml)) {
+      updatedHtml = updatedHtml.replace(scriptPattern, scriptTag);
+    } else if (updatedHtml.includes('</head>')) {
+      updatedHtml = updatedHtml.replace('</head>', `${scriptTag}\n</head>`);
+    } else if (updatedHtml.includes('</body>')) {
+      updatedHtml = updatedHtml.replace('</body>', `${scriptTag}\n</body>`);
+    } else {
+      updatedHtml += scriptTag;
+    }
+  } catch (error) {
+    logStructured('warn', 'client_index_metadata_embed_script_failed', {
+      error: serializeError(error),
+    });
   }
 
   return updatedHtml;

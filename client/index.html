@@ -758,8 +758,86 @@
           return true
         }
 
+        const applyAliasMetadataCandidates = (rawMetadata) => {
+          if (!rawMetadata || typeof rawMetadata !== 'object') {
+            return false
+          }
+
+          const metadata =
+            rawMetadata && typeof rawMetadata.cloudfront === 'object'
+              ? rawMetadata.cloudfront
+              : rawMetadata
+
+          if (!metadata || typeof metadata !== 'object') {
+            return false
+          }
+
+          const originPath = normalizeAliasOriginPath(metadata.originPath)
+          const regionHints = new Set()
+
+          const addRegionHint = (value) => {
+            if (!value) {
+              return
+            }
+            const normalized = String(value).trim().toLowerCase()
+            if (normalized) {
+              regionHints.add(normalized)
+            }
+          }
+
+          addRegionHint(extractAwsRegionFromUrl(metadata.apiGatewayUrl))
+          addRegionHint(extractAwsRegionFromUrl(metadata.url))
+          addRegionHint(metadata.originRegion)
+
+          const bucketBases = buildS3BaseCandidates(
+            typeof metadata.originBucket === 'string' ? metadata.originBucket : '',
+            Array.from(regionHints),
+          )
+
+          let added = false
+
+          const applyCandidate = (candidate) => {
+            if (addAliasBaseCandidate(candidate)) {
+              added = true
+            }
+
+            if (candidate && originPath && addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
+              added = true
+            }
+          }
+
+          const directCandidates = []
+          if (typeof metadata.apiGatewayUrl === 'string') {
+            directCandidates.push(metadata.apiGatewayUrl)
+          }
+          if (typeof metadata.url === 'string') {
+            directCandidates.push(metadata.url)
+          }
+
+          directCandidates.forEach(applyCandidate)
+          bucketBases.forEach(applyCandidate)
+
+          if (originPath && addAliasBaseCandidate(joinAliasUrl('', originPath))) {
+            added = true
+          }
+
+          return added
+        }
+
         let aliasMetadataLoaded = false
         let aliasMetadataPromise = null
+
+        try {
+          if (
+            typeof window !== 'undefined' &&
+            window.__RESUMEFORGE_CLOUDFRONT_METADATA__ &&
+            applyAliasMetadataCandidates(window.__RESUMEFORGE_CLOUDFRONT_METADATA__)
+          ) {
+            aliasMetadataLoaded = true
+          }
+        } catch (error) {
+          // Ignore inline metadata parsing failures and fall back to runtime loading.
+        }
 
         const ensureAliasMetadataLoaded = () => {
           if (aliasMetadataLoaded) {
@@ -792,71 +870,15 @@
                 return false
               }
 
-              const metadata =
-                payload && typeof payload === 'object' && payload.cloudfront
-                  ? payload.cloudfront
-                  : payload
-
-              const candidates = []
-              if (metadata && typeof metadata === 'object') {
-                if (typeof metadata.apiGatewayUrl === 'string') {
-                  candidates.push(metadata.apiGatewayUrl)
+              try {
+                if (typeof window !== 'undefined') {
+                  window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = payload
                 }
-                if (typeof metadata.url === 'string') {
-                  candidates.push(metadata.url)
-                }
+              } catch (error) {
+                // Ignore global assignment errors.
               }
 
-              const originPath = normalizeAliasOriginPath(metadata?.originPath)
-              const regionHints = new Set()
-
-              const apiRegion = extractAwsRegionFromUrl(metadata?.apiGatewayUrl)
-              if (apiRegion) {
-                regionHints.add(apiRegion)
-              }
-
-              const urlRegion = extractAwsRegionFromUrl(metadata?.url)
-              if (urlRegion) {
-                regionHints.add(urlRegion)
-              }
-
-              if (typeof metadata?.originRegion === 'string') {
-                const region = metadata.originRegion.trim()
-                if (region) {
-                  regionHints.add(region.toLowerCase())
-                }
-              }
-
-              const bucketBases = buildS3BaseCandidates(
-                typeof metadata?.originBucket === 'string' ? metadata.originBucket : '',
-                Array.from(regionHints),
-              )
-
-              let added = false
-              for (const candidate of candidates) {
-                if (addAliasBaseCandidate(candidate)) {
-                  added = true
-                }
-
-                if (candidate && originPath && addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
-                  added = true
-                }
-              }
-
-              for (const base of bucketBases) {
-                if (addAliasBaseCandidate(base)) {
-                  added = true
-                }
-                if (originPath && addAliasBaseCandidate(joinAliasUrl(base, originPath))) {
-                  added = true
-                }
-              }
-
-              if (originPath && addAliasBaseCandidate(joinAliasUrl('', originPath))) {
-                added = true
-              }
-
-              return added
+              return applyAliasMetadataCandidates(payload)
             } catch (error) {
               return false
             } finally {
