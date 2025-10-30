@@ -2691,12 +2691,47 @@ function App() {
       controller = new AbortController()
     }
     const options = controller ? { signal: controller.signal } : undefined
-    fetch('/api/published-cloudfront', options)
-      .then((response) => (response && response.ok ? response.json() : null))
-      .then((data) => {
-        if (cancelled || !data || !data.cloudfront) {
+    const endpoints = ['/api/published-cloudfront', '/api/published-cloudfront.json']
+
+    ;(async () => {
+      let lastError = null
+      for (const endpoint of endpoints) {
+        if (cancelled) {
           return
         }
+
+        const url = typeof endpoint === 'string' ? endpoint : ''
+        if (!url) {
+          continue
+        }
+
+        let response
+        try {
+          response = await fetch(url, options)
+        } catch (error) {
+          if (error?.name === 'AbortError') {
+            return
+          }
+          lastError = error
+          continue
+        }
+
+        if (!response || !response.ok) {
+          continue
+        }
+
+        let data = null
+        try {
+          data = await response.json()
+        } catch (error) {
+          lastError = error
+          continue
+        }
+
+        if (cancelled || !data || !data.cloudfront) {
+          continue
+        }
+
         const canonicalUrl =
           typeof data.cloudfront.url === 'string' && data.cloudfront.url.trim()
             ? data.cloudfront.url.trim()
@@ -2724,12 +2759,13 @@ function App() {
           apiGatewayUrl: apiGatewayUrl || prev.apiGatewayUrl || environmentOrigin,
           updatedAt: updatedAt || prev.updatedAt
         }))
-      })
-      .catch((error) => {
-        if (error?.name !== 'AbortError') {
-          console.warn('Unable to load published CloudFront metadata within the app.', error)
-        }
-      })
+        return
+      }
+
+      if (lastError && lastError?.name !== 'AbortError') {
+        console.warn('Unable to load published CloudFront metadata within the app.', lastError)
+      }
+    })()
     return () => {
       cancelled = true
       if (controller) {
