@@ -418,6 +418,46 @@ async function loadPublishedCloudfrontMetadata() {
   }
 }
 
+async function ensurePublishedCloudfrontFallback({ distDirectory = clientDistDir, metadata } = {}) {
+  let resolvedMetadata = null
+  if (typeof metadata === 'undefined') {
+    resolvedMetadata = await loadPublishedCloudfrontMetadata()
+  } else if (metadata && typeof metadata === 'object') {
+    resolvedMetadata = metadata
+  }
+
+  if (!resolvedMetadata || typeof resolvedMetadata !== 'object') {
+    return false
+  }
+
+  const payload = `${JSON.stringify({ success: true, cloudfront: resolvedMetadata }, null, 2)}\n`
+  const targets = [
+    path.join(distDirectory, 'api', 'published-cloudfront'),
+    path.join(distDirectory, 'api', 'published-cloudfront.json'),
+  ]
+
+  let wroteAny = false
+
+  for (const target of targets) {
+    try {
+      await fs.mkdir(path.dirname(target), { recursive: true })
+      await fs.writeFile(target, payload, 'utf8')
+      wroteAny = true
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        continue
+      }
+
+      console.warn(
+        `[upload-hashed-assets] Unable to write ${path.relative(distDirectory, target).replace(/\\/g, '/')}:`,
+        error?.message || error,
+      )
+    }
+  }
+
+  return wroteAny
+}
+
 function normalizePrefixSegment(value) {
   if (typeof value !== 'string') {
     return ''
@@ -449,7 +489,7 @@ function sanitizeS3PathSegment(value) {
   return trimmed.replace(/^\/+/, '').replace(/\/+$/, '')
 }
 
-async function resolveHashedAssetUploadConfiguration() {
+async function resolveHashedAssetUploadConfiguration({ metadata } = {}) {
   const { stageName, deploymentEnvironment, staticAssetsBucket, dataBucket } =
     applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
 
@@ -463,13 +503,13 @@ async function resolveHashedAssetUploadConfiguration() {
 
   let prefix = sanitizeS3PathSegment(process.env.STATIC_ASSETS_PREFIX || '')
 
-  let metadata
-  if (!bucket || !prefix) {
-    metadata = await loadPublishedCloudfrontMetadata()
+  let resolvedMetadata = metadata && typeof metadata === 'object' ? metadata : null
+  if ((!bucket || !prefix) && !resolvedMetadata) {
+    resolvedMetadata = await loadPublishedCloudfrontMetadata()
   }
 
   if (!bucket) {
-    const originBucket = metadata?.originBucket
+    const originBucket = resolvedMetadata?.originBucket
     if (typeof originBucket === 'string' && originBucket.trim()) {
       bucket = originBucket.trim()
     }
@@ -480,7 +520,7 @@ async function resolveHashedAssetUploadConfiguration() {
   }
 
   if (!prefix) {
-    const originPath = metadata?.originPath
+    const originPath = resolvedMetadata?.originPath
     const normalizedOriginPath = sanitizeS3PathSegment(originPath || '')
 
     if (normalizedOriginPath) {
@@ -609,6 +649,9 @@ export async function uploadHashedIndexAssets(options = {}) {
     distDirectory,
   })
 
+  const publishedMetadata = await loadPublishedCloudfrontMetadata()
+  await ensurePublishedCloudfrontFallback({ distDirectory, metadata: publishedMetadata })
+
   const supplementaryEntries = await resolveSupplementaryUploadEntries({
     distDirectory,
     files: Array.isArray(options?.supplementaryFiles)
@@ -619,7 +662,7 @@ export async function uploadHashedIndexAssets(options = {}) {
         ],
   })
 
-  const configuration = await resolveHashedAssetUploadConfiguration()
+  const configuration = await resolveHashedAssetUploadConfiguration({ metadata: publishedMetadata })
   if (!configuration) {
     if (!options?.quiet) {
       console.log(
