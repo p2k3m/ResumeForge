@@ -479,6 +479,8 @@
           return payload
         }
 
+        const MANIFEST_API_PATH = '/api/static-manifest'
+
         const ensureManifestCandidatesLoaded = () => {
           if (manifestState.loaded) {
             return manifestState.promise || Promise.resolve(manifestState.candidatesByExtension)
@@ -500,34 +502,47 @@
 
           manifestState.promise = (async () => {
             try {
-              const response = await fetch('/api/static-manifest', {
-                cache: 'no-store',
-                credentials: 'omit'
-              })
+              const endpoints = buildAliasEndpointCandidates(MANIFEST_API_PATH)
+              for (const endpoint of endpoints) {
+                if (!endpoint) {
+                  continue
+                }
 
-              if (!response || !response.ok) {
-                manifestState.lastErrorAt = Date.now()
+                let response
+                try {
+                  response = await fetch(endpoint, {
+                    cache: 'no-store',
+                    credentials: 'omit'
+                  })
+                } catch (error) {
+                  continue
+                }
+
+                if (!response || !response.ok) {
+                  continue
+                }
+
+                let payload
+                try {
+                  payload = await response.json()
+                } catch (error) {
+                  continue
+                }
+
+                const manifest = resolveManifestPayload(payload)
+                const combined = Array.isArray(manifest?.hashedIndexAssets) && manifest.hashedIndexAssets.length
+                  ? manifest.hashedIndexAssets
+                  : Array.isArray(manifest?.assets)
+                    ? manifest.assets
+                    : []
+
+                manifestState.candidatesByExtension = categorizeManifestCandidates(combined)
+                manifestState.loaded = true
+                manifestState.lastErrorAt = 0
                 return manifestState.candidatesByExtension
               }
 
-              let payload
-              try {
-                payload = await response.json()
-              } catch (error) {
-                manifestState.lastErrorAt = Date.now()
-                return manifestState.candidatesByExtension
-              }
-
-              const manifest = resolveManifestPayload(payload)
-              const combined = Array.isArray(manifest?.hashedIndexAssets) && manifest.hashedIndexAssets.length
-                ? manifest.hashedIndexAssets
-                : Array.isArray(manifest?.assets)
-                  ? manifest.assets
-                  : []
-
-              manifestState.candidatesByExtension = categorizeManifestCandidates(combined)
-              manifestState.loaded = true
-              manifestState.lastErrorAt = 0
+              manifestState.lastErrorAt = Date.now()
               return manifestState.candidatesByExtension
             } catch (error) {
               manifestState.lastErrorAt = Date.now()
@@ -538,12 +553,6 @@
           })()
 
           return manifestState.promise
-        }
-
-        try {
-          ensureManifestCandidatesLoaded()
-        } catch (error) {
-          // Ignore manifest prefetch failures in constrained environments.
         }
 
         const normalizeAliasBase = (value) => {
@@ -748,6 +757,12 @@
         const aliasBaseCandidates = resolveAliasBaseCandidates()
         const aliasBaseSeen = new Set(aliasBaseCandidates)
 
+        try {
+          ensureManifestCandidatesLoaded()
+        } catch (error) {
+          // Ignore manifest prefetch failures in constrained environments.
+        }
+
         const addAliasBaseCandidate = (value) => {
           const normalized = normalizeAliasBase(value)
           if (!normalized || aliasBaseSeen.has(normalized)) {
@@ -841,7 +856,7 @@
 
         const METADATA_API_PATH = '/api/published-cloudfront'
 
-        const buildMetadataEndpointCandidates = () => {
+        function buildAliasEndpointCandidates(path) {
           const endpoints = []
           const seen = new Set()
 
@@ -859,18 +874,20 @@
             endpoints.push(normalized)
           }
 
-          append(METADATA_API_PATH)
+          append(path)
 
           aliasBaseCandidates.forEach((base) => {
             if (!base) {
               return
             }
 
-            append(joinAliasUrl(base, METADATA_API_PATH))
+            append(joinAliasUrl(base, path))
           })
 
           return endpoints
         }
+
+        const buildMetadataEndpointCandidates = () => buildAliasEndpointCandidates(METADATA_API_PATH)
 
         const ensureAliasMetadataLoaded = () => {
           if (aliasMetadataLoaded) {
