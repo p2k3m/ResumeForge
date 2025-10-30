@@ -8,7 +8,6 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
-  HeadObjectCommand,
   ListObjectsV2Command,
   PutBucketWebsiteCommand,
   PutObjectCommand,
@@ -41,6 +40,43 @@ function resolveBuildVersion() {
   }
 
   return null
+}
+
+function normalizeVersionLabelSegment(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value
+    .trim()
+    .replace(/^v+/iu, '')
+    .replace(/[^a-z0-9.-]/giu, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+}
+
+function buildTimestampVersionLabel() {
+  const now = new Date()
+  const pad = (input) => String(input).padStart(2, '0')
+  return (
+    `v${now.getUTCFullYear()}` +
+    `${pad(now.getUTCMonth() + 1)}` +
+    `${pad(now.getUTCDate())}` +
+    `${pad(now.getUTCHours())}` +
+    `${pad(now.getUTCMinutes())}` +
+    `${pad(now.getUTCSeconds())}`
+  )
+}
+
+function resolveVersionLabel() {
+  const buildVersion = resolveBuildVersion()
+  const normalized = normalizeVersionLabelSegment(buildVersion)
+  if (normalized) {
+    return normalized.startsWith('v') ? normalized : `v${normalized}`
+  }
+
+  return buildTimestampVersionLabel()
 }
 
 function createValidationError(message) {
@@ -240,6 +276,11 @@ async function gatherClientAssetFiles() {
     await ensureFileExists(absolutePath, { label: `referenced asset ${assetPath}` })
   }
 
+  for (const aliasPath of INDEX_ASSET_ALIAS_PATHS) {
+    const absoluteAliasPath = path.join(clientDistDir, aliasPath)
+    await ensureFileExists(absoluteAliasPath, { label: `index alias ${aliasPath}` })
+  }
+
   const files = await walkDirectory(clientDistDir)
   if (files.length === 0) {
     throw createValidationError('[upload-static] No files were found in client/dist. Build the client before uploading.')
@@ -407,6 +448,33 @@ export function normalizeClientAssetPath(relativePath) {
   const withoutLeadingDot = trimmed.replace(/^(?:\.\/)+/, '')
   const withoutLeadingSlash = withoutLeadingDot.replace(/^\/+/, '')
   return withoutLeadingSlash.replace(/\\/g, '/')
+}
+
+function buildVersionedAssetPath(relativePath, versionLabel) {
+  const normalizedPath = normalizeClientAssetPath(relativePath)
+  if (!normalizedPath.startsWith('assets/')) {
+    return ''
+  }
+
+  const segments = normalizedPath.split('/')
+  if (segments.length < 2) {
+    return ''
+  }
+
+  if (/^v[\w.-]+$/iu.test(segments[1])) {
+    return normalizedPath
+  }
+
+  const sanitizedLabel = normalizeVersionLabelSegment(versionLabel)
+  if (!sanitizedLabel) {
+    return ''
+  }
+
+  const resolvedLabel = sanitizedLabel.startsWith('v')
+    ? sanitizedLabel
+    : `v${sanitizedLabel}`
+
+  return ['assets', resolvedLabel, ...segments.slice(1)].join('/')
 }
 
 export function resolveIndexAssetAliases(primaryAssets) {
@@ -592,28 +660,33 @@ async function uploadFiles({ s3, bucket, prefix, files }) {
   return uploaded
 }
 
-async function uploadAliasFiles({ s3, bucket, prefix, aliases }) {
-  if (!Array.isArray(aliases) || aliases.length === 0) {
+async function uploadVersionedAssets({ s3, bucket, prefix, versionLabel, hashedAssets }) {
+  const sanitizedLabel = normalizeVersionLabelSegment(versionLabel)
+  if (!sanitizedLabel) {
     return []
   }
 
-  const uploadedAliases = []
+  const uploads = []
 
-  for (const entry of aliases) {
-    const aliasPath = normalizeClientAssetPath(entry?.alias)
-    const sourcePath = normalizeClientAssetPath(entry?.source)
-
-    if (!aliasPath || !sourcePath) {
+  for (const assetPath of Array.isArray(hashedAssets) ? hashedAssets : []) {
+    const normalizedPath = normalizeClientAssetPath(assetPath)
+    if (!normalizedPath) {
       continue
     }
 
-    const absoluteSourcePath = path.join(clientDistDir, sourcePath)
-    await ensureFileExists(absoluteSourcePath, { label: `alias source ${sourcePath}` })
-    const key = buildS3Key(prefix, aliasPath)
-    const contentType = resolveContentType(aliasPath)
-    const cacheControl = 'public, max-age=60, must-revalidate'
+    const versionedPath = buildVersionedAssetPath(normalizedPath, sanitizedLabel)
+    if (!versionedPath || versionedPath === normalizedPath) {
+      continue
+    }
 
-    const body = createReadStream(absoluteSourcePath)
+    const absolutePath = path.join(clientDistDir, normalizedPath)
+    await ensureFileExists(absolutePath, { label: `versioned asset source ${normalizedPath}` })
+
+    const key = buildS3Key(prefix, versionedPath)
+    const contentType = resolveContentType(versionedPath)
+    const cacheControl = 'public, max-age=31536000, immutable'
+
+    const body = createReadStream(absolutePath)
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -625,18 +698,18 @@ async function uploadAliasFiles({ s3, bucket, prefix, aliases }) {
     )
 
     console.log(
-      `[upload-static] Uploaded alias ${aliasPath} → s3://${bucket}/${key} (${contentType}; ${cacheControl})`,
+      `[upload-static] Uploaded versioned asset ${versionedPath} → s3://${bucket}/${key} (${contentType}; ${cacheControl})`,
     )
 
-    uploadedAliases.push({
-      path: aliasPath,
+    uploads.push({
+      path: versionedPath,
       key,
       contentType,
       cacheControl,
     })
   }
 
-  return uploadedAliases
+  return uploads
 }
 
 export async function verifyUploadedAssets({ s3, bucket, uploads }) {
@@ -656,12 +729,16 @@ export async function verifyUploadedAssets({ s3, bucket, uploads }) {
     }
 
     try {
-      await s3.send(
-        new HeadObjectCommand({
+      const response = await s3.send(
+        new GetObjectCommand({
           Bucket: bucket,
           Key: key,
         }),
       )
+
+      if (response?.Body && typeof response.Body.destroy === 'function') {
+        response.Body.destroy()
+      }
     } catch (error) {
       const pathLabel =
         typeof upload?.path === 'string' && upload.path.trim()
@@ -715,6 +792,7 @@ async function uploadManifest({
   stage,
   deploymentEnvironment,
   buildVersion,
+  versionLabel,
   uploadedFiles,
   hashedAssets,
 }) {
@@ -726,6 +804,7 @@ async function uploadManifest({
     bucket,
     deploymentEnvironment: deploymentEnvironment || stage,
     buildVersion: buildVersion || null,
+    assetVersionLabel: versionLabel || null,
     uploadedAt: new Date().toISOString(),
     fileCount: uploadedFiles.length,
     files: uploadedFiles,
@@ -796,13 +875,17 @@ async function backupExistingManifest({ s3, bucket, manifestKey }) {
 }
 
 async function main() {
-  const { files, hashedAssets, primaryIndexAssets } = await gatherClientAssetFiles()
+  const { files, hashedAssets } = await gatherClientAssetFiles()
   const { bucket, prefix, stage, deploymentEnvironment } = resolveBucketConfiguration()
   const buildVersion = resolveBuildVersion()
+  const versionLabel = resolveVersionLabel()
   const s3 = new S3Client({})
 
   if (buildVersion) {
     console.log(`[upload-static] Using build version ${buildVersion}`)
+  }
+  if (versionLabel) {
+    console.log(`[upload-static] Using versioned asset directory ${versionLabel}`)
   }
 
   try {
@@ -817,13 +900,14 @@ async function main() {
   await purgeExistingObjects({ s3, bucket, prefix })
   await configureStaticWebsiteHosting({ s3, bucket })
   const uploadedFiles = await uploadFiles({ s3, bucket, prefix, files })
-  const aliasUploads = await uploadAliasFiles({
+  const versionedUploads = await uploadVersionedAssets({
     s3,
     bucket,
     prefix,
-    aliases: resolveIndexAssetAliases(primaryIndexAssets),
+    versionLabel,
+    hashedAssets,
   })
-  const allUploadedFiles = [...uploadedFiles, ...aliasUploads]
+  const allUploadedFiles = [...uploadedFiles, ...versionedUploads]
   ensureIndexAliasCoverage(allUploadedFiles)
   await verifyUploadedAssets({ s3, bucket, uploads: allUploadedFiles })
   await uploadManifest({
@@ -833,13 +917,14 @@ async function main() {
     stage,
     deploymentEnvironment,
     buildVersion,
+    versionLabel,
     uploadedFiles: allUploadedFiles,
     hashedAssets,
   })
 
   console.log(
-    `[upload-static] Uploaded ${files.length + aliasUploads.length} static asset${
-      files.length + aliasUploads.length === 1 ? '' : 's'
+    `[upload-static] Uploaded ${files.length + versionedUploads.length} static asset${
+      files.length + versionedUploads.length === 1 ? '' : 's'
     } to s3://${bucket}/${prefix}/`,
   )
 }
