@@ -303,4 +303,26 @@ describe('findMissingBucketPolicyKeys', () => {
 
     expect(missing).toEqual([])
   })
+
+  it('includes hashed asset keys when a policy omits them', () => {
+    const statements = [
+      {
+        Effect: 'Allow',
+        Principal: '*',
+        Action: 's3:GetObject',
+        Resource: `arn:aws:s3:::${bucket}/static/client/prod/latest/assets/index-latest.js`,
+      },
+    ]
+
+    const missing = findMissingBucketPolicyKeys({
+      statements,
+      bucket,
+      keys: [
+        'static/client/prod/latest/assets/index-latest.js',
+        'static/client/prod/latest/assets/index-abc123.js',
+      ],
+    })
+
+    expect(missing).toEqual(['static/client/prod/latest/assets/index-abc123.js'])
+  })
 })
