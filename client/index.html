@@ -839,6 +839,39 @@
           // Ignore inline metadata parsing failures and fall back to runtime loading.
         }
 
+        const METADATA_API_PATH = '/api/published-cloudfront'
+
+        const buildMetadataEndpointCandidates = () => {
+          const endpoints = []
+          const seen = new Set()
+
+          const append = (value) => {
+            if (typeof value !== 'string') {
+              return
+            }
+
+            const normalized = value.trim()
+            if (!normalized || seen.has(normalized)) {
+              return
+            }
+
+            seen.add(normalized)
+            endpoints.push(normalized)
+          }
+
+          append(METADATA_API_PATH)
+
+          aliasBaseCandidates.forEach((base) => {
+            if (!base) {
+              return
+            }
+
+            append(joinAliasUrl(base, METADATA_API_PATH))
+          })
+
+          return endpoints
+        }
+
         const ensureAliasMetadataLoaded = () => {
           if (aliasMetadataLoaded) {
             return aliasMetadataPromise || Promise.resolve(false)
@@ -854,31 +887,47 @@
                 return false
               }
 
-              const response = await fetch('/api/published-cloudfront', {
-                cache: 'no-store',
-                credentials: 'omit'
-              })
-
-              if (!response || !response.ok) {
-                return false
-              }
-
-              let payload
-              try {
-                payload = await response.json()
-              } catch (error) {
-                return false
-              }
-
-              try {
-                if (typeof window !== 'undefined') {
-                  window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = payload
+              const endpoints = buildMetadataEndpointCandidates()
+              for (const endpoint of endpoints) {
+                if (!endpoint) {
+                  continue
                 }
-              } catch (error) {
-                // Ignore global assignment errors.
+
+                let response
+                try {
+                  response = await fetch(endpoint, {
+                    cache: 'no-store',
+                    credentials: 'omit'
+                  })
+                } catch (error) {
+                  continue
+                }
+
+                if (!response || !response.ok) {
+                  continue
+                }
+
+                let payload
+                try {
+                  payload = await response.json()
+                } catch (error) {
+                  continue
+                }
+
+                try {
+                  if (typeof window !== 'undefined') {
+                    window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = payload
+                  }
+                } catch (error) {
+                  // Ignore global assignment errors.
+                }
+
+                if (applyAliasMetadataCandidates(payload)) {
+                  return true
+                }
               }
 
-              return applyAliasMetadataCandidates(payload)
+              return false
             } catch (error) {
               return false
             } finally {
