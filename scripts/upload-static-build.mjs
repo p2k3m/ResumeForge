@@ -862,7 +862,34 @@ export function findMissingBucketPolicyKeys({ statements = [], bucket, keys = []
   return missing
 }
 
-async function ensureBucketPolicyAllowsPublicAssetAccess({ s3, bucket, prefix }) {
+function joinBucketPrefix(prefix, key) {
+  const normalizedKey = String(key || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+/, '')
+
+  if (!normalizedKey) {
+    return ''
+  }
+
+  const normalizedPrefix = String(prefix || '')
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+
+  if (!normalizedPrefix) {
+    return normalizedKey
+  }
+
+  return `${normalizedPrefix}/${normalizedKey}`
+}
+
+async function ensureBucketPolicyAllowsPublicAssetAccess({
+  s3,
+  bucket,
+  prefix,
+  requiredKeys = [],
+}) {
   let response
   try {
     response = await s3.send(new GetBucketPolicyCommand({ Bucket: bucket }))
@@ -913,14 +940,21 @@ async function ensureBucketPolicyAllowsPublicAssetAccess({ s3, bucket, prefix })
     )
   }
 
-  const sanitizedPrefix = String(prefix || '')
-    .trim()
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')
+  const validationKeys = new Set([joinBucketPrefix(prefix, 'index.html')].filter(Boolean))
 
-  const validationKeys = new Set([`${sanitizedPrefix}/index.html`])
   for (const alias of INDEX_ASSET_ALIAS_PATHS) {
-    validationKeys.add(`${sanitizedPrefix}/${alias}`)
+    validationKeys.add(joinBucketPrefix(prefix, alias))
+  }
+
+  const normalizedRequiredKeys = Array.isArray(requiredKeys)
+    ? requiredKeys
+        .filter((key) => typeof key === 'string')
+        .map((key) => joinBucketPrefix(prefix, key))
+        .filter(Boolean)
+    : []
+
+  for (const key of normalizedRequiredKeys) {
+    validationKeys.add(key)
   }
 
   const missingKeys = findMissingBucketPolicyKeys({
@@ -1358,7 +1392,12 @@ async function main() {
       }
     }
 
-    await ensureBucketPolicyAllowsPublicAssetAccess({ s3, bucket, prefix })
+    await ensureBucketPolicyAllowsPublicAssetAccess({
+      s3,
+      bucket,
+      prefix,
+      requiredKeys: files,
+    })
 
     await purgeExistingObjects({ s3, bucket, prefix })
     await configureStaticWebsiteHosting({ s3, bucket })
