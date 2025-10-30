@@ -515,6 +515,64 @@ function resolveContentType(relativePath) {
   return 'application/octet-stream'
 }
 
+async function resolveSupplementaryUploadEntries({ distDirectory, files = [] }) {
+  if (!Array.isArray(files) || files.length === 0) {
+    return []
+  }
+
+  const uploads = []
+  const unique = new Set()
+
+  const addUpload = async ({ relativePath, cacheControl, contentType }) => {
+    if (!relativePath || unique.has(relativePath)) {
+      return
+    }
+
+    const absolutePath = path.join(distDirectory, relativePath)
+    try {
+      const stats = await fs.stat(absolutePath)
+      if (!stats.isFile()) {
+        return
+      }
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        return
+      }
+      throw error
+    }
+
+    uploads.push({
+      relativePath,
+      absolutePath,
+      cacheControl,
+      contentType,
+    })
+    unique.add(relativePath)
+  }
+
+  for (const file of files) {
+    if (typeof file !== 'string' || !file) {
+      continue
+    }
+
+    if (file.endsWith('api/published-cloudfront')) {
+      await addUpload({
+        relativePath: file,
+        cacheControl: 'no-cache',
+        contentType: 'application/json',
+      })
+    } else if (file.endsWith('api/published-cloudfront.json')) {
+      await addUpload({
+        relativePath: file,
+        cacheControl: 'no-cache',
+        contentType: 'application/json',
+      })
+    }
+  }
+
+  return uploads
+}
+
 export async function uploadHashedIndexAssets(options = {}) {
   const distDirectory = options?.distDirectory || clientDistDir
   const assetsDirectory = options?.assetsDirectory || path.join(distDirectory, 'assets')
@@ -537,6 +595,16 @@ export async function uploadHashedIndexAssets(options = {}) {
     distDirectory,
   })
 
+  const supplementaryEntries = await resolveSupplementaryUploadEntries({
+    distDirectory,
+    files: Array.isArray(options?.supplementaryFiles)
+      ? options.supplementaryFiles
+      : [
+          'api/published-cloudfront',
+          'api/published-cloudfront.json',
+        ],
+  })
+
   const configuration = await resolveHashedAssetUploadConfiguration()
   if (!configuration) {
     if (!options?.quiet) {
@@ -544,13 +612,17 @@ export async function uploadHashedIndexAssets(options = {}) {
         '[upload-hashed-assets] No static asset bucket configured; generated index-latest aliases locally and skipped hashed asset upload.',
       )
     }
-    return { uploaded: [], aliases: aliasEntries.map((entry) => entry.relativePath) }
+    return {
+      uploaded: [],
+      aliases: aliasEntries.map((entry) => entry.relativePath),
+      supplementary: supplementaryEntries.map((entry) => entry.relativePath),
+    }
   }
 
   const versionLabel = resolveBuildVersionLabel()
   const versionedEntries = createVersionedUploadEntries(entries, versionLabel)
 
-  const uploads = [...entries, ...aliasEntries, ...versionedEntries]
+  const uploads = [...entries, ...aliasEntries, ...supplementaryEntries, ...versionedEntries]
   if (uploads.length === 0) {
     if (!options?.quiet) {
       console.log('[upload-hashed-assets] No hashed assets discovered in client build; skipping upload.')
@@ -592,9 +664,14 @@ export async function uploadHashedIndexAssets(options = {}) {
     const hashedSummary = entries.map((entry) => entry.relativePath)
     const versionSummary = versionedEntries.map((entry) => entry.relativePath)
 
+    const supplementarySummary = supplementaryEntries.map((entry) => entry.relativePath)
+
     const messageParts = [`hashed assets (${hashedSummary.join(', ')})`]
     if (aliasSummary.length) {
       messageParts.push(`aliases (${aliasSummary.join(', ')})`)
+    }
+    if (supplementarySummary.length) {
+      messageParts.push(`metadata (${supplementarySummary.join(', ')})`)
     }
     if (versionSummary.length) {
       messageParts.push(`versioned copies (${versionSummary.join(', ')})`)
