@@ -6,6 +6,7 @@ import { createReadStream } from 'node:fs'
 import process from 'node:process'
 import {
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -260,6 +261,19 @@ function createVersionedUploadEntries(entries, versionLabel) {
   }
 
   return uploads
+}
+
+function resolveObjectAcl(relativePath) {
+  if (typeof relativePath !== 'string' || !relativePath.trim()) {
+    return undefined
+  }
+
+  const normalized = relativePath.replace(/\\/g, '/').trim()
+  if (normalized.startsWith('assets/')) {
+    return 'public-read'
+  }
+
+  return undefined
 }
 
 export async function gatherHashedAssetUploadEntries({
@@ -647,6 +661,7 @@ export async function uploadHashedIndexAssets(options = {}) {
   for (const entry of uploads) {
     const key = buildS3Key(prefix, entry.relativePath)
     const bodyStream = createReadStream(entry.absolutePath)
+    const acl = resolveObjectAcl(entry.relativePath)
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -654,10 +669,18 @@ export async function uploadHashedIndexAssets(options = {}) {
         Body: bodyStream,
         ContentType: resolveContentType(entry.relativePath),
         CacheControl: entry.cacheControl || resolveHashedAssetCacheControl(entry.relativePath),
+        ...(acl ? { ACL: acl } : {}),
       }),
     )
     uploaded.push(entry.relativePath)
   }
+
+  await verifyUploadedObjects({
+    s3,
+    bucket,
+    prefix,
+    uploads,
+  })
 
   if (!options?.quiet) {
     const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
@@ -683,6 +706,70 @@ export async function uploadHashedIndexAssets(options = {}) {
   }
 
   return { uploaded, bucket, prefix, versionLabel }
+}
+
+async function verifyUploadedObjects({ s3, bucket, prefix, uploads }) {
+  if (!Array.isArray(uploads) || uploads.length === 0) {
+    return
+  }
+
+  const failures = []
+
+  for (const entry of uploads) {
+    const relativePath = typeof entry?.relativePath === 'string' ? entry.relativePath.trim() : ''
+    if (!relativePath) {
+      continue
+    }
+
+    const key = buildS3Key(prefix, relativePath)
+
+    try {
+      await s3.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        }),
+      )
+    } catch (error) {
+      failures.push({
+        relativePath,
+        key,
+        statusCode: error?.$metadata?.httpStatusCode,
+        code: error?.name || error?.Code || error?.code,
+        reason: error?.message || String(error),
+      })
+    }
+  }
+
+  if (failures.length > 0) {
+    const summary = failures
+      .map((failure) => {
+        const details = [
+          typeof failure.statusCode === 'number' && !Number.isNaN(failure.statusCode)
+            ? `status ${failure.statusCode}`
+            : '',
+          failure.code ? `code ${failure.code}` : '',
+        ]
+          .filter(Boolean)
+          .join(', ')
+        const suffix = details ? ` (${details})` : ''
+        const reason = failure.reason ? ` — ${failure.reason}` : ''
+        return `- ${failure.relativePath} → s3://${bucket}/${failure.key}${suffix}${reason}`
+      })
+      .join('\n')
+
+    throw new Error(
+      `[upload-hashed-assets] ${failures.length} uploaded asset${
+        failures.length === 1 ? '' : 's'
+      } failed verification.\n${summary}`,
+    )
+  }
+
+  console.log(
+    `[upload-hashed-assets] Verified ${uploads.length} uploaded asset${
+      uploads.length === 1 ? '' : 's'
+    } are accessible in s3://${bucket}/${prefix}/`,
+  )
 }
 
 async function main() {

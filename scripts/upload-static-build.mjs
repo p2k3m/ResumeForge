@@ -626,6 +626,19 @@ function resolveContentType(relativePath) {
   return 'application/octet-stream'
 }
 
+function resolveObjectAcl(relativePath) {
+  const normalized = normalizeClientAssetPath(relativePath)
+  if (normalized.startsWith('assets/')) {
+    return 'public-read'
+  }
+
+  if (normalized === 'manifest.json' || normalized === 'api/published-cloudfront.json') {
+    return 'public-read'
+  }
+
+  return undefined
+}
+
 async function uploadFiles({ s3, bucket, prefix, files }) {
   const uploaded = []
 
@@ -634,6 +647,7 @@ async function uploadFiles({ s3, bucket, prefix, files }) {
     const key = buildS3Key(prefix, relativePath)
     const contentType = resolveContentType(relativePath)
     const cacheControl = determineCacheControl(relativePath)
+    const acl = resolveObjectAcl(relativePath)
 
     const body = createReadStream(absolutePath)
     await s3.send(
@@ -643,6 +657,7 @@ async function uploadFiles({ s3, bucket, prefix, files }) {
         Body: body,
         ContentType: contentType,
         CacheControl: cacheControl,
+        ...(acl ? { ACL: acl } : {}),
       }),
     )
     console.log(
@@ -685,6 +700,7 @@ async function uploadVersionedAssets({ s3, bucket, prefix, versionLabel, hashedA
     const key = buildS3Key(prefix, versionedPath)
     const contentType = resolveContentType(versionedPath)
     const cacheControl = 'public, max-age=31536000, immutable'
+    const acl = resolveObjectAcl(versionedPath)
 
     const body = createReadStream(absolutePath)
     await s3.send(
@@ -694,6 +710,7 @@ async function uploadVersionedAssets({ s3, bucket, prefix, versionLabel, hashedA
         Body: body,
         ContentType: contentType,
         CacheControl: cacheControl,
+        ...(acl ? { ACL: acl } : {}),
       }),
     )
 
@@ -813,6 +830,7 @@ async function uploadManifest({
   }
 
   const body = `${JSON.stringify(payload, null, 2)}\n`
+  const manifestAcl = resolveObjectAcl('manifest.json')
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -820,6 +838,7 @@ async function uploadManifest({
       Body: body,
       ContentType: 'application/json',
       CacheControl: 'no-cache',
+      ...(manifestAcl ? { ACL: manifestAcl } : {}),
     }),
   )
 
@@ -849,6 +868,7 @@ async function backupExistingManifest({ s3, bucket, manifestKey }) {
       backupKey = `${manifestKey}.previous`
     }
 
+    const backupAcl = resolveObjectAcl('manifest.previous.json')
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -856,6 +876,7 @@ async function backupExistingManifest({ s3, bucket, manifestKey }) {
         Body: `${trimmed}\n`,
         ContentType: 'application/json',
         CacheControl: 'no-cache',
+        ...(backupAcl ? { ACL: backupAcl } : {}),
       }),
     )
 
