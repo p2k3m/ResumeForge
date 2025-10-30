@@ -4,6 +4,7 @@ import {
   ensureIndexAliasCoverage,
   shouldDeleteObjectKey,
   verifyUploadedAssets,
+  extractHashedIndexAssets,
 } from '../scripts/upload-static-build.mjs'
 import { HeadObjectCommand } from '@aws-sdk/client-s3'
 
@@ -83,6 +84,22 @@ describe('resolveIndexAssetAliases', () => {
     expect(resolveIndexAssetAliases({ css: 'assets/index-abc123.css' })).toEqual([
       { alias: 'assets/index-latest.css', source: 'assets/index-abc123.css' },
     ])
+  })
+})
+
+describe('extractHashedIndexAssets', () => {
+  it('throws when no hashed CSS bundle can be detected', () => {
+    const html = `<!DOCTYPE html>
+      <html>
+        <head>
+          <script src="/assets/index-abc123.js"></script>
+        </head>
+        <body></body>
+      </html>`
+
+    expect(() => extractHashedIndexAssets(html)).toThrow(
+      '[upload-static] index.html must reference at least one hashed CSS bundle. Found 0 CSS assets.',
+    )
   })
 })
 
