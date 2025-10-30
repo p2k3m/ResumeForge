@@ -29,6 +29,10 @@ import {
   notifyIncompleteStaticUpload,
   notifyMissingClientAssets,
 } from '../lib/deploy/notifications.js'
+import {
+  resolvePublishedCloudfrontPath,
+  serializePublishedCloudfrontPayload,
+} from '../lib/cloudfront/metadata.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -38,11 +42,7 @@ const clientIndexPath = path.join(clientDistDir, 'index.html')
 const serviceWorkerPath = path.join(clientDistDir, 'service-worker.js')
 const errorDocumentPath = path.join(clientDistDir, '404.html')
 const assetsDir = path.join(clientDistDir, 'assets')
-const publishedCloudfrontPath = path.join(
-  projectRoot,
-  'config',
-  'published-cloudfront.json',
-)
+const publishedCloudfrontPath = resolvePublishedCloudfrontPath({ projectRoot })
 
 function resolveBuildVersion() {
   const candidates = [
@@ -616,7 +616,7 @@ async function ensurePublishedCloudfrontFallbackInDist({
   distDir = clientDistDir,
 } = {}) {
   const metadata = await loadPublishedCloudfrontMetadataForDist()
-  const payload = `${JSON.stringify({ success: true, cloudfront: metadata }, null, 2)}\n`
+  const payload = serializePublishedCloudfrontPayload(metadata)
   const targets = [
     path.join(distDir, 'api', 'published-cloudfront'),
     path.join(distDir, 'api', 'published-cloudfront.json'),

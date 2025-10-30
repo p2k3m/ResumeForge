@@ -2,13 +2,17 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import {
+  embedCloudfrontMetadataIntoHtml,
+  resolvePublishedCloudfrontPath,
+  serializePublishedCloudfrontPayload,
+} from '../lib/cloudfront/metadata.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const clientDistDir = path.join(projectRoot, 'client', 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
-const CLOUDFRONT_METADATA_SCRIPT_ID = 'resumeforge-cloudfront-metadata';
 const assetsDir = path.join(clientDistDir, 'assets');
 const publishedCloudfrontSourcePath = resolvePublishedCloudfrontSourcePath();
 const MIN_HASHED_VARIANTS_PER_TYPE = 6;
@@ -294,11 +298,7 @@ async function ensurePrimaryIndexAliases(html) {
 }
 
 function resolvePublishedCloudfrontSourcePath() {
-  const override = process.env.PUBLISHED_CLOUDFRONT_PATH;
-  if (typeof override === 'string' && override.trim()) {
-    return path.isAbsolute(override) ? override.trim() : path.join(projectRoot, override.trim());
-  }
-  return path.join(projectRoot, 'config', 'published-cloudfront.json');
+  return resolvePublishedCloudfrontPath({ projectRoot });
 }
 
 async function loadPublishedCloudfrontMetadata() {
@@ -345,12 +345,7 @@ async function ensurePublishedCloudfrontFallback({ metadata } = {}) {
     return;
   }
 
-  const payload = {
-    success: true,
-    cloudfront: resolvedMetadata,
-  };
-
-  const serialized = `${JSON.stringify(payload, null, 2)}\n`;
+  const serialized = serializePublishedCloudfrontPayload(resolvedMetadata);
   const targets = [
     path.join(clientDistDir, 'api', 'published-cloudfront'),
     path.join(clientDistDir, 'api', 'published-cloudfront.json'),
@@ -376,97 +371,8 @@ async function ensurePublishedCloudfrontFallback({ metadata } = {}) {
   }
 }
 
-function normalizeMetadataUrl(value) {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  try {
-    const resolved = new URL(trimmed);
-    const normalizedPath = resolved.pathname ? resolved.pathname.replace(/\/+$/, '') : '';
-    const base = `${resolved.origin}${normalizedPath}`;
-    return `${base}${resolved.search || ''}${resolved.hash || ''}`;
-  } catch (error) {
-    return trimmed;
-  }
-}
-
-function escapeAttributeValue(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function updateAttributeInTag(tag, attribute, value) {
-  if (!tag || !attribute) {
-    return tag;
-  }
-
-  const escapedValue = escapeAttributeValue(value);
-  const attributePattern = new RegExp(`(${attribute}\\s*=\\s*)(["'])([^"']*)(\\2)`, 'i');
-  if (attributePattern.test(tag)) {
-    return tag.replace(attributePattern, (_, prefix, quote, _existing, suffixQuote) => {
-      return `${prefix}${quote}${escapedValue}${suffixQuote}`;
-    });
-  }
-
-  const closing = tag.endsWith('/>') ? '/>' : '>';
-  const withoutClosing = tag.slice(0, tag.length - closing.length);
-  return `${withoutClosing} ${attribute}="${escapedValue}"${closing}`;
-}
-
-function updateTagAttribute(html, { tagName, matchAttribute, matchValue, attribute, value }) {
-  if (!html || !tagName || !matchAttribute || !matchValue || !attribute) {
-    return html;
-  }
-
-  const pattern = new RegExp(
-    `<${tagName}\\b[^>]*${matchAttribute}\\s*=\\s*(["'])${matchValue.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\1[^>]*>`,
-    'i',
-  );
-
-  return html.replace(pattern, (match) => updateAttributeInTag(match, attribute, value));
-}
-
-function updateMetaApiBase(html, apiBase) {
-  if (!apiBase) {
-    return html;
-  }
-  return updateTagAttribute(html, {
-    tagName: 'meta',
-    matchAttribute: 'name',
-    matchValue: 'resumeforge-api-base',
-    attribute: 'content',
-    value: apiBase,
-  });
-}
-
-function updateBackupApiInputs(html, apiBase) {
-  if (!apiBase) {
-    return html;
-  }
-
-  const pattern = /<input\b[^>]*data-backup-api-base[^>]*>/gi;
-  return html.replace(pattern, (match) => updateAttributeInTag(match, 'value', apiBase));
-}
-
 async function embedPublishedCloudfrontMetadata({ metadata, html }) {
   if (!metadata) {
-    return;
-  }
-
-  const apiBase = normalizeMetadataUrl(metadata.apiGatewayUrl);
-  const fallbackBase = apiBase || normalizeMetadataUrl(metadata.url);
-
-  if (!apiBase && !fallbackBase) {
     return;
   }
 
@@ -483,42 +389,8 @@ async function embedPublishedCloudfrontMetadata({ metadata, html }) {
     }
   }
 
-  let updatedHtml = workingHtml;
-  const withMeta = updateMetaApiBase(updatedHtml, apiBase);
-  if (withMeta !== updatedHtml) {
-    updatedHtml = withMeta;
-  }
-
-  const withInput = updateBackupApiInputs(updatedHtml, fallbackBase);
-  if (withInput !== updatedHtml) {
-    updatedHtml = withInput;
-  }
-
-  try {
-    const payload = JSON.stringify({ success: true, cloudfront: metadata });
-    const safePayload = payload.replace(/</g, '\\u003c').replace(/-->/g, '--\\u003e');
-    const scriptContent = `window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = ${safePayload};`;
-    const safeScript = scriptContent.replace(/<\/script/gi, '\\u003c/script');
-    const scriptTag = `<script id="${CLOUDFRONT_METADATA_SCRIPT_ID}">${safeScript}</script>`;
-    const scriptPattern = new RegExp(
-      `<script\\b[^>]*id=["']${CLOUDFRONT_METADATA_SCRIPT_ID}["'][^>]*>[\\s\\S]*?<\\/script>`,
-      'i',
-    );
-
-    if (scriptPattern.test(updatedHtml)) {
-      updatedHtml = updatedHtml.replace(scriptPattern, scriptTag);
-    } else if (updatedHtml.includes('</head>')) {
-      updatedHtml = updatedHtml.replace('</head>', `${scriptTag}\n</head>`);
-    } else if (updatedHtml.includes('</body>')) {
-      updatedHtml = updatedHtml.replace('</body>', `${scriptTag}\n</body>`);
-    } else {
-      updatedHtml += scriptTag;
-    }
-  } catch (error) {
-    console.warn('[prune-client-assets] Unable to embed inline CloudFront metadata script:', error);
-  }
-
-  if (updatedHtml === workingHtml) {
+  const updatedHtml = embedCloudfrontMetadataIntoHtml(workingHtml, metadata);
+  if (typeof updatedHtml !== 'string' || updatedHtml === workingHtml) {
     return;
   }
 

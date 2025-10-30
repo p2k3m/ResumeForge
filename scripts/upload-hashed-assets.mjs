@@ -13,6 +13,11 @@ import {
 import mime from 'mime-types'
 import { applyStageEnvironment } from '../config/stage.js'
 import { withBuildMetadata } from '../lib/buildMetadata.js'
+import {
+  embedCloudfrontMetadataIntoHtml,
+  resolvePublishedCloudfrontPath,
+  serializePublishedCloudfrontPayload,
+} from '../lib/cloudfront/metadata.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -20,7 +25,9 @@ const projectRoot = path.resolve(__dirname, '..')
 const clientDistDir = path.join(projectRoot, 'client', 'dist')
 const clientIndexPath = path.join(clientDistDir, 'index.html')
 const clientAssetsDir = path.join(clientDistDir, 'assets')
-const publishedCloudfrontPath = path.join(projectRoot, 'config', 'published-cloudfront.json')
+function resolvePublishedCloudfrontPathForProject() {
+  return resolvePublishedCloudfrontPath({ projectRoot })
+}
 
 const INDEX_ALIAS_CACHE_CONTROL = 'public, max-age=60, must-revalidate'
 const CSS_ALIAS_RELATIVE_PATH = 'assets/index-latest.css'
@@ -398,6 +405,7 @@ export async function gatherHashedAssetUploadEntries({
 }
 
 async function loadPublishedCloudfrontMetadata() {
+  const publishedCloudfrontPath = resolvePublishedCloudfrontPathForProject()
   try {
     const raw = await fs.readFile(publishedCloudfrontPath, 'utf8')
     if (!raw || !raw.trim()) {
@@ -431,7 +439,7 @@ async function ensurePublishedCloudfrontFallback({ distDirectory = clientDistDir
     return false
   }
 
-  const payload = `${JSON.stringify({ success: true, cloudfront: resolvedMetadata }, null, 2)}\n`
+  const payload = serializePublishedCloudfrontPayload(resolvedMetadata)
   const targets = [
     path.join(distDirectory, 'api', 'published-cloudfront'),
     path.join(distDirectory, 'api', 'published-cloudfront.json'),
@@ -457,6 +465,37 @@ async function ensurePublishedCloudfrontFallback({ distDirectory = clientDistDir
   }
 
   return wroteAny
+}
+
+async function embedPublishedCloudfrontMetadataIntoIndex({
+  distDirectory = clientDistDir,
+  metadata,
+} = {}) {
+  if (!metadata || typeof metadata !== 'object') {
+    return false
+  }
+
+  const indexPath = path.join(distDirectory, 'index.html')
+  let html
+  try {
+    html = await fs.readFile(indexPath, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      console.warn(
+        `[upload-hashed-assets] Unable to embed CloudFront metadata; missing index at ${indexPath}.`,
+      )
+      return false
+    }
+    throw error
+  }
+
+  const updated = embedCloudfrontMetadataIntoHtml(html, metadata)
+  if (typeof updated !== 'string' || updated === html) {
+    return false
+  }
+
+  await fs.writeFile(indexPath, updated, 'utf8')
+  return true
 }
 
 function normalizePrefixSegment(value) {
@@ -652,6 +691,10 @@ export async function uploadHashedIndexAssets(options = {}) {
 
   const publishedMetadata = await loadPublishedCloudfrontMetadata()
   await ensurePublishedCloudfrontFallback({ distDirectory, metadata: publishedMetadata })
+  await embedPublishedCloudfrontMetadataIntoIndex({
+    distDirectory,
+    metadata: publishedMetadata,
+  })
 
   const supplementaryEntries = await resolveSupplementaryUploadEntries({
     distDirectory,
