@@ -4,12 +4,14 @@ import {
   CloudFrontClient,
   CreateInvalidationCommand,
   GetDistributionConfigCommand,
+  TagResourceCommand,
 } from '@aws-sdk/client-cloudfront'
 import fs from 'fs/promises'
 import path from 'path'
 import process from 'process'
 import { fileURLToPath } from 'url'
 import { ensureRequiredEnvVars } from './utils/ensure-required-env.mjs'
+import { createBuildTagList } from '../lib/buildMetadata.js'
 
 async function main() {
   ensureRequiredEnvVars({ context: 'the CloudFront URL publication workflow' })
@@ -33,6 +35,8 @@ async function main() {
     process.exitCode = 1
     return
   }
+
+  const accountId = deriveAccountIdFromStackId(stack?.StackId)
 
   const outputs = stack.Outputs || []
   const urlOutput =
@@ -62,6 +66,8 @@ async function main() {
     return
   }
 
+  const distributionArn = buildDistributionArn({ accountId, distributionId })
+
   const publishFile = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '..',
@@ -89,6 +95,8 @@ async function main() {
     distributionIdsToInvalidate.add(previousDistributionId)
   }
   distributionIdsToInvalidate.add(distributionId)
+
+  await tagCloudFrontDistribution({ cloudFront, distributionArn, distributionId })
 
   const throttlingErrors = new Set(['Throttling', 'ThrottlingException', 'TooManyRequestsException'])
 
@@ -222,6 +230,60 @@ main().catch((err) => {
 
 function hasValue(value) {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function deriveAccountIdFromStackId(stackId) {
+  if (!hasValue(stackId)) {
+    return ''
+  }
+
+  const parts = stackId.trim().split(':')
+  if (parts.length < 5) {
+    return ''
+  }
+
+  const accountId = parts[4]?.trim()
+  return accountId || ''
+}
+
+function buildDistributionArn({ accountId, distributionId }) {
+  if (!hasValue(distributionId)) {
+    return ''
+  }
+
+  if (!hasValue(accountId)) {
+    return ''
+  }
+
+  return `arn:aws:cloudfront::${accountId}:distribution/${distributionId.trim()}`
+}
+
+async function tagCloudFrontDistribution({ cloudFront, distributionArn, distributionId }) {
+  if (!cloudFront || !hasValue(distributionArn)) {
+    return
+  }
+
+  const tags = createBuildTagList()
+  if (!Array.isArray(tags) || tags.length === 0) {
+    return
+  }
+
+  try {
+    await cloudFront.send(
+      new TagResourceCommand({
+        Resource: distributionArn,
+        Tags: { Items: tags },
+      })
+    )
+
+    console.log(
+      `[publish-cloudfront-url] Tagged CloudFront distribution ${distributionId} with build metadata (${distributionArn}).`
+    )
+  } catch (error) {
+    console.warn(
+      `[publish-cloudfront-url] Failed to tag CloudFront distribution ${distributionId}: ${error?.message || error}`
+    )
+  }
 }
 
 function normalizeOriginPath(pathValue) {
