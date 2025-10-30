@@ -5,6 +5,8 @@ import {
   shouldDeleteObjectKey,
   verifyUploadedAssets,
   extractHashedIndexAssets,
+  statementAllowsPublicAssetDownload,
+  findMissingBucketPolicyKeys,
 } from '../scripts/upload-static-build.mjs'
 import { GetObjectCommand } from '@aws-sdk/client-s3'
 
@@ -209,5 +211,96 @@ describe('verifyUploadedAssets', () => {
     await expect(
       verifyUploadedAssets({ s3: client, bucket: 'missing-bucket', uploads }),
     ).rejects.toThrow('[upload-static] 1 uploaded asset failed verification.')
+  })
+})
+
+describe('statementAllowsPublicAssetDownload', () => {
+  const bucket = 'resume-bucket'
+  const key = 'static/client/prod/latest/assets/index-latest.js'
+
+  it('returns true when the statement grants public GetObject on the prefix', () => {
+    const statement = {
+      Effect: 'Allow',
+      Principal: '*',
+      Action: 's3:GetObject',
+      Resource: `arn:aws:s3:::${bucket}/static/client/prod/latest/*`,
+    }
+
+    expect(statementAllowsPublicAssetDownload(statement, bucket, key)).toBe(true)
+  })
+
+  it('returns false when the principal is not public', () => {
+    const statement = {
+      Effect: 'Allow',
+      Principal: { AWS: 'arn:aws:iam::123456789012:role/InternalOnly' },
+      Action: 's3:GetObject',
+      Resource: `arn:aws:s3:::${bucket}/*`,
+    }
+
+    expect(statementAllowsPublicAssetDownload(statement, bucket, key)).toBe(false)
+  })
+
+  it('returns false when the resource does not cover the target key', () => {
+    const statement = {
+      Effect: 'Allow',
+      Principal: '*',
+      Action: 's3:GetObject',
+      Resource: `arn:aws:s3:::${bucket}/static/client/legacy/*`,
+    }
+
+    expect(statementAllowsPublicAssetDownload(statement, bucket, key)).toBe(false)
+  })
+})
+
+describe('findMissingBucketPolicyKeys', () => {
+  const bucket = 'resume-bucket'
+
+  it('identifies keys that are not covered by any public statements', () => {
+    const statements = [
+      {
+        Effect: 'Allow',
+        Principal: '*',
+        Action: 's3:GetObject',
+        Resource: `arn:aws:s3:::${bucket}/static/client/prod/latest/index.html`,
+      },
+    ]
+
+    const missing = findMissingBucketPolicyKeys({
+      statements,
+      bucket,
+      keys: [
+        'static/client/prod/latest/index.html',
+        'static/client/prod/latest/assets/index-latest.css',
+        'static/client/prod/latest/assets/index-latest.js',
+      ],
+    })
+
+    expect(missing).toEqual([
+      'static/client/prod/latest/assets/index-latest.css',
+      'static/client/prod/latest/assets/index-latest.js',
+    ])
+  })
+
+  it('returns an empty array when all keys are covered', () => {
+    const statements = [
+      {
+        Effect: 'Allow',
+        Principal: '*',
+        Action: ['s3:GetObject', 's3:GetObjectVersion'],
+        Resource: `arn:aws:s3:::${bucket}/*`,
+      },
+    ]
+
+    const missing = findMissingBucketPolicyKeys({
+      statements,
+      bucket,
+      keys: [
+        'static/client/prod/latest/index.html',
+        'static/client/prod/latest/assets/index-latest.css',
+        'static/client/prod/latest/assets/index-latest.js',
+      ],
+    })
+
+    expect(missing).toEqual([])
   })
 })

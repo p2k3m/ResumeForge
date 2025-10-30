@@ -14,6 +14,7 @@ import {
 import { createReadStream } from 'node:fs'
 import {
   DeleteObjectsCommand,
+  GetBucketPolicyCommand,
   GetObjectCommand,
   HeadBucketCommand,
   ListObjectsV2Command,
@@ -696,6 +697,246 @@ export function shouldDeleteObjectKey(key, prefix) {
   return true
 }
 
+function normalizePolicyActions(actions) {
+  if (!actions) {
+    return []
+  }
+
+  const actionList = Array.isArray(actions) ? actions : [actions]
+  return actionList
+    .filter((value) => typeof value === 'string')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function principalAllowsPublicAccess(principal) {
+  if (!principal) {
+    return false
+  }
+
+  if (principal === '*') {
+    return true
+  }
+
+  if (typeof principal === 'string') {
+    return principal.trim() === '*'
+  }
+
+  if (typeof principal === 'object') {
+    const values = []
+    for (const value of Object.values(principal)) {
+      if (Array.isArray(value)) {
+        values.push(...value)
+      } else {
+        values.push(value)
+      }
+    }
+    return values
+      .filter((value) => typeof value === 'string')
+      .some((value) => value.trim() === '*')
+  }
+
+  return false
+}
+
+function actionsAllowPublicGet(actions) {
+  const normalized = normalizePolicyActions(actions)
+  if (!normalized.length) {
+    return false
+  }
+
+  return normalized.some((action) => {
+    if (action === '*' || action === 's3:*') {
+      return true
+    }
+    if (action === 's3:getobject') {
+      return true
+    }
+    if (action.startsWith('s3:getobject')) {
+      return true
+    }
+    return false
+  })
+}
+
+function escapeRegexSegment(segment) {
+  if (typeof segment !== 'string') {
+    return ''
+  }
+
+  return segment.replace(/[-/\\^$+?.()|[\]{}]/g, '\\$&')
+}
+
+function resourceEntryAllowsKey(resourceEntry, bucket, key) {
+  if (typeof resourceEntry !== 'string') {
+    return false
+  }
+
+  const trimmedEntry = resourceEntry.trim()
+  if (!trimmedEntry) {
+    return false
+  }
+
+  if (trimmedEntry === '*') {
+    return true
+  }
+
+  const bucketArnPrefix = `arn:aws:s3:::${bucket}`
+  if (!trimmedEntry.toLowerCase().startsWith(bucketArnPrefix.toLowerCase())) {
+    return false
+  }
+
+  let suffix = trimmedEntry.slice(bucketArnPrefix.length)
+  if (!suffix) {
+    return false
+  }
+
+  if (suffix === '/*') {
+    return true
+  }
+
+  suffix = suffix.replace(/^\//, '')
+  if (!suffix) {
+    return false
+  }
+
+  const normalizedKey = key.replace(/^\/+/, '')
+  const escapedSegments = suffix
+    .split('*')
+    .map((segment) => escapeRegexSegment(segment))
+  const escapedPattern = escapedSegments.join('.*')
+  const pattern = new RegExp(`^${escapedPattern}$`)
+  return pattern.test(normalizedKey)
+}
+
+function resourcesAllowKey(resources, bucket, key) {
+  if (!resources) {
+    return false
+  }
+
+  const resourceList = Array.isArray(resources) ? resources : [resources]
+  return resourceList.some((entry) => resourceEntryAllowsKey(entry, bucket, key))
+}
+
+export function statementAllowsPublicAssetDownload(statement, bucket, key) {
+  if (!statement || statement.Effect !== 'Allow') {
+    return false
+  }
+
+  if (!principalAllowsPublicAccess(statement.Principal)) {
+    return false
+  }
+
+  if (!actionsAllowPublicGet(statement.Action)) {
+    return false
+  }
+
+  return resourcesAllowKey(statement.Resource, bucket, key)
+}
+
+export function findMissingBucketPolicyKeys({ statements = [], bucket, keys = [] }) {
+  const normalizedStatements = Array.isArray(statements)
+    ? statements.filter(Boolean)
+    : [statements].filter(Boolean)
+
+  const normalizedKeys = Array.from(
+    new Set(
+      keys
+        .filter((key) => typeof key === 'string')
+        .map((key) => key.trim())
+        .filter(Boolean),
+    ),
+  )
+
+  const missing = []
+  for (const key of normalizedKeys) {
+    const sanitizedKey = key.replace(/^\/+/, '')
+    const hasAccess = normalizedStatements.some((statement) =>
+      statementAllowsPublicAssetDownload(statement, bucket, sanitizedKey),
+    )
+    if (!hasAccess) {
+      missing.push(sanitizedKey)
+    }
+  }
+
+  return missing
+}
+
+async function ensureBucketPolicyAllowsPublicAssetAccess({ s3, bucket, prefix }) {
+  let response
+  try {
+    response = await s3.send(new GetBucketPolicyCommand({ Bucket: bucket }))
+  } catch (error) {
+    const statusCode = error?.$metadata?.httpStatusCode
+    const errorCode = (error?.name || error?.Code || error?.code || '').trim()
+
+    if (errorCode === 'NoSuchBucketPolicy' || statusCode === 404) {
+      throw new Error(
+        `[upload-static] Bucket "${bucket}" does not have a bucket policy. Configure a policy that allows public s3:GetObject access to s3://${bucket}/${prefix}/ before deploying.`,
+      )
+    }
+
+    if (statusCode === 403 || errorCode === 'AccessDenied') {
+      throw new Error(
+        `[upload-static] Unable to read the bucket policy for "${bucket}" (access denied). Grant GetBucketPolicy permission or confirm the policy allows public reads for s3://${bucket}/${prefix}/.`,
+      )
+    }
+
+    throw new Error(
+      `[upload-static] Unable to load the bucket policy for "${bucket}": ${error?.message || error}`,
+    )
+  }
+
+  const policyString = typeof response?.Policy === 'string' ? response.Policy.trim() : ''
+  if (!policyString) {
+    throw new Error(
+      `[upload-static] Bucket policy response for "${bucket}" is empty. Confirm the policy allows public s3:GetObject access to s3://${bucket}/${prefix}/.`,
+    )
+  }
+
+  let policyDocument
+  try {
+    policyDocument = JSON.parse(policyString)
+  } catch (error) {
+    throw new Error(
+      `[upload-static] Bucket policy for "${bucket}" is not valid JSON: ${error?.message || error}`,
+    )
+  }
+
+  const statements = Array.isArray(policyDocument?.Statement)
+    ? policyDocument.Statement.filter(Boolean)
+    : [policyDocument?.Statement].filter(Boolean)
+
+  if (!statements.length) {
+    throw new Error(
+      `[upload-static] Bucket policy for "${bucket}" does not contain any statements. Add a statement that allows public s3:GetObject access to s3://${bucket}/${prefix}/.`,
+    )
+  }
+
+  const sanitizedPrefix = String(prefix || '')
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+
+  const validationKeys = new Set([`${sanitizedPrefix}/index.html`])
+  for (const alias of INDEX_ASSET_ALIAS_PATHS) {
+    validationKeys.add(`${sanitizedPrefix}/${alias}`)
+  }
+
+  const missingKeys = findMissingBucketPolicyKeys({
+    statements,
+    bucket,
+    keys: Array.from(validationKeys),
+  })
+
+  if (missingKeys.length > 0) {
+    const summary = missingKeys.map((key) => `- s3://${bucket}/${key}`).join('\n')
+    throw new Error(
+      `[upload-static] Bucket policy for "${bucket}" must allow public s3:GetObject access to the deployed client bundle. Update the policy so unauthenticated users can read:\n${summary}`,
+    )
+  }
+}
+
 async function purgeExistingObjects({ s3, bucket, prefix }) {
   const prefixWithSlash = prefix.endsWith('/') ? prefix : `${prefix}/`
   let continuationToken
@@ -1116,6 +1357,8 @@ async function main() {
         )
       }
     }
+
+    await ensureBucketPolicyAllowsPublicAssetAccess({ s3, bucket, prefix })
 
     await purgeExistingObjects({ s3, bucket, prefix })
     await configureStaticWebsiteHosting({ s3, bucket })
