@@ -94,8 +94,7 @@ async function main() {
 
   async function sendWithRetry(command, { attempts = 5, baseDelayMs = 500 } = {}) {
     let attempt = 0
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (;;) {
       try {
         return await cloudFront.send(command)
       } catch (err) {
