@@ -23,6 +23,11 @@ import {
 } from '@aws-sdk/client-s3'
 import mime from 'mime-types'
 import { applyStageEnvironment } from '../config/stage.js'
+import {
+  classifyDeployFailure,
+  notifyIncompleteStaticUpload,
+  notifyMissingClientAssets,
+} from '../lib/deploy/notifications.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -1021,59 +1026,104 @@ async function backupExistingManifest({ s3, bucket, manifestKey }) {
   }
 }
 
-async function main() {
-  const { files, hashedAssets } = await gatherClientAssetFiles()
-  const { bucket, prefix, stage, deploymentEnvironment } = resolveBucketConfiguration()
-  const buildVersion = resolveBuildVersion()
-  const versionLabel = resolveVersionLabel()
-  const s3 = new S3Client({})
+async function handleDeployUploadError({ error, context = {}, source }) {
+  const classification = classifyDeployFailure(error)
+  if (!classification) {
+    return
+  }
 
-  if (buildVersion) {
-    console.log(`[upload-static] Using build version ${buildVersion}`)
+  const notificationDetails = {
+    ...context,
   }
-  if (versionLabel) {
-    console.log(`[upload-static] Using versioned asset directory ${versionLabel}`)
+
+  if (source) {
+    notificationDetails.source = source
   }
+  if (classification.reason) {
+    notificationDetails.errorMessage = classification.reason
+  }
+  if (error?.stack && typeof error.stack === 'string' && error.stack.trim()) {
+    notificationDetails.errorStack = error.stack
+  }
+
+  if (!notificationDetails.stage && !notificationDetails.deploymentEnvironment) {
+    const stageEnv = applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
+    if (stageEnv.stageName && !notificationDetails.stage) {
+      notificationDetails.stage = stageEnv.stageName
+    }
+    if (stageEnv.deploymentEnvironment && !notificationDetails.deploymentEnvironment) {
+      notificationDetails.deploymentEnvironment = stageEnv.deploymentEnvironment
+    }
+  }
+
+  if (classification.type === 'static_upload_incomplete') {
+    await notifyIncompleteStaticUpload(notificationDetails)
+  } else if (classification.type === 'missing_client_assets') {
+    await notifyMissingClientAssets(notificationDetails)
+  }
+}
+
+async function main() {
+  const deployContext = {}
 
   try {
-    await s3.send(new HeadBucketCommand({ Bucket: bucket }))
-  } catch (error) {
-    const code = error?.$metadata?.httpStatusCode || error?.name || error?.Code
-    throw new Error(
-      `Unable to access bucket "${bucket}" (${code || 'unknown error'}). Confirm the bucket exists and credentials are configured.`,
+    const { files, hashedAssets } = await gatherClientAssetFiles()
+    const { bucket, prefix, stage, deploymentEnvironment } = resolveBucketConfiguration()
+    Object.assign(deployContext, { bucket, prefix, stage, deploymentEnvironment })
+    const buildVersion = resolveBuildVersion()
+    const versionLabel = resolveVersionLabel()
+    const s3 = new S3Client({})
+
+    if (buildVersion) {
+      console.log(`[upload-static] Using build version ${buildVersion}`)
+    }
+    if (versionLabel) {
+      console.log(`[upload-static] Using versioned asset directory ${versionLabel}`)
+    }
+
+    try {
+      await s3.send(new HeadBucketCommand({ Bucket: bucket }))
+    } catch (error) {
+      const code = error?.$metadata?.httpStatusCode || error?.name || error?.Code
+      throw new Error(
+        `Unable to access bucket "${bucket}" (${code || 'unknown error'}). Confirm the bucket exists and credentials are configured.`,
+      )
+    }
+
+    await purgeExistingObjects({ s3, bucket, prefix })
+    await configureStaticWebsiteHosting({ s3, bucket })
+    const uploadedFiles = await uploadFiles({ s3, bucket, prefix, files })
+    const versionedUploads = await uploadVersionedAssets({
+      s3,
+      bucket,
+      prefix,
+      versionLabel,
+      hashedAssets,
+    })
+    const allUploadedFiles = [...uploadedFiles, ...versionedUploads]
+    ensureIndexAliasCoverage(allUploadedFiles)
+    await verifyUploadedAssets({ s3, bucket, uploads: allUploadedFiles })
+    await uploadManifest({
+      s3,
+      bucket,
+      prefix,
+      stage,
+      deploymentEnvironment,
+      buildVersion,
+      versionLabel,
+      uploadedFiles: allUploadedFiles,
+      hashedAssets,
+    })
+
+    console.log(
+      `[upload-static] Uploaded ${files.length + versionedUploads.length} static asset${
+        files.length + versionedUploads.length === 1 ? '' : 's'
+      } to s3://${bucket}/${prefix}/`,
     )
+  } catch (error) {
+    await handleDeployUploadError({ error, context: deployContext, source: 'upload-static-build' })
+    throw error
   }
-
-  await purgeExistingObjects({ s3, bucket, prefix })
-  await configureStaticWebsiteHosting({ s3, bucket })
-  const uploadedFiles = await uploadFiles({ s3, bucket, prefix, files })
-  const versionedUploads = await uploadVersionedAssets({
-    s3,
-    bucket,
-    prefix,
-    versionLabel,
-    hashedAssets,
-  })
-  const allUploadedFiles = [...uploadedFiles, ...versionedUploads]
-  ensureIndexAliasCoverage(allUploadedFiles)
-  await verifyUploadedAssets({ s3, bucket, uploads: allUploadedFiles })
-  await uploadManifest({
-    s3,
-    bucket,
-    prefix,
-    stage,
-    deploymentEnvironment,
-    buildVersion,
-    versionLabel,
-    uploadedFiles: allUploadedFiles,
-    hashedAssets,
-  })
-
-  console.log(
-    `[upload-static] Uploaded ${files.length + versionedUploads.length} static asset${
-      files.length + versionedUploads.length === 1 ? '' : 's'
-    } to s3://${bucket}/${prefix}/`,
-  )
 }
 
 main().catch((error) => {
