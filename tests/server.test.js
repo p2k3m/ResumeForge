@@ -364,6 +364,72 @@ describe('static asset fallbacks', () => {
     }
   });
 
+  test('serves the index asset alias when the manifest contains prefixed S3 keys', async () => {
+    const cssAliasName = 'index-prefixed.css';
+    const cssBody = '.prefixed { color: #0c0; }';
+
+    const originalReadFile = fsPromises.readFile;
+    const originalStat = fsPromises.stat;
+
+    const readFileSpy = jest
+      .spyOn(fsPromises, 'readFile')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target === clientIndexPath) {
+          const notFound = new Error('Not Found');
+          notFound.code = 'ENOENT';
+          throw notFound;
+        }
+        return originalReadFile.call(fsPromises, target, ...args);
+      });
+
+    const statSpy = jest
+      .spyOn(fsPromises, 'stat')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string') {
+          if (target === clientIndexPath || target.endsWith(cssAliasName)) {
+            const notFound = new Error('Not Found');
+            notFound.code = 'ENOENT';
+            throw notFound;
+          }
+        }
+        return originalStat.call(fsPromises, target, ...args);
+      });
+
+    mockS3Send
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Key).toMatch(/manifest\.json$/);
+        return Promise.resolve({
+          Body: Readable.from([
+            JSON.stringify({
+              hashedIndexAssets: [`static/client/prod/latest/assets/${cssAliasName}`],
+            }),
+          ]),
+          ContentType: 'application/json',
+        });
+      })
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Key).toBe(`static/client/prod/latest/assets/${cssAliasName}`);
+        return Promise.resolve({
+          Body: Readable.from([cssBody]),
+          ContentType: 'text/css',
+          CacheControl: 'public, max-age=60',
+        });
+      });
+
+    try {
+      const res = await request(app).get('/assets/index-latest.css');
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(cssBody);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
+    } finally {
+      statSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
+  });
+
   test('serves the index asset alias via manifest fallback when the primary bundle is missing from S3', async () => {
     const cssAliasName = 'index-missing.css';
     const fallbackCssName = 'index-existing.css';
