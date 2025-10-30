@@ -1,5 +1,10 @@
 node_modules
 client/node_modules
-client/dist
 dist/
 coverage/
+client/dist/**
+!client/dist/
+!client/dist/index.html
+!client/dist/assets/
+!client/dist/assets/index-latest.css
+!client/dist/assets/index-abcd1234.css
