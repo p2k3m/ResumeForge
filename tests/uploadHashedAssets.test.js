@@ -249,6 +249,84 @@ describe('uploadHashedIndexAssets', () => {
 
     expect(sendMock).toHaveBeenCalled()
   })
+
+  it('generates degraded CloudFront metadata when published metadata is unavailable', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+    process.env.VITE_API_BASE_URL = 'https://api.resume.example.com/prod'
+
+    await fs.rm(metadataPath, { force: true })
+
+    const distDir = path.join(tempDir, 'dist')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <meta name="resumeforge-api-base" content="%VITE_API_BASE_URL%" />
+          <link rel="stylesheet" href="/assets/index-424242.css" />
+        </head>
+        <body>
+          <script src="/assets/index-424242.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-424242.css'), 'html{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-424242.js'), 'console.log("fallback")', 'utf8')
+
+    const result = await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    expect(result.bucket).toBe('static-bucket-test')
+    expect(result.prefix).toBe('static/client/prod/latest')
+
+    const fallbackPayloadRaw = await fs.readFile(
+      path.join(distDir, 'api', 'published-cloudfront.json'),
+      'utf8',
+    )
+    const fallbackPayload = JSON.parse(fallbackPayloadRaw)
+
+    expect(fallbackPayload).toMatchObject({
+      success: true,
+      cloudfront: expect.objectContaining({
+        degraded: true,
+        apiGatewayUrl: 'https://api.resume.example.com/prod',
+        url: 'https://api.resume.example.com/prod',
+      }),
+    })
+    expect(typeof fallbackPayload.cloudfront.updatedAt).toBe('string')
+    expect(fallbackPayload.cloudfront.updatedAt.length).toBeGreaterThan(0)
+
+    const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
+    expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
+    expect(updatedIndex).toContain('"apiGatewayUrl":"https://api.resume.example.com/prod"')
+
+    const putCommands = sendMock.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof PutObjectCommand)
+
+    const uploadedKeys = putCommands.map((command) => command.input.Key)
+
+    expect(uploadedKeys).toEqual(
+      expect.arrayContaining([
+        'static/client/prod/latest/assets/index-424242.css',
+        'static/client/prod/latest/assets/index-424242.js',
+        'static/client/prod/latest/assets/index-latest.css',
+        'static/client/prod/latest/assets/index-latest.js',
+        'static/client/prod/latest/api/published-cloudfront',
+        'static/client/prod/latest/api/published-cloudfront.json',
+      ]),
+    )
+  })
 })
 
 describe('gatherHashedAssetUploadEntries', () => {
