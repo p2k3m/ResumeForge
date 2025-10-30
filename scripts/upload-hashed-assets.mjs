@@ -18,6 +18,7 @@ const projectRoot = path.resolve(__dirname, '..')
 const clientDistDir = path.join(projectRoot, 'client', 'dist')
 const clientIndexPath = path.join(clientDistDir, 'index.html')
 const clientAssetsDir = path.join(clientDistDir, 'assets')
+const publishedCloudfrontPath = path.join(projectRoot, 'config', 'published-cloudfront.json')
 
 const INDEX_ALIAS_CACHE_CONTROL = 'public, max-age=60, must-revalidate'
 const CSS_ALIAS_RELATIVE_PATH = 'assets/index-latest.css'
@@ -381,38 +382,106 @@ export async function gatherHashedAssetUploadEntries({
   return { entries, referencedAssets }
 }
 
-function resolveHashedAssetUploadConfiguration() {
+async function loadPublishedCloudfrontMetadata() {
+  try {
+    const raw = await fs.readFile(publishedCloudfrontPath, 'utf8')
+    if (!raw || !raw.trim()) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null
+    }
+
+    console.warn(
+      `[upload-hashed-assets] Unable to read ${publishedCloudfrontPath}:`,
+      error?.message || error,
+    )
+    return null
+  }
+}
+
+function normalizePrefixSegment(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  return trimmed
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9.-]/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function sanitizeS3PathSegment(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  return trimmed.replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
+async function resolveHashedAssetUploadConfiguration() {
   const { stageName, deploymentEnvironment, staticAssetsBucket, dataBucket } =
     applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
 
-  const bucket = staticAssetsBucket || dataBucket
+  let bucket = typeof staticAssetsBucket === 'string' && staticAssetsBucket.trim()
+    ? staticAssetsBucket.trim()
+    : ''
+
+  if (!bucket && typeof dataBucket === 'string' && dataBucket.trim()) {
+    bucket = dataBucket.trim()
+  }
+
+  let prefix = sanitizeS3PathSegment(process.env.STATIC_ASSETS_PREFIX || '')
+
+  let metadata
+  if (!bucket || !prefix) {
+    metadata = await loadPublishedCloudfrontMetadata()
+  }
+
+  if (!bucket) {
+    const originBucket = metadata?.originBucket
+    if (typeof originBucket === 'string' && originBucket.trim()) {
+      bucket = originBucket.trim()
+    }
+  }
+
   if (!bucket) {
     return null
   }
 
-  const normalizePrefixSegment = (value) => {
-    if (typeof value !== 'string') {
-      return ''
-    }
+  if (!prefix) {
+    const originPath = metadata?.originPath
+    const normalizedOriginPath = sanitizeS3PathSegment(originPath || '')
 
-    const trimmed = value.trim()
-    if (!trimmed) {
-      return ''
+    if (normalizedOriginPath) {
+      prefix = normalizedOriginPath
     }
-
-    return trimmed
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^a-z0-9.-]/g, '-')
-      .replace(/-{2,}/g, '-')
-      .replace(/^-+|-+$/g, '')
   }
 
-  const normalizedEnvironment = normalizePrefixSegment(deploymentEnvironment)
-  const normalizedStage = normalizePrefixSegment(stageName)
-  const baseSegment = normalizedEnvironment || normalizedStage || 'prod'
-  const prefixSource = process.env.STATIC_ASSETS_PREFIX || `static/client/${baseSegment}/latest`
-  const normalizedPrefix = String(prefixSource).trim().replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!prefix) {
+    const normalizedEnvironment = normalizePrefixSegment(deploymentEnvironment)
+    const normalizedStage = normalizePrefixSegment(stageName)
+    const baseSegment = normalizedEnvironment || normalizedStage || 'prod'
+    prefix = `static/client/${baseSegment}/latest`
+  }
+
+  const normalizedPrefix = sanitizeS3PathSegment(prefix)
   if (!normalizedPrefix) {
     throw new Error('STATIC_ASSETS_PREFIX must resolve to a non-empty value.')
   }
@@ -447,7 +516,7 @@ function resolveContentType(relativePath) {
 }
 
 export async function uploadHashedIndexAssets(options = {}) {
-  const configuration = resolveHashedAssetUploadConfiguration()
+  const configuration = await resolveHashedAssetUploadConfiguration()
   if (!configuration) {
     if (!options?.quiet) {
       console.log('[upload-hashed-assets] No static asset bucket configured; skipping hashed asset upload.')
