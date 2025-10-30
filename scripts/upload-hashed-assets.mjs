@@ -281,6 +281,13 @@ function resolveObjectAcl(relativePath) {
     return 'public-read'
   }
 
+  if (
+    normalized === 'api/published-cloudfront' ||
+    normalized === 'api/published-cloudfront.json'
+  ) {
+    return 'public-read'
+  }
+
   return undefined
 }
 
