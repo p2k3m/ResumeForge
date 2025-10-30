@@ -1084,10 +1084,18 @@ async function main() {
     try {
       await s3.send(new HeadBucketCommand({ Bucket: bucket }))
     } catch (error) {
-      const code = error?.$metadata?.httpStatusCode || error?.name || error?.Code
-      throw new Error(
-        `Unable to access bucket "${bucket}" (${code || 'unknown error'}). Confirm the bucket exists and credentials are configured.`,
-      )
+      const statusCode = error?.$metadata?.httpStatusCode
+      const errorCode = error?.name || error?.Code || error?.code
+
+      if (statusCode === 403 || errorCode === 'AccessDenied') {
+        console.warn(
+          `Warning: Unable to verify bucket "${bucket}" with HeadBucket (access denied). Continuing upload attempts – ensure the IAM policy allows PutObject, GetObject, and DeleteObject.`,
+        )
+      } else {
+        throw new Error(
+          `Unable to access bucket "${bucket}" (${statusCode || errorCode || 'unknown error'}). Confirm the bucket exists and credentials are configured.`,
+        )
+      }
     }
 
     await purgeExistingObjects({ s3, bucket, prefix })
