@@ -820,6 +820,13 @@
                 regionHints.add(urlRegion)
               }
 
+              if (typeof metadata?.originRegion === 'string') {
+                const region = metadata.originRegion.trim()
+                if (region) {
+                  regionHints.add(region.toLowerCase())
+                }
+              }
+
               const bucketBases = buildS3BaseCandidates(
                 typeof metadata?.originBucket === 'string' ? metadata.originBucket : '',
                 Array.from(regionHints),

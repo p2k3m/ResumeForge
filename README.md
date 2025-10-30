@@ -205,6 +205,8 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 >
 > Origin bucket: `resume-forge-app-2025`
 >
+> Origin region: `ap-south-1`
+>
 > Origin path: `/static/client/prod/latest`
 >
 > API Gateway fallback: `https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`

@@ -3492,6 +3492,10 @@ async function loadPublishedCloudfrontMetadata() {
         typeof parsed?.originBucket === 'string' && parsed.originBucket.trim()
           ? parsed.originBucket.trim()
           : null,
+      originRegion:
+        typeof parsed?.originRegion === 'string' && parsed.originRegion.trim()
+          ? parsed.originRegion.trim().toLowerCase()
+          : null,
       originPath:
         typeof parsed?.originPath === 'string'
           ? normalizePublishedOriginPath(parsed.originPath)
