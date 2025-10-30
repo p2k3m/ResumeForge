@@ -154,6 +154,15 @@ describe('uploadHashedIndexAssets', () => {
 
     expect(sendMock).toHaveBeenCalled()
     expect(putCommands).toHaveLength(8)
+    for (const command of putCommands) {
+      expect(command.input.Metadata).toEqual(
+        expect.objectContaining({
+          'build-version': expect.any(String),
+          'build-sha': expect.any(String),
+          'build-timestamp': expect.any(String),
+        })
+      )
+    }
   })
 
   it('falls back to published CloudFront metadata when env config is missing', async () => {

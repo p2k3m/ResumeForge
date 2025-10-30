@@ -78,6 +78,13 @@ describe('render cover letter route', () => {
     expect(Buffer.compare(command.input.Body, PDF_STUB)).toBe(0)
     expect(command.input.Key).toMatch(/^cv\//)
     expect(command.input.Key.endsWith('.pdf')).toBe(true)
+    expect(command.input.Metadata).toEqual(
+      expect.objectContaining({
+        'build-version': expect.any(String),
+        'build-sha': expect.any(String),
+        'build-timestamp': expect.any(String),
+      })
+    )
     expect(response.headers['x-artifact-key']).toBe(command.input.Key)
 
     expect(getSignedUrl).toHaveBeenCalledTimes(1)

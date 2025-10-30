@@ -23,6 +23,7 @@ import {
 } from '@aws-sdk/client-s3'
 import mime from 'mime-types'
 import { applyStageEnvironment } from '../config/stage.js'
+import { withBuildMetadata } from '../lib/buildMetadata.js'
 import {
   classifyDeployFailure,
   notifyIncompleteStaticUpload,
@@ -782,14 +783,16 @@ async function uploadFiles({ s3, bucket, prefix, files }) {
 
     const body = createReadStream(absolutePath)
     await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: contentType,
-        CacheControl: cacheControl,
-        ...(acl ? { ACL: acl } : {}),
-      }),
+      new PutObjectCommand(
+        withBuildMetadata({
+          Bucket: bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+          CacheControl: cacheControl,
+          ...(acl ? { ACL: acl } : {}),
+        }),
+      ),
     )
     console.log(
       `[upload-static] Uploaded ${relativePath} → s3://${bucket}/${key} (${contentType}; ${cacheControl})`,
@@ -835,14 +838,19 @@ async function uploadVersionedAssets({ s3, bucket, prefix, versionLabel, hashedA
 
     const body = createReadStream(absolutePath)
     await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: body,
-        ContentType: contentType,
-        CacheControl: cacheControl,
-        ...(acl ? { ACL: acl } : {}),
-      }),
+      new PutObjectCommand(
+        withBuildMetadata(
+          {
+            Bucket: bucket,
+            Key: key,
+            Body: body,
+            ContentType: contentType,
+            CacheControl: cacheControl,
+            ...(acl ? { ACL: acl } : {}),
+          },
+          { versionLabel: sanitizedLabel },
+        ),
+      ),
     )
 
     console.log(
@@ -963,14 +971,19 @@ async function uploadManifest({
   const body = `${JSON.stringify(payload, null, 2)}\n`
   const manifestAcl = resolveObjectAcl('manifest.json')
   await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: manifestKey,
-      Body: body,
-      ContentType: 'application/json',
-      CacheControl: 'no-cache',
-      ...(manifestAcl ? { ACL: manifestAcl } : {}),
-    }),
+    new PutObjectCommand(
+      withBuildMetadata(
+        {
+          Bucket: bucket,
+          Key: manifestKey,
+          Body: body,
+          ContentType: 'application/json',
+          CacheControl: 'no-cache',
+          ...(manifestAcl ? { ACL: manifestAcl } : {}),
+        },
+        { versionLabel },
+      ),
+    ),
   )
 
   console.log(`[upload-static] Published manifest to s3://${bucket}/${manifestKey}`)
@@ -1001,14 +1014,16 @@ async function backupExistingManifest({ s3, bucket, manifestKey }) {
 
     const backupAcl = resolveObjectAcl('manifest.previous.json')
     await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: backupKey,
-        Body: `${trimmed}\n`,
-        ContentType: 'application/json',
-        CacheControl: 'no-cache',
-        ...(backupAcl ? { ACL: backupAcl } : {}),
-      }),
+      new PutObjectCommand(
+        withBuildMetadata({
+          Bucket: bucket,
+          Key: backupKey,
+          Body: `${trimmed}\n`,
+          ContentType: 'application/json',
+          CacheControl: 'no-cache',
+          ...(backupAcl ? { ACL: backupAcl } : {}),
+        }),
+      ),
     )
 
     console.log(`[upload-static] Backed up existing manifest to s3://${bucket}/${backupKey}`)

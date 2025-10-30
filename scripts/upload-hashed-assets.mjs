@@ -12,6 +12,7 @@ import {
 } from '@aws-sdk/client-s3'
 import mime from 'mime-types'
 import { applyStageEnvironment } from '../config/stage.js'
+import { withBuildMetadata } from '../lib/buildMetadata.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -714,14 +715,20 @@ export async function uploadHashedIndexAssets(options = {}) {
     const bodyStream = createReadStream(entry.absolutePath)
     const acl = resolveObjectAcl(entry.relativePath)
     await s3.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: bodyStream,
-        ContentType: resolveContentType(entry.relativePath),
-        CacheControl: entry.cacheControl || resolveHashedAssetCacheControl(entry.relativePath),
-        ...(acl ? { ACL: acl } : {}),
-      }),
+      new PutObjectCommand(
+        withBuildMetadata(
+          {
+            Bucket: bucket,
+            Key: key,
+            Body: bodyStream,
+            ContentType: resolveContentType(entry.relativePath),
+            CacheControl:
+              entry.cacheControl || resolveHashedAssetCacheControl(entry.relativePath),
+            ...(acl ? { ACL: acl } : {}),
+          },
+          { versionLabel },
+        ),
+      ),
     )
     uploaded.push(entry.relativePath)
   }

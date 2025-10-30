@@ -32,6 +32,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import { spawnSync } from 'node:child_process';
 import { logEvent, logErrorTrace } from './logger.js';
+import { withBuildMetadata } from './lib/buildMetadata.js';
 
 const stageMetadataCache = new Map();
 import {
@@ -12722,12 +12723,14 @@ async function updateStageMetadata({
       s3,
       () =>
         new PutObjectCommand(
-          withEnvironmentTagging({
-            Bucket: bucket,
-            Key: metadataKey,
-            Body: JSON.stringify(nextPayload, null, 2),
-            ContentType: 'application/json',
-          })
+          withEnvironmentTagging(
+            withBuildMetadata({
+              Bucket: bucket,
+              Key: metadataKey,
+              Body: JSON.stringify(nextPayload, null, 2),
+              ContentType: 'application/json',
+            })
+          )
         ),
       {
         maxAttempts: 4,
@@ -13540,12 +13543,14 @@ async function writeSessionChangeLog({
     s3,
     () =>
       new PutObjectCommand(
-        withEnvironmentTagging({
-          Bucket: resolvedBucket,
-          Key: resolvedKey,
-          Body: JSON.stringify(payload, null, 2),
-          ContentType: 'application/json',
-        })
+        withEnvironmentTagging(
+          withBuildMetadata({
+            Bucket: resolvedBucket,
+            Key: resolvedKey,
+            Body: JSON.stringify(payload, null, 2),
+            ContentType: 'application/json',
+          })
+        )
       ),
     {
       maxAttempts: 4,
@@ -20133,12 +20138,14 @@ async function generateEnhancedDocumentsResponse({
             s3,
             () =>
               new PutObjectCommand(
-                withEnvironmentTagging({
-                  Bucket: bucket,
-                  Key: originalPdfKey,
-                  Body: originalPdfBuffer,
-                  ContentType: 'application/pdf',
-                })
+                withEnvironmentTagging(
+                  withBuildMetadata({
+                    Bucket: bucket,
+                    Key: originalPdfKey,
+                    Body: originalPdfBuffer,
+                    ContentType: 'application/pdf',
+                  })
+                )
               ),
             {
               maxAttempts: 4,
@@ -20450,12 +20457,14 @@ async function generateEnhancedDocumentsResponse({
       s3,
       () =>
         new PutObjectCommand(
-          withEnvironmentTagging({
-            Bucket: bucket,
-            Key: key,
-            Body: pdfBuffer,
-            ContentType: 'application/pdf',
-          })
+          withEnvironmentTagging(
+            withBuildMetadata({
+              Bucket: bucket,
+              Key: key,
+              Body: pdfBuffer,
+              ContentType: 'application/pdf',
+            })
+          )
         ),
       {
         maxAttempts: 4,
@@ -20707,12 +20716,14 @@ async function generateEnhancedDocumentsResponse({
       s3,
       () =>
         new PutObjectCommand(
-          withEnvironmentTagging({
-            Bucket: bucket,
-            Key: key,
-            Body: JSON.stringify(artifact.payload, null, 2),
-            ContentType: 'application/json',
-          })
+          withEnvironmentTagging(
+            withBuildMetadata({
+              Bucket: bucket,
+              Key: key,
+              Body: JSON.stringify(artifact.payload, null, 2),
+              ContentType: 'application/json',
+            })
+          )
         ),
       {
         maxAttempts: 4,
@@ -22464,12 +22475,14 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
         s3,
         () =>
           new PutObjectCommand(
-            withEnvironmentTagging({
-              Bucket: bucket,
-              Key: storageKey,
-              Body: buffer,
-              ContentType: 'application/pdf',
-            })
+            withEnvironmentTagging(
+              withBuildMetadata({
+                Bucket: bucket,
+                Key: storageKey,
+                Body: buffer,
+                ContentType: 'application/pdf',
+              })
+            )
           ),
         {
           maxAttempts: 4,
@@ -24237,12 +24250,14 @@ app.post(
       s3,
       () =>
         new PutObjectCommand(
-          withEnvironmentTagging({
-            Bucket: bucket,
-            Key: originalUploadKey,
-            Body: req.file.buffer,
-            ContentType: originalContentType,
-          })
+          withEnvironmentTagging(
+            withBuildMetadata({
+              Bucket: bucket,
+              Key: originalUploadKey,
+              Body: req.file.buffer,
+              ContentType: originalContentType,
+            })
+          )
         ),
       {
         maxAttempts: 4,
