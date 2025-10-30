@@ -90,7 +90,9 @@ describe('uploadHashedIndexAssets', () => {
 
     const distDir = path.join(tempDir, 'dist')
     const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
     await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
 
     const indexHtml = `
       <html>
@@ -106,6 +108,8 @@ describe('uploadHashedIndexAssets', () => {
     await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
     await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
     await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{"url":"https://example.com"}', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront.json'), '{"url":"https://example.com"}', 'utf8')
 
     const result = await uploadHashedIndexAssets({
       distDirectory: distDir,
@@ -133,13 +137,15 @@ describe('uploadHashedIndexAssets', () => {
         'static/client/prod/latest/assets/index-20251029.js',
         'static/client/prod/latest/assets/index-latest.css',
         'static/client/prod/latest/assets/index-latest.js',
+        'static/client/prod/latest/api/published-cloudfront',
+        'static/client/prod/latest/api/published-cloudfront.json',
         'static/client/prod/latest/assets/v20251029/index-20251029.css',
         'static/client/prod/latest/assets/v20251029/index-20251029.js',
       ]),
     )
 
     expect(sendMock).toHaveBeenCalled()
-    expect(putCommands).toHaveLength(6)
+    expect(putCommands).toHaveLength(8)
   })
 
   it('falls back to published CloudFront metadata when env config is missing', async () => {
@@ -153,7 +159,9 @@ describe('uploadHashedIndexAssets', () => {
 
     const distDir = path.join(tempDir, 'dist')
     const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
     await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
 
     const indexHtml = `
       <html>
@@ -169,6 +177,8 @@ describe('uploadHashedIndexAssets', () => {
     await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
     await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
     await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{"url":"https://example.com"}', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront.json'), '{"url":"https://example.com"}', 'utf8')
 
     const result = await uploadHashedIndexAssets({
       distDirectory: distDir,
@@ -192,6 +202,8 @@ describe('uploadHashedIndexAssets', () => {
         'static/client/prod/latest/assets/index-20251029.js',
         'static/client/prod/latest/assets/index-latest.css',
         'static/client/prod/latest/assets/index-latest.js',
+        'static/client/prod/latest/api/published-cloudfront',
+        'static/client/prod/latest/api/published-cloudfront.json',
       ]),
     )
 
