@@ -37,6 +37,8 @@ describe('uploadHashedIndexAssets', () => {
     'STATIC_ASSETS_BUCKET',
     'STATIC_ASSETS_PREFIX',
     'BUILD_VERSION',
+    'DATA_BUCKET',
+    'S3_BUCKET',
   ]
   const originalEnv = {}
 
@@ -46,12 +48,6 @@ describe('uploadHashedIndexAssets', () => {
     for (const key of envKeys) {
       originalEnv[key] = process.env[key]
     }
-
-    process.env.STAGE_NAME = 'prod'
-    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
-    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
-    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
-    process.env.BUILD_VERSION = '20251029'
 
     sendMock = jest
       .spyOn(S3Client.prototype, 'send')
@@ -86,6 +82,12 @@ describe('uploadHashedIndexAssets', () => {
   })
 
   it('uploads hashed assets, alias copies, and versioned directories', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+    process.env.BUILD_VERSION = '20251029'
+
     const distDir = path.join(tempDir, 'dist')
     const assetsDir = path.join(distDir, 'assets')
     await fs.mkdir(assetsDir, { recursive: true })
@@ -138,6 +140,62 @@ describe('uploadHashedIndexAssets', () => {
 
     expect(sendMock).toHaveBeenCalled()
     expect(putCommands).toHaveLength(6)
+  })
+
+  it('falls back to published CloudFront metadata when env config is missing', async () => {
+    process.env.BUILD_VERSION = '20251029'
+    delete process.env.STATIC_ASSETS_BUCKET
+    delete process.env.STATIC_ASSETS_PREFIX
+    delete process.env.STAGE_NAME
+    delete process.env.DEPLOYMENT_ENVIRONMENT
+    delete process.env.DATA_BUCKET
+    delete process.env.S3_BUCKET
+
+    const distDir = path.join(tempDir, 'dist')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251029.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251029.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+
+    const result = await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    expect(result.bucket).toBe('resume-forge-app-2025')
+    expect(result.prefix).toBe('static/client/prod/latest')
+
+    const putCommands = sendMock.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof PutObjectCommand)
+
+    const uploadedKeys = putCommands.map((command) => command.input.Key)
+
+    expect(uploadedKeys).toEqual(
+      expect.arrayContaining([
+        'static/client/prod/latest/assets/index-20251029.css',
+        'static/client/prod/latest/assets/index-20251029.js',
+        'static/client/prod/latest/assets/index-latest.css',
+        'static/client/prod/latest/assets/index-latest.js',
+      ]),
+    )
+
+    expect(sendMock).toHaveBeenCalled()
   })
 })
 
