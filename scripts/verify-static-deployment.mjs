@@ -5,11 +5,13 @@ import process from 'node:process'
 import { readFile } from 'node:fs/promises'
 import {
   DeleteObjectsCommand,
+  GetObjectAclCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js'
 import {
   verifyClientAssets,
@@ -211,6 +213,17 @@ async function verifyS3Assets({ s3, bucket, manifest }) {
       )
     } catch (error) {
       failures.push(`${key} (${error?.name || error?.Code || error?.message || error})`)
+      continue
+    }
+
+    const aclError = await ensureObjectHasPublicReadAcl({ s3, bucket, key })
+    if (aclError) {
+      failures.push(`${key} ${aclError}`)
+    }
+
+    const signedUrlError = await ensureObjectSignedUrlAccessible({ s3, bucket, key })
+    if (signedUrlError) {
+      failures.push(`${key} ${signedUrlError}`)
     }
   }
 
@@ -221,6 +234,97 @@ async function verifyS3Assets({ s3, bucket, manifest }) {
         `failed S3 verification: ${details}`,
     )
   }
+}
+
+function hasPublicReadGrant(grants) {
+  if (!Array.isArray(grants)) {
+    return false
+  }
+
+  for (const grant of grants) {
+    if (!grant || typeof grant !== 'object') {
+      continue
+    }
+
+    const permission = typeof grant.Permission === 'string' ? grant.Permission.trim().toUpperCase() : ''
+    if (permission !== 'READ') {
+      continue
+    }
+
+    const grantee = grant.Grantee
+    if (!grantee || typeof grantee !== 'object') {
+      continue
+    }
+
+    const type = typeof grantee.Type === 'string' ? grantee.Type.trim().toUpperCase() : ''
+    if (type !== 'GROUP') {
+      continue
+    }
+
+    const uri = typeof grantee.URI === 'string' ? grantee.URI.trim() : ''
+    if (uri === 'http://acs.amazonaws.com/groups/global/AllUsers') {
+      return true
+    }
+  }
+
+  return false
+}
+
+async function ensureObjectHasPublicReadAcl({ s3, bucket, key }) {
+  try {
+    const response = await s3.send(
+      new GetObjectAclCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    )
+
+    if (!hasPublicReadGrant(response?.Grants)) {
+      return '(missing public-read ACL grant)'
+    }
+  } catch (error) {
+    const detail = error?.message || error?.Code || error?.name || error
+    return `(ACL check failed: ${detail})`
+  }
+
+  return null
+}
+
+async function ensureObjectSignedUrlAccessible({ s3, bucket, key }) {
+  let signedUrl
+
+  try {
+    signedUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+      { expiresIn: 60 },
+    )
+  } catch (error) {
+    const detail = error?.message || error?.Code || error?.name || error
+    return `(signed URL generation failed: ${detail})`
+  }
+
+  const trimmedUrl = typeof signedUrl === 'string' ? signedUrl.trim() : ''
+  if (!trimmedUrl) {
+    return '(signed URL generation failed: empty URL)'
+  }
+
+  try {
+    const response = await fetch(trimmedUrl, { method: 'HEAD' })
+    if (!response.ok) {
+      const status = response.status || 0
+      const statusText = response.statusText ? ` ${response.statusText}` : ''
+      return `(signed URL request failed: HTTP ${status}${statusText})`
+    }
+  } catch (error) {
+    const detail = error?.message || error
+    return `(signed URL request failed: ${detail})`
+  }
+
+  return null
 }
 
 function normalizeHashedIndexAssets(manifest) {
@@ -829,7 +933,9 @@ async function main() {
   )
 
   await verifyS3Assets({ s3, bucket, manifest })
-  console.log('[verify-static] Confirmed all uploaded static assets are accessible via S3.')
+  console.log(
+    '[verify-static] Confirmed uploaded static assets are reachable, have public-read ACLs, and respond to signed URLs.',
+  )
 
   const deleteStaleIndexAssets = shouldDeleteStaleIndexAssets({
     cliOverride: cliFlags.deleteStaleIndexAssets,
