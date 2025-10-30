@@ -516,6 +516,117 @@ describe('static asset fallbacks', () => {
   });
 });
 
+describe('static asset proxy endpoint', () => {
+  const distAssetsDir = path.join(process.cwd(), 'client', 'dist', 'assets');
+
+  const readDistAsset = (relativePath) =>
+    fsPromises.readFile(path.join(distAssetsDir, relativePath), 'utf8');
+
+  const extractPrimaryCssAssetName = async () => {
+    const html = await fsPromises.readFile(clientIndexPath, 'utf8');
+    const match = html.match(/assets\/(index-[^"'>]+\.css)/i);
+    return match && match[1] ? match[1] : 'index-latest.css';
+  };
+
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  test('serves the index alias via the local build', async () => {
+    const cssContent = await readDistAsset('index-latest.css');
+
+    const res = await request(app)
+      .get('/api/static-proxy')
+      .query({ asset: 'assets/index-latest.css' });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe(cssContent);
+    expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+  });
+
+  test('falls back to S3 when the hashed bundle is unavailable locally', async () => {
+    const hashedCssName = await extractPrimaryCssAssetName();
+    const hashedRelativePath = `assets/${hashedCssName}`;
+    const originalStat = fsPromises.stat;
+    const originalReadFile = fsPromises.readFile;
+
+    const statSpy = jest
+      .spyOn(fsPromises, 'stat')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target.endsWith(hashedCssName)) {
+          const notFound = new Error('Not Found');
+          notFound.code = 'ENOENT';
+          throw notFound;
+        }
+        return originalStat.call(fsPromises, target, ...args);
+      });
+
+    const htmlSnapshot = await fsPromises.readFile(clientIndexPath, 'utf8');
+    const readFileSpy = jest
+      .spyOn(fsPromises, 'readFile')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target === clientIndexPath) {
+          return htmlSnapshot;
+        }
+        return originalReadFile.call(fsPromises, target, ...args);
+      });
+
+    const proxyBody = '.proxy-fallback { color: #0c0; }';
+
+    mockS3Send
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Key).toMatch(/manifest\.json$/);
+        return Promise.resolve({
+          Body: Readable.from([
+            JSON.stringify({ hashedIndexAssets: [hashedRelativePath] }),
+          ]),
+          ContentType: 'application/json',
+        });
+      })
+      .mockImplementationOnce((command) => {
+        expect(command.__type).toBe('GetObjectCommand');
+        expect(command.input.Key).toMatch(new RegExp(`${escapeRegex(hashedCssName)}$`));
+        return Promise.resolve({
+          Body: Readable.from([proxyBody]),
+          ContentType: 'text/css',
+          CacheControl: 'public, max-age=60',
+        });
+      });
+
+    try {
+      const res = await request(app)
+        .get('/api/static-proxy')
+        .query({ asset: 'assets/index-latest.css' });
+
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(proxyBody);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
+    } finally {
+      statSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
+  });
+
+  test('rejects invalid asset paths', async () => {
+    const res = await request(app)
+      .get('/api/static-proxy')
+      .query({ asset: '../secrets.txt' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      error: {
+        code: 'INVALID_STATIC_ASSET_PATH',
+        message: 'Provide a valid static asset path to proxy.',
+        details: expect.any(Object),
+        requestId: expect.any(String),
+      },
+    });
+    expect(res.body.error.details).toMatchObject({});
+    expect(mockS3Send).not.toHaveBeenCalled();
+  });
+});
+
 describe('static asset manifest endpoint', () => {
   test('returns manifest data when available', async () => {
     const manifestPayload = {

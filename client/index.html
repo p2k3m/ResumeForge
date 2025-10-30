@@ -610,6 +610,33 @@
           }
         }
 
+        const normalizeApiProxyBase = (value) => {
+          const normalized = normalizeAliasBase(value)
+          if (!normalized) {
+            return ''
+          }
+
+          try {
+            const resolved = new URL(normalized, window.location.href)
+            const host = (resolved.hostname || '').toLowerCase()
+            if (!host) {
+              return ''
+            }
+
+            if (/\.cloudfront\.net$/.test(host)) {
+              return ''
+            }
+
+            if (/\.s3[.-]/.test(host)) {
+              return ''
+            }
+          } catch (error) {
+            return ''
+          }
+
+          return normalized
+        }
+
         const normalizeAliasOriginPath = (value) => {
           if (typeof value !== 'string') {
             return ''
@@ -637,6 +664,21 @@
           const normalizedBase = base.replace(/\/*$/, '')
           const normalizedPath = aliasPath.startsWith('/') ? aliasPath : `/${aliasPath}`
           return `${normalizedBase}${normalizedPath}`
+        }
+
+        const buildStaticProxyUrl = (base, aliasPath) => {
+          if (!aliasPath) {
+            return ''
+          }
+
+          const normalizedBase = typeof base === 'string' ? base.trim() : ''
+          const sanitizedAsset = aliasPath.replace(/^\/+/, '')
+          if (!normalizedBase || !sanitizedAsset) {
+            return ''
+          }
+
+          const baseWithoutSlash = normalizedBase.replace(/\/+$/, '')
+          return `${baseWithoutSlash}/api/static-proxy?asset=${encodeURIComponent(sanitizedAsset)}`
         }
 
         const extractAwsRegionFromUrl = (value) => {
@@ -792,6 +834,22 @@
 
         const aliasBaseCandidates = resolveAliasBaseCandidates()
         const aliasBaseSeen = new Set(aliasBaseCandidates)
+        const apiProxyCandidates = []
+        const apiProxySeen = new Set()
+
+        const addApiProxyCandidate = (value) => {
+          const normalized = normalizeApiProxyBase(value)
+          if (!normalized || apiProxySeen.has(normalized)) {
+            return false
+          }
+          apiProxySeen.add(normalized)
+          apiProxyCandidates.push(normalized)
+          return true
+        }
+
+        aliasBaseCandidates.forEach((candidate) => {
+          addApiProxyCandidate(candidate)
+        })
 
         try {
           ensureManifestCandidatesLoaded()
@@ -806,6 +864,7 @@
           }
           aliasBaseSeen.add(normalized)
           aliasBaseCandidates.push(normalized)
+          addApiProxyCandidate(normalized)
           return true
         }
 
@@ -848,6 +907,9 @@
           let added = false
 
           const applyCandidate = (candidate) => {
+            if (candidate) {
+              addApiProxyCandidate(candidate)
+            }
             if (addAliasBaseCandidate(candidate)) {
               added = true
             }
@@ -1231,6 +1293,104 @@
           }
         }
 
+        const attemptStaticProxyReload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          if (!apiProxyCandidates.length) {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const aliasPath = isScript ? aliasPaths.js : aliasPaths.css
+          if (!aliasPath) {
+            return false
+          }
+
+          const rawAttempt = element.dataset?.resumeforgeProxyAttempt || '0'
+          let attemptIndex = Number.parseInt(rawAttempt, 10)
+          if (!Number.isFinite(attemptIndex) || attemptIndex < 0) {
+            attemptIndex = 0
+          }
+
+          let selectedUrl = ''
+          let selectedIndex = attemptIndex
+
+          while (selectedIndex < apiProxyCandidates.length) {
+            const candidateBase = apiProxyCandidates[selectedIndex]
+            const proxyUrl = buildStaticProxyUrl(candidateBase, aliasPath)
+            if (proxyUrl) {
+              selectedUrl = proxyUrl
+              break
+            }
+            selectedIndex += 1
+          }
+
+          if (!selectedUrl) {
+            return false
+          }
+
+          const parent = element.parentNode
+          if (!parent || typeof parent.replaceChild !== 'function') {
+            return false
+          }
+
+          const originalSource = describeSource(element)
+          const replacement = element.cloneNode(true)
+
+          if (isStylesheet) {
+            replacement.href = selectedUrl
+          } else {
+            replacement.src = selectedUrl
+          }
+
+          replacement.setAttribute('data-src', selectedUrl)
+          replacement.dataset.resumeforgeAssetRetry = 'true'
+          replacement.dataset.resumeforgeAssetProxy = 'true'
+          replacement.dataset.resumeforgeProxyAttempt = String(selectedIndex + 1)
+          if (originalSource) {
+            replacement.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          element.dataset.resumeforgeAssetRetry = 'true'
+          element.dataset.resumeforgeAssetProxy = 'true'
+          element.dataset.resumeforgeProxyAttempt = String(selectedIndex + 1)
+          if (originalSource && !element.dataset.resumeforgeOriginalSource) {
+            element.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          try {
+            parent.replaceChild(replacement, element)
+          } catch (error) {
+            try {
+              parent.removeChild(element)
+              parent.appendChild(replacement)
+            } catch (innerError) {
+              return false
+            }
+          }
+
+          try {
+            console.warn('Retrying ResumeForge static asset via API proxy fallback.', {
+              source: originalSource || '',
+              proxy: selectedUrl
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          return true
+        }
+
         function attemptAliasReload(element) {
           if (!element || typeof element.tagName !== 'string') {
             return false
@@ -1242,6 +1402,9 @@
           }
 
           if (attemptIndex >= aliasBaseCandidates.length) {
+            if (attemptStaticProxyReload(element)) {
+              return true
+            }
             ensureAliasMetadataLoaded()
               .then((added) => {
                 if (!added) {
