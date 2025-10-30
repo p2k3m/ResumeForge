@@ -10,6 +10,7 @@
     "clean": "node scripts/clean.mjs",
     "prebuild:all": "npm run clean",
     "build": "npm run build:client && npm run build:lambda",
+    "postbuild": "node scripts/update-published-cloudfront-metadata.mjs",
     "build:client": "node scripts/build-client.mjs",
     "build:lambda": "node scripts/build-lambda.mjs",
     "build:all": "npm run build",
