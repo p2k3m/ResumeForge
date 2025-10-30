@@ -147,6 +147,57 @@ function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
 const HASHED_INDEX_ASSET_PATH_PATTERN =
   /^\/assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/i;
 
+let publishedCloudfrontStaticAssetConfigLoaded = false;
+let publishedCloudfrontStaticAssetConfigCache;
+
+function resolvePublishedCloudfrontStaticAssetConfig() {
+  if (publishedCloudfrontStaticAssetConfigLoaded) {
+    return publishedCloudfrontStaticAssetConfigCache || null;
+  }
+
+  publishedCloudfrontStaticAssetConfigLoaded = true;
+
+  try {
+    const metadataPath = resolvePublishedCloudfrontPath();
+    if (!metadataPath || !fsSync.existsSync(metadataPath)) {
+      publishedCloudfrontStaticAssetConfigCache = null;
+      return null;
+    }
+
+    const raw = fsSync.readFileSync(metadataPath, 'utf8');
+    if (!raw.trim()) {
+      publishedCloudfrontStaticAssetConfigCache = null;
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    const bucket =
+      typeof parsed?.originBucket === 'string' && parsed.originBucket.trim()
+        ? parsed.originBucket.trim()
+        : '';
+    let prefix =
+      typeof parsed?.originPath === 'string'
+        ? parsed.originPath.trim().replace(/^\/+/, '').replace(/\/+$/, '')
+        : '';
+
+    if (prefix === '/') {
+      prefix = '';
+    }
+
+    publishedCloudfrontStaticAssetConfigCache = {
+      bucket: bucket || undefined,
+      prefix: prefix || undefined,
+    };
+  } catch (error) {
+    logStructured('warn', 'published_cloudfront_static_asset_resolution_failed', {
+      error: serializeError(error),
+    });
+    publishedCloudfrontStaticAssetConfigCache = null;
+  }
+
+  return publishedCloudfrontStaticAssetConfigCache || null;
+}
+
 function resolveStaticAssetBucketCandidate() {
   const candidates = [
     readEnvValue('STATIC_ASSETS_BUCKET'),
@@ -158,6 +209,11 @@ function resolveStaticAssetBucketCandidate() {
     if (typeof candidate === 'string' && candidate.trim()) {
       return candidate.trim();
     }
+  }
+
+  const metadataConfig = resolvePublishedCloudfrontStaticAssetConfig();
+  if (metadataConfig?.bucket) {
+    return metadataConfig.bucket;
   }
 
   return undefined;
@@ -185,6 +241,11 @@ function resolveStaticAssetPrefixCandidate() {
   const explicit = readEnvValue('STATIC_ASSETS_PREFIX');
   if (explicit) {
     return explicit.replace(/^\/+/, '').replace(/\/+$/, '');
+  }
+
+  const metadataConfig = resolvePublishedCloudfrontStaticAssetConfig();
+  if (metadataConfig?.prefix) {
+    return metadataConfig.prefix;
   }
 
   const stageName = readEnvValue('STAGE_NAME') || getStageName();
