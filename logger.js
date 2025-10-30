@@ -6,6 +6,7 @@ import {
 } from './lib/retry.js';
 import { randomBytes, randomUUID } from 'crypto';
 import { withEnvironmentTagging } from './config/environment.js';
+import { withBuildMetadata } from './lib/buildMetadata.js';
 import {
   withRequiredLogAttributes,
   withRequiredLogMetadata,
@@ -67,12 +68,14 @@ export async function logEvent({
     () =>
       s3.send(
         new PutObjectCommand(
-          withEnvironmentTagging({
-            Bucket: bucket,
-            Key: key,
-            Body: body,
-            ContentType: 'application/json',
-          })
+          withEnvironmentTagging(
+            withBuildMetadata({
+              Bucket: bucket,
+              Key: key,
+              Body: body,
+              ContentType: 'application/json',
+            })
+          )
         )
       ),
     {
@@ -164,12 +167,14 @@ export async function logErrorTrace({
     () =>
       s3.send(
         new PutObjectCommand(
-          withEnvironmentTagging({
-            Bucket: bucket,
-            Key: objectKey,
-            Body: JSON.stringify(payload),
-            ContentType: 'application/json'
-          })
+          withEnvironmentTagging(
+            withBuildMetadata({
+              Bucket: bucket,
+              Key: objectKey,
+              Body: JSON.stringify(payload),
+              ContentType: 'application/json'
+            })
+          )
         )
       ),
     {

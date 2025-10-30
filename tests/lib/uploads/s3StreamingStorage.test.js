@@ -60,6 +60,13 @@ describe('createS3StreamingStorage', () => {
     expect(client.send).toHaveBeenCalledTimes(1);
     const command = client.send.mock.calls[0][0];
     expect(command.input.Body.equals(Buffer.from('sanitized'))).toBe(true);
+    expect(command.input.Metadata).toEqual(
+      expect.objectContaining({
+        'build-version': expect.any(String),
+        'build-sha': expect.any(String),
+        'build-timestamp': expect.any(String),
+      })
+    );
     expect(result).toEqual({
       bucket: 'bucket',
       key: 'key',
@@ -104,6 +111,11 @@ describe('createS3StreamingStorage', () => {
       Key: 'key',
       Body: Buffer.from('sanitized'),
       ContentType: 'application/pdf',
+      Metadata: expect.objectContaining({
+        'build-version': expect.any(String),
+        'build-sha': expect.any(String),
+        'build-timestamp': expect.any(String),
+      }),
     });
     expect(uploadDoneMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual({

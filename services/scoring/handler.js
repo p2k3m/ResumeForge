@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { withBuildMetadata } from '../../lib/buildMetadata.js';
 import { parseEventBody } from '../../lib/http/parseEventBody.js';
 import {
   scoreResumeAgainstJob,
@@ -273,12 +274,14 @@ async function persistScoringAudit({ payload, result }) {
   );
 
   await scoringS3Client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: 'application/json',
-    })
+    new PutObjectCommand(
+      withBuildMetadata({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: 'application/json',
+      })
+    )
   );
 
   return {
