@@ -535,6 +535,9 @@ async function loadHashedIndexAssetManifest() {
   };
 }
 
+const HASHED_INDEX_MANIFEST_ASSET_PATTERN =
+  /(?:^|\/)(assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\.map)?$/i;
+
 function normalizeManifestHashedAssetPath(assetPath) {
   if (typeof assetPath !== 'string') {
     return '';
@@ -547,18 +550,21 @@ function normalizeManifestHashedAssetPath(assetPath) {
 
   candidate = candidate.replace(/\?.*$/, '').replace(/#.*$/, '');
 
-  while (candidate.startsWith('./')) {
-    candidate = candidate.slice(2);
+  while (/^(?:\.\.\/|\.\/)/.test(candidate)) {
+    candidate = candidate.replace(/^(?:\.\.\/|\.\/)/, '');
   }
 
-  candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
+  candidate = candidate.replace(/\\/g, '/');
 
-  const match = candidate.match(/^assets\/index-[\w.-]+\.(?:css|js)$/i);
+  // Normalize away any S3 prefixes (for example "static/client/prod/latest/") or
+  // fully-qualified URLs that may appear in the manifest. We only care about the
+  // trailing "assets/index-*.css" or "assets/index-*.js" segment.
+  const match = candidate.match(HASHED_INDEX_MANIFEST_ASSET_PATTERN);
   if (!match) {
     return '';
   }
 
-  return `/${match[0]}`;
+  return `/${match[1]}`;
 }
 
 function partitionNormalizedManifestAssets(assets = []) {
