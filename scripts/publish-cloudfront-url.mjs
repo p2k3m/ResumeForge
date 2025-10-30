@@ -190,6 +190,11 @@ async function main() {
     payload.originBucket = originBucket
   }
 
+  const originRegion = selectOriginRegion({ originDetails, previous })
+  if (originRegion) {
+    payload.originRegion = originRegion
+  }
+
   const originPath = selectOriginPath({ originDetails, previous, hasOriginBucket: Boolean(payload.originBucket) })
   if (originPath) {
     payload.originPath = originPath
@@ -202,6 +207,9 @@ async function main() {
   }
   if (payload.originBucket) {
     console.log(`Recorded CloudFront origin bucket: ${payload.originBucket}`)
+  }
+  if (payload.originRegion) {
+    console.log(`Recorded CloudFront origin region: ${payload.originRegion}`)
   }
   if (payload.originPath) {
     console.log(`Recorded CloudFront origin path: ${payload.originPath}`)
@@ -231,25 +239,74 @@ function normalizeOriginPath(pathValue) {
   return `/${withoutLeading}`
 }
 
-function deriveBucketFromDomain(domainName) {
+function resolveS3RegionFromDomain(domainName) {
   if (!hasValue(domainName)) {
     return ''
   }
 
+  const trimmed = domainName.trim().toLowerCase()
+  const suffixMatch = trimmed.match(/\.s3[.-](?<suffix>[a-z0-9.-]+)\.amazonaws\.com$/i)
+  if (!suffixMatch?.groups?.suffix) {
+    return ''
+  }
+
+  let suffix = suffixMatch.groups.suffix.toLowerCase()
+
+  const sanitizers = [
+    /^dualstack[.-]/,
+    /^website[.-]/,
+    /^accelerate[.-]/,
+    /^fips[.-]/,
+    /^s3-website[.-]/,
+  ]
+
+  for (const sanitizer of sanitizers) {
+    suffix = suffix.replace(sanitizer, '')
+  }
+
+  if (!suffix) {
+    return ''
+  }
+
+  const parts = suffix.split('.').filter(Boolean)
+  if (parts.length === 0) {
+    return ''
+  }
+
+  const candidate = parts[parts.length - 1]
+  if (!candidate) {
+    return ''
+  }
+
+  return candidate
+}
+
+function deriveS3OriginDetails(domainName) {
+  if (!hasValue(domainName)) {
+    return null
+  }
+
   const trimmed = domainName.trim()
   const s3Match = trimmed.match(
-    /^(?<bucket>[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\.s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/i
+    /^(?<bucket>[a-z0-9][a-z0-9.-]{1,61}[a-z0-9])\.s3(?:[.-][a-z0-9.-]+)?\.amazonaws\.com$/i
   )
 
   if (s3Match?.groups?.bucket) {
-    return s3Match.groups.bucket
+    const region = resolveS3RegionFromDomain(trimmed)
+    return {
+      bucket: s3Match.groups.bucket,
+      region: region || 'us-east-1',
+    }
   }
 
   if (!trimmed.includes('.')) {
-    return trimmed
+    return {
+      bucket: trimmed,
+      region: '',
+    }
   }
 
-  return ''
+  return null
 }
 
 async function resolveDistributionOrigin({ cloudFront, distributionId }) {
@@ -272,14 +329,15 @@ async function resolveDistributionOrigin({ cloudFront, distributionId }) {
   ]
 
   for (const origin of candidates) {
-    const bucket = deriveBucketFromDomain(origin?.DomainName)
-    if (!bucket) {
+    const details = deriveS3OriginDetails(origin?.DomainName)
+    if (!details?.bucket) {
       continue
     }
 
     const path = normalizeOriginPath(origin?.OriginPath)
     return {
-      bucket,
+      bucket: details.bucket,
+      region: details.region,
       path,
     }
   }
@@ -308,6 +366,41 @@ function selectOriginBucket({ originDetails, previous }) {
   const previousBucket = sanitizeBucketCandidate(previous?.originBucket)
   if (previousBucket) {
     return previousBucket
+  }
+
+  return ''
+}
+
+function sanitizeRegionCandidate(value) {
+  if (!hasValue(value)) {
+    return ''
+  }
+
+  return value.trim().toLowerCase()
+}
+
+function selectOriginRegion({ originDetails, previous }) {
+  const originRegion = sanitizeRegionCandidate(originDetails?.region)
+  if (originRegion) {
+    return originRegion
+  }
+
+  const envCandidates = [
+    process.env.STATIC_ASSETS_REGION,
+    process.env.AWS_REGION,
+    process.env.AWS_DEFAULT_REGION,
+  ]
+
+  for (const candidate of envCandidates) {
+    const sanitized = sanitizeRegionCandidate(candidate)
+    if (sanitized) {
+      return sanitized
+    }
+  }
+
+  const previousRegion = sanitizeRegionCandidate(previous?.originRegion)
+  if (previousRegion) {
+    return previousRegion
   }
 
   return ''

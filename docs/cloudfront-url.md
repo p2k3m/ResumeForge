@@ -9,6 +9,7 @@ The **canonical production CloudFront domain** for ResumeForge lives in [`config
   "distributionId": "E3NEWPORTAL789",
   "apiGatewayUrl": "https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod",
   "originBucket": "resume-forge-app-2025",
+  "originRegion": "ap-south-1",
   "originPath": "/static/client/prod/latest",
   "updatedAt": "2024-11-05T09:30:00.000Z",
   "degraded": false
@@ -19,6 +20,7 @@ The **canonical production CloudFront domain** for ResumeForge lives in [`config
 
 - **Production CloudFront URL:** [`https://d109hwmzrqr39w.cloudfront.net`](https://d109hwmzrqr39w.cloudfront.net)
 - **Origin bucket:** `resume-forge-app-2025`
+- **Origin region:** `ap-south-1`
 - **Origin path:** `/static/client/prod/latest`
 - **API Gateway fallback:** [`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`](https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod)
 - **Published:** 5 November 2024, 09:30 UTC (source: [`config/published-cloudfront.json`](../config/published-cloudfront.json))

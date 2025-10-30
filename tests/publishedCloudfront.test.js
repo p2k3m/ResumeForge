@@ -49,6 +49,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originRegion: 'ap-south-1',
       originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
@@ -64,6 +65,7 @@ describe('published CloudFront helpers', () => {
           typeUrl: 'https://d109hwmzrqr39w.cloudfront.net#download',
           distributionId: metadata.distributionId,
           originBucket: metadata.originBucket,
+          originRegion: metadata.originRegion,
           originPath: metadata.originPath,
           updatedAt: metadata.updatedAt,
           apiGatewayUrl: null,
@@ -80,6 +82,7 @@ describe('published CloudFront helpers', () => {
       stackName: 'ResumeForge',
       apiGatewayUrl: 'https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod',
       originBucket: 'resume-forge-app-2025',
+      originRegion: 'ap-south-1',
       originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
@@ -93,6 +96,7 @@ describe('published CloudFront helpers', () => {
           url: null,
           distributionId: null,
           originBucket: metadata.originBucket,
+          originRegion: metadata.originRegion,
           originPath: metadata.originPath,
           updatedAt: null,
           apiGatewayUrl: metadata.apiGatewayUrl,
@@ -111,6 +115,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originRegion: 'ap-south-1',
     };
     const { app, cleanup } = await createServer({ metadata });
     try {
@@ -129,6 +134,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originRegion: 'ap-south-1',
       originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
@@ -148,6 +154,7 @@ describe('published CloudFront helpers', () => {
       distributionId: 'E3NEWPORTAL789',
       updatedAt: '2024-11-05T09:30:00.000Z',
       originBucket: 'resume-forge-app-2025',
+      originRegion: 'ap-south-1',
       originPath: '/static/client/prod/latest',
     };
     const { app, cleanup } = await createServer({ metadata });
