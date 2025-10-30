@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
 const clientDistDir = path.join(projectRoot, 'client', 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
+const CLOUDFRONT_METADATA_SCRIPT_ID = 'resumeforge-cloudfront-metadata';
 const assetsDir = path.join(clientDistDir, 'assets');
 const publishedCloudfrontSourcePath = resolvePublishedCloudfrontSourcePath();
 const MIN_HASHED_VARIANTS_PER_TYPE = 6;
@@ -491,6 +492,30 @@ async function embedPublishedCloudfrontMetadata({ metadata, html }) {
   const withInput = updateBackupApiInputs(updatedHtml, fallbackBase);
   if (withInput !== updatedHtml) {
     updatedHtml = withInput;
+  }
+
+  try {
+    const payload = JSON.stringify({ success: true, cloudfront: metadata });
+    const safePayload = payload.replace(/</g, '\\u003c').replace(/-->/g, '--\\u003e');
+    const scriptContent = `window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = ${safePayload};`;
+    const safeScript = scriptContent.replace(/<\/script/gi, '\\u003c/script');
+    const scriptTag = `<script id="${CLOUDFRONT_METADATA_SCRIPT_ID}">${safeScript}</script>`;
+    const scriptPattern = new RegExp(
+      `<script\\b[^>]*id=["']${CLOUDFRONT_METADATA_SCRIPT_ID}["'][^>]*>[\\s\\S]*?<\\/script>`,
+      'i',
+    );
+
+    if (scriptPattern.test(updatedHtml)) {
+      updatedHtml = updatedHtml.replace(scriptPattern, scriptTag);
+    } else if (updatedHtml.includes('</head>')) {
+      updatedHtml = updatedHtml.replace('</head>', `${scriptTag}\n</head>`);
+    } else if (updatedHtml.includes('</body>')) {
+      updatedHtml = updatedHtml.replace('</body>', `${scriptTag}\n</body>`);
+    } else {
+      updatedHtml += scriptTag;
+    }
+  } catch (error) {
+    console.warn('[prune-client-assets] Unable to embed inline CloudFront metadata script:', error);
   }
 
   if (updatedHtml === workingHtml) {
