@@ -427,16 +427,206 @@ async function loadPublishedCloudfrontMetadata() {
   }
 }
 
-async function ensurePublishedCloudfrontFallback({ distDirectory = clientDistDir, metadata } = {}) {
-  let resolvedMetadata = null
-  if (typeof metadata === 'undefined') {
-    resolvedMetadata = await loadPublishedCloudfrontMetadata()
-  } else if (metadata && typeof metadata === 'object') {
-    resolvedMetadata = metadata
+const PUBLISHED_CLOUDFRONT_API_ENV_KEYS = Object.freeze([
+  'RESUMEFORGE_API_BASE_URL',
+  'VITE_API_BASE_URL',
+  'API_BASE_URL',
+  'PUBLIC_API_BASE_URL',
+])
+
+function isPlaceholderValue(value) {
+  if (typeof value !== 'string') {
+    return false
   }
 
-  if (!resolvedMetadata || typeof resolvedMetadata !== 'object') {
-    return false
+  return /^%[A-Z0-9_]+%$/.test(value.trim())
+}
+
+function normalizeUrlCandidate(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed || isPlaceholderValue(trimmed)) {
+    return ''
+  }
+
+  try {
+    const resolved = new URL(trimmed)
+    const normalizedPath = resolved.pathname ? resolved.pathname.replace(/\/+$/, '') : ''
+    return `${resolved.origin}${normalizedPath}${resolved.search || ''}${resolved.hash || ''}`
+  } catch (error) {
+    return ''
+  }
+}
+
+async function extractApiBaseFromIndex(distDirectory) {
+  const indexPath = path.join(distDirectory, 'index.html')
+  let html
+
+  try {
+    html = await fs.readFile(indexPath, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return ''
+    }
+    throw error
+  }
+
+  if (!html) {
+    return ''
+  }
+
+  const metaPattern = /<meta\b[^>]*name=["']resumeforge-api-base["'][^>]*content=["']([^"']+)["'][^>]*>/i
+  const match = metaPattern.exec(html)
+  if (!match) {
+    return ''
+  }
+
+  return normalizeUrlCandidate(match[1])
+}
+
+function resolveEnvApiBaseCandidate() {
+  for (const key of PUBLISHED_CLOUDFRONT_API_ENV_KEYS) {
+    const candidate = normalizeUrlCandidate(process.env[key])
+    if (candidate) {
+      return candidate
+    }
+  }
+
+  return ''
+}
+
+async function resolveFallbackApiBase({ distDirectory, metadata } = {}) {
+  const metadataCandidates = []
+  if (metadata && typeof metadata === 'object') {
+    if (metadata.apiGatewayUrl) {
+      metadataCandidates.push(metadata.apiGatewayUrl)
+    }
+    if (metadata.url) {
+      metadataCandidates.push(metadata.url)
+    }
+  }
+
+  for (const candidate of metadataCandidates) {
+    const normalized = normalizeUrlCandidate(candidate)
+    if (normalized) {
+      return normalized
+    }
+  }
+
+  const envCandidate = resolveEnvApiBaseCandidate()
+  if (envCandidate) {
+    return envCandidate
+  }
+
+  return extractApiBaseFromIndex(distDirectory || clientDistDir)
+}
+
+function sanitizePublishedCloudfrontMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return null
+  }
+
+  const sanitized = {}
+  let hasField = false
+
+  const assignTrimmed = (key) => {
+    const raw = metadata[key]
+    if (typeof raw !== 'string') {
+      return
+    }
+
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      return
+    }
+
+    sanitized[key] = trimmed
+    hasField = true
+  }
+
+  assignTrimmed('stackName')
+  assignTrimmed('distributionId')
+  assignTrimmed('originBucket')
+  assignTrimmed('originRegion')
+  assignTrimmed('originPath')
+
+  const normalizedUrl = normalizeUrlCandidate(metadata.url)
+  if (normalizedUrl) {
+    sanitized.url = normalizedUrl
+    hasField = true
+  }
+
+  const normalizedApi = normalizeUrlCandidate(metadata.apiGatewayUrl)
+  if (normalizedApi) {
+    sanitized.apiGatewayUrl = normalizedApi
+    hasField = true
+  }
+
+  if (typeof metadata.degraded === 'boolean') {
+    sanitized.degraded = metadata.degraded
+    hasField = true
+  }
+
+  if (typeof metadata.updatedAt === 'string' && metadata.updatedAt.trim()) {
+    sanitized.updatedAt = metadata.updatedAt.trim()
+    hasField = true
+  }
+
+  return hasField ? sanitized : null
+}
+
+async function resolvePublishedCloudfrontFallback({ distDirectory = clientDistDir, metadata } = {}) {
+  let resolvedMetadata
+
+  if (typeof metadata === 'undefined') {
+    resolvedMetadata = sanitizePublishedCloudfrontMetadata(await loadPublishedCloudfrontMetadata())
+  } else {
+    resolvedMetadata = sanitizePublishedCloudfrontMetadata(metadata)
+  }
+
+  const nowIso = new Date().toISOString()
+
+  const hasPrimaryEndpoint = Boolean(
+    resolvedMetadata && (resolvedMetadata.apiGatewayUrl || resolvedMetadata.url),
+  )
+
+  if (!hasPrimaryEndpoint) {
+    const fallbackApiBase = await resolveFallbackApiBase({
+      distDirectory,
+      metadata: resolvedMetadata,
+    })
+
+    if (fallbackApiBase) {
+      if (!resolvedMetadata) {
+        resolvedMetadata = {}
+      }
+
+      resolvedMetadata.apiGatewayUrl = fallbackApiBase
+      if (!resolvedMetadata.url) {
+        resolvedMetadata.url = fallbackApiBase
+      }
+      resolvedMetadata.degraded = true
+    }
+  }
+
+  if (resolvedMetadata && !resolvedMetadata.updatedAt) {
+    resolvedMetadata.updatedAt = nowIso
+  }
+
+  return { metadata: resolvedMetadata || null }
+}
+
+async function ensurePublishedCloudfrontFallback({ distDirectory = clientDistDir, metadata } = {}) {
+  const { metadata: resolvedMetadata } = await resolvePublishedCloudfrontFallback({
+    distDirectory,
+    metadata,
+  })
+
+  if (!resolvedMetadata) {
+    return { wrote: false, metadata: null }
   }
 
   const payload = serializePublishedCloudfrontPayload(resolvedMetadata)
@@ -464,7 +654,7 @@ async function ensurePublishedCloudfrontFallback({ distDirectory = clientDistDir
     }
   }
 
-  return wroteAny
+  return { wrote: wroteAny, metadata: resolvedMetadata }
 }
 
 async function embedPublishedCloudfrontMetadataIntoIndex({
@@ -690,10 +880,15 @@ export async function uploadHashedIndexAssets(options = {}) {
   })
 
   const publishedMetadata = await loadPublishedCloudfrontMetadata()
-  await ensurePublishedCloudfrontFallback({ distDirectory, metadata: publishedMetadata })
-  await embedPublishedCloudfrontMetadataIntoIndex({
+  const { metadata: fallbackMetadata } = await ensurePublishedCloudfrontFallback({
     distDirectory,
     metadata: publishedMetadata,
+  })
+  const effectiveMetadata = fallbackMetadata || publishedMetadata || null
+
+  await embedPublishedCloudfrontMetadataIntoIndex({
+    distDirectory,
+    metadata: effectiveMetadata,
   })
 
   const supplementaryEntries = await resolveSupplementaryUploadEntries({
@@ -706,7 +901,7 @@ export async function uploadHashedIndexAssets(options = {}) {
         ],
   })
 
-  const configuration = await resolveHashedAssetUploadConfiguration({ metadata: publishedMetadata })
+  const configuration = await resolveHashedAssetUploadConfiguration({ metadata: effectiveMetadata })
   if (!configuration) {
     if (!options?.quiet) {
       console.log(
