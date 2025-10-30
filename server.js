@@ -207,6 +207,19 @@ function buildStaticAssetKey(prefix, requestPath) {
     return normalizedPrefix;
   }
 
+  const lowerSanitizedPath = sanitizedPath.toLowerCase();
+  if (
+    normalizedPrefix &&
+    (lowerSanitizedPath.startsWith(`${normalizedPrefix.toLowerCase()}/`) ||
+      lowerSanitizedPath.startsWith('static/'))
+  ) {
+    return sanitizedPath;
+  }
+
+  if (/^[a-z]+:\/\//i.test(sanitizedPath)) {
+    return sanitizedPath;
+  }
+
   const combined = `${normalizedPrefix}/${sanitizedPath}`;
   return combined.replace(/\/{2,}/g, '/');
 }
@@ -517,6 +530,21 @@ function selectManifestHashedIndexAsset(manifest, extension) {
   return '';
 }
 
+function resolveManifestRawHashedIndexAsset(manifest, normalizedPath) {
+  if (typeof normalizedPath !== 'string' || !normalizedPath) {
+    return '';
+  }
+
+  const rawMap = manifest && typeof manifest === 'object' ? manifest.rawByNormalized : null;
+  const rawCandidate = rawMap && typeof rawMap === 'object' ? rawMap[normalizedPath] : null;
+
+  if (typeof rawCandidate === 'string' && rawCandidate.trim()) {
+    return rawCandidate;
+  }
+
+  return normalizedPath;
+}
+
 async function loadHashedIndexAssetManifest() {
   const manifest = await loadStaticAssetManifestFromS3();
   const hashedFromManifest = {
@@ -532,6 +560,12 @@ async function loadHashedIndexAssetManifest() {
   return {
     css: hashedFromManifest.css || localManifest.css || '',
     js: hashedFromManifest.js || localManifest.js || '',
+    rawCss: hashedFromManifest.css
+      ? resolveManifestRawHashedIndexAsset(manifest, hashedFromManifest.css)
+      : hashedFromManifest.css || '',
+    rawJs: hashedFromManifest.js
+      ? resolveManifestRawHashedIndexAsset(manifest, hashedFromManifest.js)
+      : hashedFromManifest.js || '',
   };
 }
 
@@ -710,6 +744,7 @@ async function loadStaticAssetManifestFromS3({ forceRefresh = false } = {}) {
       const combined = hashedAssets.length ? hashedAssets : fallbackAssets;
       const normalizedAssets = [];
       const seen = new Set();
+      const rawByNormalized = Object.create(null);
 
       for (const asset of combined) {
         const normalized = normalizeManifestHashedAssetPath(asset);
@@ -717,12 +752,16 @@ async function loadStaticAssetManifestFromS3({ forceRefresh = false } = {}) {
           continue;
         }
         seen.add(normalized);
+        if (typeof asset === 'string' && !rawByNormalized[normalized]) {
+          rawByNormalized[normalized] = asset;
+        }
         normalizedAssets.push(normalized);
       }
 
       const data = {
         assets: normalizedAssets,
         byExtension: partitionNormalizedManifestAssets(normalizedAssets),
+        rawByNormalized,
       };
 
       cachedStaticManifest = { fetchedAt: now, data };
@@ -782,7 +821,17 @@ async function resolveFallbackHashedAssetPaths({ extension, exclude = [] } = {})
   }
 
   const excludeSet = buildManifestExcludeSet(exclude);
-  return candidates.filter((candidate) => candidate && !excludeSet.has(candidate));
+  const rawMap = manifest.rawByNormalized || {};
+
+  return candidates
+    .filter((candidate) => candidate && !excludeSet.has(candidate))
+    .map((candidate) => ({
+      normalized: candidate,
+      raw:
+        typeof rawMap === 'object' && rawMap && typeof rawMap[candidate] === 'string'
+          ? rawMap[candidate]
+          : candidate,
+    }));
 }
 
 function resetStaticAssetManifestCache() {
@@ -962,16 +1011,32 @@ async function serveIndexAssetAlias(req, res, next) {
 
   const extension = match[1].toLowerCase();
   const manifest = await loadHashedIndexAssetManifest();
-  let hashedAssetPath = extension === 'css' ? manifest.css : manifest.js;
-  let normalizedHashedAssetPath = normalizeManifestHashedAssetPath(hashedAssetPath);
+  const manifestHashedAssetPath = extension === 'css' ? manifest.css : manifest.js;
+  let remoteHashedAssetPath = extension === 'css' ? manifest.rawCss : manifest.rawJs;
+  let normalizedHashedAssetPath = normalizeManifestHashedAssetPath(manifestHashedAssetPath);
   let manifestFallbackCandidates = [];
+
+  if (!normalizedHashedAssetPath && remoteHashedAssetPath) {
+    normalizedHashedAssetPath = normalizeManifestHashedAssetPath(remoteHashedAssetPath);
+  }
+
+  if (!remoteHashedAssetPath && normalizedHashedAssetPath) {
+    remoteHashedAssetPath = normalizedHashedAssetPath;
+  }
 
   if (!normalizedHashedAssetPath) {
     manifestFallbackCandidates = await resolveFallbackHashedAssetPaths({ extension });
     if (manifestFallbackCandidates.length > 0) {
-      hashedAssetPath = manifestFallbackCandidates.shift();
-      normalizedHashedAssetPath = normalizeManifestHashedAssetPath(hashedAssetPath);
+      const nextCandidate = manifestFallbackCandidates.shift();
+      normalizedHashedAssetPath = nextCandidate?.normalized
+        ? normalizeManifestHashedAssetPath(nextCandidate.normalized)
+        : '';
+      remoteHashedAssetPath = nextCandidate?.raw || nextCandidate?.normalized || '';
     }
+  }
+
+  if (!remoteHashedAssetPath && normalizedHashedAssetPath) {
+    remoteHashedAssetPath = normalizedHashedAssetPath;
   }
 
   if (!normalizedHashedAssetPath) {
@@ -985,13 +1050,14 @@ async function serveIndexAssetAlias(req, res, next) {
 
   const logContext = {
     aliasPath: req.path,
-    resolvedPath: hashedAssetPath,
+    resolvedPath: normalizedHashedAssetPath,
+    s3Key: remoteHashedAssetPath,
     method,
   };
 
   if (
     await serveClientDistAsset({
-      assetPath: hashedAssetPath,
+      assetPath: normalizedHashedAssetPath,
       method,
       res,
       logContext,
@@ -1002,7 +1068,7 @@ async function serveIndexAssetAlias(req, res, next) {
   }
 
   const servedFromS3 = await serveHashedIndexAssetFromS3({
-    assetPath: hashedAssetPath,
+    assetPath: remoteHashedAssetPath,
     method,
     res,
     logContext,
@@ -1029,21 +1095,29 @@ async function serveIndexAssetAlias(req, res, next) {
 
   const attemptedFallbacks = [];
   for (const candidate of fallbackCandidates) {
-    if (!candidate) {
+    if (!candidate || !candidate.normalized) {
       continue;
     }
 
-    attemptedFallbacks.push(candidate);
+    const normalizedCandidate = normalizeManifestHashedAssetPath(candidate.normalized);
+    const remoteCandidate = candidate.raw || normalizedCandidate;
+
+    if (!normalizedCandidate) {
+      continue;
+    }
+
+    attemptedFallbacks.push(remoteCandidate);
     const fallbackLogContext = {
       aliasPath: req.path,
-      resolvedPath: candidate,
+      resolvedPath: normalizedCandidate,
+      s3Key: remoteCandidate,
       method,
       manifestFallback: true,
     };
 
     if (
       await serveClientDistAsset({
-        assetPath: candidate,
+        assetPath: normalizedCandidate,
         method,
         res,
         logContext: fallbackLogContext,
@@ -1054,7 +1128,7 @@ async function serveIndexAssetAlias(req, res, next) {
     }
 
     const servedFallback = await serveHashedIndexAssetFromS3({
-      assetPath: candidate,
+      assetPath: remoteCandidate,
       method,
       res,
       logContext: fallbackLogContext,
