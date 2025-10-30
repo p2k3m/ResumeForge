@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { CloudFrontClient, GetDistributionCommand } from '@aws-sdk/client-cloudfront';
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js';
 import { resolveCloudfrontAssetPathPrefixes } from '../lib/cloudfrontAssetPrefixes.js';
 import { runPostDeploymentApiTests } from '../lib/postDeploymentApiTests.js';
@@ -63,6 +64,130 @@ async function readPublishedMetadata() {
   }
 }
 
+function normalizeOriginPath(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.replace(/\/+$/u, '').replace(/\/+/gu, '/');
+}
+
+function domainMatchesBucket(domainName, bucket) {
+  if (!domainName || !bucket) {
+    return false;
+  }
+
+  const normalizedDomain = domainName.trim().toLowerCase();
+  const normalizedBucket = bucket.trim().toLowerCase();
+  if (!normalizedDomain.includes('amazonaws.com')) {
+    return false;
+  }
+
+  return normalizedDomain.startsWith(`${normalizedBucket}.`);
+}
+
+function domainMatchesRegion(domainName, region) {
+  if (!region) {
+    return true;
+  }
+
+  const normalizedDomain = domainName.trim().toLowerCase();
+  const normalizedRegion = region.trim().toLowerCase();
+  return (
+    normalizedDomain.includes(`.${normalizedRegion}.amazonaws.com`) ||
+    normalizedDomain.includes(`-${normalizedRegion}.amazonaws.com`)
+  );
+}
+
+async function verifyDistributionOrigin(metadata) {
+  const distributionId =
+    typeof metadata?.distributionId === 'string' ? metadata.distributionId.trim() : '';
+  if (!distributionId) {
+    console.warn(
+      'Skipping CloudFront origin verification because no distributionId is recorded in config/published-cloudfront.json.',
+    );
+    return;
+  }
+
+  const expectedBucket =
+    typeof metadata?.originBucket === 'string' ? metadata.originBucket.trim() : '';
+  if (!expectedBucket) {
+    console.warn(
+      `Skipping CloudFront origin verification for distribution ${distributionId} because originBucket is not recorded.`,
+    );
+    return;
+  }
+
+  const expectedRegion =
+    typeof metadata?.originRegion === 'string' ? metadata.originRegion.trim() : '';
+  const expectedOriginPath = normalizeOriginPath(metadata?.originPath || '');
+
+  const client = new CloudFrontClient({});
+
+  let response;
+  try {
+    response = await client.send(new GetDistributionCommand({ Id: distributionId }));
+  } catch (error) {
+    throw new Error(
+      `Failed to load CloudFront distribution ${distributionId}: ${error?.message || error}`,
+    );
+  }
+
+  const origins = response?.Distribution?.DistributionConfig?.Origins?.Items || [];
+  if (origins.length === 0) {
+    throw new Error(
+      `[verify-cloudfront] Distribution ${distributionId} does not define any origins.`,
+    );
+  }
+
+  const matchingOrigin = origins.find((origin) => {
+    const domainName = origin?.DomainName;
+    if (!domainName || !domainMatchesBucket(domainName, expectedBucket)) {
+      return false;
+    }
+
+    if (!domainMatchesRegion(domainName, expectedRegion)) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (!matchingOrigin) {
+    const originSummary = origins
+      .map((origin) => origin?.DomainName || '(unknown)')
+      .join(', ');
+    throw new Error(
+      `[verify-cloudfront] Distribution ${distributionId} is not pointing at bucket ${expectedBucket}` +
+        (expectedRegion ? ` in region ${expectedRegion}` : '') +
+        `. Found origins: ${originSummary}.`,
+    );
+  }
+
+  const configuredPath = normalizeOriginPath(matchingOrigin.OriginPath || '');
+  if (expectedOriginPath && configuredPath !== expectedOriginPath) {
+    throw new Error(
+      `[verify-cloudfront] Distribution ${distributionId} origin path ${
+        configuredPath || '/'
+      } does not match expected ${expectedOriginPath}.`,
+    );
+  }
+
+  const pathLabel = configuredPath || '/';
+  const regionSuffix = expectedRegion ? ` in ${expectedRegion}` : '';
+  console.log(
+    `[verify-cloudfront] Distribution ${distributionId} origin ${matchingOrigin.DomainName}${
+      pathLabel === '/' ? '' : pathLabel
+    } matches bucket ${expectedBucket}${regionSuffix}.`,
+  );
+}
+
 async function main() {
   let allowFailureFlag = false;
   try {
@@ -70,10 +195,22 @@ async function main() {
     const { targetUrl: cliTargetUrl } = parsed;
     allowFailureFlag = parsed.allowFailure;
 
+    let metadata = null;
+    let metadataError = null;
+    try {
+      metadata = await readPublishedMetadata();
+    } catch (error) {
+      metadataError = error;
+    }
+
     let targetUrl = hasValue(cliTargetUrl) ? cliTargetUrl.trim() : '';
 
     if (!targetUrl) {
-      const metadata = await readPublishedMetadata();
+      if (metadataError) {
+        throw metadataError;
+      }
+
+      metadata = metadata || (await readPublishedMetadata());
       targetUrl = resolvePublishedCloudfrontUrl(metadata);
       if (!targetUrl) {
         throw new Error('No CloudFront URL is recorded in config/published-cloudfront.json.');
@@ -81,6 +218,24 @@ async function main() {
       console.log(`Loaded CloudFront URL from config: ${targetUrl}`);
     } else {
       console.log(`Verifying provided CloudFront URL: ${targetUrl}`);
+
+      if (metadataError) {
+        if (metadataError.code === 'ENOENT') {
+          console.warn(
+            'config/published-cloudfront.json is not available; origin configuration verification will be skipped.',
+          );
+        } else {
+          throw metadataError;
+        }
+      }
+    }
+
+    if (metadata) {
+      await verifyDistributionOrigin(metadata);
+    } else {
+      console.warn(
+        'Skipping CloudFront origin verification because configuration metadata is unavailable.',
+      );
     }
 
     const assetPathPrefixes = resolveCloudfrontAssetPathPrefixes();

@@ -516,14 +516,6 @@ function resolveContentType(relativePath) {
 }
 
 export async function uploadHashedIndexAssets(options = {}) {
-  const configuration = await resolveHashedAssetUploadConfiguration()
-  if (!configuration) {
-    if (!options?.quiet) {
-      console.log('[upload-hashed-assets] No static asset bucket configured; skipping hashed asset upload.')
-    }
-    return { uploaded: [] }
-  }
-
   const distDirectory = options?.distDirectory || clientDistDir
   const assetsDirectory = options?.assetsDirectory || path.join(distDirectory, 'assets')
   const indexHtmlPath = options?.indexHtmlPath || path.join(distDirectory, 'index.html')
@@ -544,6 +536,16 @@ export async function uploadHashedIndexAssets(options = {}) {
     entries,
     distDirectory,
   })
+
+  const configuration = await resolveHashedAssetUploadConfiguration()
+  if (!configuration) {
+    if (!options?.quiet) {
+      console.log(
+        '[upload-hashed-assets] No static asset bucket configured; generated index-latest aliases locally and skipped hashed asset upload.',
+      )
+    }
+    return { uploaded: [], aliases: aliasEntries.map((entry) => entry.relativePath) }
+  }
 
   const versionLabel = resolveBuildVersionLabel()
   const versionedEntries = createVersionedUploadEntries(entries, versionLabel)

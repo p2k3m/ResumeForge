@@ -94,6 +94,20 @@ jobs:
           npm run predeploy:sam
           sam build --template-file template.yaml --cached --parallel
 
+      - name: Upload static client assets
+        env:
+          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          npm run upload:static
+
+      - name: Verify static asset upload
+        env:
+          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          npm run verify:static -- --skip-cloudfront
+
       - name: Deploy SAM stack
         env:
           STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
