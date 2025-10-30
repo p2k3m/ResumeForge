@@ -67,6 +67,12 @@ describe('createS3StreamingStorage', () => {
         'build-timestamp': expect.any(String),
       })
     );
+    expect(command.input.Tagging).toEqual(
+      expect.stringMatching(/(^|&)build=[^&]+(&|$)/)
+    );
+    expect(command.input.Tagging).toEqual(
+      expect.stringMatching(/(^|&)deployed=[^&]+(&|$)/)
+    );
     expect(result).toEqual({
       bucket: 'bucket',
       key: 'key',
@@ -116,7 +122,11 @@ describe('createS3StreamingStorage', () => {
         'build-sha': expect.any(String),
         'build-timestamp': expect.any(String),
       }),
+      Tagging: expect.stringMatching(/(^|&)build=[^&]+(&|$)/),
     });
+    expect(uploadParamsCaptured.Tagging).toEqual(
+      expect.stringMatching(/(^|&)deployed=[^&]+(&|$)/)
+    );
     expect(uploadDoneMock).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       bucket: 'bucket',
