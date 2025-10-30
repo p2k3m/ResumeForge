@@ -764,7 +764,11 @@ function resolveObjectAcl(relativePath) {
     return 'public-read'
   }
 
-  if (normalized === 'manifest.json' || normalized === 'api/published-cloudfront.json') {
+  if (
+    normalized === 'manifest.json' ||
+    normalized === 'api/published-cloudfront' ||
+    normalized === 'api/published-cloudfront.json'
+  ) {
     return 'public-read'
   }
 
