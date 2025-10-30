@@ -623,12 +623,19 @@
               return ''
             }
 
-            if (/\.cloudfront\.net$/.test(host)) {
+            if (/\.s3[.-]/.test(host)) {
               return ''
             }
 
-            if (/\.s3[.-]/.test(host)) {
-              return ''
+            if (/\.cloudfront\.net$/.test(host)) {
+              const currentHost =
+                typeof window?.location?.hostname === 'string'
+                  ? window.location.hostname.toLowerCase()
+                  : ''
+
+              if (!currentHost || currentHost !== host) {
+                return ''
+              }
             }
           } catch (error) {
             return ''
