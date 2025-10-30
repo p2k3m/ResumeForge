@@ -19,6 +19,10 @@ const clientDistDir = path.join(projectRoot, 'client', 'dist')
 const clientIndexPath = path.join(clientDistDir, 'index.html')
 const clientAssetsDir = path.join(clientDistDir, 'assets')
 
+const INDEX_ALIAS_CACHE_CONTROL = 'public, max-age=60, must-revalidate'
+const CSS_ALIAS_RELATIVE_PATH = 'assets/index-latest.css'
+const JS_ALIAS_RELATIVE_PATH = 'assets/index-latest.js'
+
 export const HASHED_INDEX_ASSET_FILENAME_PATTERN = /^index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/i
 const HASHED_INDEX_REFERENCE_PATTERN = /assets\/(index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'\s>]+)?/gi
 
@@ -63,6 +67,198 @@ export function isHashedIndexAssetFilename(name) {
   }
 
   return HASHED_INDEX_ASSET_FILENAME_PATTERN.test(name.trim())
+}
+
+function normalizeVersionLabelSegment(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  return value
+    .trim()
+    .replace(/^v+/i, '')
+    .replace(/[^a-z0-9.-]/gi, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+}
+
+function resolveBuildVersionLabel() {
+  const candidates = [
+    process.env.BUILD_VERSION,
+    process.env.GIT_COMMIT,
+    process.env.GIT_SHA,
+    process.env.GITHUB_SHA,
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeVersionLabelSegment(candidate)
+    if (normalized) {
+      return `v${normalized}`
+    }
+  }
+
+  const now = new Date()
+  const pad = (value) => String(value).padStart(2, '0')
+  const fallback =
+    `${now.getUTCFullYear()}` +
+    `${pad(now.getUTCMonth() + 1)}` +
+    `${pad(now.getUTCDate())}` +
+    `${pad(now.getUTCHours())}` +
+    `${pad(now.getUTCMinutes())}` +
+    `${pad(now.getUTCSeconds())}`
+
+  return `v${fallback}`
+}
+
+function pickAliasSource({ referencedAssets = [], entries = [], extension }) {
+  if (!extension) {
+    return ''
+  }
+
+  const normalizedReferenced = Array.isArray(referencedAssets)
+    ? referencedAssets.map((asset) => normalizeHashedAssetReference(asset))
+    : []
+
+  for (const asset of normalizedReferenced) {
+    if (asset && asset.endsWith(extension)) {
+      return asset
+    }
+  }
+
+  const candidates = entries
+    .map((entry) => normalizeHashedAssetReference(entry?.relativePath))
+    .filter((asset) => asset && asset.endsWith(extension))
+
+  if (candidates.length === 0) {
+    return ''
+  }
+
+  candidates.sort((a, b) => a.localeCompare(b))
+  return candidates[candidates.length - 1]
+}
+
+async function createIndexAliasCopy({
+  sourceRelativePath,
+  aliasRelativePath,
+  distDirectory,
+}) {
+  if (!sourceRelativePath || !aliasRelativePath) {
+    return null
+  }
+
+  const normalizedSource = normalizeHashedAssetReference(sourceRelativePath)
+  if (!normalizedSource) {
+    return null
+  }
+
+  const absoluteSourcePath = path.join(distDirectory, normalizedSource)
+  const absoluteAliasPath = path.join(distDirectory, aliasRelativePath)
+
+  await fs.mkdir(path.dirname(absoluteAliasPath), { recursive: true })
+  await fs.copyFile(absoluteSourcePath, absoluteAliasPath)
+
+  return {
+    relativePath: aliasRelativePath,
+    absolutePath: absoluteAliasPath,
+    cacheControl: INDEX_ALIAS_CACHE_CONTROL,
+  }
+}
+
+async function generateIndexAliasUploadEntries({
+  referencedAssets,
+  entries,
+  distDirectory,
+}) {
+  const uploads = []
+
+  const cssSource = pickAliasSource({
+    referencedAssets,
+    entries,
+    extension: '.css',
+  })
+
+  if (cssSource) {
+    const cssAlias = await createIndexAliasCopy({
+      sourceRelativePath: cssSource,
+      aliasRelativePath: CSS_ALIAS_RELATIVE_PATH,
+      distDirectory,
+    })
+    if (cssAlias) {
+      uploads.push(cssAlias)
+    }
+  } else {
+    console.warn(
+      '[upload-hashed-assets] No hashed CSS bundle detected; skipping index-latest.css alias upload.',
+    )
+  }
+
+  const jsSource = pickAliasSource({
+    referencedAssets,
+    entries,
+    extension: '.js',
+  })
+
+  if (!jsSource) {
+    throw new Error(
+      '[upload-hashed-assets] Unable to resolve a hashed JS bundle to back index-latest.js.',
+    )
+  }
+
+  const jsAlias = await createIndexAliasCopy({
+    sourceRelativePath: jsSource,
+    aliasRelativePath: JS_ALIAS_RELATIVE_PATH,
+    distDirectory,
+  })
+
+  if (jsAlias) {
+    uploads.push(jsAlias)
+  }
+
+  return uploads
+}
+
+function createVersionedUploadEntries(entries, versionLabel) {
+  const normalizedVersion = typeof versionLabel === 'string' ? versionLabel.trim() : ''
+  if (!normalizedVersion) {
+    return []
+  }
+
+  const sanitizedVersion = normalizedVersion.startsWith('v')
+    ? normalizedVersion
+    : `v${normalizedVersion}`
+
+  const uploads = []
+
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const relativePath = entry?.relativePath
+    if (typeof relativePath !== 'string') {
+      continue
+    }
+
+    const normalized = relativePath.replace(/\\/g, '/').trim()
+    if (!normalized.startsWith('assets/')) {
+      continue
+    }
+
+    const segments = normalized.split('/')
+    if (segments.length < 2) {
+      continue
+    }
+
+    if (segments[1] && /^v[\w.-]+$/i.test(segments[1])) {
+      continue
+    }
+
+    const versionedPath = ['assets', sanitizedVersion, ...segments.slice(1)].join('/')
+    uploads.push({
+      relativePath: versionedPath,
+      absolutePath: entry.absolutePath,
+      cacheControl: entry.cacheControl,
+    })
+  }
+
+  return uploads
 }
 
 export async function gatherHashedAssetUploadEntries({
@@ -259,8 +455,32 @@ export async function uploadHashedIndexAssets(options = {}) {
     return { uploaded: [] }
   }
 
-  const { entries, referencedAssets } = await gatherHashedAssetUploadEntries()
+  const distDirectory = options?.distDirectory || clientDistDir
+  const assetsDirectory = options?.assetsDirectory || path.join(distDirectory, 'assets')
+  const indexHtmlPath = options?.indexHtmlPath || path.join(distDirectory, 'index.html')
+
+  const { entries, referencedAssets } = await gatherHashedAssetUploadEntries({
+    assetsDirectory,
+    indexHtmlPath,
+  })
   if (!entries.length) {
+    if (!options?.quiet) {
+      console.log('[upload-hashed-assets] No hashed assets discovered in client build; skipping upload.')
+    }
+    return { uploaded: [] }
+  }
+
+  const aliasEntries = await generateIndexAliasUploadEntries({
+    referencedAssets,
+    entries,
+    distDirectory,
+  })
+
+  const versionLabel = resolveBuildVersionLabel()
+  const versionedEntries = createVersionedUploadEntries(entries, versionLabel)
+
+  const uploads = [...entries, ...aliasEntries, ...versionedEntries]
+  if (uploads.length === 0) {
     if (!options?.quiet) {
       console.log('[upload-hashed-assets] No hashed assets discovered in client build; skipping upload.')
     }
@@ -281,7 +501,7 @@ export async function uploadHashedIndexAssets(options = {}) {
 
   const uploaded = []
 
-  for (const entry of entries) {
+  for (const entry of uploads) {
     const key = buildS3Key(prefix, entry.relativePath)
     const bodyStream = createReadStream(entry.absolutePath)
     await s3.send(
@@ -290,21 +510,31 @@ export async function uploadHashedIndexAssets(options = {}) {
         Key: key,
         Body: bodyStream,
         ContentType: resolveContentType(entry.relativePath),
-        CacheControl: resolveHashedAssetCacheControl(entry.relativePath),
+        CacheControl: entry.cacheControl || resolveHashedAssetCacheControl(entry.relativePath),
       }),
     )
     uploaded.push(entry.relativePath)
   }
 
   if (!options?.quiet) {
+    const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
+    const hashedSummary = entries.map((entry) => entry.relativePath)
+    const versionSummary = versionedEntries.map((entry) => entry.relativePath)
+
+    const messageParts = [`hashed assets (${hashedSummary.join(', ')})`]
+    if (aliasSummary.length) {
+      messageParts.push(`aliases (${aliasSummary.join(', ')})`)
+    }
+    if (versionSummary.length) {
+      messageParts.push(`versioned copies (${versionSummary.join(', ')})`)
+    }
+
     console.log(
-      `[upload-hashed-assets] Uploaded ${uploaded.length} hashed asset${uploaded.length === 1 ? '' : 's'} (${referencedAssets.join(
-        ', ',
-      )}) to s3://${bucket}/${prefix}/`,
+      `[upload-hashed-assets] Uploaded ${uploads.length} bundle${uploads.length === 1 ? '' : 's'} to s3://${bucket}/${prefix}/: ${messageParts.join('; ')}`,
     )
   }
 
-  return { uploaded, bucket, prefix }
+  return { uploaded, bucket, prefix, versionLabel }
 }
 
 async function main() {

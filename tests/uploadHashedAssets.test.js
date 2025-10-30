@@ -2,9 +2,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { jest } from '@jest/globals'
+import { HeadBucketCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import {
   extractHashedIndexAssetReferences,
   gatherHashedAssetUploadEntries,
+  uploadHashedIndexAssets,
 } from '../scripts/upload-hashed-assets.mjs'
 
 describe('extractHashedIndexAssetReferences', () => {
@@ -23,6 +25,119 @@ describe('extractHashedIndexAssetReferences', () => {
       'assets/index-legacy.css',
       'assets/index-legacy.js',
     ])
+  })
+})
+
+describe('uploadHashedIndexAssets', () => {
+  let tempDir
+  let sendMock
+  const envKeys = [
+    'STAGE_NAME',
+    'DEPLOYMENT_ENVIRONMENT',
+    'STATIC_ASSETS_BUCKET',
+    'STATIC_ASSETS_PREFIX',
+    'BUILD_VERSION',
+  ]
+  const originalEnv = {}
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hashed-upload-exec-'))
+
+    for (const key of envKeys) {
+      originalEnv[key] = process.env[key]
+    }
+
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+    process.env.BUILD_VERSION = '20251029'
+
+    sendMock = jest
+      .spyOn(S3Client.prototype, 'send')
+      .mockImplementation(async (command) => {
+        if (command instanceof HeadBucketCommand) {
+          return {}
+        }
+        if (command instanceof PutObjectCommand) {
+          return {}
+        }
+        throw new Error(`Unexpected command: ${command?.constructor?.name ?? 'unknown'}`)
+      })
+  })
+
+  afterEach(async () => {
+    if (sendMock) {
+      sendMock.mockRestore()
+    }
+
+    for (const key of envKeys) {
+      if (typeof originalEnv[key] === 'undefined') {
+        delete process.env[key]
+      } else {
+        process.env[key] = originalEnv[key]
+      }
+      delete originalEnv[key]
+    }
+
+    if (tempDir) {
+      await fs.rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uploads hashed assets, alias copies, and versioned directories', async () => {
+    const distDir = path.join(tempDir, 'dist')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251029.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251029.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+
+    const result = await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    const cssAlias = await fs.readFile(path.join(assetsDir, 'index-latest.css'), 'utf8')
+    const jsAlias = await fs.readFile(path.join(assetsDir, 'index-latest.js'), 'utf8')
+
+    expect(cssAlias).toBe('body{}')
+    expect(jsAlias).toBe('console.log("hi")')
+    expect(result.versionLabel).toBe('v20251029')
+
+    const putCommands = sendMock.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof PutObjectCommand)
+
+    const uploadedKeys = putCommands.map((command) => command.input.Key)
+
+    expect(uploadedKeys).toEqual(
+      expect.arrayContaining([
+        'static/client/prod/latest/assets/index-20251029.css',
+        'static/client/prod/latest/assets/index-20251029.js',
+        'static/client/prod/latest/assets/index-latest.css',
+        'static/client/prod/latest/assets/index-latest.js',
+        'static/client/prod/latest/assets/v20251029/index-20251029.css',
+        'static/client/prod/latest/assets/v20251029/index-20251029.js',
+      ]),
+    )
+
+    expect(sendMock).toHaveBeenCalled()
+    expect(putCommands).toHaveLength(6)
   })
 })
 
