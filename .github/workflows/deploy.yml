@@ -154,6 +154,15 @@ jobs:
             --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
             --paths '/*'
 
+      - name: Smoke test CDN assets
+        if: steps.resolve_domain.outputs.url != ''
+        env:
+          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
+          CLOUDFRONT_URL: ${{ steps.resolve_domain.outputs.url }}
+        run: |
+          set -euo pipefail
+          npm run verify:static
+
       - name: Verify CloudFront distribution
         if: steps.resolve_domain.outputs.url != ''
         env:
