@@ -326,6 +326,17 @@ Use `npm run build:all` (or `make build-all`) to wipe previous artifacts via `np
 
 When iterating quickly on the React portal, run `npm run watch:cloudfront -- --stack <stack-name>` after exporting the required AWS credentials. The watcher rebuilds the client bundle, uploads the refreshed assets, and republishes the CloudFront metadata every time a file in `client/` changes so the CDN stays aligned with the latest code.
 
+### Manual deployment order
+
+If you deploy outside of the automated GitHub Actions workflow, follow this order so viewers always receive the latest static bundle and API responses:
+
+1. **Build the client** – Run `npm run build:client` (or the aggregate `npm run build`) to emit `client/dist/`. The S3 upload step depends on these fresh assets.
+2. **Upload `client/dist/` to S3** – Sync the generated bundle to the distribution bucket (for example, `aws s3 sync client/dist s3://<bucket>/static/client/prod/latest`). Uploading first ensures the CDN can immediately serve the new files once caches are cleared.
+3. **Invalidate CloudFront** – Issue a `/*` invalidation against the active distribution so cached objects are evicted. This guarantees browsers fetch the newly uploaded assets instead of serving stale responses.
+4. **Deploy the Lambdas** – Package and deploy the Lambda functions (for example with `sam deploy`). Doing this last prevents the API from referencing client assets that CloudFront has not yet refreshed.
+
+Keeping this sequence avoids end users receiving mixed-version assets during rolling releases.
+
 ### Post-deployment verification
 
 1. Confirm that the CloudFormation outputs include `ApiBaseUrl`. This is the canonical URL for the deployed serverless API.
