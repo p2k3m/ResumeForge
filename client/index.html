@@ -279,6 +279,49 @@
           }
         }
 
+        const PUBLISHED_CLOUDFRONT_ENDPOINT_PATHS = Object.freeze([
+          '/api/published-cloudfront',
+          '/api/published-cloudfront.json'
+        ])
+
+        const loadPublishedCloudfrontMetadata = async () => {
+          if (typeof fetch !== 'function') {
+            return null
+          }
+
+          let lastError = null
+          for (const path of PUBLISHED_CLOUDFRONT_ENDPOINT_PATHS) {
+            const endpoint = typeof path === 'string' ? path : ''
+            if (!endpoint) {
+              continue
+            }
+
+            try {
+              const response = await fetch(endpoint, { method: 'GET' })
+              if (!response || !response.ok) {
+                continue
+              }
+
+              try {
+                const payload = await response.json()
+                if (payload && typeof payload === 'object') {
+                  return payload
+                }
+              } catch (innerError) {
+                lastError = innerError
+              }
+            } catch (error) {
+              lastError = error
+            }
+          }
+
+          if (lastError) {
+            console.warn('Unable to load published CloudFront metadata.', lastError)
+          }
+
+          return null
+        }
+
         if (degradeBanner) {
           const host = typeof window.location?.hostname === 'string' ? window.location.hostname : ''
           const onApiGateway = /\.execute-api\.[^.]+\.amazonaws\.com$/i.test(host)
@@ -303,17 +346,10 @@
               applyDegradedState({ canonicalUrl, backupUrl, updatedAt })
             }
 
-            if (typeof fetch === 'function') {
-              fetch('/api/published-cloudfront', { method: 'GET' })
-                .then((response) => (response && response.ok ? response.json() : null))
-                .then((data) => handleMetadata(data))
-                .catch((error) => {
-                  console.warn('Unable to load published CloudFront metadata.', error)
-                  handleMetadata(null)
-                })
-            } else {
+            loadPublishedCloudfrontMetadata().then((data) => handleMetadata(data)).catch((error) => {
+              console.warn('Unable to load published CloudFront metadata.', error)
               handleMetadata(null)
-            }
+            })
           } else {
             setBackupInputValue('')
           }
@@ -854,8 +890,6 @@
           // Ignore inline metadata parsing failures and fall back to runtime loading.
         }
 
-        const METADATA_API_PATH = '/api/published-cloudfront'
-
         function buildAliasEndpointCandidates(path) {
           const endpoints = []
           const seen = new Set()
@@ -887,7 +921,25 @@
           return endpoints
         }
 
-        const buildMetadataEndpointCandidates = () => buildAliasEndpointCandidates(METADATA_API_PATH)
+        const buildMetadataEndpointCandidates = () => {
+          const endpoints = []
+          const seen = new Set()
+
+          const append = (candidate) => {
+            if (!candidate || seen.has(candidate)) {
+              return
+            }
+            seen.add(candidate)
+            endpoints.push(candidate)
+          }
+
+          PUBLISHED_CLOUDFRONT_ENDPOINT_PATHS.forEach((path) => {
+            const list = buildAliasEndpointCandidates(path)
+            list.forEach(append)
+          })
+
+          return endpoints
+        }
 
         const ensureAliasMetadataLoaded = () => {
           if (aliasMetadataLoaded) {
