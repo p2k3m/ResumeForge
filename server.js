@@ -1225,6 +1225,7 @@ function normalizeStaticProxyAssetPath(value) {
   }
 
   candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
+  candidate = candidate.replace(/[,;]+$/, '');
   if (!candidate) {
     return '';
   }

@@ -551,6 +551,19 @@ describe('static asset proxy endpoint', () => {
     expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
   });
 
+  test('normalizes stray punctuation in proxy asset queries', async () => {
+    const cssContent = await readDistAsset('index-latest.css');
+
+    const res = await request(app)
+      .get('/api/static-proxy')
+      .query({ asset: 'assets/index-latest.css,,' });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe(cssContent);
+    expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+    expect(mockS3Send).not.toHaveBeenCalled();
+  });
+
   test('falls back to S3 when the hashed bundle is unavailable locally', async () => {
     const hashedCssName = await extractPrimaryCssAssetName();
     const hashedRelativePath = `assets/${hashedCssName}`;
