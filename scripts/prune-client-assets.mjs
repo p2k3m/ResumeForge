@@ -15,8 +15,12 @@ const clientDistDir = path.join(projectRoot, 'client', 'dist');
 const clientIndexPath = path.join(clientDistDir, 'index.html');
 const assetsDir = path.join(clientDistDir, 'assets');
 const publishedCloudfrontSourcePath = resolvePublishedCloudfrontSourcePath();
-const MIN_HASHED_VARIANTS_PER_TYPE = 6;
-const MIN_ASSET_RETENTION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
+// Keep a generous number of historical bundles so slow CDN caches that still
+// reference older index.html snapshots can successfully resolve the hashed
+// assets. This mitigates production 404s when a stale page points at a bundle
+// that has already been superseded.
+const MIN_HASHED_VARIANTS_PER_TYPE = 12;
+const MIN_ASSET_RETENTION_MS = 1000 * 60 * 60 * 24 * 90; // 90 days
 
 async function readIndexHtml() {
   try {
