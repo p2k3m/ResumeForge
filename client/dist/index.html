@@ -1425,6 +1425,14 @@
           return true
         }
 
+        const attemptProxyOrAliasReload = (element) => {
+          if (attemptStaticProxyReload(element)) {
+            return true
+          }
+
+          return attemptAliasReload(element)
+        }
+
         function attemptAliasReload(element) {
           if (!element || typeof element.tagName !== 'string') {
             return false
@@ -1662,7 +1670,7 @@
           promise
             .then((candidates) => {
               if (!candidates) {
-                attemptAliasReload(element)
+                attemptProxyOrAliasReload(element)
                 return
               }
 
@@ -1685,11 +1693,11 @@
               }
 
               if (!applyCandidates(candidates)) {
-                attemptAliasReload(element)
+                attemptProxyOrAliasReload(element)
               }
             })
             .catch(() => {
-              attemptAliasReload(element)
+              attemptProxyOrAliasReload(element)
             })
 
           return true
@@ -1712,6 +1720,10 @@
             }
 
             if (attemptManifestReload(target)) {
+              return
+            }
+
+            if (attemptStaticProxyReload(target)) {
               return
             }
 
