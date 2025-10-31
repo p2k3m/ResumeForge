@@ -476,6 +476,89 @@
           candidatesByExtension: { js: [], css: [] }
         }
 
+        const HASHED_INDEX_ASSET_PATTERN = /^(?:\/)?assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
+
+        const appendManifestCandidates = (extension, values) => {
+          if (!extension || !Array.isArray(values) || values.length === 0) {
+            return
+          }
+
+          const normalizedExtension = extension === 'css' ? 'css' : 'js'
+          const bucket = Array.isArray(manifestState.candidatesByExtension[normalizedExtension])
+            ? manifestState.candidatesByExtension[normalizedExtension]
+            : []
+          const seen = new Set(bucket)
+
+          values.forEach((candidate) => {
+            if (!candidate || seen.has(candidate)) {
+              return
+            }
+            seen.add(candidate)
+            bucket.push(candidate)
+          })
+
+          manifestState.candidatesByExtension[normalizedExtension] = bucket
+        }
+
+        const seedManifestCandidatesFromDom = () => {
+          const discovered = []
+
+          const captureCandidate = (rawValue) => {
+            const normalized = normalizeManifestCandidate(rawValue)
+            if (!normalized || !HASHED_INDEX_ASSET_PATTERN.test(normalized)) {
+              return
+            }
+            discovered.push(normalized)
+          }
+
+          try {
+            const scriptElements = document.querySelectorAll('script[src]')
+            scriptElements.forEach((script) => {
+              if (!script) {
+                return
+              }
+
+              const value =
+                typeof script.getAttribute === 'function'
+                  ? script.getAttribute('src') || script.src
+                  : script.src
+
+              captureCandidate(value)
+            })
+
+            const stylesheetElements = document.querySelectorAll('link[rel]')
+            stylesheetElements.forEach((link) => {
+              if (!link) {
+                return
+              }
+
+              const rel = typeof link.rel === 'string' ? link.rel.toLowerCase() : ''
+              if (!rel.includes('stylesheet')) {
+                return
+              }
+
+              const value =
+                typeof link.getAttribute === 'function'
+                  ? link.getAttribute('href') || link.href
+                  : link.href
+
+              captureCandidate(value)
+            })
+          } catch (error) {
+            return
+          }
+
+          if (!discovered.length) {
+            return
+          }
+
+          const buckets = categorizeManifestCandidates(discovered)
+          appendManifestCandidates('js', buckets.js)
+          appendManifestCandidates('css', buckets.css)
+        }
+
+        seedManifestCandidatesFromDom()
+
         const normalizeManifestCandidate = (value) => {
           if (typeof value !== 'string') {
             return ''
@@ -1326,8 +1409,6 @@
             return rawSource
           }
         }
-
-        const HASHED_INDEX_ASSET_PATTERN = /^(?:\/)?assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
 
         const attemptStaticProxyReload = (element) => {
           if (!element || typeof element.tagName !== 'string') {
