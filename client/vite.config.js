@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { applyStageEnvironment } from '../config/stage.js'
 
 const resolvedApiBase =
@@ -40,6 +43,32 @@ const stageEnvironment = applyStageEnvironment({
 
 const buildVersion = resolveBuildVersion()
 
+function loadPublishedCloudfrontMetadata() {
+  try {
+    const currentDir = path.dirname(fileURLToPath(import.meta.url))
+    const metadataPath = path.resolve(currentDir, '../config/published-cloudfront.json')
+    const raw = readFileSync(metadataPath, 'utf8')
+    if (!raw) {
+      return null
+    }
+
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const parsed = JSON.parse(trimmed)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.warn('Unable to load published CloudFront metadata', error)
+    }
+    return null
+  }
+}
+
+const publishedCloudfrontMetadata = loadPublishedCloudfrontMetadata()
+
 export default defineConfig({
   base: './',
   plugins: [react()],
@@ -60,5 +89,6 @@ export default defineConfig({
     __DEPLOYMENT_ENVIRONMENT__: JSON.stringify(stageEnvironment.deploymentEnvironment),
     __DATA_BUCKET_NAME__: JSON.stringify(stageEnvironment.dataBucket || ''),
     __STATIC_ASSETS_BUCKET_NAME__: JSON.stringify(stageEnvironment.staticAssetsBucket || ''),
+    __PUBLISHED_CLOUDFRONT_METADATA__: JSON.stringify(publishedCloudfrontMetadata),
   },
 })
