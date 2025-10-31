@@ -1492,16 +1492,22 @@
           const originalSource = describeSource(element)
           const replacement = element.cloneNode(true)
 
+          const cacheBustedAliasUrl = appendCacheBustParam(aliasUrl)
+          const effectiveAliasUrl = cacheBustedAliasUrl || aliasUrl
+
           if (isStylesheet) {
-            replacement.href = aliasUrl
+            replacement.href = effectiveAliasUrl
           } else {
-            replacement.src = aliasUrl
+            replacement.src = effectiveAliasUrl
           }
 
-          replacement.setAttribute('data-src', aliasUrl)
+          replacement.setAttribute('data-src', effectiveAliasUrl)
           replacement.dataset.resumeforgeAssetRetry = 'true'
           replacement.dataset.resumeforgeAssetAlias = 'true'
           replacement.dataset.resumeforgeAliasAttempt = String(attemptIndex + 1)
+          if (aliasBase) {
+            replacement.dataset.resumeforgeAliasBase = aliasBase
+          }
           if (originalSource) {
             replacement.dataset.resumeforgeOriginalSource = originalSource
           }
@@ -1509,6 +1515,9 @@
           element.dataset.resumeforgeAssetRetry = 'true'
           element.dataset.resumeforgeAssetAlias = 'true'
           element.dataset.resumeforgeAliasAttempt = String(attemptIndex + 1)
+          if (aliasBase) {
+            element.dataset.resumeforgeAliasBase = aliasBase
+          }
           if (originalSource && !element.dataset.resumeforgeOriginalSource) {
             element.dataset.resumeforgeOriginalSource = originalSource
           }
@@ -1528,6 +1537,7 @@
             console.warn('Retrying ResumeForge static asset via alias fallback.', {
               source: originalSource || '',
               alias: aliasUrl,
+              resolved: effectiveAliasUrl,
               base: aliasBase
             })
           } catch (error) {
