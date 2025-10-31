@@ -1338,12 +1338,149 @@
           return true
         }
 
+        let apiFallbackRedirectScheduled = false
+
+        const gatherApiFallbackBases = () => {
+          const bases = []
+          const seen = new Set()
+
+          const appendBase = (candidate) => {
+            if (!candidate) {
+              return
+            }
+
+            const normalized = normalizeAliasBase(candidate)
+            if (!normalized) {
+              return
+            }
+
+            try {
+              const resolved = new URL(normalized, window.location.href)
+              const currentHost = typeof window.location?.hostname === 'string'
+                ? window.location.hostname.toLowerCase()
+                : ''
+              const resolvedHost = (resolved.hostname || '').toLowerCase()
+              if (currentHost && resolvedHost && currentHost === resolvedHost) {
+                return
+              }
+            } catch (error) {
+              return
+            }
+
+            if (seen.has(normalized)) {
+              return
+            }
+
+            seen.add(normalized)
+            bases.push(normalized)
+          }
+
+          const inlineApiBase = inlinePublishedCloudfrontMetadata?.cloudfront?.apiGatewayUrl
+          if (inlineApiBase) {
+            appendBase(inlineApiBase)
+          }
+
+          try {
+            const runtimeMetadata = window.__RESUMEFORGE_CLOUDFRONT_METADATA__
+            if (runtimeMetadata?.cloudfront?.apiGatewayUrl) {
+              appendBase(runtimeMetadata.cloudfront.apiGatewayUrl)
+            }
+          } catch (error) {
+            // Ignore runtime metadata access errors.
+          }
+
+          aliasBaseCandidates.forEach(appendBase)
+          apiProxyCandidates.forEach(appendBase)
+
+          return bases
+        }
+
+        const buildApiFallbackUrl = (base) => {
+          if (!base) {
+            return ''
+          }
+
+          try {
+            const path = `${window.location.pathname || '/'}`
+            const suffix = `${window.location.search || ''}${window.location.hash || ''}`
+            return new URL(`${path}${suffix}`, base).toString()
+          } catch (error) {
+            return ''
+          }
+        }
+
+        const appendFallbackRedirectParams = (url) => {
+          if (!url) {
+            return ''
+          }
+
+          try {
+            const parsed = new URL(url)
+            parsed.searchParams.set('__rf_origin', 'cdn-fallback')
+            parsed.searchParams.set('__rf_ts', Date.now().toString(36))
+            return parsed.toString()
+          } catch (error) {
+            const separator = url.includes('?') ? '&' : '?'
+            return `${url}${separator}__rf_origin=cdn-fallback&__rf_ts=${Date.now().toString(36)}`
+          }
+        }
+
+        const scheduleApiFallbackRedirect = (reason) => {
+          if (apiFallbackRedirectScheduled) {
+            return false
+          }
+
+          const host = typeof window.location?.hostname === 'string' ? window.location.hostname : ''
+          if (/\.execute-api\./i.test(host)) {
+            return false
+          }
+
+          const bases = gatherApiFallbackBases()
+          if (!bases.length) {
+            return false
+          }
+
+          const target = appendFallbackRedirectParams(buildApiFallbackUrl(bases[0]))
+          if (!target) {
+            return false
+          }
+
+          apiFallbackRedirectScheduled = true
+
+          try {
+            console.warn('Redirecting ResumeForge to API fallback due to static asset failure.', {
+              source: reason || '',
+              target
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          window.setTimeout(() => {
+            try {
+              recordHardRefreshAttempt()
+            } catch (error) {
+              // Ignore storage errors when recording refresh attempts.
+            }
+
+            try {
+              window.location.assign(target)
+            } catch (error) {
+              window.location.href = target
+            }
+          }, 750)
+
+          return true
+        }
+
         const logFailure = (sourceText) => {
           if (sourceText) {
             console.error('ResumeForge static asset failed to load.', { source: sourceText })
           } else {
             console.error('ResumeForge static asset failed to load.')
           }
+
+          scheduleApiFallbackRedirect(sourceText)
         }
 
         const recordHardRefreshAttempt = () => {
