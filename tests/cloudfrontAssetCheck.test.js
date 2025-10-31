@@ -44,6 +44,20 @@ function extractHashedIndexAssets(html) {
   return { all: allAssets, js: jsAssets, css: cssAssets };
 }
 
+function maybeRespondToAlias(target, method, overrides = {}) {
+  const { jsStatus = 200, cssStatus = 200 } = overrides;
+
+  if (target.pathname.endsWith('/assets/index-latest.js')) {
+    return new Response('', { status: jsStatus });
+  }
+
+  if (target.pathname.endsWith('/assets/index-latest.css')) {
+    return new Response('', { status: cssStatus });
+  }
+
+  return null;
+}
+
 describe('verifyClientAssets', () => {
   test('adds a cache-busting query parameter when an asset initially returns 404', async () => {
     const html = `<!doctype html>
@@ -66,6 +80,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -122,6 +141,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -183,6 +207,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 500, statusText: 'Internal Server Error' });
@@ -242,6 +271,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 404, statusText: 'Not Found' });
@@ -297,6 +331,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -358,6 +397,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if ([jsAssetPath, cssAssetPath].includes(target.pathname)) {
         return new Response('', { status: 200 });
       }
@@ -415,6 +459,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         if (method === 'HEAD') {
           return new Response(null, { status: 403, statusText: 'Forbidden' });
@@ -470,6 +519,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         return new Response('', { status: 200 });
       }
@@ -518,6 +572,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -578,6 +637,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
@@ -617,6 +681,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -672,6 +741,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 403, statusText: 'Access Denied' });
       }
@@ -725,6 +799,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 500, statusText: 'Internal Server Error' });
       }
@@ -776,6 +855,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -835,6 +919,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         return new Response(null, { status: 404, statusText: 'Not Found' });
       }
@@ -889,6 +978,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath) {
@@ -965,6 +1059,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname.endsWith(jsAssetPath)) {
         return new Response(null, { status: 403, statusText: 'Forbidden' });
       }
@@ -1001,6 +1100,57 @@ describe('verifyClientAssets', () => {
     });
   });
 
+  test('fails when CloudFront index alias bundles are unavailable', async () => {
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-ac104019.css" />
+          <script type="module" src="/assets/index-d438c9c1.js"></script>
+        </head>
+        <body></body>
+      </html>`;
+
+    const assetPaths = extractHashedIndexAssets(html);
+    const [jsAssetPath] = assetPaths.js;
+    const [cssAssetPath] = assetPaths.css;
+
+    const fetchImpl = jest.fn(async (requestUrl, options = {}) => {
+      const method = (options.method || 'GET').toUpperCase();
+      const target = new URL(requestUrl);
+
+      if (target.pathname === '/' && method === 'GET') {
+        return new Response(html, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      if (target.pathname.endsWith('/assets/index-latest.js')) {
+        return new Response('', { status: 404, statusText: 'Not Found' });
+      }
+
+      if (target.pathname.endsWith('/assets/index-latest.css')) {
+        return new Response('', { status: 404, statusText: 'Not Found' });
+      }
+
+      if (target.pathname === jsAssetPath || target.pathname === cssAssetPath) {
+        return new Response('', { status: 200 });
+      }
+
+      throw new Error(`Unexpected ${method} request to ${requestUrl}`);
+    });
+
+    await expect(
+      verifyClientAssets({
+        baseUrl: 'https://example.cloudfront.net',
+        fetchImpl,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { warn: jest.fn() },
+      }),
+    ).rejects.toThrow(/index-latest\.(css|js)/);
+  });
+
   test('sends an Origin header when probing hashed asset routes', async () => {
     const html = `<!doctype html>
       <html>
@@ -1026,6 +1176,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if ([jsAssetPath, cssAssetPath].some((assetPath) => target.pathname === assetPath)) {
@@ -1085,6 +1240,11 @@ describe('verifyClientAssets', () => {
         });
       }
 
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
+      }
+
       if (target.pathname === jsAssetPath) {
         return new Response(null, {
           status: 403,
@@ -1136,6 +1296,11 @@ describe('verifyClientAssets', () => {
           status: 200,
           headers: { 'Content-Type': 'text/html' },
         });
+      }
+
+      const aliasResponse = maybeRespondToAlias(target, method);
+      if (aliasResponse) {
+        return aliasResponse;
       }
 
       if (target.pathname === jsAssetPath && method === 'HEAD') {
