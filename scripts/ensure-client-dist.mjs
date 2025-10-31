@@ -31,6 +31,28 @@ const TRACKED_ASSET_EXTENSIONS = new Set([
   '.webmanifest',
 ])
 
+function normalizeManifestAssetPath(assetPath) {
+  if (typeof assetPath !== 'string') {
+    return ''
+  }
+
+  let candidate = assetPath.trim()
+  if (!candidate) {
+    return ''
+  }
+
+  candidate = candidate.replace(/\?.*$/, '').replace(/#.*$/, '')
+  while (candidate.startsWith('./')) {
+    candidate = candidate.slice(2)
+  }
+  candidate = candidate.replace(/^\/+/, '')
+  if (candidate.startsWith('..')) {
+    return ''
+  }
+
+  return candidate
+}
+
 function createValidationError(message) {
   const error = new Error(message)
   error.name = 'ClientBuildValidationError'
@@ -153,6 +175,95 @@ async function main() {
       })
     }),
   )
+
+  const manifestPath = path.join(clientDistDir, 'manifest.json')
+  await assertFileExists(manifestPath, { label: 'client asset manifest' })
+
+  let manifestRaw
+  try {
+    manifestRaw = await readFile(manifestPath, 'utf8')
+  } catch (error) {
+    throw createValidationError(
+      `[ensure-client-build] Unable to read client manifest at ${manifestPath}: ${error?.message || error}`,
+    )
+  }
+
+  let manifest
+  try {
+    manifest = JSON.parse(manifestRaw)
+  } catch (error) {
+    throw createValidationError(
+      `[ensure-client-build] Client manifest JSON parse failed at ${manifestPath}: ${error?.message || error}`,
+    )
+  }
+
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    throw createValidationError(
+      `[ensure-client-build] Client manifest at ${manifestPath} must be a JSON object.`,
+    )
+  }
+
+  const manifestAssetPaths = new Set()
+  for (const entry of Object.values(manifest)) {
+    if (!entry || typeof entry !== 'object') {
+      continue
+    }
+
+    const files = []
+    if (typeof entry.file === 'string') {
+      files.push(entry.file)
+    }
+    if (Array.isArray(entry.css)) {
+      files.push(...entry.css)
+    }
+    if (Array.isArray(entry.assets)) {
+      files.push(...entry.assets)
+    }
+
+    for (const candidate of files) {
+      const normalized = normalizeManifestAssetPath(candidate)
+      if (normalized) {
+        manifestAssetPaths.add(normalized)
+      }
+    }
+  }
+
+  if (manifestAssetPaths.size === 0) {
+    throw createValidationError(
+      `[ensure-client-build] Client manifest at ${manifestPath} does not reference any asset files.`,
+    )
+  }
+
+  let cssCount = 0
+  let jsCount = 0
+
+  await Promise.all(
+    Array.from(manifestAssetPaths).map(async (relativePath) => {
+      const absolutePath = path.join(clientDistDir, relativePath)
+      await assertFileExists(absolutePath, {
+        label: `client asset referenced by manifest.json (${relativePath})`,
+      })
+
+      const extension = path.extname(relativePath).toLowerCase()
+      if (extension === '.css') {
+        cssCount += 1
+      } else if (extension === '.js' || extension === '.mjs' || extension === '.cjs') {
+        jsCount += 1
+      }
+    }),
+  )
+
+  if (cssCount === 0) {
+    throw createValidationError(
+      `[ensure-client-build] Client manifest at ${manifestPath} must reference at least one CSS bundle.`,
+    )
+  }
+
+  if (jsCount === 0) {
+    throw createValidationError(
+      `[ensure-client-build] Client manifest at ${manifestPath} must reference at least one JS bundle.`,
+    )
+  }
 
   console.log(`[ensure-client-build] Client assets verified in ${clientDistDir}`)
 }
