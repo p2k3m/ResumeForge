@@ -25,6 +25,22 @@ class MockDictionary {
   }
 }
 
+class MockNode {
+  constructor() {
+    this.store = new Map();
+  }
+
+  lookup(key) {
+    const normalized = key instanceof PDFName ? key.value : key;
+    return this.store.get(normalized);
+  }
+
+  set(key, value) {
+    const normalized = key instanceof PDFName ? key.value : key;
+    this.store.set(normalized, value);
+  }
+}
+
 class MockFont {
   constructor(name) {
     this.name = name;
@@ -40,6 +56,7 @@ class MockPage {
   constructor(width = 612, height = 792) {
     this.width = width;
     this.height = height;
+    this.node = new MockNode();
   }
 
   getWidth() {
@@ -51,6 +68,18 @@ class MockPage {
   }
 
   drawText() {
+    // no-op for tests
+  }
+
+  drawRectangle() {
+    // no-op for tests
+  }
+
+  drawLine() {
+    // no-op for tests
+  }
+
+  drawImage() {
     // no-op for tests
   }
 }
@@ -69,9 +98,33 @@ export class PDFName {
   }
 }
 
+export class PDFString {
+  constructor(value) {
+    this.value = value;
+  }
+
+  static of(value) {
+    return new PDFString(value);
+  }
+
+  toString() {
+    return String(this.value);
+  }
+}
+
+export class PDFArray extends Array {}
+
 export class PDFDocument {
   constructor() {
-    this.context = { trailer: new MockDictionary() };
+    this.context = {
+      trailer: new MockDictionary(),
+      obj(value) {
+        return value;
+      },
+      register(value) {
+        return value;
+      },
+    };
     this.catalog = { dict: new MockDictionary() };
     this.pages = [];
   }
@@ -107,6 +160,17 @@ export class PDFDocument {
 
   setCreator() {}
 
+  async embedPng() {
+    return {
+      width: 256,
+      height: 256,
+      scale: (factor = 1) => ({
+        width: 256 * factor,
+        height: 256 * factor,
+      }),
+    };
+  }
+
   async save() {
     return Buffer.from('%PDF-STUB');
   }
@@ -118,4 +182,13 @@ export const StandardFonts = {
   HelveticaOblique: 'Helvetica-Oblique',
 };
 
-export default { PDFDocument, PDFName, StandardFonts };
+export function rgb(r = 0, g = 0, b = 0) {
+  return {
+    type: 'rgb',
+    r: Number(r) || 0,
+    g: Number(g) || 0,
+    b: Number(b) || 0,
+  };
+}
+
+export default { PDFDocument, PDFName, PDFString, PDFArray, StandardFonts, rgb };
