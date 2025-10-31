@@ -3,6 +3,7 @@ import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { jest } from '@jest/globals'
 import {
+  GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -36,6 +37,7 @@ describe('extractHashedIndexAssetReferences', () => {
 describe('uploadHashedIndexAssets', () => {
   let tempDir
   let sendMock
+  let manifestPayload
   const envKeys = [
     'STAGE_NAME',
     'DEPLOYMENT_ENVIRONMENT',
@@ -69,6 +71,16 @@ describe('uploadHashedIndexAssets', () => {
     await fs.writeFile(metadataPath, JSON.stringify(defaultMetadata), 'utf8')
     process.env.PUBLISHED_CLOUDFRONT_PATH = metadataPath
 
+    manifestPayload = {
+      stage: 'prod',
+      prefix: 'static/client/prod/latest',
+      bucket: 'resume-forge-app-2025',
+      files: [],
+      hashedIndexAssets: [],
+      hashedIndexAssetCount: 0,
+      uploadedAt: '2024-11-01T00:00:00.000Z',
+    }
+
     sendMock = jest
       .spyOn(S3Client.prototype, 'send')
       .mockImplementation(async (command) => {
@@ -80,6 +92,11 @@ describe('uploadHashedIndexAssets', () => {
         }
         if (command instanceof HeadObjectCommand) {
           return {}
+        }
+        if (command instanceof GetObjectCommand) {
+          return {
+            Body: Buffer.from(JSON.stringify(manifestPayload)),
+          }
         }
         throw new Error(`Unexpected command: ${command?.constructor?.name ?? 'unknown'}`)
       })
@@ -166,20 +183,36 @@ describe('uploadHashedIndexAssets', () => {
         'static/client/prod/latest/assets/index-latest.js',
         'static/client/prod/latest/api/published-cloudfront',
         'static/client/prod/latest/api/published-cloudfront.json',
+        'static/client/prod/latest/manifest.json',
         'static/client/prod/latest/assets/v20251029/index-20251029.css',
         'static/client/prod/latest/assets/v20251029/index-20251029.js',
       ]),
     )
 
     expect(sendMock).toHaveBeenCalled()
-    expect(putCommands).toHaveLength(8)
+    expect(putCommands).toHaveLength(9)
+
+    const manifestPut = putCommands.find((command) =>
+      command.input.Key.endsWith('/manifest.json'),
+    )
+    expect(manifestPut).toBeDefined()
+    const manifestBody = manifestPut.input.Body
+    const manifestJson = JSON.parse(
+      typeof manifestBody === 'string' ? manifestBody : manifestBody.toString(),
+    )
+    expect(manifestJson.hashedIndexAssets).toEqual([
+      'assets/index-20251029.css',
+      'assets/index-20251029.js',
+    ])
+    expect(manifestJson.assetVersionLabel).toBe('v20251029')
+
     for (const command of putCommands) {
       expect(command.input.Metadata).toEqual(
         expect.objectContaining({
           'build-version': expect.any(String),
           'build-sha': expect.any(String),
           'build-timestamp': expect.any(String),
-        })
+        }),
       )
     }
   })
@@ -244,6 +277,7 @@ describe('uploadHashedIndexAssets', () => {
         'static/client/prod/latest/assets/index-latest.js',
         'static/client/prod/latest/api/published-cloudfront',
         'static/client/prod/latest/api/published-cloudfront.json',
+        'static/client/prod/latest/manifest.json',
       ]),
     )
 
@@ -360,6 +394,7 @@ describe('uploadHashedIndexAssets', () => {
         'static/client/prod/latest/assets/index-latest.js',
         'static/client/prod/latest/api/published-cloudfront',
         'static/client/prod/latest/api/published-cloudfront.json',
+        'static/client/prod/latest/manifest.json',
       ]),
     )
   })
