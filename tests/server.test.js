@@ -208,6 +208,15 @@ describe('static asset fallbacks', () => {
     expect(mockS3Send).toHaveBeenCalledTimes(1);
   });
 
+  test('strips API Gateway stage prefixes before resolving static index aliases', async () => {
+    const res = await request(app)
+      .get('/prod/assets/index-latest.css')
+      .set('x-apigateway-stage', 'prod');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+  });
+
   test('performs HEAD lookup against S3 for hashed index asset metadata', async () => {
     mockS3Send.mockImplementationOnce((command) => {
       expect(command.__type).toBe('HeadObjectCommand');
