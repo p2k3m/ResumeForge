@@ -1242,6 +1242,80 @@ function normalizeStaticProxyAssetPath(value) {
   return '';
 }
 
+function normalizeStageSegment(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  return trimmed.replace(/^\/+/, '').replace(/\/+$/, '');
+}
+
+function stripStagePrefixFromUrl(url, stage) {
+  if (typeof url !== 'string' || !url) {
+    return null;
+  }
+
+  const normalizedStage = normalizeStageSegment(stage);
+  if (!normalizedStage) {
+    return null;
+  }
+
+  const prefix = `/${normalizedStage}`;
+  const queryIndex = url.indexOf('?');
+  const pathname = queryIndex === -1 ? url : url.slice(0, queryIndex);
+  const search = queryIndex === -1 ? '' : url.slice(queryIndex);
+
+  if (pathname === prefix) {
+    return `/${search ? search.replace(/^\?/, '?') : ''}`.replace(/\?$/, '');
+  }
+
+  if (pathname.startsWith(`${prefix}/`)) {
+    const strippedPath = pathname.slice(prefix.length) || '/';
+    return `${strippedPath.startsWith('/') ? strippedPath : `/${strippedPath}`}${search}`;
+  }
+
+  return null;
+}
+
+function resolveApiGatewayStage(req) {
+  const headerStage = Array.isArray(req?.headers?.['x-apigateway-stage'])
+    ? req.headers['x-apigateway-stage'][0]
+    : req?.headers?.['x-apigateway-stage'];
+  const normalizedHeader = normalizeStageSegment(headerStage);
+  if (normalizedHeader) {
+    return normalizedHeader;
+  }
+
+  const contextHeader = Array.isArray(req?.headers?.['x-apigateway-event'])
+    ? req.headers['x-apigateway-event'][0]
+    : req?.headers?.['x-apigateway-event'];
+  if (contextHeader) {
+    try {
+      const parsed = JSON.parse(contextHeader);
+      const contextStage = normalizeStageSegment(parsed?.requestContext?.stage);
+      if (contextStage) {
+        return contextStage;
+      }
+    } catch (error) {
+      // Ignore malformed context headers from API Gateway.
+    }
+  }
+
+  const envStage =
+    normalizeStageSegment(process.env.AWS_API_GATEWAY_STAGE) ||
+    normalizeStageSegment(process.env.API_GATEWAY_STAGE);
+  if (envStage) {
+    return envStage;
+  }
+
+  return '';
+}
+
 const extractText = extractResumeText;
 const classifyDocument = classifyResumeDocument;
 const deploymentEnvironment = getDeploymentEnvironment();
@@ -4074,6 +4148,20 @@ function respondWithServiceNotFound(res, method, path, serviceKey) {
 }
 
 const app = express();
+
+app.use((req, res, next) => {
+  const stage = resolveApiGatewayStage(req);
+  if (!stage) {
+    return next();
+  }
+
+  const rewritten = stripStagePrefixFromUrl(req.url, stage);
+  if (rewritten) {
+    req.url = rewritten;
+  }
+
+  return next();
+});
 
 app.use((req, res, next) => {
   if (!req.requestId) {
