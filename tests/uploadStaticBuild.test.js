@@ -152,6 +152,15 @@ describe('shouldDeleteObjectKey', () => {
     expect(shouldDeleteObjectKey('static/client/prod/latest/index.html', prefix)).toBe(true)
     expect(shouldDeleteObjectKey('static/client/prod/latest/404.html', prefix)).toBe(true)
   })
+
+  it('preserves published CloudFront metadata fallbacks', () => {
+    expect(
+      shouldDeleteObjectKey('static/client/prod/latest/api/published-cloudfront', prefix),
+    ).toBe(false)
+    expect(
+      shouldDeleteObjectKey('static/client/prod/latest/api/published-cloudfront.json', prefix),
+    ).toBe(false)
+  })
 })
 
 describe('verifyUploadedAssets', () => {
