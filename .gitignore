@@ -5,6 +5,12 @@ coverage/
 client/dist/**
 !client/dist/
 !client/dist/index.html
+!client/dist/404.html
+!client/dist/service-worker.js
+!client/dist/manifest.json
+!client/dist/api/
+!client/dist/api/published-cloudfront
+!client/dist/api/published-cloudfront.json
 !client/dist/assets/
-!client/dist/assets/index-latest.css
-!client/dist/assets/index-abcd1234.css
+!client/dist/assets/index-*.css
+!client/dist/assets/index-*.js
