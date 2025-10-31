@@ -997,6 +997,24 @@ async function handleIndexAssetAliasRequest({
     return false;
   }
 
+  const directLogContext = {
+    aliasPath: normalizedAliasPath,
+    method,
+    ...additionalLogContext,
+  };
+
+  if (
+    await serveClientDistAsset({
+      assetPath: normalizedAliasPath,
+      method,
+      res,
+      logContext: directLogContext,
+      requestPath,
+    })
+  ) {
+    return true;
+  }
+
   const aliasLower = normalizedAliasPath.toLowerCase();
   const extension = aliasLower.endsWith('.css') ? 'css' : 'js';
   const manifest = await loadHashedIndexAssetManifest();
