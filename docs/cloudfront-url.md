@@ -5,30 +5,30 @@ The **canonical production CloudFront domain** for ResumeForge lives in [`config
 ```json
 {
   "stackName": "ResumeForge",
-  "url": "https://d3p9a7w5x4y2z.cloudfront.net",
-  "distributionId": "E3NEWCFDN0001",
+  "url": "https://d109hwmzrqr39w.cloudfront.net",
+  "distributionId": "E2NEWCFDN0002",
   "apiGatewayUrl": "https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod",
   "originBucket": "resume-forge-app-2025",
   "originRegion": "ap-south-1",
   "originPath": "/static/client/prod/latest",
-  "updatedAt": "2024-12-12T14:45:00.000Z",
+  "updatedAt": "2025-01-18T09:30:00.000Z",
   "degraded": false
 }
 ```
 
 ## Active domain snapshot
 
-- **Production CloudFront URL:** [`https://d3p9a7w5x4y2z.cloudfront.net`](https://d3p9a7w5x4y2z.cloudfront.net)
+- **Production CloudFront URL:** [`https://d109hwmzrqr39w.cloudfront.net`](https://d109hwmzrqr39w.cloudfront.net)
 - **Origin bucket:** `resume-forge-app-2025`
 - **Origin region:** `ap-south-1`
 - **Origin path:** `/static/client/prod/latest`
 - **API Gateway fallback:** [`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`](https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod)
-- **Published:** 12 December 2024, 14:45 UTC (source: [`config/published-cloudfront.json`](../config/published-cloudfront.json))
+- **Published:** 18 January 2025, 09:30 UTC (source: [`config/published-cloudfront.json`](../config/published-cloudfront.json))
 
 ## Operational telemetry
 
 - **Last successful deploy:** 22 October 2024, 09:18 UTC (GitHub Actions `deploy-prod` workflow run `#428`).
-- **Last CloudFront verification:** 12 December 2024, 15:00 UTC (`npm run verify:cloudfront` against [`https://d3p9a7w5x4y2z.cloudfront.net/healthz`](https://d3p9a7w5x4y2z.cloudfront.net/healthz), HTTP 200).
+- **Last CloudFront verification:** 18 January 2025, 10:00 UTC (`npm run verify:cloudfront` against [`https://d109hwmzrqr39w.cloudfront.net/healthz`](https://d109hwmzrqr39w.cloudfront.net/healthz), HTTP 200).
 
 This document and the project README mirror the latest domain so onboarding teams can copy the canonical URL without installing the CLI helpers or loading the app.
 

@@ -2,9 +2,9 @@
 
 This guide walks a candidate through ResumeForge end to end so every action has a clearly defined outcome.
 
-> **Start here:** [`https://d3p9a7w5x4y2z.cloudfront.net`](https://d3p9a7w5x4y2z.cloudfront.net) is the active CloudFront entry point (fronting the `resume-forge-app-2025` bucket in `ap-south-1` at origin path `/static/client/prod/latest`). Share this link with candidates so they always land on the latest deployment. Run `npm run verify:cloudfront` after each publish to confirm the CDN is still answering `/healthz` before sending traffic. If CloudFront is degraded, route urgent requests through the API Gateway fallback at [`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`](https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod) until the CDN recovers.
+> **Start here:** [`https://d109hwmzrqr39w.cloudfront.net`](https://d109hwmzrqr39w.cloudfront.net) is the active CloudFront entry point (fronting the `resume-forge-app-2025` bucket in `ap-south-1` at origin path `/static/client/prod/latest`). Share this link with candidates so they always land on the latest deployment. Run `npm run verify:cloudfront` after each publish to confirm the CDN is still answering `/healthz` before sending traffic. If CloudFront is degraded, route urgent requests through the API Gateway fallback at [`https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod`](https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod) until the CDN recovers.
 >
-> Last verified: 12 December 2024 at 15:00 UTC per [`config/published-cloudfront.json`](../config/published-cloudfront.json).
+> Last verified: 18 January 2025 at 10:00 UTC per [`config/published-cloudfront.json`](../config/published-cloudfront.json).
 
 ## 1. Upload a résumé
 - **What to do:** Drag-and-drop or browse for a PDF, DOC, or DOCX résumé.
