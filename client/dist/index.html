@@ -1480,18 +1480,47 @@
             return false
           }
 
-          let selectedUrl = ''
-          let selectedIndex = attemptIndex
+          const candidateAssets = []
+          if (preferredAssetPath) {
+            candidateAssets.push(preferredAssetPath)
+          }
+          if (aliasPath && aliasPath !== preferredAssetPath) {
+            candidateAssets.push(aliasPath)
+          }
 
-          while (selectedIndex < apiProxyCandidates.length) {
-            const candidateBase = apiProxyCandidates[selectedIndex]
-            const proxyUrl = buildStaticProxyUrl(candidateBase, preferredAssetPath)
+          if (!candidateAssets.length || apiProxyCandidates.length === 0) {
+            return false
+          }
+
+          let selectedUrl = ''
+          let selectedAsset = ''
+          let selectedBase = ''
+          const totalCombinations = candidateAssets.length * apiProxyCandidates.length
+          let nextPointer = attemptIndex
+
+          if (!Number.isFinite(nextPointer) || nextPointer < 0) {
+            nextPointer = 0
+          }
+
+          let cursor = nextPointer
+
+          while (cursor < totalCombinations) {
+            const assetIndex = Math.floor(cursor / apiProxyCandidates.length)
+            const baseIndex = cursor % apiProxyCandidates.length
+            const assetCandidate = candidateAssets[assetIndex]
+            const baseCandidate = apiProxyCandidates[baseIndex]
+            const proxyUrl = buildStaticProxyUrl(baseCandidate, assetCandidate)
+            cursor += 1
+
             if (proxyUrl) {
               selectedUrl = proxyUrl
+              selectedAsset = assetCandidate
+              selectedBase = baseCandidate
               break
             }
-            selectedIndex += 1
           }
+
+          element.dataset.resumeforgeProxyAttempt = String(cursor)
 
           if (!selectedUrl) {
             return false
@@ -1513,14 +1542,26 @@
           replacement.setAttribute('data-src', selectedUrl)
           replacement.dataset.resumeforgeAssetRetry = 'true'
           replacement.dataset.resumeforgeAssetProxy = 'true'
-          replacement.dataset.resumeforgeProxyAttempt = String(selectedIndex + 1)
+          replacement.dataset.resumeforgeProxyAttempt = String(cursor)
+          if (selectedAsset) {
+            replacement.dataset.resumeforgeProxyAsset = selectedAsset
+          }
+          if (selectedBase) {
+            replacement.dataset.resumeforgeProxyBase = selectedBase
+          }
           if (originalSource) {
             replacement.dataset.resumeforgeOriginalSource = originalSource
           }
 
           element.dataset.resumeforgeAssetRetry = 'true'
           element.dataset.resumeforgeAssetProxy = 'true'
-          element.dataset.resumeforgeProxyAttempt = String(selectedIndex + 1)
+          element.dataset.resumeforgeProxyAttempt = String(cursor)
+          if (selectedAsset && !element.dataset.resumeforgeProxyAsset) {
+            element.dataset.resumeforgeProxyAsset = selectedAsset
+          }
+          if (selectedBase && !element.dataset.resumeforgeProxyBase) {
+            element.dataset.resumeforgeProxyBase = selectedBase
+          }
           if (originalSource && !element.dataset.resumeforgeOriginalSource) {
             element.dataset.resumeforgeOriginalSource = originalSource
           }
@@ -1539,7 +1580,9 @@
           try {
             console.warn('Retrying ResumeForge static asset via API proxy fallback.', {
               source: originalSource || '',
-              proxy: selectedUrl
+              proxy: selectedUrl,
+              asset: selectedAsset || '',
+              base: selectedBase || ''
             })
           } catch (error) {
             // Ignore logging errors in constrained environments.
