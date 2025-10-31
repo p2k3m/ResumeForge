@@ -526,20 +526,31 @@ async function loadHashedIndexAssetManifest() {
     js: selectManifestHashedIndexAsset(manifest, 'js'),
   };
 
-  if (hashedFromManifest.css && hashedFromManifest.js) {
-    return hashedFromManifest;
-  }
-
   const localManifest = await loadLocalHashedIndexAssetManifest();
+  const normalizedLocalCss = normalizeManifestHashedAssetPath(localManifest.css);
+  const normalizedLocalJs = normalizeManifestHashedAssetPath(localManifest.js);
+  const rawLocalCss = localManifest.css || normalizedLocalCss || '';
+  const rawLocalJs = localManifest.js || normalizedLocalJs || '';
+
+  const normalizedManifestCss = hashedFromManifest.css || '';
+  const normalizedManifestJs = hashedFromManifest.js || '';
+
+  const resolvedManifestRawCss = normalizedManifestCss
+    ? resolveManifestRawHashedIndexAsset(manifest, normalizedManifestCss)
+    : '';
+  const resolvedManifestRawJs = normalizedManifestJs
+    ? resolveManifestRawHashedIndexAsset(manifest, normalizedManifestJs)
+    : '';
+
   return {
-    css: hashedFromManifest.css || localManifest.css || '',
-    js: hashedFromManifest.js || localManifest.js || '',
-    rawCss: hashedFromManifest.css
-      ? resolveManifestRawHashedIndexAsset(manifest, hashedFromManifest.css)
-      : hashedFromManifest.css || '',
-    rawJs: hashedFromManifest.js
-      ? resolveManifestRawHashedIndexAsset(manifest, hashedFromManifest.js)
-      : hashedFromManifest.js || '',
+    css: normalizedManifestCss || normalizedLocalCss || '',
+    js: normalizedManifestJs || normalizedLocalJs || '',
+    rawCss: resolvedManifestRawCss || rawLocalCss,
+    rawJs: resolvedManifestRawJs || rawLocalJs,
+    localCss: normalizedLocalCss || '',
+    localJs: normalizedLocalJs || '',
+    localRawCss: rawLocalCss,
+    localRawJs: rawLocalJs,
   };
 }
 
@@ -1036,6 +1047,24 @@ async function handleIndexAssetAliasRequest({
 
     res.status(503).type('text/plain').send('Static assets are temporarily unavailable.');
     return true;
+  }
+
+  const localNormalizedAssetPath =
+    extension === 'css' ? manifest.localCss : manifest.localJs;
+  const localRawAssetPath = extension === 'css' ? manifest.localRawCss : manifest.localRawJs;
+
+  if (
+    localNormalizedAssetPath &&
+    localNormalizedAssetPath !== normalizedHashedAssetPath &&
+    !manifestFallbackCandidates.some(
+      (candidate) => candidate && candidate.normalized === localNormalizedAssetPath,
+    )
+  ) {
+    manifestFallbackCandidates.unshift({
+      normalized: localNormalizedAssetPath,
+      raw: localRawAssetPath || localNormalizedAssetPath,
+      local: true,
+    });
   }
 
   const logContext = {
