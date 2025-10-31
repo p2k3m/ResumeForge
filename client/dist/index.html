@@ -957,7 +957,46 @@
           return candidates
         }
 
-        const aliasBaseCandidates = resolveAliasBaseCandidates()
+        const aliasBaseCandidates = (() => {
+          const candidates = resolveAliasBaseCandidates()
+
+          const addCandidate = (value) => {
+            if (!value) {
+              return
+            }
+
+            const normalized = normalizeAliasBase(value)
+            if (!normalized) {
+              return
+            }
+
+            if (!candidates.includes(normalized)) {
+              candidates.unshift(normalized)
+            }
+          }
+
+          const extractApiGatewayUrl = (metadata) =>
+            metadata && typeof metadata === 'object'
+              ? metadata.apiGatewayUrl || metadata.url || ''
+              : ''
+
+          const inlineApiBase = extractApiGatewayUrl(inlinePublishedCloudfrontMetadata?.cloudfront)
+          if (inlineApiBase) {
+            addCandidate(inlineApiBase)
+          }
+
+          try {
+            const runtimeMetadata = window.__RESUMEFORGE_CLOUDFRONT_METADATA__
+            const runtimeApiBase = extractApiGatewayUrl(runtimeMetadata?.cloudfront)
+            if (runtimeApiBase) {
+              addCandidate(runtimeApiBase)
+            }
+          } catch (error) {
+            // Ignore runtime metadata access errors in constrained environments.
+          }
+
+          return candidates
+        })()
         const aliasBaseSeen = new Set(aliasBaseCandidates)
         const apiProxyCandidates = []
         const apiProxySeen = new Set()
