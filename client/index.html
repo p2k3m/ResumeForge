@@ -1449,12 +1449,26 @@
               return ''
             }
 
+            try {
+              const resolved = new URL(candidate, window.location.href)
+              candidate =
+                resolved.origin === window.location.origin
+                  ? `${resolved.pathname}${resolved.search}`
+                  : resolved.href
+            } catch (error) {
+              // Ignore URL parsing failures and continue with the raw candidate.
+            }
+
             candidate = candidate.replace(/[#?].*$/, '')
             candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '')
             candidate = candidate.replace(/^\/+/, '')
             candidate = candidate.replace(/\\/g, '/')
             if (!candidate) {
               return ''
+            }
+
+            if (/^[a-z]+:/i.test(candidate)) {
+              return candidate
             }
 
             return candidate.startsWith('/') ? candidate : `/${candidate}`
