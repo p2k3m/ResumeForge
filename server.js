@@ -124,6 +124,10 @@ import {
   updateBackupApiInputs,
   updateMetaApiBase,
 } from './lib/cloudfront/metadata.js';
+import {
+  normalizeHashedIndexAssetPath,
+  normalizeManifestHashedAssetPath,
+} from './lib/static/normalization.js';
 
 const knownResumeIdentifiers = new Set();
 let missingClientAssetsNotificationSent = false;
@@ -408,29 +412,6 @@ const STATIC_MANIFEST_CACHE_TTL_MS = 5 * 60 * 1000;
 let cachedStaticManifest;
 let pendingStaticManifestPromise;
 
-function normalizeHashedIndexAssetPath(rawPath) {
-  if (typeof rawPath !== 'string') {
-    return '';
-  }
-
-  let normalized = rawPath.trim();
-  if (!normalized) {
-    return '';
-  }
-
-  while (/^(?:\.\.\/|\.\/)/.test(normalized)) {
-    normalized = normalized.replace(/^(?:\.\.\/|\.\/)/, '');
-  }
-
-  normalized = normalized.replace(/^\.\/+/, '');
-
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-
-  return normalized.replace(/\?.*$/, '');
-}
-
 function extractPrimaryIndexAssets(html) {
   const manifest = { js: '', css: '' };
   if (typeof html !== 'string' || !html.trim()) {
@@ -557,38 +538,6 @@ async function loadHashedIndexAssetManifest() {
     localRawCss: rawLocalCss,
     localRawJs: rawLocalJs,
   };
-}
-
-const HASHED_INDEX_MANIFEST_ASSET_PATTERN =
-  /(?:^|\/)(assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\.map)?$/i;
-
-function normalizeManifestHashedAssetPath(assetPath) {
-  if (typeof assetPath !== 'string') {
-    return '';
-  }
-
-  let candidate = assetPath.trim();
-  if (!candidate) {
-    return '';
-  }
-
-  candidate = candidate.replace(/\?.*$/, '').replace(/#.*$/, '');
-
-  while (/^(?:\.\.\/|\.\/)/.test(candidate)) {
-    candidate = candidate.replace(/^(?:\.\.\/|\.\/)/, '');
-  }
-
-  candidate = candidate.replace(/\\/g, '/');
-
-  // Normalize away any S3 prefixes (for example "static/client/prod/latest/") or
-  // fully-qualified URLs that may appear in the manifest. We only care about the
-  // trailing "assets/index-*.css" or "assets/index-*.js" segment.
-  const match = candidate.match(HASHED_INDEX_MANIFEST_ASSET_PATTERN);
-  if (!match) {
-    return '';
-  }
-
-  return `/${match[1]}`;
 }
 
 function partitionNormalizedManifestAssets(assets = []) {
@@ -26391,4 +26340,6 @@ export {
   setStaticAssetCacheHeaders,
   resetStaticAssetManifestCache,
   buildFallbackClientIndexHtml,
+  normalizeManifestHashedAssetPath,
+  normalizeHashedIndexAssetPath,
 };
