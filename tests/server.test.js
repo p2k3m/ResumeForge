@@ -264,7 +264,7 @@ describe('static asset fallbacks', () => {
           if (target === clientIndexPath) {
             return { mtimeMs: testMtime };
           }
-          if (target.endsWith(cssAliasName)) {
+          if (target.endsWith(cssAliasName) || target.endsWith('index-latest.css')) {
             const notFound = new Error('Not Found');
             notFound.code = 'ENOENT';
             throw notFound;
@@ -331,7 +331,11 @@ describe('static asset fallbacks', () => {
       .spyOn(fsPromises, 'stat')
       .mockImplementation(async (target, ...args) => {
         if (typeof target === 'string') {
-          if (target === clientIndexPath || target.endsWith(cssAliasName)) {
+          if (
+            target === clientIndexPath ||
+            target.endsWith(cssAliasName) ||
+            target.endsWith('index-latest.css')
+          ) {
             const notFound = new Error('Not Found');
             notFound.code = 'ENOENT';
             throw notFound;
@@ -395,7 +399,11 @@ describe('static asset fallbacks', () => {
       .spyOn(fsPromises, 'stat')
       .mockImplementation(async (target, ...args) => {
         if (typeof target === 'string') {
-          if (target === clientIndexPath || target.endsWith(cssAliasName)) {
+          if (
+            target === clientIndexPath ||
+            target.endsWith(cssAliasName) ||
+            target.endsWith('index-latest.css')
+          ) {
             const notFound = new Error('Not Found');
             notFound.code = 'ENOENT';
             throw notFound;
@@ -464,7 +472,11 @@ describe('static asset fallbacks', () => {
           if (target === clientIndexPath) {
             return { mtimeMs: testMtime };
           }
-          if (target.endsWith(cssAliasName) || target.endsWith(fallbackCssName)) {
+          if (
+            target.endsWith(cssAliasName) ||
+            target.endsWith(fallbackCssName) ||
+            target.endsWith('index-latest.css')
+          ) {
             const notFound = new Error('Not Found');
             notFound.code = 'ENOENT';
             throw notFound;
@@ -573,7 +585,10 @@ describe('static asset proxy endpoint', () => {
     const statSpy = jest
       .spyOn(fsPromises, 'stat')
       .mockImplementation(async (target, ...args) => {
-        if (typeof target === 'string' && target.endsWith(hashedCssName)) {
+        if (
+          typeof target === 'string' &&
+          (target.endsWith(hashedCssName) || target.endsWith('index-latest.css'))
+        ) {
           const notFound = new Error('Not Found');
           notFound.code = 'ENOENT';
           throw notFound;
