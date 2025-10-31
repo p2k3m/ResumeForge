@@ -482,6 +482,10 @@ function resolveBucketConfiguration() {
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/
 const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
 const INDEX_ASSET_ALIAS_PATHS = new Set(['assets/index-latest.css', 'assets/index-latest.js'])
+const RESERVED_STATIC_ASSET_PATHS = new Set([
+  'api/published-cloudfront',
+  'api/published-cloudfront.json',
+])
 
 export function normalizeClientAssetPath(relativePath) {
   if (typeof relativePath !== 'string') {
@@ -687,6 +691,10 @@ export function shouldDeleteObjectKey(key, prefix) {
   }
 
   if (INDEX_ASSET_ALIAS_PATHS.has(sanitized)) {
+    return false
+  }
+
+  if (RESERVED_STATIC_ASSET_PATHS.has(sanitized)) {
     return false
   }
 
