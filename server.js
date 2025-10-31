@@ -4003,6 +4003,25 @@ const shouldServeClientAppRoutes =
     typeof value === 'string' && value.trim().toLowerCase() === 'clientapp'
   );
 
+function shouldBypassClientStaticForPublishedCloudfront(req) {
+  if (!req || typeof req !== 'object') {
+    return false;
+  }
+
+  const method = typeof req.method === 'string' ? req.method.toUpperCase() : 'GET';
+  if (method !== 'GET' && method !== 'HEAD') {
+    return false;
+  }
+
+  const requestPath = typeof req.path === 'string' ? req.path : '';
+  if (!requestPath) {
+    return false;
+  }
+
+  const normalizedPath = requestPath.length > 1 ? requestPath.replace(/\/+$/, '') : requestPath;
+  return normalizedPath === '/api/published-cloudfront';
+}
+
 const SERVICE_GUARD_HEADERS = Object.freeze({
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
@@ -4174,13 +4193,18 @@ if (shouldServeClientAppRoutes) {
   app.use(serveIndexAssetAlias);
 
   if (clientAssetsAvailable()) {
-    app.use(
-      express.static(clientDistDir, {
-        index: false,
-        fallthrough: true,
-        setHeaders: setStaticAssetCacheHeaders,
-      })
-    );
+    const clientStaticMiddleware = express.static(clientDistDir, {
+      index: false,
+      fallthrough: true,
+      setHeaders: setStaticAssetCacheHeaders,
+    });
+
+    app.use((req, res, next) => {
+      if (shouldBypassClientStaticForPublishedCloudfront(req)) {
+        return next();
+      }
+      return clientStaticMiddleware(req, res, next);
+    });
   } else {
     logStructured('warn', 'client_build_missing', {
       path: clientIndexPath,
