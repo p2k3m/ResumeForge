@@ -459,6 +459,86 @@ async function ensureIndexHtmlMatchesManifest({ s3, bucket, prefix, hashedAssets
   return { indexKey, indexAssets }
 }
 
+async function verifyIndexAliasAssets({
+  s3,
+  bucket,
+  prefix,
+  requireCssAlias = false,
+  requireJsAlias = true,
+}) {
+  const aliases = []
+
+  if (requireJsAlias) {
+    aliases.push('assets/index-latest.js')
+  }
+
+  if (requireCssAlias) {
+    aliases.push('assets/index-latest.css')
+  }
+
+  if (aliases.length === 0) {
+    return
+  }
+
+  const failures = []
+
+  for (const relativePath of aliases) {
+    const key = buildS3Key(prefix, relativePath)
+
+    try {
+      await s3.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        }),
+      )
+    } catch (error) {
+      const status = error?.$metadata?.httpStatusCode
+      const code = error?.name || error?.Code || error?.code
+      const detail = error?.message || String(error)
+      const parts = [relativePath]
+      if (typeof status === 'number' && !Number.isNaN(status)) {
+        parts.push(`status ${status}`)
+      }
+      if (code) {
+        parts.push(`code ${code}`)
+      }
+      if (detail) {
+        parts.push(`— ${detail}`)
+      }
+      failures.push(parts.join(' '))
+      continue
+    }
+
+    const aclError = await ensureObjectHasPublicReadAcl({ s3, bucket, key })
+    if (aclError) {
+      failures.push(`${relativePath} ${aclError}`)
+      continue
+    }
+
+    const signedUrlError = await ensureObjectSignedUrlAccessible({
+      s3,
+      bucket,
+      key,
+    })
+    if (signedUrlError) {
+      failures.push(`${relativePath} ${signedUrlError}`)
+    }
+  }
+
+  if (failures.length > 0) {
+    const details = failures.join(', ')
+    throw new Error(
+      `[verify-static] Index alias asset${failures.length === 1 ? '' : 's'} failed verification: ${details}`,
+    )
+  }
+
+  console.log(
+    `[verify-static] Confirmed index alias asset${aliases.length === 1 ? '' : 's'} ` +
+      `reachable in s3://${bucket}/${prefix}/: ${aliases.join(', ')}`,
+  )
+}
+
 function ensureHashedIndexAssets(manifest, { manifestKey, bucket }) {
   const hashedAssets = normalizeHashedIndexAssets(manifest)
   if (hashedAssets.length === 0) {
@@ -931,6 +1011,15 @@ async function main() {
       indexAssets.length === 1 ? '' : 's'
     }) matches manifest hashed bundle references at s3://${bucket}/${indexKey}`,
   )
+
+  const requiresCssAlias = indexAssets.some((asset) => asset.endsWith('.css'))
+  await verifyIndexAliasAssets({
+    s3,
+    bucket,
+    prefix,
+    requireCssAlias: requiresCssAlias,
+    requireJsAlias: true,
+  })
 
   await verifyS3Assets({ s3, bucket, manifest })
   console.log(
