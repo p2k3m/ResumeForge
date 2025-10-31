@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs'
 import { createReadStream } from 'node:fs'
 import process from 'node:process'
 import {
+  GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -864,6 +865,183 @@ async function resolveSupplementaryUploadEntries({ distDirectory, files = [] }) 
   return uploads
 }
 
+async function readStreamToString(stream) {
+  if (!stream) {
+    return ''
+  }
+
+  if (typeof stream === 'string') {
+    return stream
+  }
+
+  if (Buffer.isBuffer(stream)) {
+    return stream.toString('utf8')
+  }
+
+  const chunks = []
+  for await (const chunk of stream) {
+    if (chunk === undefined || chunk === null) {
+      continue
+    }
+
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+
+  if (chunks.length === 0) {
+    return ''
+  }
+
+  return Buffer.concat(chunks).toString('utf8')
+}
+
+function extractManifestHashedAssets(entries = []) {
+  const assets = new Set()
+
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const candidate = normalizeHashedAssetReference(entry?.relativePath || entry)
+    if (!candidate) {
+      continue
+    }
+
+    const filename = path.basename(candidate)
+    if (!HASHED_INDEX_ASSET_FILENAME_PATTERN.test(filename)) {
+      continue
+    }
+
+    if (filename.endsWith('.map')) {
+      continue
+    }
+
+    assets.add(candidate)
+  }
+
+  return Array.from(assets).sort((a, b) => a.localeCompare(b))
+}
+
+async function updateManifestHashedAssets({
+  s3,
+  bucket,
+  prefix,
+  hashedEntries = [],
+  versionLabel,
+}) {
+  if (!s3 || !bucket || !prefix) {
+    return false
+  }
+
+  const hashedAssets = extractManifestHashedAssets(hashedEntries)
+  if (hashedAssets.length === 0) {
+    return false
+  }
+
+  const manifestKey = buildS3Key(prefix, 'manifest.json')
+
+  let existing
+  try {
+    existing = await s3.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: manifestKey,
+      }),
+    )
+  } catch (error) {
+    const statusCode = error?.$metadata?.httpStatusCode
+    const errorCode = error?.name || error?.Code || error?.code || ''
+    const normalizedCode = typeof errorCode === 'string' ? errorCode.toLowerCase() : ''
+
+    if (statusCode === 404 || /nosuchkey|notfound/.test(normalizedCode)) {
+      console.warn(
+        `[upload-hashed-assets] manifest.json not found at s3://${bucket}/${manifestKey}; skipping manifest update.`,
+      )
+      return false
+    }
+
+    console.warn(
+      `[upload-hashed-assets] Unable to load manifest at s3://${bucket}/${manifestKey}:`,
+      error?.message || error,
+    )
+    return false
+  }
+
+  const raw = await readStreamToString(existing?.Body)
+  if (!raw || !raw.trim()) {
+    console.warn(
+      `[upload-hashed-assets] Existing manifest at s3://${bucket}/${manifestKey} was empty; skipping manifest update.`,
+    )
+    return false
+  }
+
+  let manifest
+  try {
+    manifest = JSON.parse(raw)
+  } catch (error) {
+    console.warn(
+      `[upload-hashed-assets] Unable to parse manifest at s3://${bucket}/${manifestKey}:`,
+      error?.message || error,
+    )
+    return false
+  }
+
+  const fileSet = new Set()
+  if (Array.isArray(manifest.files)) {
+    for (const entry of manifest.files) {
+      if (typeof entry === 'string') {
+        const normalized = entry.trim()
+        if (normalized) {
+          fileSet.add(normalized)
+        }
+        continue
+      }
+
+      if (entry && typeof entry === 'object') {
+        const candidates = [entry.path, entry.key]
+        for (const candidate of candidates) {
+          if (typeof candidate === 'string' && candidate.trim()) {
+            fileSet.add(candidate.trim())
+          }
+        }
+      }
+    }
+  }
+
+  if (!Array.isArray(manifest.files)) {
+    manifest.files = []
+  }
+
+  for (const asset of hashedAssets) {
+    if (!fileSet.has(asset)) {
+      manifest.files.push(asset)
+      fileSet.add(asset)
+    }
+  }
+
+  manifest.hashedIndexAssets = hashedAssets
+  manifest.hashedIndexAssetCount = hashedAssets.length
+  manifest.assetVersionLabel = versionLabel || manifest.assetVersionLabel || null
+  manifest.uploadedAt = new Date().toISOString()
+
+  const manifestBody = `${JSON.stringify(manifest, null, 2)}\n`
+  const manifestAcl = resolveObjectAcl('manifest.json')
+
+  await s3.send(
+    new PutObjectCommand(
+      withBuildMetadata(
+        {
+          Bucket: bucket,
+          Key: manifestKey,
+          Body: manifestBody,
+          ContentType: 'application/json',
+          CacheControl: 'no-cache',
+          ...(manifestAcl ? { ACL: manifestAcl } : {}),
+        },
+        { versionLabel },
+      ),
+    ),
+  )
+
+  return true
+}
+
 export async function uploadHashedIndexAssets(options = {}) {
   const distDirectory = options?.distDirectory || clientDistDir
   const assetsDirectory = options?.assetsDirectory || path.join(distDirectory, 'assets')
@@ -979,6 +1157,14 @@ export async function uploadHashedIndexAssets(options = {}) {
     bucket,
     prefix,
     uploads,
+  })
+
+  await updateManifestHashedAssets({
+    s3,
+    bucket,
+    prefix,
+    hashedEntries: entries,
+    versionLabel,
   })
 
   if (!options?.quiet) {
