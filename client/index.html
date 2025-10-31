@@ -211,6 +211,30 @@
           })
         }
 
+        const inlinePublishedCloudfrontMetadata = (() => {
+          try {
+            if (typeof __PUBLISHED_CLOUDFRONT_METADATA__ === 'undefined') {
+              return null
+            }
+            return __PUBLISHED_CLOUDFRONT_METADATA__ && typeof __PUBLISHED_CLOUDFRONT_METADATA__ === 'object'
+              ? __PUBLISHED_CLOUDFRONT_METADATA__
+              : null
+          } catch (error) {
+            return null
+          }
+        })()
+
+        if (inlinePublishedCloudfrontMetadata && typeof window !== 'undefined') {
+          try {
+            const existing = window.__RESUMEFORGE_CLOUDFRONT_METADATA__
+            if (!existing || typeof existing !== 'object') {
+              window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = inlinePublishedCloudfrontMetadata
+            }
+          } catch (error) {
+            // Ignore inline metadata assignment failures in restricted environments.
+          }
+        }
+
         const degradeBanner = document.getElementById('cloudfront-degraded-banner')
         const degradeDomainWrapper = degradeBanner?.querySelector('[data-cloudfront-domain-wrapper]')
         const degradeDomainLabel = degradeBanner?.querySelector('[data-cloudfront-domain]')
