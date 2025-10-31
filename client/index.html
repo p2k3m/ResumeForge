@@ -578,6 +578,7 @@
           candidate = candidate.replace(/^(?:\.\.\/)+/g, '')
           candidate = candidate.replace(/^\/+/, '')
           candidate = candidate.replace(/\\/g, '/')
+          candidate = candidate.replace(/[,;]+$/, '')
 
           if (!candidate) {
             return ''
