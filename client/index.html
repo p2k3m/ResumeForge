@@ -989,6 +989,48 @@
           return true
         }
 
+        const shouldAppendOriginPathToBase = (candidate, originPath) => {
+          if (!candidate || !originPath) {
+            return false
+          }
+
+          try {
+            const resolved = new URL(candidate, window.location.href)
+            const host = (resolved.hostname || '').toLowerCase()
+            if (!host) {
+              return false
+            }
+
+            if (/^(?:s3[.-]|s3$)/.test(host)) {
+              return true
+            }
+
+            if (/\.s3[.-]/.test(host)) {
+              return true
+            }
+
+            if (host === 's3.amazonaws.com') {
+              return true
+            }
+
+            if (/\.amazonaws\.com$/.test(host)) {
+              if (host.startsWith('s3-') || host.startsWith('s3.')) {
+                return true
+              }
+              if (host.includes('.s3-website.')) {
+                return true
+              }
+              if (host.includes('.s3-website-')) {
+                return true
+              }
+            }
+          } catch (error) {
+            return false
+          }
+
+          return false
+        }
+
         const applyAliasMetadataCandidates = (rawMetadata) => {
           if (!rawMetadata || typeof rawMetadata !== 'object') {
             return false
@@ -1028,15 +1070,20 @@
           let added = false
 
           const applyCandidate = (candidate) => {
-            if (candidate) {
-              addApiProxyCandidate(candidate)
+            if (!candidate) {
+              return
             }
+
+            addApiProxyCandidate(candidate)
+
             if (addAliasBaseCandidate(candidate)) {
               added = true
             }
 
-            if (candidate && originPath && addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
-              added = true
+            if (shouldAppendOriginPathToBase(candidate, originPath)) {
+              if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
+                added = true
+              }
             }
           }
 
