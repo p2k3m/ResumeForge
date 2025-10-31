@@ -43,6 +43,9 @@ const buildVersion = resolveBuildVersion()
 export default defineConfig({
   base: './',
   plugins: [react()],
+  build: {
+    manifest: true,
+  },
   server: {
     proxy: {
       '/api': {
