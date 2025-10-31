@@ -318,27 +318,34 @@
 
           let lastError = null
           for (const path of PUBLISHED_CLOUDFRONT_ENDPOINT_PATHS) {
-            const endpoint = typeof path === 'string' ? path : ''
-            if (!endpoint) {
-              continue
-            }
-
-            try {
-              const response = await fetch(endpoint, { method: 'GET' })
-              if (!response || !response.ok) {
+            const endpoints = buildAliasEndpointCandidates(path)
+            for (const endpoint of endpoints) {
+              if (!endpoint) {
                 continue
               }
 
               try {
-                const payload = await response.json()
-                if (payload && typeof payload === 'object') {
-                  return payload
+                const response = await fetch(endpoint, {
+                  method: 'GET',
+                  cache: 'no-store',
+                  credentials: 'omit'
+                })
+                if (!response || !response.ok) {
+                  continue
                 }
-              } catch (innerError) {
-                lastError = innerError
+
+                try {
+                  const payload = await response.json()
+                  if (payload && typeof payload === 'object') {
+                    return payload
+                  }
+                } catch (innerError) {
+                  lastError = innerError
+                  continue
+                }
+              } catch (error) {
+                lastError = error
               }
-            } catch (error) {
-              lastError = error
             }
           }
 
