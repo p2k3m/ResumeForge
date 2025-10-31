@@ -1324,6 +1324,8 @@
           }
         }
 
+        const HASHED_INDEX_ASSET_PATTERN = /^(?:\/)?assets\/index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
+
         const attemptStaticProxyReload = (element) => {
           if (!element || typeof element.tagName !== 'string') {
             return false
@@ -1342,15 +1344,49 @@
             return false
           }
 
-          const aliasPath = isScript ? aliasPaths.js : aliasPaths.css
-          if (!aliasPath) {
-            return false
-          }
-
           const rawAttempt = element.dataset?.resumeforgeProxyAttempt || '0'
           let attemptIndex = Number.parseInt(rawAttempt, 10)
           if (!Number.isFinite(attemptIndex) || attemptIndex < 0) {
             attemptIndex = 0
+          }
+
+          const originalSource = describeSource(element)
+          const normalizedSource = (() => {
+            if (!originalSource) {
+              return ''
+            }
+
+            let candidate = String(originalSource).trim()
+            if (!candidate) {
+              return ''
+            }
+
+            candidate = candidate.replace(/[#?].*$/, '')
+            candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '')
+            candidate = candidate.replace(/^\/+/, '')
+            candidate = candidate.replace(/\\/g, '/')
+            if (!candidate) {
+              return ''
+            }
+
+            return candidate.startsWith('/') ? candidate : `/${candidate}`
+          })()
+
+          const aliasPath = isScript ? aliasPaths.js : aliasPaths.css
+          if (!aliasPath && !normalizedSource) {
+            return false
+          }
+
+          const preferredAssetPath = (() => {
+            if (normalizedSource && HASHED_INDEX_ASSET_PATTERN.test(normalizedSource)) {
+              return normalizedSource
+            }
+
+            return aliasPath || ''
+          })()
+
+          if (!preferredAssetPath) {
+            return false
           }
 
           let selectedUrl = ''
@@ -1358,7 +1394,7 @@
 
           while (selectedIndex < apiProxyCandidates.length) {
             const candidateBase = apiProxyCandidates[selectedIndex]
-            const proxyUrl = buildStaticProxyUrl(candidateBase, aliasPath)
+            const proxyUrl = buildStaticProxyUrl(candidateBase, preferredAssetPath)
             if (proxyUrl) {
               selectedUrl = proxyUrl
               break
@@ -1375,7 +1411,6 @@
             return false
           }
 
-          const originalSource = describeSource(element)
           const replacement = element.cloneNode(true)
 
           if (isStylesheet) {
