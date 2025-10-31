@@ -118,7 +118,12 @@ import { stripUploadMetadata } from './lib/uploads/metadata.js';
 import createS3StreamingStorage from './lib/uploads/s3StreamingStorage.js';
 import { withRequiredLogAttributes } from './lib/logging/attributes.js';
 import { notifyMissingClientAssets } from './lib/deploy/notifications.js';
-import { embedCloudfrontMetadataIntoHtml, ensureMetaApiBase } from './lib/cloudfront/metadata.js';
+import {
+  embedCloudfrontMetadataIntoHtml,
+  ensureMetaApiBase,
+  updateBackupApiInputs,
+  updateMetaApiBase,
+} from './lib/cloudfront/metadata.js';
 
 const knownResumeIdentifiers = new Set();
 let missingClientAssetsNotificationSent = false;
@@ -2382,6 +2387,23 @@ function buildFallbackClientIndexHtml(metadata = null) {
   return FALLBACK_CLIENT_INDEX_TEMPLATE.replace('__DEGRADE_SECTION__', degradeSection.trim());
 }
 
+function resolveConfiguredApiBaseUrl() {
+  const candidates = [
+    readEnvValue('RESUMEFORGE_API_BASE_URL'),
+    readEnvValue('VITE_API_BASE_URL'),
+    readEnvValue('API_BASE_URL'),
+    readEnvValue('PUBLIC_API_BASE_URL'),
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return undefined;
+}
+
 async function getClientIndexHtml() {
   if (!clientAssetsAvailable()) {
     if (!cachedClientIndexHtml) {
@@ -2404,17 +2426,25 @@ async function getClientIndexHtml() {
 
   let html = await fs.readFile(clientIndexPath, 'utf8');
 
-  html = ensureMetaApiBase(html);
-
+  let metadata = null;
   try {
-    const metadata = await loadPublishedCloudfrontMetadata();
-    if (metadata) {
-      html = embedCloudfrontMetadataIntoHtml(html, metadata);
-    }
+    metadata = await loadPublishedCloudfrontMetadata();
   } catch (err) {
     logStructured('warn', 'client_index_metadata_embed_failed', {
       error: serializeError(err),
     });
+  }
+
+  const fallbackApiBase =
+    (metadata && metadata.apiGatewayUrl) || resolveConfiguredApiBaseUrl();
+
+  html = ensureMetaApiBase(html, fallbackApiBase || '');
+
+  if (metadata) {
+    html = embedCloudfrontMetadataIntoHtml(html, metadata);
+  } else if (fallbackApiBase) {
+    html = updateMetaApiBase(html, fallbackApiBase);
+    html = updateBackupApiInputs(html, fallbackApiBase);
   }
 
   if (process.env.NODE_ENV !== 'development') {
