@@ -6,20 +6,60 @@
     <meta name="resumeforge-api-base" content="https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod" />
     <script>
       ;(function setResumeForgeApiBase() {
+        const resolveFallbackApiBase = () => {
+          try {
+            if (typeof __PUBLISHED_CLOUDFRONT_METADATA__ === 'undefined') {
+              return '';
+            }
+
+            const metadata =
+              __PUBLISHED_CLOUDFRONT_METADATA__ && typeof __PUBLISHED_CLOUDFRONT_METADATA__ === 'object'
+                ? __PUBLISHED_CLOUDFRONT_METADATA__
+                : null;
+            if (!metadata || typeof metadata.cloudfront !== 'object' || !metadata.cloudfront) {
+              return '';
+            }
+
+            const candidate = metadata.cloudfront.apiGatewayUrl || metadata.cloudfront.url || '';
+            return typeof candidate === 'string' ? candidate.trim() : '';
+          } catch (error) {
+            return '';
+          }
+        };
+
         try {
           const meta = document.querySelector('meta[name="resumeforge-api-base"]');
-          if (!meta || typeof meta.getAttribute !== 'function') {
+          const metaContent =
+            meta && typeof meta.getAttribute === 'function' ? meta.getAttribute('content') || '' : '';
+          const normalizedMeta = typeof metaContent === 'string' ? metaContent.trim() : '';
+
+          const existingGlobal =
+            typeof window !== 'undefined' && typeof window.__RESUMEFORGE_API_BASE_URL__ === 'string'
+              ? window.__RESUMEFORGE_API_BASE_URL__.trim()
+              : '';
+
+          if (existingGlobal) {
+            if (!normalizedMeta && meta && typeof meta.setAttribute === 'function') {
+              meta.setAttribute('content', existingGlobal);
+            }
             return;
           }
 
-          const raw = meta.getAttribute('content') || '';
-          const normalized = typeof raw === 'string' ? raw.trim() : '';
-          if (!normalized || normalized === 'undefined' || normalized === 'null') {
+          let resolved = normalizedMeta;
+          if (!resolved || resolved === 'undefined' || resolved === 'null') {
+            resolved = resolveFallbackApiBase();
+          }
+
+          if (!resolved) {
             return;
           }
 
           if (typeof window !== 'undefined') {
-            window.__RESUMEFORGE_API_BASE_URL__ = normalized;
+            window.__RESUMEFORGE_API_BASE_URL__ = resolved;
+          }
+
+          if (meta && typeof meta.setAttribute === 'function') {
+            meta.setAttribute('content', resolved);
           }
         } catch (error) {
           // Ignore runtime errors caused by constrained environments.
