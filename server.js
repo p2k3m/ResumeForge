@@ -935,6 +935,8 @@ async function serveClientDistAsset({
     return false;
   }
 
+  applyStaticProxyCorsHeaders(res);
+
   const fullPath = resolveClientDistAssetPath(assetPath);
 
   try {
