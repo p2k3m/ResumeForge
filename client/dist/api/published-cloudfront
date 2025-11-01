@@ -2,13 +2,13 @@
   "success": true,
   "cloudfront": {
     "stackName": "ResumeForge",
-    "url": "https://d109hwmzrqr39w.cloudfront.net",
-    "distributionId": "E2NEWCFDN0002",
+    "url": "https://d3r7s5t9uvwx2.cloudfront.net",
+    "distributionId": "E3NEWCFDN0003",
     "apiGatewayUrl": "https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod",
     "originBucket": "resume-forge-app-2025",
     "originRegion": "ap-south-1",
     "originPath": "/static/client/prod/latest",
-    "updatedAt": "2025-01-18T09:30:00.000Z",
+    "updatedAt": "2025-02-07T12:00:00.000Z",
     "degraded": false
   }
 }
