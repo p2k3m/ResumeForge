@@ -1199,34 +1199,50 @@
 
           let added = false
 
-          const applyCandidate = (candidate, { prioritize = false } = {}) => {
+          const applyCandidate = (
+            candidate,
+            { prioritize = false, allowAlias = true, allowProxy = true } = {},
+          ) => {
             if (!candidate) {
               return
             }
 
-            addApiProxyCandidate(candidate)
-
-            if (addAliasBaseCandidate(candidate, { prepend: prioritize })) {
-              added = true
+            if (allowProxy) {
+              addApiProxyCandidate(candidate)
             }
 
-            if (shouldAppendOriginPathToBase(candidate, originPath)) {
-              if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath), { prepend: prioritize })) {
+            if (allowAlias) {
+              if (addAliasBaseCandidate(candidate, { prepend: prioritize })) {
                 added = true
+              }
+
+              if (shouldAppendOriginPathToBase(candidate, originPath)) {
+                if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath), { prepend: prioritize })) {
+                  added = true
+                }
               }
             }
           }
 
           const directCandidates = []
           if (typeof metadata.apiGatewayUrl === 'string') {
-            directCandidates.push({ value: metadata.apiGatewayUrl, prioritize: true })
+            directCandidates.push({
+              value: metadata.apiGatewayUrl,
+              prioritize: true,
+              allowAlias: false,
+              allowProxy: true,
+            })
           }
           if (typeof metadata.url === 'string') {
             directCandidates.push({ value: metadata.url, prioritize: false })
           }
 
           directCandidates.forEach((entry) =>
-            applyCandidate(entry?.value, { prioritize: Boolean(entry?.prioritize) }),
+            applyCandidate(entry?.value, {
+              prioritize: Boolean(entry?.prioritize),
+              allowAlias: entry?.allowAlias !== false,
+              allowProxy: entry?.allowProxy !== false,
+            }),
           )
           bucketBases.forEach((candidate) => applyCandidate(candidate))
 

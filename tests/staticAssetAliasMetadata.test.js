@@ -8,10 +8,12 @@ const __dirname = path.dirname(__filename)
 
 describe('static asset alias metadata helpers', () => {
   let shouldAppendOriginPathToBase
+  let htmlContent = ''
 
   beforeAll(async () => {
     const htmlPath = path.resolve(__dirname, '../client/index.html')
-    const html = await fs.readFile(htmlPath, 'utf8')
+    htmlContent = await fs.readFile(htmlPath, 'utf8')
+    const html = htmlContent
     const match = html.match(
       /const\s+shouldAppendOriginPathToBase\s*=\s*\(candidate,\s*originPath\)\s*=>\s*{([\s\S]*?)}\n\s*const\s+applyAliasMetadataCandidates/,
     )
@@ -51,5 +53,11 @@ describe('static asset alias metadata helpers', () => {
     expect(
       shouldAppendOriginPathToBase('https://d109hwmzrqr39w.cloudfront.net', '/static/client/prod/latest'),
     ).toBe(false)
+  })
+
+  test('skips alias fallbacks for API Gateway metadata base', () => {
+    expect(htmlContent).toMatch(
+      /directCandidates\.push\({\s*value:\s*metadata\.apiGatewayUrl,[^}]*allowAlias:\s*false/,
+    )
   })
 })
