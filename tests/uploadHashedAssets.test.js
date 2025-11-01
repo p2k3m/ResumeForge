@@ -65,12 +65,12 @@ describe('uploadHashedIndexAssets', () => {
     metadataPath = path.join(tempDir, 'published-cloudfront.json')
     const defaultMetadata = {
       stackName: 'ResumeForge',
-      url: 'https://d3r7s5t9uvwx2.cloudfront.net',
-      distributionId: 'E3NEWCFDN0003',
+      url: 'https://d109hwmzrqr39w.cloudfront.net',
+      distributionId: 'E2HWMZRQR39W0',
       originBucket: 'resume-forge-app-2025',
       originRegion: 'ap-south-1',
       originPath: '/static/client/prod/latest',
-      updatedAt: '2025-02-07T12:00:00.000Z',
+      updatedAt: '2025-03-18T09:30:00.000Z',
     }
     await fs.writeFile(metadataPath, JSON.stringify(defaultMetadata), 'utf8')
     process.env.PUBLISHED_CLOUDFRONT_PATH = metadataPath
@@ -164,7 +164,7 @@ describe('uploadHashedIndexAssets', () => {
 
     const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
     expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
-    expect(updatedIndex).toContain('"url":"https://d3r7s5t9uvwx2.cloudfront.net"')
+    expect(updatedIndex).toContain('"url":"https://d109hwmzrqr39w.cloudfront.net"')
 
     const cssAlias = await fs.readFile(path.join(assetsDir, 'index-latest.css'), 'utf8')
     const jsAlias = await fs.readFile(path.join(assetsDir, 'index-latest.js'), 'utf8')
