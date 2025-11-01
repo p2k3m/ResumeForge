@@ -2452,8 +2452,13 @@ function buildFallbackClientIndexHtml(metadata = null) {
     degradeDetails += `<p>Primary CloudFront URL: <code>${safeCanonicalUrl}</code></p>`;
   }
 
-  if (safeGatewayUrl) {
-    degradeDetails += `<p>Share the backup API Gateway endpoint while the CDN recovers: <a href="${safeGatewayUrl}" rel="noopener noreferrer">${safeGatewayUrl}</a></p>`;
+  const configuredApiBaseUrl = resolveConfiguredApiBaseUrl();
+  const safeConfiguredApiBase = configuredApiBaseUrl ? escapeHtml(configuredApiBaseUrl) : '';
+
+  const backupLinkUrl = safeGatewayUrl || safeConfiguredApiBase;
+
+  if (backupLinkUrl) {
+    degradeDetails += `<p>Share the backup API Gateway endpoint while the CDN recovers: <a href="${backupLinkUrl}" rel="noopener noreferrer">${backupLinkUrl}</a></p>`;
   } else {
     degradeDetails += '<p>Retrieve the <code>ApiBaseUrl</code> CloudFormation output and share it with teammates so they can bypass CloudFront until service is restored.</p>';
   }
@@ -2462,7 +2467,7 @@ function buildFallbackClientIndexHtml(metadata = null) {
     degradeDetails += `<p class="fallback__degraded-detail">Last published metadata: <code>${safeUpdatedAt}</code></p>`;
   }
 
-  const backupApiValue = safeGatewayUrl;
+  const backupApiValue = backupLinkUrl;
 
   const degradeSection = `
     <section
