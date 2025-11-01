@@ -254,6 +254,32 @@
           })
         }
 
+        const initialBackupApiBase = (() => {
+          try {
+            const inputs = document.querySelectorAll('input[data-backup-api-base]')
+            for (const input of inputs) {
+              if (!input) {
+                continue
+              }
+
+              if (typeof input.getAttribute === 'function') {
+                const attributeValue = input.getAttribute('value')
+                if (typeof attributeValue === 'string' && attributeValue.trim()) {
+                  return attributeValue.trim()
+                }
+              }
+
+              if (typeof input.value === 'string' && input.value.trim()) {
+                return input.value.trim()
+              }
+            }
+          } catch (error) {
+            // Ignore probing failures in constrained environments.
+          }
+
+          return ''
+        })()
+
         const inlinePublishedCloudfrontMetadata = (() => {
           try {
             if (typeof __PUBLISHED_CLOUDFRONT_METADATA__ === 'undefined') {
@@ -424,8 +450,8 @@
               console.warn('Unable to load published CloudFront metadata.', error)
               handleMetadata(null)
             })
-          } else {
-            setBackupInputValue('')
+          } else if (initialBackupApiBase) {
+            setBackupInputValue(initialBackupApiBase)
           }
         }
 
