@@ -644,6 +644,43 @@ describe('static asset proxy endpoint', () => {
     }
   });
 
+  test('degrades hashed proxy requests to the index alias when upstream assets are missing', async () => {
+    const hashedCssName = await extractPrimaryCssAssetName();
+    const hashedRelativePath = `assets/${hashedCssName}`;
+    const aliasContent = await readDistAsset('index-latest.css');
+    const originalStat = fsPromises.stat;
+
+    const statSpy = jest
+      .spyOn(fsPromises, 'stat')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target.endsWith(hashedCssName)) {
+          const notFound = new Error('Not Found');
+          notFound.code = 'ENOENT';
+          throw notFound;
+        }
+        return originalStat.call(fsPromises, target, ...args);
+      });
+
+    mockS3Send.mockImplementation(() => {
+      const error = new Error('NoSuchKey');
+      error.name = 'NoSuchKey';
+      throw error;
+    });
+
+    try {
+      const res = await request(app)
+        .get('/api/static-proxy')
+        .query({ asset: hashedRelativePath });
+
+      expect(res.status).toBe(200);
+      expect(res.text).toBe(aliasContent);
+      expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+      expect(mockS3Send).toHaveBeenCalled();
+    } finally {
+      statSpy.mockRestore();
+    }
+  });
+
   test('rejects invalid asset paths', async () => {
     const res = await request(app)
       .get('/api/static-proxy')

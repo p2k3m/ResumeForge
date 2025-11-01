@@ -18459,6 +18459,14 @@ app.get('/api/static-proxy', async (req, res) => {
     return;
   }
 
+  const aliasProxyLogLabels = {
+    retry: 'client_asset_alias_proxy_s3_retry',
+    headRetry: 'client_asset_alias_proxy_s3_head_retry',
+    served: 'client_asset_alias_proxy_s3_served',
+    headServed: 'client_asset_alias_proxy_s3_head_served',
+    failed: 'client_asset_alias_proxy_s3_failed',
+  };
+
   if (INDEX_ASSET_ALIAS_PATH_PATTERN.test(normalizedAssetPath)) {
     await handleIndexAssetAliasRequest({
       aliasPath: normalizedAssetPath,
@@ -18466,13 +18474,7 @@ app.get('/api/static-proxy', async (req, res) => {
       res,
       requestPath: normalizedAssetPath,
       logContext: { proxy: true },
-      logLabels: {
-        retry: 'client_asset_alias_proxy_s3_retry',
-        headRetry: 'client_asset_alias_proxy_s3_head_retry',
-        served: 'client_asset_alias_proxy_s3_served',
-        headServed: 'client_asset_alias_proxy_s3_head_served',
-        failed: 'client_asset_alias_proxy_s3_failed',
-      },
+      logLabels: aliasProxyLogLabels,
       onUnavailable: async ({ logContext, attemptedFallbacks }) => {
         logStructured('error', 'client_asset_alias_proxy_unavailable', {
           ...(logContext || {}),
@@ -18523,6 +18525,45 @@ app.get('/api/static-proxy', async (req, res) => {
 
   if (servedFromS3) {
     return;
+  }
+
+  if (HASHED_INDEX_ASSET_PATH_PATTERN.test(normalizedAssetPath)) {
+    const aliasPath = normalizedAssetPath.toLowerCase().endsWith('.css')
+      ? '/assets/index-latest.css'
+      : '/assets/index-latest.js';
+
+    if (aliasPath) {
+      const aliasLogContext = {
+        ...logContext,
+        aliasPath,
+        degradedFrom: normalizedAssetPath,
+      };
+
+      const servedAlias = await handleIndexAssetAliasRequest({
+        aliasPath,
+        method,
+        res,
+        requestPath: aliasPath,
+        logContext: aliasLogContext,
+        logLabels: aliasProxyLogLabels,
+        onUnavailable: async ({ logContext: unavailableContext, attemptedFallbacks }) => {
+          logStructured('error', 'client_asset_alias_proxy_unavailable', {
+            ...(unavailableContext || {}),
+            fallbackCandidates: attemptedFallbacks,
+          });
+          res
+            .status(502)
+            .type('text/plain')
+            .send('Static assets are temporarily unavailable.');
+          return true;
+        },
+      });
+
+      if (servedAlias) {
+        logStructured('warn', 'client_asset_proxy_degraded_to_alias', aliasLogContext);
+        return;
+      }
+    }
   }
 
   logStructured('error', 'client_asset_proxy_unavailable', logContext);
