@@ -647,6 +647,14 @@
           candidate = candidate.replace(/^(?:\.\.\/)+/g, '')
           candidate = candidate.replace(/^\/+/, '')
           candidate = candidate.replace(/\\/g, '/')
+
+          for (const separator of [',,', ';;']) {
+            const metadataIndex = candidate.indexOf(separator)
+            if (metadataIndex !== -1) {
+              candidate = candidate.slice(0, metadataIndex).trim()
+            }
+          }
+
           candidate = candidate.replace(/[,;]+$/, '')
 
           if (!candidate) {

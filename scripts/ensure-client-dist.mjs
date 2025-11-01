@@ -42,6 +42,14 @@ function normalizeManifestAssetPath(assetPath) {
   }
 
   candidate = candidate.replace(/\?.*$/, '').replace(/#.*$/, '')
+
+  for (const separator of [',,', ';;']) {
+    const metadataIndex = candidate.indexOf(separator)
+    if (metadataIndex !== -1) {
+      candidate = candidate.slice(0, metadataIndex).trim()
+    }
+  }
+
   while (candidate.startsWith('./')) {
     candidate = candidate.slice(2)
   }

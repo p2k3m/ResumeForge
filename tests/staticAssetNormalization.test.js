@@ -11,6 +11,20 @@ describe('static asset path normalization', () => {
       );
     });
 
+    it('drops manifest metadata payloads appended after delimiters', () => {
+      expect(
+        normalizeManifestHashedAssetPath(
+          'assets/index-abc123.css,, {"alias":"/assets/index-latest.css"}',
+        ),
+      ).toBe('/assets/index-abc123.css');
+
+      expect(
+        normalizeManifestHashedAssetPath(
+          'assets/index-abc123.css;; {"alias":"/assets/index-latest.css"}',
+        ),
+      ).toBe('/assets/index-abc123.css');
+    });
+
     it('handles query strings before stripping punctuation', () => {
       expect(normalizeManifestHashedAssetPath('https://cdn.example.com/assets/index-xyz.js?foo=1,,')).toBe(
         '/assets/index-xyz.js',
