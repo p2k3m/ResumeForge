@@ -47,6 +47,10 @@ describe('uploadHashedIndexAssets', () => {
     'DATA_BUCKET',
     'S3_BUCKET',
     'PUBLISHED_CLOUDFRONT_PATH',
+    'RESUMEFORGE_API_BASE_URL',
+    'VITE_API_BASE_URL',
+    'API_BASE_URL',
+    'PUBLIC_API_BASE_URL',
   ]
   const originalEnv = {}
   let metadataPath
@@ -293,7 +297,9 @@ describe('uploadHashedIndexAssets', () => {
 
     const distDir = path.join(tempDir, 'dist-no-destination')
     const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
     await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
 
     const indexHtml = `
       <html>
@@ -309,6 +315,8 @@ describe('uploadHashedIndexAssets', () => {
     await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
     await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
     await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{}', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront.json'), '{}', 'utf8')
 
     await expect(
       uploadHashedIndexAssets({
@@ -318,6 +326,47 @@ describe('uploadHashedIndexAssets', () => {
         quiet: true,
       }),
     ).rejects.toThrow('Unable to resolve a static asset bucket/prefix')
+  })
+
+  it('throws when CloudFront fallback metadata files cannot be generated', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+    delete process.env.RESUMEFORGE_API_BASE_URL
+    delete process.env.VITE_API_BASE_URL
+    delete process.env.API_BASE_URL
+    delete process.env.PUBLIC_API_BASE_URL
+
+    await fs.rm(metadataPath, { force: true })
+
+    const distDir = path.join(tempDir, 'dist-missing-fallback')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-555555.css" />
+        </head>
+        <body>
+          <script src="/assets/index-555555.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-555555.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-555555.js'), 'console.log("noop")', 'utf8')
+
+    await expect(
+      uploadHashedIndexAssets({
+        distDirectory: distDir,
+        assetsDirectory: assetsDir,
+        indexHtmlPath: path.join(distDir, 'index.html'),
+        quiet: true,
+      }),
+    ).rejects.toThrow(/Required supplementary asset/i)
   })
 
   it('generates degraded CloudFront metadata when published metadata is unavailable', async () => {
