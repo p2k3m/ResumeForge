@@ -361,6 +361,29 @@ async function copyStaticAssets({ copyTemplates, copyClientAssets }) {
       throw error
     }
   }
+
+  const publishedCloudfrontSource = path.join(
+    projectRoot,
+    'config',
+    'published-cloudfront.json'
+  )
+
+  const configTargets = [
+    path.join(outDir, 'config', 'published-cloudfront.json'),
+    path.join(outDir, 'lambdas', 'config', 'published-cloudfront.json'),
+  ]
+
+  for (const destination of configTargets) {
+    try {
+      await mkdir(path.dirname(destination), { recursive: true })
+      await cp(publishedCloudfrontSource, destination, { recursive: false })
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        continue
+      }
+      throw error
+    }
+  }
 }
 
 async function main() {
