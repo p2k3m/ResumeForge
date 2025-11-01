@@ -6,15 +6,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { applyStageEnvironment } from '../config/stage.js'
 
-const resolvedApiBase =
-  typeof process.env.VITE_API_BASE_URL === 'string'
-    ? process.env.VITE_API_BASE_URL
-    : process.env.RESUMEFORGE_API_BASE_URL
-
-if (typeof process.env.VITE_API_BASE_URL === 'undefined') {
-  process.env.VITE_API_BASE_URL = resolvedApiBase || ''
-}
-
 function resolveBuildVersion() {
   if (process.env.VITE_BUILD_VERSION) {
     return process.env.VITE_BUILD_VERSION
@@ -68,6 +59,47 @@ function loadPublishedCloudfrontMetadata() {
 }
 
 const publishedCloudfrontMetadata = loadPublishedCloudfrontMetadata()
+
+function resolveApiBase(metadata) {
+  const normalize = (value) => {
+    if (typeof value !== 'string') {
+      return ''
+    }
+
+    const trimmed = value.trim()
+    return trimmed || ''
+  }
+
+  const envCandidates = [
+    normalize(process.env.VITE_API_BASE_URL),
+    normalize(process.env.RESUMEFORGE_API_BASE_URL),
+  ]
+
+  for (const candidate of envCandidates) {
+    if (candidate) {
+      return candidate
+    }
+  }
+
+  if (metadata && typeof metadata === 'object') {
+    const metadataCandidates = [
+      normalize(metadata.apiGatewayUrl),
+      normalize(metadata.url),
+    ]
+
+    for (const candidate of metadataCandidates) {
+      if (candidate) {
+        return candidate
+      }
+    }
+  }
+
+  return ''
+}
+
+const resolvedApiBase = resolveApiBase(publishedCloudfrontMetadata)
+
+process.env.VITE_API_BASE_URL = resolvedApiBase
 
 export default defineConfig({
   base: './',
