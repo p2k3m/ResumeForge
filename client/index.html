@@ -1175,6 +1175,21 @@
         })
 
         try {
+          if (typeof window !== 'undefined') {
+            const explicitApiBase =
+              typeof window.__RESUMEFORGE_API_BASE_URL__ === 'string'
+                ? window.__RESUMEFORGE_API_BASE_URL__.trim()
+                : ''
+
+            if (explicitApiBase) {
+              addApiProxyCandidate(explicitApiBase)
+            }
+          }
+        } catch (error) {
+          // Ignore global API base injection failures.
+        }
+
+        try {
           ensureManifestCandidatesLoaded()
         } catch (error) {
           // Ignore manifest prefetch failures in constrained environments.
