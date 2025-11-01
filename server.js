@@ -136,6 +136,30 @@ const IMMUTABLE_STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutabl
 const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
 const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
 const CLIENT_INDEX_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
+const STATIC_PROXY_CORS_HEADER = 'Access-Control-Allow-Origin';
+
+function applyStaticProxyCorsHeaders(res) {
+  if (!res || typeof res.setHeader !== 'function') {
+    return;
+  }
+
+  try {
+    if (typeof res.getHeader === 'function') {
+      const existing = res.getHeader(STATIC_PROXY_CORS_HEADER);
+      if (typeof existing === 'string' && existing.trim()) {
+        return;
+      }
+    }
+  } catch (error) {
+    // Ignore header inspection failures and fall back to setting the wildcard header.
+  }
+
+  try {
+    res.setHeader(STATIC_PROXY_CORS_HEADER, '*');
+  } catch (error) {
+    // Ignore header assignment failures; the proxy will continue without CORS hints.
+  }
+}
 
 function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
   const effectivePath = typeof requestPath === 'string' ? requestPath : assetPath;
@@ -18436,6 +18460,8 @@ app.get('/api/published-cloudfront', async (req, res) => {
 });
 
 app.get('/api/static-proxy', async (req, res) => {
+  applyStaticProxyCorsHeaders(res);
+
   const rawAssetPath =
     typeof req.query?.asset === 'string'
       ? req.query.asset
