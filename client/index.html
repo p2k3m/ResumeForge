@@ -1678,6 +1678,174 @@
           }
         }
 
+        const attemptApiGatewayAssetReload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          if (!apiProxyCandidates.length) {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const aliasPath = isScript ? aliasPaths.js : aliasPaths.css
+          const originalSource = describeSource(element)
+          const normalizedSource = (() => {
+            if (!originalSource) {
+              return ''
+            }
+
+            let candidate = String(originalSource).trim()
+            if (!candidate) {
+              return ''
+            }
+
+            try {
+              const resolved = new URL(candidate, window.location.href)
+              candidate =
+                resolved.origin === window.location.origin
+                  ? `${resolved.pathname}${resolved.search}`
+                  : resolved.href
+            } catch (error) {
+              // Ignore resolution failures and continue with the raw candidate.
+            }
+
+            candidate = candidate.replace(/[#?].*$/, '')
+            candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '')
+            candidate = candidate.replace(/^\/+/, '')
+            candidate = candidate.replace(/\\/g, '/')
+            if (!candidate) {
+              return ''
+            }
+
+            if (/^[a-z]+:/i.test(candidate)) {
+              return candidate
+            }
+
+            return candidate.startsWith('/') ? candidate : `/${candidate}`
+          })()
+
+          const candidateAssets = []
+          if (normalizedSource && !/^[a-z]+:/i.test(normalizedSource)) {
+            candidateAssets.push(normalizedSource)
+          }
+          if (aliasPath && !candidateAssets.includes(aliasPath)) {
+            candidateAssets.push(aliasPath)
+          }
+
+          if (!candidateAssets.length) {
+            return false
+          }
+
+          const rawAttempt = element.dataset?.resumeforgeApiAttempt || '0'
+          let attemptIndex = Number.parseInt(rawAttempt, 10)
+          if (!Number.isFinite(attemptIndex) || attemptIndex < 0) {
+            attemptIndex = 0
+          }
+
+          const totalCombinations = candidateAssets.length * apiProxyCandidates.length
+          let nextPointer = attemptIndex
+          let selectedUrl = ''
+          let selectedAsset = ''
+          let selectedBase = ''
+
+          while (nextPointer < totalCombinations) {
+            const assetIndex = Math.floor(nextPointer / apiProxyCandidates.length)
+            const baseIndex = nextPointer % apiProxyCandidates.length
+            const assetCandidate = candidateAssets[assetIndex]
+            const baseCandidate = apiProxyCandidates[baseIndex]
+            const joined = joinAliasUrl(baseCandidate, assetCandidate)
+            nextPointer += 1
+
+            if (joined) {
+              selectedUrl = joined
+              selectedAsset = assetCandidate
+              selectedBase = baseCandidate
+              break
+            }
+          }
+
+          element.dataset.resumeforgeApiAttempt = String(nextPointer)
+
+          if (!selectedUrl) {
+            return false
+          }
+
+          const parent = element.parentNode
+          if (!parent || typeof parent.replaceChild !== 'function') {
+            return false
+          }
+
+          const replacement = element.cloneNode(true)
+          const cacheBustedUrl = appendCacheBustParam(selectedUrl)
+          const effectiveUrl = cacheBustedUrl || selectedUrl
+
+          if (isStylesheet) {
+            replacement.href = effectiveUrl
+          } else {
+            replacement.src = effectiveUrl
+          }
+
+          replacement.setAttribute('data-src', effectiveUrl)
+          replacement.dataset.resumeforgeAssetRetry = 'true'
+          replacement.dataset.resumeforgeAssetApi = 'true'
+          replacement.dataset.resumeforgeApiAttempt = String(nextPointer)
+          if (selectedAsset) {
+            replacement.dataset.resumeforgeApiAsset = selectedAsset
+          }
+          if (selectedBase) {
+            replacement.dataset.resumeforgeApiBase = selectedBase
+          }
+          if (originalSource) {
+            replacement.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          element.dataset.resumeforgeAssetRetry = 'true'
+          element.dataset.resumeforgeAssetApi = 'true'
+          element.dataset.resumeforgeApiAttempt = String(nextPointer)
+          if (selectedAsset && !element.dataset.resumeforgeApiAsset) {
+            element.dataset.resumeforgeApiAsset = selectedAsset
+          }
+          if (selectedBase && !element.dataset.resumeforgeApiBase) {
+            element.dataset.resumeforgeApiBase = selectedBase
+          }
+          if (originalSource && !element.dataset.resumeforgeOriginalSource) {
+            element.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          try {
+            parent.replaceChild(replacement, element)
+          } catch (error) {
+            try {
+              parent.removeChild(element)
+              parent.appendChild(replacement)
+            } catch (innerError) {
+              return false
+            }
+          }
+
+          try {
+            console.warn('Retrying ResumeForge static asset via API origin fallback.', {
+              source: originalSource || '',
+              target: effectiveUrl,
+              base: selectedBase || '',
+              asset: selectedAsset || ''
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          return true
+        }
+
         const attemptStaticProxyReload = (element) => {
           if (!element || typeof element.tagName !== 'string') {
             return false
@@ -1867,6 +2035,10 @@
         }
 
         const attemptProxyOrAliasReload = (element) => {
+          if (attemptApiGatewayAssetReload(element)) {
+            return true
+          }
+
           if (attemptStaticProxyReload(element)) {
             return true
           }
