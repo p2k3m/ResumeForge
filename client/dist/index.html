@@ -2704,11 +2704,7 @@
               return
             }
 
-            if (attemptStaticProxyReload(target)) {
-              return
-            }
-
-            if (attemptAliasReload(target)) {
+            if (attemptProxyOrAliasReload(target)) {
               return
             }
 
