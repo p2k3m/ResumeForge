@@ -60,4 +60,74 @@ describe('static asset alias metadata helpers', () => {
       /directCandidates\.push\({\s*value:\s*metadata\.apiGatewayUrl,[^}]*allowAlias:\s*false/,
     )
   })
+
+  test('alias reload waits for metadata before falling back to other transports', async () => {
+    const functionMatch = htmlContent.match(
+      /function\s+attemptAliasReload\s*\(element\)\s*{([\s\S]*?)}(?=\s*const\s+attemptManifestReload)/,
+    )
+
+    if (!functionMatch) {
+      throw new Error('Unable to extract attemptAliasReload implementation from client/index.html')
+    }
+
+    const context = {
+      aliasBaseCandidates: [],
+      aliasMetadataLoaded: false,
+      aliasMetadataPromise: null,
+      ensureAliasMetadataLoadedCallCount: 0,
+      attemptProxyOrAliasReloadCallCount: 0,
+      attemptStaticProxyReloadCallCount: 0,
+      document: { documentElement: { contains: () => true } },
+      console: { warn: () => {} },
+      appendCacheBustParam: (value) => value,
+      describeSource: () => '',
+      buildAliasUrlForAttempt: () => ({ url: '', base: '' }),
+      aliasPaths: { css: '/assets/index-latest.css', js: '/assets/index-latest.js' },
+      window: { location: { href: 'https://app.resumeforge.test/' } },
+    }
+
+    context.ensureAliasMetadataLoaded = () => {
+      context.ensureAliasMetadataLoadedCallCount += 1
+      context.aliasMetadataPromise = Promise.resolve(false)
+      return context.aliasMetadataPromise
+    }
+
+    context.attemptProxyOrAliasReload = () => {
+      context.attemptProxyOrAliasReloadCallCount += 1
+      return false
+    }
+
+    context.attemptStaticProxyReload = () => {
+      context.attemptStaticProxyReloadCallCount += 1
+      return false
+    }
+
+    const attemptAliasReload = vm.runInNewContext(
+      `${functionMatch[0]}; attemptAliasReload`,
+      { ...context, Promise },
+    )
+
+    const element = {
+      tagName: 'link',
+      rel: 'stylesheet',
+      dataset: {},
+      parentNode: {
+        replaceChild() {},
+        removeChild() {},
+        appendChild() {},
+      },
+    }
+
+    const result = attemptAliasReload(element)
+    expect(result).toBe(true)
+    expect(context.ensureAliasMetadataLoadedCallCount).toBe(1)
+    expect(element.dataset.resumeforgeAliasMetadataPending).toBe('true')
+
+    await context.aliasMetadataPromise
+
+    expect(element.dataset.resumeforgeAliasMetadataPending).toBeUndefined()
+    expect(element.dataset.resumeforgeAliasMetadataAttempted).toBe('true')
+    expect(context.attemptProxyOrAliasReloadCallCount).toBeGreaterThan(0)
+    expect(context.attemptStaticProxyReloadCallCount).toBeGreaterThan(0)
+  })
 })

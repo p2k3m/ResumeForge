@@ -2421,33 +2421,111 @@
             return false
           }
 
+          const dataset = element?.dataset
           if (attemptIndex >= aliasBaseCandidates.length) {
-            if (attemptStaticProxyReload(element)) {
+            if (dataset?.resumeforgeAliasMetadataPending === 'true') {
               return true
             }
-            ensureAliasMetadataLoaded()
-              .then((added) => {
-                if (!added) {
-                  return
+
+            if (
+              dataset?.resumeforgeAliasMetadataAttempted === 'true' ||
+              aliasMetadataLoaded
+            ) {
+              if (attemptStaticProxyReload(element)) {
+                return true
+              }
+              return false
+            }
+
+            const metadataPromise = ensureAliasMetadataLoaded()
+            if (metadataPromise) {
+              try {
+                if (dataset) {
+                  dataset.resumeforgeAliasMetadataPending = 'true'
                 }
+              } catch (error) {
+                // Ignore dataset assignment failures in constrained environments.
+              }
+
+              const handleResolution = (callback) => {
                 if (!element) {
                   return
                 }
+
+                let connected = true
                 if (typeof element.isConnected === 'boolean') {
-                  if (!element.isConnected) {
-                    return
-                  }
+                  connected = element.isConnected
                 } else {
                   const root = document?.documentElement
-                  if (!root || typeof root.contains !== 'function' || !root.contains(element)) {
+                  connected = Boolean(root && typeof root.contains === 'function' && root.contains(element))
+                }
+
+                if (!connected) {
+                  return
+                }
+
+                callback()
+              }
+
+              metadataPromise
+                .then((added) => {
+                  try {
+                    if (dataset) {
+                      delete dataset.resumeforgeAliasMetadataPending
+                      if (added) {
+                        delete dataset.resumeforgeAliasMetadataAttempted
+                      } else {
+                        dataset.resumeforgeAliasMetadataAttempted = 'true'
+                      }
+                    }
+                  } catch (error) {
+                    // Ignore dataset mutation failures when clearing metadata state.
+                  }
+
+                  if (added) {
+                    handleResolution(() => {
+                      attemptAliasReload(element)
+                    })
                     return
                   }
-                }
-                attemptAliasReload(element)
-              })
-              .catch(() => {
-                // Ignore metadata lookup failures and allow other fallbacks to proceed.
-              })
+
+                  handleResolution(() => {
+                    if (!attemptProxyOrAliasReload(element)) {
+                      attemptStaticProxyReload(element)
+                    }
+                  })
+                })
+                .catch(() => {
+                  try {
+                    if (dataset) {
+                      delete dataset.resumeforgeAliasMetadataPending
+                      dataset.resumeforgeAliasMetadataAttempted = 'true'
+                    }
+                  } catch (error) {
+                    // Ignore dataset mutation failures when clearing metadata state.
+                  }
+
+                  handleResolution(() => {
+                    if (!attemptProxyOrAliasReload(element)) {
+                      attemptStaticProxyReload(element)
+                    }
+                  })
+                })
+
+              return true
+            }
+
+            try {
+              if (dataset) {
+                dataset.resumeforgeAliasMetadataAttempted = 'true'
+              }
+            } catch (error) {
+              // Ignore dataset mutation failures when recording metadata exhaustion.
+            }
+
+            if (attemptStaticProxyReload(element)) {
+              return true
+            }
             return false
           }
 
