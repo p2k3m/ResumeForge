@@ -880,6 +880,36 @@
           return normalized
         }
 
+        const resolveApiProxyPriority = (value) => {
+          if (typeof value !== 'string' || !value.trim()) {
+            return 3
+          }
+
+          try {
+            const resolved = new URL(value, window.location.href)
+            const host = (resolved.hostname || '').toLowerCase()
+            if (!host) {
+              return 3
+            }
+
+            if (/\.execute-api\./.test(host)) {
+              return 0
+            }
+
+            if (/\.cloudfront\.net$/.test(host)) {
+              return 1
+            }
+
+            if (/\.s3[.-]/.test(host) || host === 's3.amazonaws.com') {
+              return 2
+            }
+          } catch (error) {
+            return 3
+          }
+
+          return 4
+        }
+
         const normalizeAliasOriginPath = (value) => {
           if (typeof value !== 'string') {
             return ''
@@ -1124,8 +1154,19 @@
           if (!normalized || apiProxySeen.has(normalized)) {
             return false
           }
+
           apiProxySeen.add(normalized)
-          apiProxyCandidates.push(normalized)
+          const priority = resolveApiProxyPriority(normalized)
+          const insertIndex = apiProxyCandidates.findIndex(
+            (candidate) => resolveApiProxyPriority(candidate) > priority
+          )
+
+          if (insertIndex === -1) {
+            apiProxyCandidates.push(normalized)
+          } else {
+            apiProxyCandidates.splice(insertIndex, 0, normalized)
+          }
+
           return true
         }
 
