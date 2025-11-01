@@ -387,14 +387,68 @@ async function streamS3BodyToResponse(body, res) {
   res.end();
 }
 
+function normalizeHeaderLengthValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value < 0) {
+      return undefined;
+    }
+    return String(Math.trunc(value));
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return undefined;
+    }
+    return String(Math.trunc(parsed));
+  }
+
+  return undefined;
+}
+
+function resolveS3ContentLength(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return undefined;
+  }
+
+  const direct = normalizeHeaderLengthValue(metadata.ContentLength ?? metadata.contentLength);
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const sizeCandidate = normalizeHeaderLengthValue(metadata.Size ?? metadata.size);
+  if (sizeCandidate !== undefined) {
+    return sizeCandidate;
+  }
+
+  const headers = metadata.Headers || metadata.headers;
+  if (headers && typeof headers === 'object') {
+    const headerCandidate =
+      normalizeHeaderLengthValue(headers['Content-Length']) ??
+      normalizeHeaderLengthValue(headers['content-length']);
+    if (headerCandidate !== undefined) {
+      return headerCandidate;
+    }
+  }
+
+  const httpHeaders = metadata.$metadata?.httpHeaders;
+  if (httpHeaders && typeof httpHeaders === 'object') {
+    const httpCandidate = normalizeHeaderLengthValue(httpHeaders['content-length']);
+    if (httpCandidate !== undefined) {
+      return httpCandidate;
+    }
+  }
+
+  return undefined;
+}
+
 function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPath) {
-  const {
-    ContentType,
-    CacheControl,
-    ContentLength,
-    ETag,
-    LastModified,
-  } = metadata || {};
+  const { ContentType, CacheControl, ETag, LastModified } = metadata || {};
 
   if (ContentType) {
     res.setHeader('Content-Type', ContentType);
@@ -415,8 +469,9 @@ function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPat
     res.setHeader('Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
   }
 
-  if (ContentLength !== undefined) {
-    res.setHeader('Content-Length', String(ContentLength));
+  const resolvedContentLength = resolveS3ContentLength(metadata);
+  if (resolvedContentLength !== undefined) {
+    res.setHeader('Content-Length', resolvedContentLength);
   }
 
   if (ETag) {
@@ -1186,6 +1241,10 @@ async function handleIndexAssetAliasRequest({
     ...logContext,
     fallbackCandidates: attemptedFallbacks,
   });
+
+  if (res.headersSent) {
+    return true;
+  }
   res.status(502).type('text/plain').send('Static assets are temporarily unavailable.');
   return true;
 }
