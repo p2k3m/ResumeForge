@@ -947,12 +947,37 @@ function extractManifestHashedAssets(entries = []) {
   return Array.from(assets).sort((a, b) => a.localeCompare(b))
 }
 
+async function loadLocalManifest({ distDirectory = clientDistDir } = {}) {
+  const manifestPath = path.join(distDirectory, 'manifest.json')
+
+  try {
+    const raw = await fs.readFile(manifestPath, 'utf8')
+    if (!raw || !raw.trim()) {
+      return null
+    }
+
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null
+    }
+
+    console.warn(
+      `[upload-hashed-assets] Unable to read local manifest at ${manifestPath}:`,
+      error?.message || error,
+    )
+    return null
+  }
+}
+
 async function updateManifestHashedAssets({
   s3,
   bucket,
   prefix,
   hashedEntries = [],
   versionLabel,
+  distDirectory = clientDistDir,
 }) {
   if (!s3 || !bucket || !prefix) {
     return false
@@ -965,6 +990,7 @@ async function updateManifestHashedAssets({
 
   const manifestKey = buildS3Key(prefix, 'manifest.json')
 
+  let manifest
   let existing
   try {
     existing = await s3.send(
@@ -978,63 +1004,66 @@ async function updateManifestHashedAssets({
     const errorCode = error?.name || error?.Code || error?.code || ''
     const normalizedCode = typeof errorCode === 'string' ? errorCode.toLowerCase() : ''
 
-    if (statusCode === 404 || /nosuchkey|notfound/.test(normalizedCode)) {
+    if (statusCode !== 404 && !/nosuchkey|notfound/.test(normalizedCode)) {
       console.warn(
-        `[upload-hashed-assets] manifest.json not found at s3://${bucket}/${manifestKey}; skipping manifest update.`,
+        `[upload-hashed-assets] Unable to load manifest at s3://${bucket}/${manifestKey}:`,
+        error?.message || error,
       )
       return false
     }
-
-    console.warn(
-      `[upload-hashed-assets] Unable to load manifest at s3://${bucket}/${manifestKey}:`,
-      error?.message || error,
-    )
-    return false
   }
 
-  const raw = await readStreamToString(existing?.Body)
-  if (!raw || !raw.trim()) {
-    console.warn(
-      `[upload-hashed-assets] Existing manifest at s3://${bucket}/${manifestKey} was empty; skipping manifest update.`,
-    )
-    return false
-  }
-
-  let manifest
-  try {
-    manifest = JSON.parse(raw)
-  } catch (error) {
-    console.warn(
-      `[upload-hashed-assets] Unable to parse manifest at s3://${bucket}/${manifestKey}:`,
-      error?.message || error,
-    )
-    return false
-  }
-
-  const fileSet = new Set()
-  if (Array.isArray(manifest.files)) {
-    for (const entry of manifest.files) {
-      if (typeof entry === 'string') {
-        const normalized = entry.trim()
-        if (normalized) {
-          fileSet.add(normalized)
+  if (existing?.Body) {
+    const raw = await readStreamToString(existing.Body)
+    if (raw && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          manifest = parsed
         }
-        continue
+      } catch (error) {
+        console.warn(
+          `[upload-hashed-assets] Unable to parse manifest at s3://${bucket}/${manifestKey}:`,
+          error?.message || error,
+        )
       }
+    } else {
+      console.warn(
+        `[upload-hashed-assets] Existing manifest at s3://${bucket}/${manifestKey} was empty; falling back to local copy.`,
+      )
+    }
+  }
 
-      if (entry && typeof entry === 'object') {
-        const candidates = [entry.path, entry.key]
-        for (const candidate of candidates) {
-          if (typeof candidate === 'string' && candidate.trim()) {
-            fileSet.add(candidate.trim())
-          }
-        }
-      }
+  if (!manifest) {
+    manifest = await loadLocalManifest({ distDirectory })
+
+    if (!manifest) {
+      manifest = { files: [] }
     }
   }
 
   if (!Array.isArray(manifest.files)) {
     manifest.files = []
+  }
+
+  const fileSet = new Set()
+  for (const entry of manifest.files) {
+    if (typeof entry === 'string') {
+      const normalized = entry.trim()
+      if (normalized) {
+        fileSet.add(normalized)
+      }
+      continue
+    }
+
+    if (entry && typeof entry === 'object') {
+      const candidates = [entry.path, entry.key]
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) {
+          fileSet.add(candidate.trim())
+        }
+      }
+    }
   }
 
   for (const asset of hashedAssets) {
@@ -1194,6 +1223,7 @@ export async function uploadHashedIndexAssets(options = {}) {
     prefix,
     hashedEntries: entries,
     versionLabel,
+    distDirectory,
   })
 
   if (!options?.quiet) {

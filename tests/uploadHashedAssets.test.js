@@ -221,6 +221,103 @@ describe('uploadHashedIndexAssets', () => {
     }
   })
 
+  it('recreates manifest.json from the local build when the remote copy is missing', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+    process.env.BUILD_VERSION = '20251029'
+
+    const distDir = path.join(tempDir, 'dist-missing-manifest')
+    const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
+    await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251029.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251029.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251029.js'), 'console.log("hi")', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{"url":"https://example.com"}', 'utf8')
+    await fs.writeFile(
+      path.join(apiDir, 'published-cloudfront.json'),
+      '{"url":"https://example.com"}',
+      'utf8',
+    )
+
+    const localManifest = {
+      files: ['assets/index-legacy.css'],
+      hashedIndexAssets: [],
+      uploadedAt: '2024-10-31T00:00:00.000Z',
+    }
+    await fs.writeFile(
+      path.join(distDir, 'manifest.json'),
+      JSON.stringify(localManifest, null, 2),
+      'utf8',
+    )
+
+    sendMock.mockImplementation(async (command) => {
+      if (command instanceof HeadBucketCommand) {
+        return {}
+      }
+      if (command instanceof PutObjectCommand) {
+        return {}
+      }
+      if (command instanceof HeadObjectCommand) {
+        return {}
+      }
+      if (command instanceof GetObjectCommand) {
+        const error = new Error('NotFound')
+        error.$metadata = { httpStatusCode: 404 }
+        error.name = 'NoSuchKey'
+        throw error
+      }
+
+      throw new Error(`Unexpected command: ${command?.constructor?.name ?? 'unknown'}`)
+    })
+
+    await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    const putCommands = sendMock.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof PutObjectCommand)
+
+    const manifestPut = putCommands.find((command) =>
+      command.input.Key.endsWith('/manifest.json'),
+    )
+
+    expect(manifestPut).toBeDefined()
+
+    const manifestBody = manifestPut.input.Body
+    const manifestJson = JSON.parse(
+      typeof manifestBody === 'string' ? manifestBody : manifestBody.toString(),
+    )
+
+    expect(manifestJson.files).toEqual(
+      expect.arrayContaining(['assets/index-20251029.css', 'assets/index-20251029.js']),
+    )
+    expect(manifestJson.hashedIndexAssets).toEqual([
+      'assets/index-20251029.css',
+      'assets/index-20251029.js',
+    ])
+    expect(manifestJson.assetVersionLabel).toBe('v20251029')
+  })
+
   it('falls back to published CloudFront metadata when env config is missing', async () => {
     process.env.BUILD_VERSION = '20251029'
     delete process.env.STATIC_ASSETS_BUCKET
