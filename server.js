@@ -296,9 +296,14 @@ function resolveStaticAssetPrefixCandidate() {
 }
 
 function buildStaticAssetKey(prefix, requestPath) {
-  const normalizedPrefix = (prefix || '').replace(/^\/+/, '').replace(/\/+$/, '');
+  const normalizedPrefix = (prefix || '')
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
   let sanitizedPath = typeof requestPath === 'string' ? requestPath : '';
+  sanitizedPath = sanitizedPath.trim();
   sanitizedPath = sanitizedPath.replace(/\?.*$/, '').replace(/#.*$/, '');
+  sanitizedPath = sanitizedPath.replace(/[,;]+$/, '');
   sanitizedPath = sanitizedPath.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
 
   if (!sanitizedPath) {
@@ -26409,4 +26414,5 @@ export {
   buildFallbackClientIndexHtml,
   normalizeManifestHashedAssetPath,
   normalizeHashedIndexAssetPath,
+  buildStaticAssetKey,
 };
