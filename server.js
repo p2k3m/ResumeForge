@@ -1280,6 +1280,11 @@ function normalizeStaticProxyAssetPath(value) {
 
   candidate = candidate.replace(/[#?].*$/, '');
 
+  const normalizedHashed = normalizeManifestHashedAssetPath(candidate);
+  if (normalizedHashed) {
+    return normalizedHashed;
+  }
+
   while (/^(?:\.\.\/|\.\/)/.test(candidate)) {
     candidate = candidate.replace(/^(?:\.\.\/|\.\/)/, '');
   }

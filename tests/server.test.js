@@ -578,6 +578,22 @@ describe('static asset proxy endpoint', () => {
     expect(mockS3Send).not.toHaveBeenCalled();
   });
 
+  test('strips inline alias annotations from hashed proxy asset queries', async () => {
+    const hashedCssName = await extractPrimaryCssAssetName();
+    const hashedContent = await readDistAsset(hashedCssName);
+    const annotatedPath = `assets/${hashedCssName},, {"alias":"/assets/index-latest.css"}`;
+
+    const res = await request(app)
+      .get('/api/static-proxy')
+      .query({ asset: annotatedPath });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.text).toBe(hashedContent);
+    expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
+    expect(mockS3Send).not.toHaveBeenCalled();
+  });
+
   test('falls back to S3 when the hashed bundle is unavailable locally', async () => {
     const hashedCssName = await extractPrimaryCssAssetName();
     const hashedRelativePath = `assets/${hashedCssName}`;
