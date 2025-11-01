@@ -51,7 +51,7 @@ describe('static asset alias metadata helpers', () => {
 
   test('ignores CloudFront domains even with origin paths', () => {
     expect(
-      shouldAppendOriginPathToBase('https://d3r7s5t9uvwx2.cloudfront.net', '/static/client/prod/latest'),
+      shouldAppendOriginPathToBase('https://d109hwmzrqr39w.cloudfront.net', '/static/client/prod/latest'),
     ).toBe(false)
   })
 
