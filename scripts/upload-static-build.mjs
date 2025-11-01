@@ -979,10 +979,10 @@ async function ensureBucketPolicyAllowsPublicAssetAccess({
   }
 }
 
-async function purgeExistingObjects({ s3, bucket, prefix }) {
+async function listExistingObjects({ s3, bucket, prefix }) {
   const prefixWithSlash = prefix.endsWith('/') ? prefix : `${prefix}/`
+  const existing = new Set()
   let continuationToken
-  let deletedCount = 0
 
   do {
     const response = await s3.send(
@@ -993,32 +993,61 @@ async function purgeExistingObjects({ s3, bucket, prefix }) {
       }),
     )
     const contents = response.Contents || []
-    if (contents.length > 0) {
-      const objects = contents
-        .map((item) => item.Key)
-        .filter((key) => shouldDeleteObjectKey(key, prefixWithSlash))
-        .map((key) => ({ Key: key }))
-
-      for (let index = 0; index < objects.length; index += 1000) {
-        const chunk = objects.slice(index, index + 1000)
-        await s3.send(
-          new DeleteObjectsCommand({
-            Bucket: bucket,
-            Delete: { Objects: chunk },
-          }),
-        )
-        deletedCount += chunk.length
+    for (const item of contents) {
+      if (item?.Key) {
+        existing.add(item.Key)
       }
     }
 
     continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
   } while (continuationToken)
 
-  if (deletedCount > 0) {
-    console.log(
-      `[upload-static] Removed ${deletedCount} stale object${deletedCount === 1 ? '' : 's'} from s3://${bucket}/${prefixWithSlash}`,
+  return existing
+}
+
+async function purgeExistingObjects({
+  s3,
+  bucket,
+  prefix,
+  existingKeys,
+  retainKeys = [],
+}) {
+  const prefixWithSlash = prefix.endsWith('/') ? prefix : `${prefix}/`
+  const sourceKeys = existingKeys ? Array.from(existingKeys) : []
+
+  if (!existingKeys) {
+    const discovered = await listExistingObjects({ s3, bucket, prefix })
+    discovered.forEach((key) => sourceKeys.push(key))
+  }
+
+  if (sourceKeys.length === 0) {
+    return
+  }
+
+  const retainSet = new Set(retainKeys)
+  const deletionTargets = sourceKeys
+    .filter((key) => shouldDeleteObjectKey(key, prefixWithSlash) && !retainSet.has(key))
+    .map((key) => ({ Key: key }))
+
+  if (deletionTargets.length === 0) {
+    return
+  }
+
+  for (let index = 0; index < deletionTargets.length; index += 1000) {
+    const chunk = deletionTargets.slice(index, index + 1000)
+    await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: { Objects: chunk },
+      }),
     )
   }
+
+  console.log(
+    `[upload-static] Removed ${deletionTargets.length} stale object${
+      deletionTargets.length === 1 ? '' : 's'
+    } from s3://${bucket}/${prefixWithSlash}`,
+  )
 }
 
 function buildS3Key(prefix, relativePath) {
@@ -1274,6 +1303,8 @@ async function uploadManifest({
   )
 
   console.log(`[upload-static] Published manifest to s3://${bucket}/${manifestKey}`)
+
+  return { key: manifestKey }
 }
 
 async function backupExistingManifest({ s3, bucket, manifestKey }) {
@@ -1407,7 +1438,7 @@ async function main() {
       requiredKeys: files,
     })
 
-    await purgeExistingObjects({ s3, bucket, prefix })
+    const existingKeys = await listExistingObjects({ s3, bucket, prefix })
     await configureStaticWebsiteHosting({ s3, bucket })
     const uploadedFiles = await uploadFiles({ s3, bucket, prefix, files })
     const versionedUploads = await uploadVersionedAssets({
@@ -1420,7 +1451,7 @@ async function main() {
     const allUploadedFiles = [...uploadedFiles, ...versionedUploads]
     ensureIndexAliasCoverage(allUploadedFiles)
     await verifyUploadedAssets({ s3, bucket, uploads: allUploadedFiles })
-    await uploadManifest({
+    const manifestUpload = await uploadManifest({
       s3,
       bucket,
       prefix,
@@ -1430,6 +1461,24 @@ async function main() {
       versionLabel,
       uploadedFiles: allUploadedFiles,
       hashedAssets,
+    })
+
+    const retainKeys = new Set()
+    for (const entry of allUploadedFiles) {
+      if (entry?.key) {
+        retainKeys.add(entry.key)
+      }
+    }
+    if (manifestUpload?.key) {
+      retainKeys.add(manifestUpload.key)
+    }
+
+    await purgeExistingObjects({
+      s3,
+      bucket,
+      prefix,
+      existingKeys,
+      retainKeys: Array.from(retainKeys),
     })
 
     console.log(
