@@ -24,4 +24,12 @@ describe('buildStaticAssetKey', () => {
     const key = buildStaticAssetKey(' static/client/prod/latest/ ', ' ./assets/index-def456.js;; ');
     expect(key).toBe('static/client/prod/latest/assets/index-def456.js');
   });
+
+  it('strips inline alias metadata from hashed asset queries', () => {
+    const key = buildStaticAssetKey(
+      'static/client/prod/latest',
+      'https://cdn.example.com/assets/index-789abc.css,, {"alias":"/assets/index-latest.css"}',
+    );
+    expect(key).toBe('static/client/prod/latest/assets/index-789abc.css');
+  });
 });

@@ -356,11 +356,34 @@ function buildStaticAssetKey(prefix, requestPath) {
     .trim()
     .replace(/^\/+/, '')
     .replace(/\/+$/, '');
-  let sanitizedPath = typeof requestPath === 'string' ? requestPath : '';
-  sanitizedPath = sanitizedPath.trim();
-  sanitizedPath = sanitizedPath.replace(/\?.*$/, '').replace(/#.*$/, '');
-  sanitizedPath = sanitizedPath.replace(/[,;]+$/, '');
-  sanitizedPath = sanitizedPath.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
+  const rawPath = typeof requestPath === 'string' ? requestPath.trim() : '';
+
+  let sanitizedPath = (() => {
+    const normalizedHashed = normalizeManifestHashedAssetPath(rawPath);
+    if (normalizedHashed) {
+      return normalizedHashed.replace(/^\//, '');
+    }
+
+    let candidate = rawPath;
+    if (!candidate) {
+      return '';
+    }
+
+    candidate = candidate.replace(/[#?].*$/, '');
+
+    for (const separator of STATIC_PROXY_ALIAS_METADATA_SEPARATORS) {
+      const metadataIndex = candidate.indexOf(separator);
+      if (metadataIndex !== -1) {
+        candidate = candidate.slice(0, metadataIndex);
+      }
+    }
+
+    candidate = candidate.replace(/[,;]+$/, '');
+    candidate = candidate.replace(/^(?:\.\/)+/, '').replace(/^\/+/, '');
+    candidate = candidate.replace(/\\/g, '/');
+
+    return candidate.trim();
+  })();
 
   if (!sanitizedPath) {
     return normalizedPrefix;
