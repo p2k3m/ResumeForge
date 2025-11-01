@@ -1134,14 +1134,17 @@ export async function uploadHashedIndexAssets(options = {}) {
     metadata: effectiveMetadata,
   })
 
+  const supplementaryFiles = Array.isArray(options?.supplementaryFiles)
+    ? options.supplementaryFiles
+    : [
+        'api/published-cloudfront',
+        'api/published-cloudfront.json',
+      ]
+
   const supplementaryEntries = await resolveSupplementaryUploadEntries({
     distDirectory,
-    files: Array.isArray(options?.supplementaryFiles)
-      ? options.supplementaryFiles
-      : [
-          'api/published-cloudfront',
-          'api/published-cloudfront.json',
-        ],
+    files: supplementaryFiles,
+    requiredFiles: supplementaryFiles,
   })
 
   const configuration = await resolveHashedAssetUploadConfiguration({ metadata: effectiveMetadata })
