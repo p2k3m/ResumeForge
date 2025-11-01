@@ -783,6 +783,25 @@
           return manifestState.promise
         }
 
+        const stripInlineAssetAnnotations = (value) => {
+          if (typeof value !== 'string') {
+            return ''
+          }
+
+          let candidate = value.trim()
+          if (!candidate) {
+            return ''
+          }
+
+          const annotationIndex = candidate.search(/[,;]{2}/)
+          if (annotationIndex >= 0) {
+            candidate = candidate.slice(0, annotationIndex)
+          }
+
+          candidate = candidate.replace(/[,;]+$/, '')
+          return candidate.trim()
+        }
+
         const normalizeAliasBase = (value) => {
           if (typeof value !== 'string') {
             return ''
@@ -1782,7 +1801,7 @@
               return ''
             }
 
-            let candidate = String(originalSource).trim()
+            let candidate = stripInlineAssetAnnotations(String(originalSource).trim())
             if (!candidate) {
               return ''
             }
@@ -1955,7 +1974,7 @@
               return ''
             }
 
-            let candidate = String(originalSource).trim()
+            let candidate = stripInlineAssetAnnotations(String(originalSource).trim())
             if (!candidate) {
               return ''
             }
