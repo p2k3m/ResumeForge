@@ -137,6 +137,7 @@ const STATIC_ASSET_IMMUTABLE_EXTENSION_DENYLIST = new Set(['.html']);
 const INDEX_ASSET_ALIAS_PATH_PATTERN = /^\/assets\/index-latest\.(css|js)$/i;
 const CLIENT_INDEX_CACHE_CONTROL = 'no-cache, no-store, must-revalidate';
 const STATIC_PROXY_CORS_HEADER = 'Access-Control-Allow-Origin';
+const STATIC_PROXY_ALIAS_METADATA_SEPARATORS = [',,', ';;'];
 
 function applyStaticProxyCorsHeaders(res) {
   if (!res || typeof res.setHeader !== 'function') {
@@ -159,6 +160,61 @@ function applyStaticProxyCorsHeaders(res) {
   } catch (error) {
     // Ignore header assignment failures; the proxy will continue without CORS hints.
   }
+}
+
+function extractStaticProxyAnnotatedAliasPath(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  for (const separator of STATIC_PROXY_ALIAS_METADATA_SEPARATORS) {
+    const metadataIndex = value.indexOf(separator);
+    if (metadataIndex === -1) {
+      continue;
+    }
+
+    const rawMetadata = value.slice(metadataIndex + separator.length).trim();
+    if (!rawMetadata) {
+      continue;
+    }
+
+    const sanitizedMetadata = rawMetadata.replace(/[,;]+$/, '');
+
+    let aliasCandidate = '';
+
+    try {
+      const parsed = JSON.parse(sanitizedMetadata);
+      if (parsed && typeof parsed.alias === 'string') {
+        aliasCandidate = parsed.alias.trim();
+      }
+    } catch (error) {
+      // Ignore JSON parse errors and fall back to a regex based extraction.
+    }
+
+    if (!aliasCandidate) {
+      const aliasMatch = sanitizedMetadata.match(/"alias"\s*:\s*"([^"]+)"/i);
+      if (aliasMatch) {
+        aliasCandidate = aliasMatch[1].trim();
+      }
+    }
+
+    if (!aliasCandidate) {
+      continue;
+    }
+
+    const normalizedAlias = normalizeStaticProxyAssetPath(aliasCandidate);
+    if (!normalizedAlias) {
+      continue;
+    }
+
+    if (!INDEX_ASSET_ALIAS_PATH_PATTERN.test(normalizedAlias)) {
+      continue;
+    }
+
+    return normalizedAlias;
+  }
+
+  return '';
 }
 
 function setStaticAssetCacheHeaders(res, assetPath, requestPath = assetPath) {
@@ -18537,6 +18593,7 @@ app.get('/api/static-proxy', async (req, res) => {
       : typeof req.query?.path === 'string'
         ? req.query.path
         : '';
+  const annotatedAliasPath = extractStaticProxyAnnotatedAliasPath(rawAssetPath);
   const normalizedAssetPath = normalizeStaticProxyAssetPath(rawAssetPath);
 
   if (!normalizedAssetPath) {
@@ -18589,6 +18646,7 @@ app.get('/api/static-proxy', async (req, res) => {
     path: normalizedAssetPath,
     method,
     proxy: true,
+    ...(annotatedAliasPath ? { aliasPath: annotatedAliasPath, annotatedAlias: true } : {}),
   };
 
   if (
@@ -18597,7 +18655,7 @@ app.get('/api/static-proxy', async (req, res) => {
       method,
       res,
       logContext,
-      requestPath: normalizedAssetPath,
+      requestPath: annotatedAliasPath || normalizedAssetPath,
     })
   ) {
     return;
@@ -18615,7 +18673,7 @@ app.get('/api/static-proxy', async (req, res) => {
       headServed: 'client_asset_proxy_s3_head_served',
       failed: 'client_asset_proxy_s3_failed',
     },
-    requestPath: normalizedAssetPath,
+    requestPath: annotatedAliasPath || normalizedAssetPath,
   });
 
   if (servedFromS3) {
