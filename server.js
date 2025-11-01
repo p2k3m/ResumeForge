@@ -2502,7 +2502,7 @@ function resolveConfiguredApiBaseUrl() {
   return undefined;
 }
 
-async function getClientIndexHtml() {
+async function getClientIndexHtml({ request } = {}) {
   if (!clientAssetsAvailable()) {
     if (!cachedClientIndexHtml) {
       let metadata = null;
@@ -2518,12 +2518,6 @@ async function getClientIndexHtml() {
     return cachedClientIndexHtml;
   }
 
-  if (cachedClientIndexHtml && process.env.NODE_ENV !== 'development') {
-    return cachedClientIndexHtml;
-  }
-
-  let html = await fs.readFile(clientIndexPath, 'utf8');
-
   let metadata = null;
   try {
     metadata = await loadPublishedCloudfrontMetadata();
@@ -2533,19 +2527,38 @@ async function getClientIndexHtml() {
     });
   }
 
+  const shouldDegrade = shouldForceCloudfrontDegrade({ metadata, request });
+
+  if (!shouldDegrade && cachedClientIndexHtml && process.env.NODE_ENV !== 'development') {
+    return cachedClientIndexHtml;
+  }
+
+  let html = await fs.readFile(clientIndexPath, 'utf8');
+
+  const requestInfo = resolveRequestHostInfo(request);
   const fallbackApiBase =
-    (metadata && metadata.apiGatewayUrl) || resolveConfiguredApiBaseUrl();
+    (metadata && metadata.apiGatewayUrl) ||
+    resolveConfiguredApiBaseUrl() ||
+    requestInfo.baseUrl;
 
   html = ensureMetaApiBase(html, fallbackApiBase || '');
 
-  if (metadata) {
+  if (shouldDegrade) {
+    const degradeBase = fallbackApiBase || requestInfo.baseUrl || '';
+    if (degradeBase) {
+      html = updateMetaApiBase(html, degradeBase);
+      html = updateBackupApiInputs(html, degradeBase);
+    }
+    const degradedMetadata = buildDegradedCloudfrontMetadata(metadata, degradeBase || requestInfo.baseUrl || '');
+    html = embedCloudfrontMetadataIntoHtml(html, degradedMetadata);
+  } else if (metadata) {
     html = embedCloudfrontMetadataIntoHtml(html, metadata);
   } else if (fallbackApiBase) {
     html = updateMetaApiBase(html, fallbackApiBase);
     html = updateBackupApiInputs(html, fallbackApiBase);
   }
 
-  if (process.env.NODE_ENV !== 'development') {
+  if (!shouldDegrade && process.env.NODE_ENV !== 'development') {
     cachedClientIndexHtml = html;
   }
   return html;
@@ -3713,6 +3726,134 @@ function readBooleanEnv(name, defaultValue = false) {
     return defaultValue;
   }
   return parseBoolean(raw, defaultValue);
+}
+
+function getRequestHeader(req, name) {
+  if (!req || !name) {
+    return '';
+  }
+
+  try {
+    if (typeof req.get === 'function') {
+      const value = req.get(name);
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+  } catch (error) {
+    // Ignore express header lookup failures and fall through to direct access.
+  }
+
+  try {
+    const headers = req.headers;
+    if (headers && typeof headers === 'object') {
+      const raw = headers[String(name).toLowerCase()];
+      if (Array.isArray(raw)) {
+        const candidate = raw.find((entry) => typeof entry === 'string' && entry.trim());
+        if (candidate) {
+          return candidate;
+        }
+      } else if (typeof raw === 'string' && raw.trim()) {
+        return raw;
+      }
+    }
+  } catch (error) {
+    // Ignore header access failures and return an empty string.
+  }
+
+  return '';
+}
+
+function resolveRequestHostInfo(req) {
+  const forwardedHost = getRequestHeader(req, 'x-forwarded-host');
+  const rawHostHeader = forwardedHost || getRequestHeader(req, 'host');
+  const hostWithPort = rawHostHeader ? rawHostHeader.split(',')[0]?.trim() || '' : '';
+
+  let normalizedHost = hostWithPort;
+  if (normalizedHost.includes(']')) {
+    const closingBracketIndex = normalizedHost.indexOf(']');
+    if (closingBracketIndex !== -1) {
+      normalizedHost = normalizedHost.slice(0, closingBracketIndex + 1);
+    }
+  }
+  if (normalizedHost.includes(':') && !normalizedHost.startsWith('[')) {
+    normalizedHost = normalizedHost.slice(0, normalizedHost.indexOf(':'));
+  }
+
+  const rawProto = getRequestHeader(req, 'x-forwarded-proto') || req?.protocol || '';
+  const normalizedProto = (() => {
+    if (!rawProto) {
+      return hostWithPort ? 'https' : '';
+    }
+    const first = rawProto.split(',')[0]?.trim().toLowerCase();
+    if (first === 'http' || first === 'https') {
+      return first;
+    }
+    return hostWithPort ? 'https' : '';
+  })();
+
+  const baseUrl = normalizedProto && hostWithPort ? `${normalizedProto}://${hostWithPort}` : '';
+
+  return {
+    host: normalizedHost ? normalizedHost.toLowerCase() : '',
+    hostWithPort,
+    baseUrl,
+  };
+}
+
+function buildDegradedCloudfrontMetadata(metadata, fallbackBase) {
+  const normalizedFallback = typeof fallbackBase === 'string' ? fallbackBase.trim() : '';
+  const baseMetadata =
+    metadata && typeof metadata === 'object'
+      ? { ...metadata }
+      : {};
+
+  if (normalizedFallback) {
+    if (typeof baseMetadata.apiGatewayUrl !== 'string' || !baseMetadata.apiGatewayUrl.trim()) {
+      baseMetadata.apiGatewayUrl = normalizedFallback;
+    }
+    if (typeof baseMetadata.url !== 'string' || !baseMetadata.url.trim()) {
+      baseMetadata.url = normalizedFallback;
+    }
+  }
+
+  baseMetadata.degraded = true;
+  return baseMetadata;
+}
+
+function shouldForceCloudfrontDegrade({ metadata, request } = {}) {
+  if (
+    readBooleanEnv('RESUMEFORGE_FORCE_CLOUDFRONT_DEGRADED', false) ||
+    readBooleanEnv('FORCE_CLOUDFRONT_DEGRADED', false) ||
+    readBooleanEnv('RESUMEFORGE_DISABLE_CLOUDFRONT', false)
+  ) {
+    return true;
+  }
+
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+
+  const requestInfo = resolveRequestHostInfo(request);
+  const requestHost = requestInfo.host;
+  if (!requestHost) {
+    return false;
+  }
+
+  const metadataHost = (() => {
+    const primary = getUrlHost(metadata.url);
+    if (primary) {
+      return primary.toLowerCase();
+    }
+    const apiHost = getUrlHost(metadata.apiGatewayUrl);
+    return apiHost ? apiHost.toLowerCase() : '';
+  })();
+
+  if (!metadataHost) {
+    return false;
+  }
+
+  return metadataHost !== requestHost;
 }
 
 function isDownloadSessionLogCleanupEnabled() {
@@ -18813,7 +18954,7 @@ app.get(['/redirect/latest', '/go/cloudfront'], async (req, res) => {
 if (shouldServeClientAppRoutes) {
   app.get('/', async (req, res) => {
     try {
-      const html = await getClientIndexHtml();
+      const html = await getClientIndexHtml({ request: req });
       res.setHeader('Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
       res.type('html').send(html);
     } catch (err) {
