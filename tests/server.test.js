@@ -559,6 +559,7 @@ describe('static asset proxy endpoint', () => {
       .query({ asset: 'assets/index-latest.css' });
 
     expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(res.text).toBe(cssContent);
     expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
   });
@@ -571,6 +572,7 @@ describe('static asset proxy endpoint', () => {
       .query({ asset: 'assets/index-latest.css,,' });
 
     expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(res.text).toBe(cssContent);
     expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
     expect(mockS3Send).not.toHaveBeenCalled();
@@ -635,6 +637,7 @@ describe('static asset proxy endpoint', () => {
         .query({ asset: 'assets/index-latest.css' });
 
       expect(res.status).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
       expect(res.text).toBe(proxyBody);
       expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
       expect(mockS3Send).toHaveBeenCalledTimes(2);
@@ -673,6 +676,7 @@ describe('static asset proxy endpoint', () => {
         .query({ asset: hashedRelativePath });
 
       expect(res.status).toBe(200);
+      expect(res.headers['access-control-allow-origin']).toBe('*');
       expect(res.text).toBe(aliasContent);
       expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
       expect(mockS3Send).toHaveBeenCalled();
@@ -687,6 +691,7 @@ describe('static asset proxy endpoint', () => {
       .query({ asset: '../secrets.txt' });
 
     expect(res.status).toBe(400);
+    expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(res.body).toEqual({
       success: false,
       error: {
