@@ -807,13 +807,23 @@ function resolveContentType(relativePath) {
   return 'application/octet-stream'
 }
 
-async function resolveSupplementaryUploadEntries({ distDirectory, files = [] }) {
+async function resolveSupplementaryUploadEntries({
+  distDirectory,
+  files = [],
+  requiredFiles,
+}) {
   if (!Array.isArray(files) || files.length === 0) {
     return []
   }
 
   const uploads = []
   const unique = new Set()
+  const required = new Set(
+    Array.isArray(requiredFiles) && requiredFiles.length > 0
+      ? requiredFiles.map((entry) => entry && String(entry)).filter(Boolean)
+      : files,
+  )
+  const missingRequired = new Set()
 
   const addUpload = async ({ relativePath, cacheControl, contentType }) => {
     if (!relativePath || unique.has(relativePath)) {
@@ -824,10 +834,16 @@ async function resolveSupplementaryUploadEntries({ distDirectory, files = [] }) 
     try {
       const stats = await fs.stat(absolutePath)
       if (!stats.isFile()) {
+        if (required.has(relativePath)) {
+          missingRequired.add(relativePath)
+        }
         return
       }
     } catch (error) {
       if (error?.code === 'ENOENT') {
+        if (required.has(relativePath)) {
+          missingRequired.add(relativePath)
+        }
         return
       }
       throw error
@@ -860,6 +876,19 @@ async function resolveSupplementaryUploadEntries({ distDirectory, files = [] }) 
         contentType: 'application/json',
       })
     }
+  }
+
+  if (missingRequired.size > 0) {
+    const summary = Array.from(missingRequired)
+      .sort((a, b) => a.localeCompare(b))
+      .map((entry) => `"${entry}"`)
+      .join(', ')
+
+    const plural = missingRequired.size === 1 ? '' : 's'
+    throw new Error(
+      `[upload-hashed-assets] Required supplementary asset${plural} ${summary} missing from ${distDirectory}. ` +
+        'Ensure the client build embeds the CloudFront fallback metadata (run "npm run build:client" before uploading).',
+    )
   }
 
   return uploads
