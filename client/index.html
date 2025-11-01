@@ -533,6 +533,34 @@
         } catch (error) {
           // Ignore globals that cannot be set in restricted environments.
         }
+        const resolveEffectiveCloudfrontMetadata = () => {
+          try {
+            const runtime =
+              typeof window !== 'undefined' &&
+              window.__RESUMEFORGE_CLOUDFRONT_METADATA__ &&
+              typeof window.__RESUMEFORGE_CLOUDFRONT_METADATA__ === 'object'
+                ? window.__RESUMEFORGE_CLOUDFRONT_METADATA__
+                : null
+
+            if (runtime && typeof runtime === 'object') {
+              return typeof runtime.cloudfront === 'object' && runtime.cloudfront
+                ? runtime.cloudfront
+                : runtime
+            }
+          } catch (error) {
+            // Ignore runtime metadata access failures in constrained environments.
+          }
+
+          const inlineMetadata = inlinePublishedCloudfrontMetadata
+          if (inlineMetadata && typeof inlineMetadata === 'object') {
+            return typeof inlineMetadata.cloudfront === 'object' && inlineMetadata.cloudfront
+              ? inlineMetadata.cloudfront
+              : inlineMetadata
+          }
+
+          return null
+        }
+
         const aliasPaths = Object.freeze({
           js: '/assets/index-latest.js',
           css: hasInlineIndexCss ? '/assets/index-latest.css' : ''
@@ -2138,7 +2166,208 @@
             return true
           }
 
+          if (attemptDirectS3Reload(element)) {
+            return true
+          }
+
           return attemptAliasReload(element)
+        }
+
+        const attemptDirectS3Reload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          const metadata = resolveEffectiveCloudfrontMetadata()
+          if (!metadata) {
+            return false
+          }
+
+          const bucket =
+            typeof metadata.originBucket === 'string' && metadata.originBucket.trim()
+              ? metadata.originBucket.trim()
+              : ''
+          if (!bucket) {
+            return false
+          }
+
+          const regionHints = new Set()
+          const addRegionHint = (value) => {
+            if (!value) {
+              return
+            }
+            const normalized = String(value).trim().toLowerCase()
+            if (normalized) {
+              regionHints.add(normalized)
+            }
+          }
+
+          addRegionHint(metadata.originRegion)
+          addRegionHint(extractAwsRegionFromUrl(metadata.url))
+          addRegionHint(extractAwsRegionFromUrl(metadata.apiGatewayUrl))
+
+          const bucketBases = buildS3BaseCandidates(bucket, Array.from(regionHints))
+          if (!bucketBases.length) {
+            return false
+          }
+
+          const originPath = normalizeAliasOriginPath(metadata.originPath)
+          const baseCandidates = []
+          const seenBases = new Set()
+
+          const appendBaseCandidate = (base) => {
+            if (!base || seenBases.has(base)) {
+              return
+            }
+            seenBases.add(base)
+            baseCandidates.push(base)
+          }
+
+          bucketBases.forEach((base) => {
+            appendBaseCandidate(base)
+            if (originPath && shouldAppendOriginPathToBase(base, originPath)) {
+              appendBaseCandidate(joinAliasUrl(base, originPath))
+            }
+          })
+
+          if (!baseCandidates.length) {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const originalSource = describeSource(element)
+          const preferredAssetPath = (() => {
+            const normalizedSource = stripInlineAssetAnnotations(originalSource || '')
+            if (normalizedSource && HASHED_INDEX_ASSET_PATTERN.test(normalizedSource)) {
+              return normalizedSource
+            }
+            return isScript ? aliasPaths.js : aliasPaths.css
+          })()
+
+          if (!preferredAssetPath) {
+            return false
+          }
+
+          const candidateAssets = []
+          if (preferredAssetPath) {
+            candidateAssets.push(preferredAssetPath)
+          }
+          const aliasPath = isScript ? aliasPaths.js : aliasPaths.css
+          if (aliasPath && aliasPath !== preferredAssetPath) {
+            candidateAssets.push(aliasPath)
+          }
+
+          if (!candidateAssets.length) {
+            return false
+          }
+
+          const rawAttempt = element.dataset?.resumeforgeS3Attempt || '0'
+          let attemptIndex = Number.parseInt(rawAttempt, 10)
+          if (!Number.isFinite(attemptIndex) || attemptIndex < 0) {
+            attemptIndex = 0
+          }
+
+          const totalCombinations = candidateAssets.length * baseCandidates.length
+          let nextPointer = attemptIndex
+          let selectedUrl = ''
+          let selectedAsset = ''
+          let selectedBase = ''
+
+          while (nextPointer < totalCombinations) {
+            const assetIndex = Math.floor(nextPointer / baseCandidates.length)
+            const baseIndex = nextPointer % baseCandidates.length
+            const assetCandidate = candidateAssets[assetIndex]
+            const baseCandidate = baseCandidates[baseIndex]
+            const joined = joinAliasUrl(baseCandidate, assetCandidate)
+            nextPointer += 1
+
+            if (joined) {
+              selectedUrl = joined
+              selectedAsset = assetCandidate
+              selectedBase = baseCandidate
+              break
+            }
+          }
+
+          element.dataset.resumeforgeS3Attempt = String(nextPointer)
+
+          if (!selectedUrl) {
+            return false
+          }
+
+          const parent = element.parentNode
+          if (!parent || typeof parent.replaceChild !== 'function') {
+            return false
+          }
+
+          const replacement = element.cloneNode(true)
+          const cacheBustedUrl = appendCacheBustParam(selectedUrl)
+          const effectiveUrl = cacheBustedUrl || selectedUrl
+
+          if (isStylesheet) {
+            replacement.href = effectiveUrl
+          } else {
+            replacement.src = effectiveUrl
+          }
+
+          replacement.setAttribute('data-src', effectiveUrl)
+          replacement.dataset.resumeforgeAssetRetry = 'true'
+          replacement.dataset.resumeforgeAssetS3 = 'true'
+          replacement.dataset.resumeforgeS3Attempt = String(nextPointer)
+          if (selectedAsset) {
+            replacement.dataset.resumeforgeS3Asset = selectedAsset
+          }
+          if (selectedBase) {
+            replacement.dataset.resumeforgeS3Base = selectedBase
+          }
+          if (originalSource) {
+            replacement.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          element.dataset.resumeforgeAssetRetry = 'true'
+          element.dataset.resumeforgeAssetS3 = 'true'
+          element.dataset.resumeforgeS3Attempt = String(nextPointer)
+          if (selectedAsset && !element.dataset.resumeforgeS3Asset) {
+            element.dataset.resumeforgeS3Asset = selectedAsset
+          }
+          if (selectedBase && !element.dataset.resumeforgeS3Base) {
+            element.dataset.resumeforgeS3Base = selectedBase
+          }
+          if (originalSource && !element.dataset.resumeforgeOriginalSource) {
+            element.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          try {
+            parent.replaceChild(replacement, element)
+          } catch (error) {
+            try {
+              parent.removeChild(element)
+              parent.appendChild(replacement)
+            } catch (innerError) {
+              return false
+            }
+          }
+
+          try {
+            console.warn('Retrying ResumeForge static asset via S3 origin fallback.', {
+              source: originalSource || '',
+              target: effectiveUrl,
+              base: selectedBase || '',
+              asset: selectedAsset || ''
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          return true
         }
 
         function attemptAliasReload(element) {
