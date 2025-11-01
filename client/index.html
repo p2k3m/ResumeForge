@@ -2213,6 +2213,132 @@
           return true
         }
 
+        const attemptOriginPrefixedReload = (element) => {
+          if (!element || typeof element.tagName !== 'string') {
+            return false
+          }
+
+          const metadata = resolveEffectiveCloudfrontMetadata()
+          const originPath = normalizeAliasOriginPath(metadata?.originPath)
+          if (!originPath) {
+            return false
+          }
+
+          const tagName = element.tagName.toLowerCase()
+          const isStylesheet =
+            tagName === 'link' && typeof element.rel === 'string' && element.rel.toLowerCase() === 'stylesheet'
+          const isScript = tagName === 'script'
+
+          if (!isScript && !isStylesheet) {
+            return false
+          }
+
+          const dataset = element.dataset || {}
+          if (dataset.resumeforgeOriginPrefixed === 'true') {
+            return false
+          }
+
+          const originalSource = describeSource(element)
+          const normalizedSource = (() => {
+            if (!originalSource) {
+              return ''
+            }
+
+            let candidate = stripInlineAssetAnnotations(String(originalSource).trim())
+            if (!candidate) {
+              return ''
+            }
+
+            try {
+              const resolved = new URL(candidate, window.location.href)
+              if (resolved.origin === window.location.origin) {
+                candidate = `${resolved.pathname}${resolved.search}`
+              } else {
+                candidate = resolved.href
+              }
+            } catch (error) {
+              // Ignore URL resolution failures and continue with the raw candidate.
+            }
+
+            if (/^[a-z]+:/i.test(candidate)) {
+              return ''
+            }
+
+            candidate = candidate.replace(/[#?].*$/, '')
+            candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '')
+            candidate = candidate.replace(/^\/+/, '')
+            candidate = candidate.replace(/\\/g, '/')
+            return candidate
+          })()
+
+          const preferredAsset = normalizedSource
+            ? `/${normalizedSource}`
+            : isScript
+              ? aliasPaths.js
+              : aliasPaths.css
+
+          if (!preferredAsset) {
+            return false
+          }
+
+          if (preferredAsset.startsWith(`${originPath}/`) || preferredAsset === originPath) {
+            return false
+          }
+
+          const fallbackUrl = joinAliasUrl(originPath, preferredAsset)
+          if (!fallbackUrl) {
+            return false
+          }
+
+          const replacement = element.cloneNode(true)
+          if (isStylesheet) {
+            replacement.href = fallbackUrl
+          } else {
+            replacement.src = fallbackUrl
+          }
+
+          replacement.setAttribute('data-src', fallbackUrl)
+          replacement.dataset.resumeforgeAssetRetry = 'true'
+          replacement.dataset.resumeforgeOriginPrefixed = 'true'
+          if (originalSource) {
+            replacement.dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          dataset.resumeforgeAssetRetry = 'true'
+          dataset.resumeforgeOriginPrefixed = 'true'
+          if (originalSource && !dataset.resumeforgeOriginalSource) {
+            dataset.resumeforgeOriginalSource = originalSource
+          }
+
+          const parent = element.parentNode
+          if (!parent || typeof parent.replaceChild !== 'function') {
+            return false
+          }
+
+          try {
+            parent.replaceChild(replacement, element)
+          } catch (error) {
+            try {
+              parent.removeChild(element)
+              parent.appendChild(replacement)
+            } catch (innerError) {
+              return false
+            }
+          }
+
+          try {
+            console.warn('Retrying ResumeForge static asset via origin path fallback.', {
+              source: originalSource || '',
+              originPath,
+              asset: preferredAsset
+            })
+          } catch (error) {
+            // Ignore logging errors in constrained environments.
+          }
+
+          return true
+        }
+
         const attemptProxyOrAliasReload = (element) => {
           if (attemptApiGatewayAssetReload(element)) {
             return true
@@ -2223,6 +2349,10 @@
           }
 
           if (attemptDirectS3Reload(element)) {
+            return true
+          }
+
+          if (attemptOriginPrefixedReload(element)) {
             return true
           }
 
