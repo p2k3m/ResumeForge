@@ -1084,13 +1084,37 @@
           // Ignore manifest prefetch failures in constrained environments.
         }
 
-        const addAliasBaseCandidate = (value) => {
+        const addAliasBaseCandidate = (value, options = {}) => {
           const normalized = normalizeAliasBase(value)
-          if (!normalized || aliasBaseSeen.has(normalized)) {
+          if (!normalized) {
             return false
           }
+
+          const shouldPrepend = Boolean(options && options.prepend)
+
+          if (aliasBaseSeen.has(normalized)) {
+            if (!shouldPrepend) {
+              return false
+            }
+
+            const existingIndex = aliasBaseCandidates.indexOf(normalized)
+            if (existingIndex <= 0) {
+              addApiProxyCandidate(normalized)
+              return existingIndex === 0
+            }
+
+            aliasBaseCandidates.splice(existingIndex, 1)
+            aliasBaseCandidates.unshift(normalized)
+            addApiProxyCandidate(normalized)
+            return true
+          }
+
           aliasBaseSeen.add(normalized)
-          aliasBaseCandidates.push(normalized)
+          if (shouldPrepend) {
+            aliasBaseCandidates.unshift(normalized)
+          } else {
+            aliasBaseCandidates.push(normalized)
+          }
           addApiProxyCandidate(normalized)
           return true
         }
@@ -1175,19 +1199,19 @@
 
           let added = false
 
-          const applyCandidate = (candidate) => {
+          const applyCandidate = (candidate, { prioritize = false } = {}) => {
             if (!candidate) {
               return
             }
 
             addApiProxyCandidate(candidate)
 
-            if (addAliasBaseCandidate(candidate)) {
+            if (addAliasBaseCandidate(candidate, { prepend: prioritize })) {
               added = true
             }
 
             if (shouldAppendOriginPathToBase(candidate, originPath)) {
-              if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath))) {
+              if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath), { prepend: prioritize })) {
                 added = true
               }
             }
@@ -1195,14 +1219,16 @@
 
           const directCandidates = []
           if (typeof metadata.apiGatewayUrl === 'string') {
-            directCandidates.push(metadata.apiGatewayUrl)
+            directCandidates.push({ value: metadata.apiGatewayUrl, prioritize: true })
           }
           if (typeof metadata.url === 'string') {
-            directCandidates.push(metadata.url)
+            directCandidates.push({ value: metadata.url, prioritize: false })
           }
 
-          directCandidates.forEach(applyCandidate)
-          bucketBases.forEach(applyCandidate)
+          directCandidates.forEach((entry) =>
+            applyCandidate(entry?.value, { prioritize: Boolean(entry?.prioritize) }),
+          )
+          bucketBases.forEach((candidate) => applyCandidate(candidate))
 
           if (originPath && addAliasBaseCandidate(joinAliasUrl('', originPath))) {
             added = true
