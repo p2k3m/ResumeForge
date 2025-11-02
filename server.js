@@ -406,6 +406,27 @@ function buildStaticAssetKey(prefix, requestPath) {
   return combined.replace(/\/{2,}/g, '/');
 }
 
+function setResponseHeader(res, name, value) {
+  if (!res || typeof name !== 'string' || value === undefined) {
+    return;
+  }
+
+  try {
+    if (typeof res.set === 'function') {
+      res.set(name, value);
+      return;
+    }
+  } catch (error) {
+    // Ignore express-style header assignment failures and fall back to the Node.js API.
+  }
+
+  try {
+    res.setHeader?.(name, value);
+  } catch (error) {
+    // Ignore header assignment failures; downstream logic will continue without the hint.
+  }
+}
+
 async function streamS3BodyToResponse(body, res) {
   if (!body) {
     res.end();
@@ -448,11 +469,6 @@ async function streamS3BodyToResponse(body, res) {
     return;
   }
 
-  if (typeof body.pipe === 'function') {
-    await streamPipeline(body, res);
-    return;
-  }
-
   if (Symbol.asyncIterator in body) {
     const chunks = [];
     for await (const chunk of body) {
@@ -460,6 +476,11 @@ async function streamS3BodyToResponse(body, res) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     res.send(Buffer.concat(chunks));
+    return;
+  }
+
+  if (typeof body.pipe === 'function') {
+    await streamPipeline(body, res);
     return;
   }
 
@@ -530,31 +551,31 @@ function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPat
   const { ContentType, CacheControl, ETag, LastModified } = metadata || {};
 
   if (ContentType) {
-    res.setHeader('Content-Type', ContentType);
+    setResponseHeader(res, 'Content-Type', ContentType);
   } else {
     const fallbackType = mime.lookup(assetPath);
     if (fallbackType) {
-      res.setHeader('Content-Type', fallbackType);
+      setResponseHeader(res, 'Content-Type', fallbackType);
     }
   }
 
   if (CacheControl) {
-    res.setHeader('Cache-Control', CacheControl);
+    setResponseHeader(res, 'Cache-Control', CacheControl);
   } else {
     setStaticAssetCacheHeaders(res, assetPath, requestPath);
   }
 
   if (INDEX_ASSET_ALIAS_PATH_PATTERN.test((requestPath || assetPath || '').toString())) {
-    res.setHeader('Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
+    setResponseHeader(res, 'Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
   }
 
   const resolvedContentLength = resolveS3ContentLength(metadata);
   if (resolvedContentLength !== undefined) {
-    res.setHeader('Content-Length', resolvedContentLength);
+    setResponseHeader(res, 'Content-Length', resolvedContentLength);
   }
 
   if (ETag) {
-    res.setHeader('ETag', ETag);
+    setResponseHeader(res, 'ETag', ETag);
   }
 
   if (LastModified) {
@@ -565,7 +586,7 @@ function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPat
           ? new Date(LastModified).toUTCString()
           : String(LastModified);
     if (resolved) {
-      res.setHeader('Last-Modified', resolved);
+      setResponseHeader(res, 'Last-Modified', resolved);
     }
   }
 }
