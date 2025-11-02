@@ -1268,6 +1268,52 @@
                 return true
               }
             }
+
+            const canonicalHosts = (() => {
+              const hosts = new Set()
+              const recordHost = (value) => {
+                if (!value) {
+                  return
+                }
+                try {
+                  const parsed = new URL(value, window.location.href)
+                  const parsedHost = (parsed.hostname || '').toLowerCase()
+                  if (parsedHost) {
+                    hosts.add(parsedHost)
+                  }
+                } catch (error) {
+                  // Ignore parse failures for candidate hosts.
+                }
+              }
+
+              recordHost(inlinePublishedCloudfrontMetadata?.cloudfront?.url)
+
+              try {
+                recordHost(window.__RESUMEFORGE_CLOUDFRONT_METADATA__?.cloudfront?.url)
+              } catch (error) {
+                // Ignore runtime metadata access issues.
+              }
+
+              return hosts
+            })()
+
+            if (canonicalHosts.has(host)) {
+              return true
+            }
+
+            const locationHost = (() => {
+              try {
+                return typeof window?.location?.hostname === 'string'
+                  ? window.location.hostname.toLowerCase()
+                  : ''
+              } catch (error) {
+                return ''
+              }
+            })()
+
+            if (locationHost && locationHost === host && /\.cloudfront\.net$/.test(host)) {
+              return true
+            }
           } catch (error) {
             return false
           }
