@@ -407,6 +407,9 @@ function determineCacheControl(relativePath) {
   if (normalized === 'service-worker.js') {
     return 'no-cache, no-store, must-revalidate'
   }
+  if (INDEX_ASSET_ALIAS_PATHS.has(normalized)) {
+    return INDEX_ALIAS_CACHE_CONTROL
+  }
   if (
     normalized === 'api/published-cloudfront' ||
     normalized === 'api/published-cloudfront.json'
@@ -482,6 +485,7 @@ function resolveBucketConfiguration() {
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/
 const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
 const INDEX_ASSET_ALIAS_PATHS = new Set(['assets/index-latest.css', 'assets/index-latest.js'])
+const INDEX_ALIAS_CACHE_CONTROL = 'public, max-age=60, must-revalidate'
 const RESERVED_STATIC_ASSET_PATHS = new Set([
   'api/published-cloudfront',
   'api/published-cloudfront.json',
