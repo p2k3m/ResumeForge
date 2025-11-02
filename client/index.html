@@ -1646,7 +1646,7 @@
           const bases = []
           const seen = new Set()
 
-          const appendBase = (candidate) => {
+          const appendBase = (candidate, { prioritize = false } = {}) => {
             if (!candidate) {
               return
             }
@@ -1674,25 +1674,56 @@
             }
 
             seen.add(normalized)
-            bases.push(normalized)
+            if (prioritize) {
+              bases.unshift(normalized)
+            } else {
+              bases.push(normalized)
+            }
+          }
+
+          const resolvedMetaApiBase = (() => {
+            try {
+              const meta = document.querySelector('meta[name="resumeforge-api-base"]')
+              if (meta && typeof meta.getAttribute === 'function') {
+                const value = meta.getAttribute('content')
+                if (typeof value === 'string' && value.trim()) {
+                  return value.trim()
+                }
+              }
+            } catch (error) {
+              // Ignore metadata lookup failures when gathering API fallbacks.
+            }
+            return ''
+          })()
+
+          if (resolvedMetaApiBase) {
+            appendBase(resolvedMetaApiBase, { prioritize: true })
+          }
+
+          try {
+            if (typeof window !== 'undefined' && typeof window.__RESUMEFORGE_API_BASE_URL__ === 'string') {
+              appendBase(window.__RESUMEFORGE_API_BASE_URL__, { prioritize: true })
+            }
+          } catch (error) {
+            // Ignore global API base discovery failures.
           }
 
           const inlineApiBase = inlinePublishedCloudfrontMetadata?.cloudfront?.apiGatewayUrl
           if (inlineApiBase) {
-            appendBase(inlineApiBase)
+            appendBase(inlineApiBase, { prioritize: true })
           }
 
           try {
             const runtimeMetadata = window.__RESUMEFORGE_CLOUDFRONT_METADATA__
             if (runtimeMetadata?.cloudfront?.apiGatewayUrl) {
-              appendBase(runtimeMetadata.cloudfront.apiGatewayUrl)
+              appendBase(runtimeMetadata.cloudfront.apiGatewayUrl, { prioritize: true })
             }
           } catch (error) {
             // Ignore runtime metadata access errors.
           }
 
-          aliasBaseCandidates.forEach(appendBase)
-          apiProxyCandidates.forEach(appendBase)
+          aliasBaseCandidates.forEach((candidate) => appendBase(candidate))
+          apiProxyCandidates.forEach((candidate) => appendBase(candidate))
 
           return bases
         }
