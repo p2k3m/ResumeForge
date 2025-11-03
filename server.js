@@ -1119,6 +1119,52 @@ async function tryServeHashedIndexAssetFromS3(req, res, next) {
     return;
   }
 
+  const aliasPath = req.path.toLowerCase().endsWith('.css')
+    ? '/assets/index-latest.css'
+    : req.path.toLowerCase().endsWith('.js')
+    ? '/assets/index-latest.js'
+    : '';
+
+  if (aliasPath) {
+    const logContext = {
+      hashedPath: req.path,
+      aliasPath,
+      method,
+    };
+
+    const aliasLabels = {
+      retry: 'client_asset_alias_direct_s3_retry',
+      headRetry: 'client_asset_alias_direct_s3_head_retry',
+      served: 'client_asset_alias_direct_s3_served',
+      headServed: 'client_asset_alias_direct_s3_head_served',
+      failed: 'client_asset_alias_direct_s3_failed',
+    };
+
+    const aliasServed = await handleIndexAssetAliasRequest({
+      aliasPath,
+      method,
+      res,
+      requestPath: req.path,
+      logContext,
+      logLabels: aliasLabels,
+      onUnavailable: async ({ logContext: unavailableContext, attemptedFallbacks }) => {
+        logStructured('error', 'client_asset_alias_direct_unavailable', {
+          ...(unavailableContext || {}),
+          fallbackCandidates: attemptedFallbacks,
+        });
+        if (!res.headersSent) {
+          res.status(502).type('text/plain').send('Static assets are temporarily unavailable.');
+        }
+        return true;
+      },
+    });
+
+    if (aliasServed) {
+      logStructured('warn', 'hashed_index_asset_degraded_to_alias', logContext);
+      return;
+    }
+  }
+
   return next();
 }
 
