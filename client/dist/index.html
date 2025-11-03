@@ -1929,11 +1929,11 @@
           try {
             const resolved = new URL(rawSource, window.location.href)
             if (resolved.origin === window.location.origin) {
-              return `${resolved.pathname}${resolved.search}`
+              return stripInlineAssetAnnotations(`${resolved.pathname}${resolved.search}`)
             }
-            return resolved.href
+            return stripInlineAssetAnnotations(resolved.href)
           } catch (error) {
-            return rawSource
+            return stripInlineAssetAnnotations(rawSource)
           }
         }
 
@@ -3005,6 +3005,7 @@
             }
 
             if (attemptProxyOrAliasReload(target)) {
+              scheduleApiFallbackRedirect(describeSource(target))
               return
             }
 
