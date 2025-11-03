@@ -1183,6 +1183,11 @@ async function handleIndexAssetAliasRequest({
     return false;
   }
 
+  const cacheRequestPath =
+    typeof requestPath === 'string' && INDEX_ASSET_ALIAS_PATH_PATTERN.test(requestPath)
+      ? requestPath
+      : normalizedAliasPath;
+
   const directLogContext = {
     aliasPath: normalizedAliasPath,
     method,
@@ -1195,7 +1200,7 @@ async function handleIndexAssetAliasRequest({
       method,
       res,
       logContext: directLogContext,
-      requestPath,
+      requestPath: cacheRequestPath,
     })
   ) {
     return true;
@@ -1285,7 +1290,7 @@ async function handleIndexAssetAliasRequest({
       method,
       res,
       logContext,
-      requestPath,
+      requestPath: cacheRequestPath,
     })
   ) {
     return true;
@@ -1306,7 +1311,7 @@ async function handleIndexAssetAliasRequest({
     res,
     logContext,
     logLabels: aliasLabels,
-    requestPath,
+    requestPath: cacheRequestPath,
   });
 
   if (servedFromS3) {
@@ -1347,7 +1352,7 @@ async function handleIndexAssetAliasRequest({
         method,
         res,
         logContext: fallbackLogContext,
-        requestPath,
+        requestPath: cacheRequestPath,
       })
     ) {
       return true;
@@ -1365,7 +1370,7 @@ async function handleIndexAssetAliasRequest({
         headServed: 'client_asset_alias_fallback_s3_head_served',
         failed: 'client_asset_alias_fallback_s3_failed',
       },
-      requestPath,
+      requestPath: cacheRequestPath,
     });
 
     if (servedFallback) {
