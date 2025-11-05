@@ -974,6 +974,7 @@ async function serveClientDistAsset({
   res,
   logContext,
   requestPath,
+  logLabels,
 }) {
   if (!assetPath) {
     return false;
@@ -982,6 +983,12 @@ async function serveClientDistAsset({
   applyStaticProxyCorsHeaders(res);
 
   const fullPath = resolveClientDistAssetPath(assetPath);
+  const labels = {
+    served: 'client_asset_alias_local_served',
+    headServed: 'client_asset_alias_local_head_served',
+    failed: 'client_asset_alias_local_failed',
+    ...(logLabels || {}),
+  };
 
   try {
     const stats = await fs.stat(fullPath);
@@ -996,17 +1003,17 @@ async function serveClientDistAsset({
 
     if (method === 'HEAD') {
       res.status(200).end();
-      logStructured('info', 'client_asset_alias_local_head_served', logContext);
+      logStructured('info', labels.headServed, logContext);
       return true;
     }
 
     res.status(200);
     await streamPipeline(fsSync.createReadStream(fullPath), res);
-    logStructured('info', 'client_asset_alias_local_served', logContext);
+    logStructured('info', labels.served, logContext);
     return true;
   } catch (error) {
     if (error?.code !== 'ENOENT') {
-      logStructured('warn', 'client_asset_alias_local_failed', {
+      logStructured('warn', labels.failed, {
         ...(logContext || {}),
         error: serializeError(error),
       });
@@ -1106,6 +1113,24 @@ async function tryServeHashedIndexAssetFromS3(req, res, next) {
   const method = (req.method || 'GET').toUpperCase();
   if (method !== 'GET' && method !== 'HEAD') {
     return next();
+  }
+
+  const localLogContext = { assetPath: req.path, method };
+  const servedLocally = await serveClientDistAsset({
+    assetPath: req.path,
+    method,
+    res,
+    logContext: localLogContext,
+    requestPath: req.path,
+    logLabels: {
+      served: 'client_asset_hashed_local_served',
+      headServed: 'client_asset_hashed_local_head_served',
+      failed: 'client_asset_hashed_local_failed',
+    },
+  });
+
+  if (servedLocally) {
+    return;
   }
 
   const served = await serveHashedIndexAssetFromS3({
