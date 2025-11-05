@@ -4733,6 +4733,8 @@ app.use((req, res, next) => {
 if (shouldServeClientAppRoutes) {
   app.use(serveIndexAssetAlias);
 
+  app.use(tryServeHashedIndexAssetFromS3);
+
   if (clientAssetsAvailable()) {
     const clientStaticMiddleware = express.static(clientDistDir, {
       index: false,
@@ -4761,7 +4763,6 @@ if (shouldServeClientAppRoutes) {
       });
     }
   }
-  app.use(tryServeHashedIndexAssetFromS3);
 } else if (declaredActiveServices.length) {
   logStructured('info', 'client_assets_routing_disabled', {
     activeServices: declaredActiveServices,
