@@ -612,6 +612,48 @@ describe('gatherHashedAssetUploadEntries', () => {
     ])
   })
 
+  it('throws when index references a hashed css bundle that is missing from the build output', async () => {
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+
+    const distDir = path.join(tempDir, 'dist-missing-css')
+    const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
+    await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251030.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251030.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251030.js'), 'console.log("hi")', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{"url":"https://example.com"}', 'utf8')
+    await fs.writeFile(
+      path.join(apiDir, 'published-cloudfront.json'),
+      '{"url":"https://example.com"}',
+      'utf8',
+    )
+
+    await expect(
+      uploadHashedIndexAssets({
+        distDirectory: distDir,
+        assetsDirectory: assetsDir,
+        indexHtmlPath: path.join(distDir, 'index.html'),
+        quiet: true,
+      }),
+    ).rejects.toThrow(
+      /Referenced asset assets\/index-20251030\.css is missing from the client build output/,
+    )
+  })
+
   it('allows builds that inline CSS and only reference hashed JS bundles', async () => {
     const distDir = path.join(tempDir, 'dist-inline')
     const assetsDir = path.join(distDir, 'assets')

@@ -199,6 +199,19 @@ async function generateIndexAliasUploadEntries({
       uploads.push(cssAlias)
     }
   } else {
+    const referencesCssBundle = Array.isArray(referencedAssets)
+      ? referencedAssets.some((asset) => typeof asset === 'string' && asset.endsWith('.css'))
+      : false
+
+    if (referencesCssBundle) {
+      throw new Error(
+        [
+          '[upload-hashed-assets] index.html references a hashed CSS bundle but the file could not be located.',
+          'Ensure the client build output includes the referenced stylesheet before uploading.',
+        ].join(' '),
+      )
+    }
+
     console.warn(
       '[upload-hashed-assets] No hashed CSS bundle detected; skipping index-latest.css alias upload.',
     )
