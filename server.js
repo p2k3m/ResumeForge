@@ -1213,6 +1213,10 @@ async function handleIndexAssetAliasRequest({
       ? requestPath
       : normalizedAliasPath;
 
+  const enforceAliasCacheControl = () => {
+    setResponseHeader(res, 'Cache-Control', CLIENT_INDEX_CACHE_CONTROL);
+  };
+
   const directLogContext = {
     aliasPath: normalizedAliasPath,
     method,
@@ -1228,6 +1232,7 @@ async function handleIndexAssetAliasRequest({
       requestPath: cacheRequestPath,
     })
   ) {
+    enforceAliasCacheControl();
     return true;
   }
 
@@ -1318,6 +1323,7 @@ async function handleIndexAssetAliasRequest({
       requestPath: cacheRequestPath,
     })
   ) {
+    enforceAliasCacheControl();
     return true;
   }
 
@@ -1340,6 +1346,7 @@ async function handleIndexAssetAliasRequest({
   });
 
   if (servedFromS3) {
+    enforceAliasCacheControl();
     return true;
   }
 
@@ -1380,6 +1387,7 @@ async function handleIndexAssetAliasRequest({
         requestPath: cacheRequestPath,
       })
     ) {
+      enforceAliasCacheControl();
       return true;
     }
 
@@ -1399,6 +1407,7 @@ async function handleIndexAssetAliasRequest({
     });
 
     if (servedFallback) {
+      enforceAliasCacheControl();
       return true;
     }
   }
