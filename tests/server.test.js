@@ -208,6 +208,21 @@ describe('static asset fallbacks', () => {
     expect(mockS3Send).toHaveBeenCalledTimes(1);
   });
 
+  test('serves hashed index asset directly from the bundled client when available', async () => {
+    const html = await fsPromises.readFile(clientIndexPath, 'utf8');
+    const match = html.match(/assets\/(index-[^"'>]+\.css)/i);
+    const hashedCssName = match && match[1] ? match[1] : 'index-latest.css';
+    const hashedContent = await fsPromises.readFile(
+      path.join(process.cwd(), 'client', 'dist', 'assets', hashedCssName),
+      'utf8',
+    );
+
+    const res = await request(app).get(`/assets/${hashedCssName}`);
+    expect(res.status).toBe(200);
+    expect(res.text).toBe(hashedContent);
+    expect(mockS3Send).not.toHaveBeenCalled();
+  });
+
   test('strips API Gateway stage prefixes before resolving static index aliases', async () => {
     const res = await request(app)
       .get('/prod/assets/index-latest.css')
