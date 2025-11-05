@@ -1050,13 +1050,17 @@
           const candidates = []
           const seen = new Set()
 
-          const addCandidate = (raw) => {
+          const addCandidate = (raw, { prioritize = false } = {}) => {
             const normalized = normalizeAliasBase(raw)
             if (!normalized || seen.has(normalized)) {
               return
             }
             seen.add(normalized)
-            candidates.push(normalized)
+            if (prioritize) {
+              candidates.unshift(normalized)
+            } else {
+              candidates.push(normalized)
+            }
           }
 
           try {
@@ -1065,7 +1069,7 @@
                 ? window.__RESUMEFORGE_API_BASE_URL__.trim()
                 : ''
             if (explicitGlobal) {
-              addCandidate(explicitGlobal)
+              addCandidate(explicitGlobal, { prioritize: true })
             }
           } catch (error) {
             // Ignore global override parsing issues.
@@ -1074,7 +1078,7 @@
           try {
             const meta = document.querySelector('meta[name="resumeforge-api-base"]')
             if (meta && typeof meta.getAttribute === 'function') {
-              addCandidate(meta.getAttribute('content'))
+              addCandidate(meta.getAttribute('content'), { prioritize: true })
             }
           } catch (error) {
             // Ignore metadata parsing errors.
@@ -1090,7 +1094,7 @@
                     : typeof input.getAttribute === 'function'
                       ? input.getAttribute('value')
                       : ''
-                addCandidate(value)
+                addCandidate(value, { prioritize: true })
               }
             })
           } catch (error) {
