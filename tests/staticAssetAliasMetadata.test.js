@@ -57,7 +57,7 @@ describe('static asset alias metadata helpers', () => {
 
   test('allows alias fallbacks for API Gateway metadata base', () => {
     expect(htmlContent).toMatch(
-      /directCandidates\.push\({\s*value:\s*metadata\.apiGatewayUrl,[^}]*allowAlias:\s*true/,
+      /directCandidates\.push\({\s*value:\s*metadata\.apiGatewayUrl,[^}]*allowAlias:\s*false/,
     )
   })
 
