@@ -1190,6 +1190,19 @@
           candidates.push('')
 
           return candidates
+            .map((value, index) => ({
+              value,
+              index,
+              priority: resolveApiProxyPriority(value)
+            }))
+            .sort((a, b) => {
+              if (a.priority !== b.priority) {
+                return a.priority - b.priority
+              }
+
+              return a.index - b.index
+            })
+            .map((entry) => entry.value)
         }
 
         const aliasBaseCandidates = (() => {
