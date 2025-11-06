@@ -59,7 +59,7 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       STATIC_ASSETS_BUCKET: ${{ secrets.STATIC_ASSETS_BUCKET }}
-      STATIC_ASSETS_PREFIX: static/client/${{ env.TARGET_ENVIRONMENT }}/latest
+      STATIC_ASSETS_PREFIX: ${{ format('static/client/{0}/latest', github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod') }}
       DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
       S3_BUCKET: ${{ secrets.S3_BUCKET }}
       LOGS_BUCKET: ${{ secrets.LOGS_BUCKET }}
