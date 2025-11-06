@@ -1380,6 +1380,10 @@
               }
             }
 
+            if (/\.cloudfront\.net$/.test(host)) {
+              return originPath ? true : false
+            }
+
             const canonicalHosts = (() => {
               const hosts = new Set()
               const recordHost = (value) => {
