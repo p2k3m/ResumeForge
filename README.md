@@ -162,7 +162,7 @@ PI Gateway, using on-demand DynamoDB billing and a single S3 bucket to minimise 
 1. Install the AWS SAM CLI and authenticate with the target AWS account.
 2. Set `S3_BUCKET` and (optionally) `CLOUDFRONT_ORIGINS` environment variables before building the deployment artifact. Provide the Gemini key at deployment time via the new `GeminiApiKey` parameter instead of exporting it directly.
 3. Ensure the chosen S3 bucket name is globally unique.
-4. Provision an IAM user or role for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
+4. Provision an IAM user for GitHub Actions with permissions to deploy the stack via CloudFormation, read/write to the S3 bucket, and manage the DynamoDB table, Lambda, and API Gateway resources created by the SAM template.
 
 ### Deploy
 
@@ -434,9 +434,8 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 
 | Secret | Description |
 | --- | --- |
-| `AWS_ACCESS_KEY_ID` | Access key for the IAM user or role with deployment permissions (omit when using OIDC role assumption). |
-| `AWS_SECRET_ACCESS_KEY` | Corresponding secret access key (omit when using OIDC role assumption). |
-| `AWS_ROLE_TO_ASSUME` | Optional IAM role ARN for GitHub's OIDC provider. When set, access keys are not required. |
+| `AWS_ACCESS_KEY_ID` | Access key for the IAM user with deployment permissions. |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding secret access key. |
 | `AWS_SESSION_TOKEN` | Optional session token for temporary credentials (only when using access keys). |
 | `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
 | `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
@@ -445,7 +444,7 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 
 Provide the same secrets when running locally by exporting environment variables (for example, through `.env` files that are excluded from version control).
 
-> **Tip:** Supply either `AWS_ROLE_TO_ASSUME` (for GitHub OIDC deployments) **or** the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair. The workflows automatically fall back to access keys when a role ARN is not provided.
+> **Tip:** Store the access key pair in repository secrets and rotate it regularly. Temporary session tokens are supported when you generate short-lived credentials.
 
 Optional secrets:
 
@@ -456,7 +455,7 @@ GitHub stores these encrypted at rest. The workflow reads them at runtime to con
 
 ### Granting deployment permissions
 
-Assign the IAM user or role attached to the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` secrets the ability to perform the following operations:
+Assign the IAM user attached to the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` secrets the ability to perform the following operations:
 
 - `cloudformation:*` on the target stack.
 - `s3:*` on the deployment bucket created by `--resolve-s3` and on the bucket referenced by `RESUMEFORGE_DATA_BUCKET`.

@@ -32,11 +32,9 @@ jobs:
       name: ${{ github.event.inputs.environment || 'staging' }}
     permissions:
       contents: read
-      id-token: write
     env:
       NODE_VERSION: '20'
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
@@ -61,8 +59,8 @@ jobs:
             echo "CLOUDFRONT_DISTRIBUTION_ID secret is required to invalidate the cache after deployment" >&2
             exit 1
           fi
-          if [ -z "${AWS_ROLE_TO_ASSUME:-}" ] && { [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; }; then
-            echo "Provide either AWS_ROLE_TO_ASSUME or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY for deployments" >&2
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for deployments" >&2
             exit 1
           fi
 
@@ -87,16 +85,7 @@ jobs:
         with:
           version: '1.*'
 
-      - name: Configure AWS credentials (federated)
-        if: env.AWS_ROLE_TO_ASSUME != ''
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
-          role-session-name: ResumeForgeDeploy
-
-      - name: Configure AWS credentials (access keys)
-        if: env.AWS_ROLE_TO_ASSUME == ''
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
