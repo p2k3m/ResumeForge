@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import process from 'node:process'
 import { readFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import {
   DeleteObjectsCommand,
   GetObjectAclCommand,
@@ -25,10 +26,12 @@ import {
   formatDurationForLog,
   formatAssetAgeForLog,
 } from '../lib/static/hashedIndexAssetRetention.js'
+import { resolvePublishedCloudfrontPath } from '../lib/cloudfront/metadata.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
+const publishedCloudfrontPath = resolvePublishedCloudfrontPath({ projectRoot })
 
 const MASK_PATTERNS = [/^[*]+$/u, /REDACTED/iu, /MASKED/iu, /CHANGEME/iu]
 
@@ -59,6 +62,93 @@ function shouldEnforceVerification(flagName) {
   return isTruthyEnv(process.env.CI || '')
 }
 
+function loadPublishedCloudfrontMetadataSafe() {
+  try {
+    const raw = readFileSync(publishedCloudfrontPath, 'utf8')
+    if (!raw) {
+      return null
+    }
+
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const parsed = JSON.parse(trimmed)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null
+    }
+
+    console.warn(
+      `[verify-static] Unable to read published CloudFront metadata at ${publishedCloudfrontPath}: ${error?.message || error}`,
+    )
+    return null
+  }
+}
+
+function normalizeOriginPath(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  return trimmed.replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
+function derivePrefixFromMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return ''
+  }
+
+  const originPath = normalizeOriginPath(metadata.originPath)
+  if (originPath) {
+    return originPath
+  }
+
+  const urlCandidate = typeof metadata.url === 'string' ? metadata.url.trim() : ''
+  if (urlCandidate) {
+    try {
+      const parsedUrl = new URL(urlCandidate)
+      const normalizedPath = normalizeOriginPath(parsedUrl.pathname || '')
+      if (normalizedPath) {
+        return normalizedPath
+      }
+    } catch (error) {
+      // Ignore URL parsing errors and fall back to an empty string
+    }
+  }
+
+  return ''
+}
+
+function deriveEnvironmentFromPrefix(prefix) {
+  if (typeof prefix !== 'string') {
+    return ''
+  }
+
+  const sanitized = prefix.trim().replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!sanitized) {
+    return ''
+  }
+
+  const segments = sanitized.split('/')
+  if (segments.length >= 3 && segments[0] === 'static' && segments[1] === 'client') {
+    return segments[2]
+  }
+
+  if (segments.length >= 1) {
+    return segments[segments.length - 1]
+  }
+
+  return ''
+}
+
 function resolveBucketConfiguration() {
   const {
     stageName,
@@ -77,12 +167,44 @@ function resolveBucketConfiguration() {
   const stage = stageName || deploymentEnvironment || 'prod'
   const prefixCandidate =
     process.env.STATIC_ASSETS_PREFIX || `static/client/${stage}/latest`
-  const normalizedPrefix = String(prefixCandidate).trim().replace(/^\/+/, '').replace(/\/+$/, '')
-  if (!normalizedPrefix) {
+  const computedPrefix = String(prefixCandidate).trim().replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!computedPrefix) {
     throw new Error('STATIC_ASSETS_PREFIX must resolve to a non-empty value.')
   }
 
-  return { bucket, prefix: normalizedPrefix, stage }
+  let normalizedPrefix = computedPrefix
+  let effectiveStage = stage
+
+  if (!process.env.STATIC_ASSETS_PREFIX) {
+    const metadata = loadPublishedCloudfrontMetadataSafe()
+    const metadataPrefix = derivePrefixFromMetadata(metadata)
+    const sanitizedMetadataPrefix = metadataPrefix
+      ? metadataPrefix.replace(/^\/+/, '').replace(/\/+$/, '')
+      : ''
+
+    if (sanitizedMetadataPrefix && sanitizedMetadataPrefix !== normalizedPrefix) {
+      console.log(
+        `[verify-static] Using CloudFront origin path ${sanitizedMetadataPrefix} for verification (overriding ${normalizedPrefix}).`,
+      )
+      normalizedPrefix = sanitizedMetadataPrefix
+    }
+
+    const derivedEnvironment = deriveEnvironmentFromPrefix(sanitizedMetadataPrefix)
+    const normalizedDerived = typeof derivedEnvironment === 'string'
+      ? derivedEnvironment.trim().toLowerCase()
+      : ''
+    if (normalizedDerived) {
+      effectiveStage = normalizedDerived
+      process.env.STAGE_NAME = normalizedDerived
+      process.env.DEPLOYMENT_ENVIRONMENT = normalizedDerived
+    }
+
+    if (sanitizedMetadataPrefix) {
+      process.env.STATIC_ASSETS_PREFIX = sanitizedMetadataPrefix
+    }
+  }
+
+  return { bucket, prefix: normalizedPrefix, stage: effectiveStage }
 }
 
 function buildS3Key(prefix, relativePath) {
