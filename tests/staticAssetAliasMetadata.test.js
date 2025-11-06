@@ -49,10 +49,10 @@ describe('static asset alias metadata helpers', () => {
     ).toBe(true)
   })
 
-  test('appends origin paths for CloudFront domains when available', () => {
+  test('never appends origin paths for CloudFront viewer domains', () => {
     expect(
       shouldAppendOriginPathToBase('https://d109hwmzrqr39w.cloudfront.net', '/static/client/prod/latest'),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   test('allows alias fallbacks for API Gateway metadata base', () => {
