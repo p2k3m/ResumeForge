@@ -216,6 +216,10 @@
         Metadata last updated at <time data-cloudfront-updated></time>
       </p>
       <input type="hidden" name="resumeforge-backup-api-base" data-backup-api-base value="" />
+      <input type="hidden" data-cloudfront-origin-bucket value="" />
+      <input type="hidden" data-cloudfront-origin-region value="" />
+      <input type="hidden" data-cloudfront-origin-path value="" />
+      <input type="hidden" data-cloudfront-origin-url value="" />
     </section>
     <div
       id="static-asset-warning"
@@ -249,6 +253,34 @@
               input.setAttribute('value', nextValue)
             }
           })
+        }
+
+        const readDataInputValue = (selector) => {
+          if (!selector) {
+            return ''
+          }
+
+          try {
+            const input = document.querySelector(selector)
+            if (!input) {
+              return ''
+            }
+
+            if (typeof input.value === 'string' && input.value.trim()) {
+              return input.value.trim()
+            }
+
+            if (typeof input.getAttribute === 'function') {
+              const attributeValue = input.getAttribute('value')
+              if (typeof attributeValue === 'string' && attributeValue.trim()) {
+                return attributeValue.trim()
+              }
+            }
+          } catch (error) {
+            // Ignore selector resolution failures in constrained environments.
+          }
+
+          return ''
         }
 
         const initialBackupApiBase = (() => {
@@ -556,6 +588,49 @@
             return typeof inlineMetadata.cloudfront === 'object' && inlineMetadata.cloudfront
               ? inlineMetadata.cloudfront
               : inlineMetadata
+          }
+
+          const fallbackMetadata = (() => {
+            const bucket = readDataInputValue('input[data-cloudfront-origin-bucket]')
+            const region = readDataInputValue('input[data-cloudfront-origin-region]')
+            const originPath = readDataInputValue('input[data-cloudfront-origin-path]')
+            const cloudfrontUrl = readDataInputValue('input[data-cloudfront-origin-url]')
+
+            if (!bucket && !region && !originPath && !cloudfrontUrl) {
+              return null
+            }
+
+            const backupApiBase = (() => {
+              if (initialBackupApiBase) {
+                return initialBackupApiBase
+              }
+
+              try {
+                const meta = document.querySelector('meta[name="resumeforge-api-base"]')
+                if (meta && typeof meta.getAttribute === 'function') {
+                  const value = meta.getAttribute('content')
+                  if (typeof value === 'string' && value.trim()) {
+                    return value.trim()
+                  }
+                }
+              } catch (error) {
+                // Ignore metadata lookup failures when resolving fallback CloudFront metadata.
+              }
+
+              return ''
+            })()
+
+            return {
+              originBucket: bucket || '',
+              originRegion: region || '',
+              originPath: originPath || '',
+              url: cloudfrontUrl || '',
+              apiGatewayUrl: backupApiBase || ''
+            }
+          })()
+
+          if (fallbackMetadata) {
+            return fallbackMetadata
           }
 
           return null
