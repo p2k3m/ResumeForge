@@ -1,0 +1,160 @@
+name: Publish static assets
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/**'
+      - 'scripts/build-client.mjs'
+      - 'scripts/upload-static-build.mjs'
+      - 'scripts/verify-static-deployment.mjs'
+      - 'scripts/upload-hashed-assets.mjs'
+      - 'config/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/publish-static-assets.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment to publish static assets'
+        type: choice
+        default: staging
+        options:
+          - dev
+          - staging
+          - prod
+      skip_verify:
+        description: 'Skip the verification step after uploading assets'
+        type: boolean
+        default: false
+      verify_cloudfront:
+        description: 'Include CloudFront smoke tests during verification'
+        type: boolean
+        default: false
+      stack_name:
+        description: 'Optional SAM stack name to publish the CloudFront URL metadata'
+        type: string
+        required: false
+
+concurrency:
+  group: publish-static-${{ github.event_name == 'push' && github.ref || github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'staging' }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish static assets
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'staging' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NODE_VERSION: '20'
+      DEFAULT_STATIC_ENVIRONMENT: ${{ vars.DEFAULT_STATIC_ENVIRONMENT }}
+      TARGET_ENVIRONMENT: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'staging' }}
+      STAGE_NAME: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'staging' }}
+      DEPLOYMENT_ENVIRONMENT: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'staging' }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      STATIC_ASSETS_BUCKET: ${{ secrets.STATIC_ASSETS_BUCKET }}
+      DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      LOGS_BUCKET: ${{ secrets.LOGS_BUCKET }}
+      BUILD_VERSION: ${{ github.sha }}
+      STACK_NAME_INPUT: ${{ github.event.inputs.stack_name || '' }}
+      SAM_STACK_NAME_SECRET: ${{ secrets.SAM_STACK_NAME }}
+      SKIP_VERIFY_INPUT: ${{ github.event.inputs.skip_verify || 'false' }}
+      VERIFY_CLOUDFRONT_INPUT: ${{ github.event.inputs.verify_cloudfront || 'false' }}
+    steps:
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_REGION:-}" ]; then
+            echo 'AWS_REGION secret is required for publishing static assets.' >&2
+            exit 1
+          fi
+          if [ -z "${AWS_ROLE_TO_ASSUME:-}" ]; then
+            echo 'AWS_ROLE_TO_ASSUME secret is required to assume deployment credentials.' >&2
+            exit 1
+          fi
+          if [ -z "${STATIC_ASSETS_BUCKET:-}" ] && [ -z "${DATA_BUCKET:-}" ] && [ -z "${S3_BUCKET:-}" ]; then
+            echo 'Provide STATIC_ASSETS_BUCKET (or DATA_BUCKET/S3_BUCKET) so assets can be uploaded.' >&2
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Clean workspace
+        run: npm run clean
+
+      - name: Build client bundle
+        run: npm run build:client
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload static assets
+        run: npm run upload:static
+
+      - name: Verify uploaded assets
+        if: env.SKIP_VERIFY_INPUT != 'true'
+        run: |
+          set -euo pipefail
+          args=()
+          if [ "${VERIFY_CLOUDFRONT_INPUT}" != 'true' ]; then
+            args+=(--skip-cloudfront)
+          fi
+          npm run verify:static -- "${args[@]}"
+
+      - name: Publish CloudFront metadata
+        run: |
+          set -euo pipefail
+          stack_name="${STACK_NAME_INPUT:-}"
+          if [ -z "$stack_name" ]; then
+            stack_name="${SAM_STACK_NAME_SECRET:-}"
+          fi
+          if [ -z "$stack_name" ]; then
+            echo 'Skipping CloudFront metadata publication (no stack name provided).'
+            exit 0
+          fi
+          npm run publish:cloudfront-url -- "$stack_name"
+        if: env.STACK_NAME_INPUT != '' || env.SAM_STACK_NAME_SECRET != ''
+
+      - name: Publish workflow summary
+        if: always()
+        run: |
+          {
+            echo '## Static asset publication'
+            echo
+            echo "* Status: ${{ job.status }}"
+            echo "* Environment: ${{ env.TARGET_ENVIRONMENT }}"
+            bucket="${STATIC_ASSETS_BUCKET:-${DATA_BUCKET:-${S3_BUCKET:-}}}"
+            if [ -n "$bucket" ]; then
+              echo "* Bucket: $bucket"
+            fi
+            echo "* Build version: ${{ env.BUILD_VERSION }}"
+            if [ "${SKIP_VERIFY_INPUT}" = 'true' ]; then
+              echo '* Verification: skipped'
+            else
+              if [ "${VERIFY_CLOUDFRONT_INPUT}" = 'true' ]; then
+                echo '* Verification: S3 + CloudFront'
+              else
+                echo '* Verification: S3 only (CloudFront skipped)'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

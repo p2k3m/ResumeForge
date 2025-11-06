@@ -238,8 +238,9 @@
         access.
       </p>
       <p class="static-asset-warning__body">
-        Support engineers should rebuild and republish the client bundles to S3/CloudFront:
-        <code>npm run build:client &amp;&amp; npm run upload:static</code>. See
+        Support engineers should rebuild and republish the client bundles to S3/CloudFront and verify the upload
+        completed successfully:
+        <code>npm run build:client &amp;&amp; npm run upload:static &amp;&amp; npm run verify:static</code>. See
         <a href="https://github.com/ResumeForge/ResumeForge/blob/main/docs/troubleshooting-cloudfront.md" target="_blank" rel="noopener noreferrer">
           CloudFront troubleshooting
         </a>
