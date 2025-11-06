@@ -1483,12 +1483,15 @@
             }
 
             if (allowAlias) {
-              if (addAliasBaseCandidate(candidate, { prepend: prioritize })) {
+              const shouldPrepend =
+                prioritize || shouldAppendOriginPathToBase(candidate, originPath)
+
+              if (addAliasBaseCandidate(candidate, { prepend: shouldPrepend })) {
                 added = true
               }
 
               if (shouldAppendOriginPathToBase(candidate, originPath)) {
-                if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath), { prepend: prioritize })) {
+                if (addAliasBaseCandidate(joinAliasUrl(candidate, originPath), { prepend: true })) {
                   added = true
                 }
               }
