@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs'
 import { createReadStream } from 'node:fs'
 import process from 'node:process'
 import {
+  CopyObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
@@ -49,6 +50,17 @@ export function normalizeHashedAssetReference(candidate) {
   }
 
   return `assets/${match[1]}`
+}
+
+function isNotFoundError(error) {
+  if (!error) {
+    return false
+  }
+
+  const statusCode = error?.$metadata?.httpStatusCode
+  const name = error?.name || error?.Code || error?.code
+
+  return statusCode === 404 || name === 'NotFound' || name === 'NoSuchKey'
 }
 
 export function extractHashedIndexAssetReferences(html) {
@@ -172,6 +184,7 @@ async function createIndexAliasCopy({
   return {
     relativePath: aliasRelativePath,
     absolutePath: absoluteAliasPath,
+    sourceRelativePath: normalizedSource,
     cacheControl: INDEX_ALIAS_CACHE_CONTROL,
   }
 }
@@ -240,6 +253,79 @@ async function generateIndexAliasUploadEntries({
   }
 
   return uploads
+}
+
+async function ensureAliasObjectsInS3({
+  s3,
+  bucket,
+  prefix,
+  aliasEntries = [],
+  versionLabel,
+}) {
+  if (!Array.isArray(aliasEntries) || aliasEntries.length === 0) {
+    return
+  }
+
+  for (const aliasEntry of aliasEntries) {
+    const aliasPath = aliasEntry?.relativePath
+    const sourcePath = aliasEntry?.sourceRelativePath
+    if (!aliasPath || !sourcePath) {
+      continue
+    }
+
+    const aliasKey = buildS3Key(prefix, aliasPath)
+    const sourceKey = buildS3Key(prefix, sourcePath)
+
+    let aliasExists = true
+    try {
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: aliasKey }))
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        aliasExists = false
+      } else {
+        throw error
+      }
+    }
+
+    if (aliasExists) {
+      continue
+    }
+
+    try {
+      await s3.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: sourceKey }),
+      )
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        throw new Error(
+          `Hashed asset "${sourcePath}" is missing; unable to rebuild alias "${aliasPath}" in bucket "${bucket}".`,
+        )
+      }
+      throw error
+    }
+
+    await s3.send(
+      new CopyObjectCommand(
+        withBuildMetadata(
+          {
+            Bucket: bucket,
+            Key: aliasKey,
+            CopySource: `${bucket}/${sourceKey}`,
+            CacheControl:
+              aliasEntry.cacheControl ||
+              resolveHashedAssetCacheControl(aliasEntry.relativePath),
+            ContentType: resolveContentType(aliasEntry.relativePath),
+            MetadataDirective: 'REPLACE',
+          },
+          { versionLabel },
+        ),
+      ),
+    )
+
+    console.warn(
+      `[upload-hashed-assets] Restored missing alias ${aliasPath} from ${sourcePath}.`,
+    )
+  }
 }
 
 function createVersionedUploadEntries(entries, versionLabel) {
@@ -1231,6 +1317,14 @@ export async function uploadHashedIndexAssets(options = {}) {
     bucket,
     prefix,
     uploads,
+  })
+
+  await ensureAliasObjectsInS3({
+    s3,
+    bucket,
+    prefix,
+    aliasEntries,
+    versionLabel,
   })
 
   await updateManifestHashedAssets({

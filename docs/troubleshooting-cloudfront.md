@@ -31,6 +31,8 @@ GET https://<distribution>/api/published-cloudfront 404 (Not Found)
 
 both the hashed bundle **and** its `index-latest.*` alias are missing from the CDN. The client attempts to fall back to the alias whenever the hashed file is unavailable, so a missing alias blocks the entire bootstrap sequence and produces a blank page.
 
+You may also see Chrome-specific noise such as `net::ERR_ABORTED 500 (Internal Server Error)` in the developer console. That status code reflects CloudFront surfacing the origin's 404 as a 500 once the fetch is aborted—it does **not** mean the client bundle is corrupt. The root problem is still that neither the hashed bundle nor its alias exists in the distribution.
+
 Recover by uploading the full build output so the alias objects are recreated and backed by fresh hashes:
 
 ```bash
@@ -41,6 +43,8 @@ npm run verify:static
 
 - `upload:static` publishes every file under `client/dist/` *and* recreates the alias objects (`static/client/prod/latest/assets/index-latest.css` and `.js`).
 - `verify:static` confirms the aliases resolve to the new hashed bundles and that CloudFront can fetch them. If the aliases are still missing, inspect the uploader logs for skipped alias entries and rerun with `DEBUG=upload-static` for verbose output.
+
+If the `/api/published-cloudfront` probe continues to return `404`, the metadata file was never uploaded. Re-run `npm run upload:static` to push the supplementary `api/published-cloudfront(.json)` artifacts, then `npm run verify:static -- --skip-cloudfront` to confirm S3 now serves them. Once the metadata is present you can rerun the full verifier without the skip flag.
 
 Once verification succeeds, reload the portal. Browsers that cached the failing alias responses may require a hard refresh (Shift+Reload) to pick up the repaired bundles.
 
