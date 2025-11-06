@@ -300,6 +300,7 @@ async function ensureAliasObjectsInS3({
   prefix,
   aliasEntries = [],
   versionLabel,
+  forceAliasOverwrite = true,
 }) {
   if (!Array.isArray(aliasEntries) || aliasEntries.length === 0) {
     return
@@ -315,25 +316,18 @@ async function ensureAliasObjectsInS3({
     const aliasKey = buildS3Key(prefix, aliasPath)
     const sourceKey = buildS3Key(prefix, sourcePath)
 
-    let aliasExists = true
+    let aliasExists = false
     try {
       await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: aliasKey }))
+      aliasExists = true
     } catch (error) {
-      if (isNotFoundError(error)) {
-        aliasExists = false
-      } else {
+      if (!isNotFoundError(error)) {
         throw error
       }
     }
 
-    if (aliasExists) {
-      continue
-    }
-
     try {
-      await s3.send(
-        new HeadObjectCommand({ Bucket: bucket, Key: sourceKey }),
-      )
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: sourceKey }))
     } catch (error) {
       if (isNotFoundError(error)) {
         throw new Error(
@@ -343,27 +337,35 @@ async function ensureAliasObjectsInS3({
       throw error
     }
 
-    await s3.send(
-      new CopyObjectCommand(
-        withBuildMetadata(
-          {
-            Bucket: bucket,
-            Key: aliasKey,
-            CopySource: `${bucket}/${sourceKey}`,
-            CacheControl:
-              aliasEntry.cacheControl ||
-              resolveHashedAssetCacheControl(aliasEntry.relativePath),
-            ContentType: resolveContentType(aliasEntry.relativePath),
-            MetadataDirective: 'REPLACE',
-          },
-          { versionLabel },
-        ),
-      ),
-    )
+    if (!aliasExists) {
+      console.warn(
+        `[upload-hashed-assets] Alias ${aliasPath} was missing; recreating from ${sourcePath}.`,
+      )
+    } else if (forceAliasOverwrite) {
+      console.log(
+        `[upload-hashed-assets] Refreshing alias ${aliasPath} from ${sourcePath}.`,
+      )
+    }
 
-    console.warn(
-      `[upload-hashed-assets] Restored missing alias ${aliasPath} from ${sourcePath}.`,
-    )
+    if (!aliasExists || forceAliasOverwrite) {
+      await s3.send(
+        new CopyObjectCommand(
+          withBuildMetadata(
+            {
+              Bucket: bucket,
+              Key: aliasKey,
+              CopySource: `${bucket}/${sourceKey}`,
+              CacheControl:
+                aliasEntry.cacheControl ||
+                resolveHashedAssetCacheControl(aliasEntry.relativePath),
+              ContentType: resolveContentType(aliasEntry.relativePath),
+              MetadataDirective: 'REPLACE',
+            },
+            { versionLabel },
+          ),
+        ),
+      )
+    }
   }
 }
 

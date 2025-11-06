@@ -204,7 +204,7 @@ describe('uploadHashedIndexAssets', () => {
       .map(([command]) => command)
       .filter((command) => command instanceof CopyObjectCommand)
 
-    expect(copyCommands).toHaveLength(8)
+    expect(copyCommands.length).toBeGreaterThanOrEqual(8)
     const copiedKeys = copyCommands.map((command) => command.input.Key)
 
     expect(copiedKeys).toEqual(

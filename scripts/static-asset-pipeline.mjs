@@ -13,6 +13,66 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
 
+function resolveFirstEnvValue(keys = [], env = process.env) {
+  if (!Array.isArray(keys) || keys.length === 0) {
+    return ''
+  }
+
+  for (const key of keys) {
+    if (typeof key !== 'string' || !key) {
+      continue
+    }
+    const value = env?.[key]
+    if (typeof value === 'string') {
+      const normalized = value.trim()
+      if (normalized) {
+        return normalized
+      }
+    }
+  }
+
+  return ''
+}
+
+function resolveDefaultStackName(env = process.env) {
+  return resolveFirstEnvValue(
+    [
+      'RESUMEFORGE_STACK_NAME',
+      'TARGET_STACK_NAME',
+      'STACK_NAME',
+      'SAM_STACK_NAME',
+      'SAM_STACK_NAME_SECRET',
+      'STACK_NAME_INPUT',
+    ],
+    env,
+  )
+}
+
+function resolveDefaultCloudfrontUrl(env = process.env) {
+  return resolveFirstEnvValue(
+    [
+      'CLOUDFRONT_URL',
+      'RESUMEFORGE_CLOUDFRONT_URL',
+      'PUBLISHED_CLOUDFRONT_URL',
+      'APP_BASE_URL',
+      'RESUMEFORGE_APP_BASE_URL',
+    ],
+    env,
+  )
+}
+
+function resolveDefaultAssetPrefix(env = process.env) {
+  return resolveFirstEnvValue(
+    [
+      'STATIC_ASSETS_PREFIX',
+      'RESUMEFORGE_STATIC_ASSETS_PREFIX',
+      'STATIC_ASSETS_ORIGIN_PATH',
+      'CLOUDFRONT_ORIGIN_PATH',
+    ],
+    env,
+  )
+}
+
 function normalizeString(value) {
   if (typeof value !== 'string') {
     return ''
@@ -153,6 +213,29 @@ export function parseStaticPipelineArgs(argv = []) {
         break
       default:
         break
+    }
+  }
+
+  return options
+}
+
+function applyDefaultOptionsFromEnvironment(options) {
+  if (!options) {
+    return options
+  }
+
+  if (!options.stackName) {
+    options.stackName = normalizeString(resolveDefaultStackName())
+  }
+
+  if (!options.cloudfrontUrl) {
+    options.cloudfrontUrl = normalizeString(resolveDefaultCloudfrontUrl())
+  }
+
+  if (!Array.isArray(options.assetPrefixes) || options.assetPrefixes.length === 0) {
+    const envPrefix = normalizeAssetPrefix(resolveDefaultAssetPrefix())
+    if (envPrefix) {
+      options.assetPrefixes = [envPrefix]
     }
   }
 
@@ -346,8 +429,10 @@ async function verifyCloudfrontDistribution({
 }
 
 export async function runStaticPipeline(options = {}) {
-  if (options.environment) {
-    const normalizedEnv = normalizeString(options.environment)
+  const normalizedOptions = applyDefaultOptionsFromEnvironment({ ...options }) || {}
+
+  if (normalizedOptions.environment) {
+    const normalizedEnv = normalizeString(normalizedOptions.environment)
     if (normalizedEnv) {
       process.env.STAGE_NAME = normalizedEnv
       process.env.DEPLOYMENT_ENVIRONMENT = normalizedEnv
@@ -356,16 +441,16 @@ export async function runStaticPipeline(options = {}) {
 
   applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: true })
 
-  const plan = buildStaticPipelinePlan(options)
+  const plan = buildStaticPipelinePlan(normalizedOptions)
 
   for (const step of plan) {
     console.log(`\n[static-pipeline] Starting: ${step.label}`)
     if (step.type === 'cloudfront-verify') {
       await verifyCloudfrontDistribution({
-        explicitUrl: options.cloudfrontUrl,
-        assetPrefixes: options.assetPrefixes,
-        retries: options.cloudfrontRetries,
-        retryDelayMs: options.cloudfrontRetryDelayMs,
+        explicitUrl: normalizedOptions.cloudfrontUrl,
+        assetPrefixes: normalizedOptions.assetPrefixes,
+        retries: normalizedOptions.cloudfrontRetries,
+        retryDelayMs: normalizedOptions.cloudfrontRetryDelayMs,
       })
     } else {
       await runCommandStep(step)
@@ -377,7 +462,9 @@ export async function runStaticPipeline(options = {}) {
 }
 
 async function main() {
-  const options = parseStaticPipelineArgs(process.argv.slice(2))
+  const options = applyDefaultOptionsFromEnvironment(
+    parseStaticPipelineArgs(process.argv.slice(2)),
+  )
   await runStaticPipeline(options)
 }
 

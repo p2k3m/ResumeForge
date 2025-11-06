@@ -32,6 +32,10 @@ jobs:
       SAM_STACK_NAME: ${{ secrets.SAM_STACK_NAME }}
       SAM_DEPLOY_ARGS: ${{ secrets.SAM_DEPLOY_ARGS }}
       CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+      STATIC_ASSETS_BUCKET: ${{ secrets.STATIC_ASSETS_BUCKET }}
+      DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      LOGS_BUCKET: ${{ secrets.LOGS_BUCKET }}
       STAGE_NAME: prod
       DEPLOYMENT_ENVIRONMENT: prod
       ALLOW_CLOUDFRONT_VERIFY_FAILURE: ${{ github.event.inputs.allow_cloudfront_failure }}
@@ -53,6 +57,10 @@ jobs:
           fi
           if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
             echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for deployments" >&2
+            exit 1
+          fi
+          if [ -z "${STATIC_ASSETS_BUCKET:-${DATA_BUCKET:-${S3_BUCKET:-}}}" ]; then
+            echo "STATIC_ASSETS_BUCKET (or DATA_BUCKET/S3_BUCKET) secrets are required to publish client assets" >&2
             exit 1
           fi
 
@@ -93,26 +101,19 @@ jobs:
           npm run predeploy:sam
           sam build --template-file template.yaml --cached --parallel
 
-      - name: Upload static client assets
+      - name: Publish static client bundle
+        env:
+          TARGET_STACK_NAME: ${{ env.SAM_STACK_NAME }}
         run: |
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
           export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
-          npm run upload:static
-
-      - name: Upload hashed index bundles
-        run: |
-          set -euo pipefail
-          export STAGE_NAME="${STAGE_NAME:-prod}"
-          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
-          npm run upload:hashed
-
-      - name: Verify static asset upload
-        run: |
-          set -euo pipefail
-          export STAGE_NAME="${STAGE_NAME:-prod}"
-          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
-          npm run verify:static -- --skip-cloudfront
+          prefix="static/client/${STAGE_NAME:-prod}/latest"
+          args=(--skip-clean --skip-build --verify-cloudfront --asset-prefix "$prefix")
+          if [ -n "${TARGET_STACK_NAME:-}" ]; then
+            args+=(--stack "$TARGET_STACK_NAME")
+          fi
+          npm run pipeline:static -- "${args[@]}"
 
       - name: Deploy SAM stack
         run: |
