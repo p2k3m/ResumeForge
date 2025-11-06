@@ -3072,6 +3072,160 @@
         }
       }
 
+      const normalizeProxyBase = (value) => {
+        if (typeof value !== 'string') {
+          return ''
+        }
+
+        const trimmed = value.trim()
+        if (!trimmed) {
+          return ''
+        }
+
+        try {
+          const resolved = new URL(trimmed, window.location.href)
+          const pathname = resolved.pathname.replace(/\/+$/, '')
+          return `${resolved.origin}${pathname}`
+        } catch (error) {
+          return ''
+        }
+      }
+
+      const extractApiBaseFromMetadata = (metadata) => {
+        if (!metadata || typeof metadata !== 'object') {
+          return ''
+        }
+
+        const candidate =
+          (typeof metadata.cloudfront === 'object' && metadata.cloudfront
+            ? metadata.cloudfront.apiGatewayUrl || metadata.cloudfront.url
+            : metadata.apiGatewayUrl || metadata.url) || ''
+
+        return typeof candidate === 'string' ? candidate : ''
+      }
+
+      const resolveProxyBaseCandidates = () => {
+        const bases = []
+        const seen = new Set()
+
+        const addCandidate = (raw) => {
+          const normalized = normalizeProxyBase(raw)
+          if (!normalized || seen.has(normalized)) {
+            return false
+          }
+          seen.add(normalized)
+          bases.push(normalized)
+          return true
+        }
+
+        try {
+          if (typeof window !== 'undefined') {
+            addCandidate(window.__RESUMEFORGE_API_BASE_URL__)
+          }
+        } catch (error) {
+          // Ignore failures when probing the API base global.
+        }
+
+        try {
+          if (typeof window !== 'undefined') {
+            const degraded = window.__RESUMEFORGE_CLOUDFRONT_DEGRADE__
+            if (degraded && typeof degraded === 'object') {
+              addCandidate(degraded.backupApiGatewayUrl)
+            }
+          }
+        } catch (error) {
+          // Ignore degraded state parsing failures in constrained environments.
+        }
+
+        try {
+          if (typeof window !== 'undefined') {
+            addCandidate(extractApiBaseFromMetadata(window.__RESUMEFORGE_CLOUDFRONT_METADATA__))
+          }
+        } catch (error) {
+          // Ignore runtime metadata parsing failures.
+        }
+
+        try {
+          if (typeof __PUBLISHED_CLOUDFRONT_METADATA__ !== 'undefined') {
+            addCandidate(extractApiBaseFromMetadata(__PUBLISHED_CLOUDFRONT_METADATA__))
+          }
+        } catch (error) {
+          // Ignore published metadata probes when not defined.
+        }
+
+        try {
+          const meta = document.querySelector('meta[name="resumeforge-api-base"]')
+          if (meta && typeof meta.getAttribute === 'function') {
+            addCandidate(meta.getAttribute('content'))
+          }
+        } catch (error) {
+          // Ignore meta tag extraction failures.
+        }
+
+        try {
+          const inputs = document.querySelectorAll('input[data-backup-api-base]')
+          inputs.forEach((input) => {
+            if (!input) {
+              return
+            }
+
+            const value =
+              typeof input.value === 'string'
+                ? input.value
+                : typeof input.getAttribute === 'function'
+                  ? input.getAttribute('value')
+                  : ''
+
+            addCandidate(value)
+          })
+        } catch (error) {
+          // Ignore backup input parsing failures.
+        }
+
+        try {
+          if (typeof window !== 'undefined') {
+            const host = typeof window.location?.hostname === 'string' ? window.location.hostname : ''
+            if (host && /\.execute-api\./i.test(host)) {
+              addCandidate(window.location?.origin)
+            }
+          }
+        } catch (error) {
+          // Ignore location probing failures.
+        }
+
+        return bases
+      }
+
+      const buildStaticProxyUrl = (base, assetPath) => {
+        const normalizedBase = normalizeProxyBase(base)
+        if (!normalizedBase) {
+          return ''
+        }
+
+        if (typeof assetPath !== 'string') {
+          return ''
+        }
+
+        let sanitized = assetPath.trim()
+        if (!sanitized) {
+          return ''
+        }
+
+        while (sanitized.startsWith('../')) {
+          sanitized = sanitized.slice(3)
+        }
+        while (sanitized.startsWith('./')) {
+          sanitized = sanitized.slice(2)
+        }
+
+        sanitized = sanitized.replace(/^\/+/, '')
+        if (!sanitized) {
+          return ''
+        }
+
+        return `${normalizedBase}/api/static-proxy?asset=${encodeURIComponent(sanitized)}`
+      }
+
       const appendStylesheet = (href) => {
         if (typeof href !== 'string' || !href.trim()) {
           return Promise.resolve()
@@ -3123,6 +3277,88 @@
         })
       }
 
+      const loadStylesheetWithFallback = async (href) => {
+        if (typeof href !== 'string' || !href.trim()) {
+          return
+        }
+
+        try {
+          await appendStylesheet(href)
+          return
+        } catch (error) {
+          console.warn('ResumeForge entry stylesheet failed to load.', {
+            source: href,
+            error,
+          })
+        }
+
+        const candidates = resolveProxyBaseCandidates()
+        for (const base of candidates) {
+          const proxyUrl = buildStaticProxyUrl(base, href)
+          if (!proxyUrl) {
+            continue
+          }
+
+          try {
+            console.warn('Retrying ResumeForge entry stylesheet via static proxy fallback.', {
+              source: href,
+              proxy: proxyUrl,
+              base,
+            })
+            await appendStylesheet(proxyUrl)
+            return
+          } catch (proxyError) {
+            console.warn('ResumeForge entry stylesheet static proxy fallback failed.', {
+              source: href,
+              proxy: proxyUrl,
+              base,
+              error: proxyError,
+            })
+          }
+        }
+
+        throw new Error(`Unable to load stylesheet: ${href}`)
+      }
+
+      const loadModuleWithFallback = async (src) => {
+        try {
+          await appendModuleScript(src)
+          return
+        } catch (error) {
+          console.warn('ResumeForge entry module failed to load.', {
+            source: src,
+            error,
+          })
+        }
+
+        const candidates = resolveProxyBaseCandidates()
+        for (const base of candidates) {
+          const proxyUrl = buildStaticProxyUrl(base, src)
+          if (!proxyUrl) {
+            continue
+          }
+
+          try {
+            console.warn('Retrying ResumeForge entry module via static proxy fallback.', {
+              source: src,
+              proxy: proxyUrl,
+              base,
+            })
+            await appendModuleScript(proxyUrl)
+            return
+          } catch (proxyError) {
+            console.warn('ResumeForge entry module static proxy fallback failed.', {
+              source: src,
+              proxy: proxyUrl,
+              base,
+              error: proxyError,
+            })
+          }
+        }
+
+        throw new Error(`Unable to load module script: ${src}`)
+      }
+
       const bootstrap = async () => {
         const devEnvironment = detectDevEnvironment()
 
@@ -3132,15 +3368,15 @@
         }
 
         try {
-          await appendStylesheet(PROD_STYLESHEET_HREF)
+          await loadStylesheetWithFallback(PROD_STYLESHEET_HREF)
         } catch (error) {
-          console.warn('ResumeForge entry stylesheet failed to load.', {
+          console.warn('ResumeForge entry stylesheet fallback exhausted.', {
             source: PROD_STYLESHEET_HREF,
             error,
           })
         }
 
-        await appendModuleScript(PROD_ENTRY_SOURCE)
+        await loadModuleWithFallback(PROD_ENTRY_SOURCE)
       }
 
       bootstrap().catch((error) => {
