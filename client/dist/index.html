@@ -1090,15 +1090,51 @@
           return bases
         }
 
+        const initialApiProxyBaseCandidates = new Set()
+
         const resolveAliasBaseCandidates = () => {
           const candidates = []
           const seen = new Set()
 
-          const addCandidate = (raw, { prioritize = false } = {}) => {
-            const normalized = normalizeAliasBase(raw)
-            if (!normalized || seen.has(normalized)) {
+          const registerProxyCandidate = (value) => {
+            if (!value) {
               return
             }
+
+            const normalized = normalizeAliasBase(value)
+            if (normalized) {
+              initialApiProxyBaseCandidates.add(normalized)
+            }
+          }
+
+          const addCandidate = (
+            raw,
+            { prioritize = false, allowAlias = true, allowProxy = true } = {},
+          ) => {
+            const normalized = normalizeAliasBase(raw)
+            if (!normalized) {
+              return
+            }
+
+            if (allowProxy) {
+              registerProxyCandidate(normalized)
+            }
+
+            if (!allowAlias) {
+              return
+            }
+
+            if (seen.has(normalized)) {
+              if (prioritize) {
+                const existingIndex = candidates.indexOf(normalized)
+                if (existingIndex > 0) {
+                  candidates.splice(existingIndex, 1)
+                  candidates.unshift(normalized)
+                }
+              }
+              return
+            }
+
             seen.add(normalized)
             if (prioritize) {
               candidates.unshift(normalized)
@@ -1113,7 +1149,7 @@
                 ? window.__RESUMEFORGE_API_BASE_URL__.trim()
                 : ''
             if (explicitGlobal) {
-              addCandidate(explicitGlobal, { prioritize: true })
+              addCandidate(explicitGlobal, { prioritize: true, allowAlias: false })
             }
           } catch (error) {
             // Ignore global override parsing issues.
@@ -1122,7 +1158,10 @@
           try {
             const meta = document.querySelector('meta[name="resumeforge-api-base"]')
             if (meta && typeof meta.getAttribute === 'function') {
-              addCandidate(meta.getAttribute('content'), { prioritize: true })
+              addCandidate(meta.getAttribute('content'), {
+                prioritize: true,
+                allowAlias: false,
+              })
             }
           } catch (error) {
             // Ignore metadata parsing errors.
@@ -1138,7 +1177,7 @@
                     : typeof input.getAttribute === 'function'
                       ? input.getAttribute('value')
                       : ''
-                addCandidate(value, { prioritize: true })
+                addCandidate(value, { prioritize: true, allowAlias: false })
               }
             })
           } catch (error) {
@@ -1219,6 +1258,10 @@
         }
 
         aliasBaseCandidates.forEach((candidate) => {
+          addApiProxyCandidate(candidate)
+        })
+
+        initialApiProxyBaseCandidates.forEach((candidate) => {
           addApiProxyCandidate(candidate)
         })
 
@@ -1443,7 +1486,7 @@
             directCandidates.push({
               value: metadata.apiGatewayUrl,
               prioritize: true,
-              allowAlias: true,
+              allowAlias: false,
               allowProxy: true,
             })
           }
