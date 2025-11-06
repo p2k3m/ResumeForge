@@ -32,10 +32,11 @@ jobs:
       name: ${{ github.event.inputs.environment || 'staging' }}
     permissions:
       contents: read
-      id-token: write
     env:
       NODE_VERSION: '20'
       AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       SAM_STACK_NAME: ${{ secrets.SAM_STACK_NAME }}
       SAM_DEPLOY_ARGS: ${{ secrets.SAM_DEPLOY_ARGS }}
       CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
@@ -55,6 +56,10 @@ jobs:
           fi
           if [ -z "${CLOUDFRONT_DISTRIBUTION_ID:-}" ]; then
             echo "CLOUDFRONT_DISTRIBUTION_ID secret is required to invalidate the cache after deployment" >&2
+            exit 1
+          fi
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for deployments" >&2
             exit 1
           fi
 
@@ -83,8 +88,8 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          role-session-name: ResumeForgeDeploy
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 
       - name: Prepare deployment artifacts
         env:
