@@ -11,7 +11,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises'
-import { createReadStream } from 'node:fs'
+import { createReadStream, readFileSync } from 'node:fs'
 import {
   DeleteObjectsCommand,
   GetBucketPolicyCommand,
@@ -428,6 +428,93 @@ function determineCacheControl(relativePath) {
   return 'public, max-age=86400'
 }
 
+function loadPublishedCloudfrontMetadataSafe() {
+  try {
+    const raw = readFileSync(publishedCloudfrontPath, 'utf8')
+    if (!raw) {
+      return null
+    }
+
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const parsed = JSON.parse(trimmed)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return null
+    }
+
+    console.warn(
+      `[upload-static] Unable to read published CloudFront metadata at ${publishedCloudfrontPath}: ${error?.message || error}`,
+    )
+    return null
+  }
+}
+
+function normalizeOriginPath(value) {
+  if (typeof value !== 'string') {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  return trimmed.replace(/^\/+/, '').replace(/\/+$/, '')
+}
+
+function derivePrefixFromMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object') {
+    return ''
+  }
+
+  const originPath = normalizeOriginPath(metadata.originPath)
+  if (originPath) {
+    return originPath
+  }
+
+  const urlCandidate = typeof metadata.url === 'string' ? metadata.url.trim() : ''
+  if (urlCandidate) {
+    try {
+      const parsedUrl = new URL(urlCandidate)
+      const normalizedPath = normalizeOriginPath(parsedUrl.pathname || '')
+      if (normalizedPath) {
+        return normalizedPath
+      }
+    } catch (error) {
+      // Ignore URL parsing errors and fall through to return ''
+    }
+  }
+
+  return ''
+}
+
+function deriveEnvironmentFromPrefix(prefix) {
+  if (typeof prefix !== 'string') {
+    return ''
+  }
+
+  const sanitized = prefix.trim().replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!sanitized) {
+    return ''
+  }
+
+  const segments = sanitized.split('/')
+  if (segments.length >= 3 && segments[0] === 'static' && segments[1] === 'client') {
+    return segments[2]
+  }
+
+  if (segments.length >= 1) {
+    return segments[segments.length - 1]
+  }
+
+  return ''
+}
+
 function resolveBucketConfiguration() {
   const {
     stageName,
@@ -466,13 +553,42 @@ function resolveBucketConfiguration() {
   const baseSegment = normalizedEnvironment || normalizedStage || 'prod'
   const prefixSource =
     process.env.STATIC_ASSETS_PREFIX || `static/client/${baseSegment}/latest`
-  const normalizedPrefix = String(prefixSource).trim().replace(/^\/+/, '').replace(/\/+$/, '')
-  if (!normalizedPrefix) {
+  const computedPrefix = String(prefixSource).trim().replace(/^\/+/, '').replace(/\/+$/, '')
+  if (!computedPrefix) {
     throw new Error('STATIC_ASSETS_PREFIX must resolve to a non-empty value.')
   }
 
-  const effectiveStage = stageName || normalizedStage || baseSegment
-  const effectiveEnvironment = deploymentEnvironment || stageName || baseSegment
+  let normalizedPrefix = computedPrefix
+  let effectiveStage = stageName || normalizedStage || baseSegment
+  let effectiveEnvironment = deploymentEnvironment || stageName || baseSegment
+
+  if (!process.env.STATIC_ASSETS_PREFIX) {
+    const metadata = loadPublishedCloudfrontMetadataSafe()
+    const metadataPrefix = derivePrefixFromMetadata(metadata)
+    const sanitizedMetadataPrefix = metadataPrefix
+      ? metadataPrefix.replace(/^\/+/, '').replace(/\/+$/, '')
+      : ''
+
+    if (sanitizedMetadataPrefix && sanitizedMetadataPrefix !== normalizedPrefix) {
+      console.log(
+        `[upload-static] Using CloudFront origin path ${sanitizedMetadataPrefix} for static asset uploads (overriding ${normalizedPrefix}).`,
+      )
+      normalizedPrefix = sanitizedMetadataPrefix
+    }
+
+    const derivedEnvironment = deriveEnvironmentFromPrefix(sanitizedMetadataPrefix)
+    const normalizedDerived = normalizePrefixSegment(derivedEnvironment)
+    if (normalizedDerived) {
+      effectiveStage = normalizedDerived
+      effectiveEnvironment = normalizedDerived
+      process.env.STAGE_NAME = normalizedDerived
+      process.env.DEPLOYMENT_ENVIRONMENT = normalizedDerived
+    }
+
+    if (sanitizedMetadataPrefix) {
+      process.env.STATIC_ASSETS_PREFIX = sanitizedMetadataPrefix
+    }
+  }
 
   return {
     bucket,
