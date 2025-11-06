@@ -17,6 +17,33 @@ npm run verify:static
 
 Republishing refreshes `config/published-cloudfront.json` and issues cache invalidations so CloudFront stops serving stale manifests. The static verifier then confirms the manifest references objects that exist in S3 and that the CDN can fetch them. If your build generates uniquely hashed filenames on every deploy, re-upload the **entire** client build output (for example via `npm run upload:static`) so the new hashes are present alongside the `assets/index-latest.*` aliases—uploading only the `latest` alias will still leave references to the missing hashed bundles and cause 404s. If the verifier continues to report missing bundles after this cycle, escalate to the full repair workflow in step 3.
 
+### Alias fallbacks returning 404/500
+
+When browsers report errors like:
+
+```text
+GET https://<distribution>/assets/index-<hash>.css 404
+Retrying ResumeForge static asset via alias fallback … alias: 'https://<distribution>/assets/index-latest.css'
+GET https://<distribution>/assets/index-latest.css 404 (Not Found)
+ResumeForge static asset failed to load. {source: '/assets/index-<hash>.css'}
+GET https://<distribution>/api/published-cloudfront 404 (Not Found)
+```
+
+both the hashed bundle **and** its `index-latest.*` alias are missing from the CDN. The client attempts to fall back to the alias whenever the hashed file is unavailable, so a missing alias blocks the entire bootstrap sequence and produces a blank page.
+
+Recover by uploading the full build output so the alias objects are recreated and backed by fresh hashes:
+
+```bash
+npm run build:client
+npm run upload:static
+npm run verify:static
+```
+
+- `upload:static` publishes every file under `client/dist/` *and* recreates the alias objects (`static/client/prod/latest/assets/index-latest.css` and `.js`).
+- `verify:static` confirms the aliases resolve to the new hashed bundles and that CloudFront can fetch them. If the aliases are still missing, inspect the uploader logs for skipped alias entries and rerun with `DEBUG=upload-static` for verbose output.
+
+Once verification succeeds, reload the portal. Browsers that cached the failing alias responses may require a hard refresh (Shift+Reload) to pick up the repaired bundles.
+
 Starting in November 2024, `npm run verify:static` gained support for pruning stale `assets/index-*.css`/`assets/index-*.js` bundles that linger in the deployment prefix. To protect users that are still served an older cached `index.html`, the verifier now retains superseded bundles by default and only deletes them when explicitly requested. Opt into automatic cleanup by passing `--delete-stale-index-assets` (or setting `STATIC_VERIFY_DELETE_STALE_INDEX_ASSETS=true`) once cached HTML has refreshed. The retention window (72 hours by default) can be adjusted with the `STATIC_VERIFY_STALE_INDEX_RETENTION_*` environment variables whenever you enable pruning.
 
 ## 1. Run the verifier
