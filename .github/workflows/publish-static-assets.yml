@@ -102,38 +102,23 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Clean workspace
-        run: npm run clean
-
-      - name: Build client bundle
-        run: npm run build:client
-
-      - name: Upload static assets
-        run: npm run upload:static
-
-      - name: Verify uploaded assets
-        if: env.SKIP_VERIFY_INPUT != 'true'
+      - name: Run static asset pipeline
+        env:
+          TARGET_STACK_NAME: ${{ env.STACK_NAME_INPUT != '' && env.STACK_NAME_INPUT || env.SAM_STACK_NAME_SECRET || '' }}
         run: |
           set -euo pipefail
-          args=()
-          if [ "${VERIFY_CLOUDFRONT_INPUT}" != 'true' ]; then
-            args+=(--skip-cloudfront)
+          args=(--environment "${TARGET_ENVIRONMENT}")
+          if [ "${SKIP_VERIFY_INPUT}" = 'true' ]; then
+            args+=(--skip-verify)
           fi
-          npm run verify:static -- "${args[@]}"
-
-      - name: Publish CloudFront metadata
-        run: |
-          set -euo pipefail
-          stack_name="${STACK_NAME_INPUT:-}"
-          if [ -z "$stack_name" ]; then
-            stack_name="${SAM_STACK_NAME_SECRET:-}"
+          stack_name="${TARGET_STACK_NAME}"
+          if [ -n "$stack_name" ]; then
+            args+=(--stack "$stack_name")
           fi
-          if [ -z "$stack_name" ]; then
-            echo 'Skipping CloudFront metadata publication (no stack name provided).'
-            exit 0
+          if [ "${SKIP_VERIFY_INPUT}" != 'true' ]; then
+            args+=(--verify-cloudfront)
           fi
-          npm run publish:cloudfront-url -- "$stack_name"
-        if: env.STACK_NAME_INPUT != '' || env.SAM_STACK_NAME_SECRET != ''
+          npm run pipeline:static -- "${args[@]}"
 
       - name: Publish workflow summary
         if: always()
@@ -151,10 +136,6 @@ jobs:
             if [ "${SKIP_VERIFY_INPUT}" = 'true' ]; then
               echo '* Verification: skipped'
             else
-              if [ "${VERIFY_CLOUDFRONT_INPUT}" = 'true' ]; then
-                echo '* Verification: S3 + CloudFront'
-              else
-                echo '* Verification: S3 only (CloudFront skipped)'
-              fi
+              echo '* Verification: S3 + CloudFront (pipeline)'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
