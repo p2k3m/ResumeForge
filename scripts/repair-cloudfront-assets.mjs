@@ -9,18 +9,22 @@ const __dirname = path.dirname(__filename)
 const projectRoot = path.resolve(__dirname, '..')
 
 function printUsage() {
-  console.log(`Usage: npm run repair:cloudfront -- --stack <stack-name> [options]\n\n` +
-    'Options:\n' +
-    '  --stack <stack-name>        SAM stack name that owns the CloudFront distribution (required).\n' +
-    '  --skip-build                Skip rebuilding the client bundle (assumes client/dist is current).\n' +
-    '  --skip-upload               Skip uploading static assets to S3.\n' +
-    '  --skip-publish              Skip publishing the CloudFront metadata / issuing invalidations.\n' +
-    '  --skip-verify               Skip running the CloudFront verification step.\n')
+  console.log(
+    `Usage: npm run repair:cloudfront -- [options]\n\n` +
+      'Options:\n' +
+      '  --stack <stack-name>        SAM stack name that owns the CloudFront distribution.\n' +
+      '  --environment <stage>       Deployment environment / stage name to apply.\n' +
+      '  --skip-build                Skip rebuilding the client bundle (assumes client/dist is current).\n' +
+      '  --skip-upload               Skip uploading static assets to S3.\n' +
+      '  --skip-publish              Skip publishing the CloudFront metadata / issuing invalidations.\n' +
+      '  --skip-verify               Skip running the CloudFront verification step.\n'
+  )
 }
 
 function parseArguments(argv) {
   const args = [...argv]
   let stackName = ''
+  let environment = ''
   let skipBuild = false
   let skipUpload = false
   let skipPublish = false
@@ -39,6 +43,14 @@ function parseArguments(argv) {
           throw new Error('Missing value for --stack.')
         }
         stackName = value
+        break
+      }
+      case '--environment': {
+        const value = args.shift()
+        if (!value) {
+          throw new Error('Missing value for --environment.')
+        }
+        environment = value
         break
       }
       case '--skip-build':
@@ -64,10 +76,26 @@ function parseArguments(argv) {
   }
 
   if (!stackName) {
-    throw new Error('The --stack option is required.')
+    const fallbackCandidates = [
+      process.env.REPAIR_STACK_NAME,
+      process.env.STACK_NAME,
+      process.env.SAM_STACK_NAME,
+      process.env.CLOUDFRONT_STACK_NAME,
+    ]
+
+    for (const candidate of fallbackCandidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        stackName = candidate.trim()
+        break
+      }
+    }
   }
 
-  return { stackName, skipBuild, skipUpload, skipPublish, skipVerify }
+  if (!stackName) {
+    throw new Error('The CloudFront stack name is required (provide --stack or set SAM_STACK_NAME).')
+  }
+
+  return { stackName, environment, skipBuild, skipUpload, skipPublish, skipVerify }
 }
 
 function runStep({ command, args = [], label }) {
@@ -101,6 +129,14 @@ function runStep({ command, args = [], label }) {
 async function main() {
   try {
     const options = parseArguments(process.argv.slice(2))
+
+    if (options.environment) {
+      const normalizedEnv = options.environment.trim()
+      if (normalizedEnv) {
+        process.env.STAGE_NAME = normalizedEnv
+        process.env.DEPLOYMENT_ENVIRONMENT = normalizedEnv
+      }
+    }
 
     const steps = []
 

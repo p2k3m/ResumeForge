@@ -47,6 +47,16 @@ Once verification succeeds, reload the portal. Browsers that cached the failing 
 
 Starting in November 2024, `npm run verify:static` gained support for pruning stale `assets/index-*.css`/`assets/index-*.js` bundles that linger in the deployment prefix. To protect users that are still served an older cached `index.html`, the verifier now retains superseded bundles by default and only deletes them when explicitly requested. Opt into automatic cleanup by passing `--delete-stale-index-assets` (or setting `STATIC_VERIFY_DELETE_STALE_INDEX_ASSETS=true`) once cached HTML has refreshed. The retention window (72 hours by default) can be adjusted with the `STATIC_VERIFY_STALE_INDEX_RETENTION_*` environment variables whenever you enable pruning.
 
+### Automated guard rails
+
+The repository now ships with a scheduled GitHub Actions workflow (`static-asset-guard.yml`) that continuously verifies the CDN.
+
+- The workflow runs hourly (and can be dispatched manually) to execute `npm run verify:static -- --verify-cloudfront` against the published environment.
+- When verification fails, the guard automatically invokes the static asset pipeline with the recorded stack name so the hashed bundles, aliases, and metadata are rebuilt and republished without waiting for a manual response.
+- Every run writes a summary to the workflow report indicating whether verification succeeded, whether an automated repair was attempted, and which bucket/environment were evaluated. Keep the `STATIC_ASSETS_BUCKET`/`SAM_STACK_NAME` secrets current so the guard can recover unattended outages.
+
+Treat the guard as an early warning system rather than a replacement for incident response. If the automated repair fails twice in a row, escalate to the manual steps above so the team can inspect AWS console logs and unblock production traffic.
+
 ## 1. Run the verifier
 
 ```bash
