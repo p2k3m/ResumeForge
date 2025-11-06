@@ -4,6 +4,77 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="resumeforge-api-base" content="%VITE_API_BASE_URL%" />
+    <script
+      type="application/json"
+      id="resumeforge-cloudfront-metadata"
+    >%VITE_PUBLISHED_CLOUDFRONT_METADATA%</script>
+    <script>
+      ;(function seedPublishedCloudfrontMetadata() {
+        const parseInlineMetadata = () => {
+          try {
+            if (typeof window === 'undefined') {
+              return null
+            }
+
+            const existing = window.__PUBLISHED_CLOUDFRONT_METADATA__
+            if (existing && typeof existing === 'object') {
+              return existing
+            }
+          } catch (error) {
+            // Ignore global inspection failures.
+          }
+
+          try {
+            const script = document.getElementById('resumeforge-cloudfront-metadata')
+            if (!script) {
+              return null
+            }
+
+            const raw =
+              typeof script.textContent === 'string'
+                ? script.textContent
+                : typeof script.innerText === 'string'
+                  ? script.innerText
+                  : ''
+
+            const trimmed = raw ? raw.trim() : ''
+            if (!trimmed) {
+              return null
+            }
+
+            const parsed = JSON.parse(trimmed)
+            return parsed && typeof parsed === 'object' ? parsed : null
+          } catch (error) {
+            try {
+              console.warn('Unable to parse inline CloudFront metadata.', error)
+            } catch (loggingError) {
+              // Ignore logging failures in constrained environments.
+            }
+            return null
+          }
+        }
+
+        const metadata = parseInlineMetadata()
+        if (!metadata) {
+          return
+        }
+
+        try {
+          if (typeof window === 'undefined') {
+            return
+          }
+
+          window.__PUBLISHED_CLOUDFRONT_METADATA__ = metadata
+
+          const current = window.__RESUMEFORGE_CLOUDFRONT_METADATA__
+          if (!current || typeof current !== 'object') {
+            window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = metadata
+          }
+        } catch (error) {
+          // Ignore assignment errors in restricted environments.
+        }
+      })();
+    </script>
     <script>
       ;(function setResumeForgeApiBase() {
         const resolveFallbackApiBase = () => {
