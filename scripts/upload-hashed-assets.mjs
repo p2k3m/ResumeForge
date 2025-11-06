@@ -865,6 +865,36 @@ function sanitizeS3PathSegment(value) {
   return trimmed.replace(/^\/+/, '').replace(/\/+$/, '')
 }
 
+function deriveFallbackPrefixes(prefix, { stageName, deploymentEnvironment } = {}) {
+  const fallbacks = new Set()
+  const normalizedPrefix = sanitizeS3PathSegment(prefix)
+  if (!normalizedPrefix) {
+    return []
+  }
+
+  const lower = normalizedPrefix.toLowerCase()
+  if (lower.endsWith('/latest')) {
+    const withoutLatest = normalizedPrefix.slice(0, -'/latest'.length)
+    if (withoutLatest) {
+      fallbacks.add(withoutLatest)
+    }
+
+    const segments = withoutLatest.split('/').filter(Boolean)
+    if (segments.length > 3) {
+      const baseSegments = segments.slice(0, 3)
+      fallbacks.add(baseSegments.join('/'))
+    }
+  }
+
+  const normalizedEnv = normalizePrefixSegment(deploymentEnvironment || stageName)
+  if (normalizedEnv) {
+    fallbacks.add(`static/client/${normalizedEnv}`)
+  }
+
+  fallbacks.delete(normalizedPrefix)
+  return Array.from(fallbacks).filter(Boolean)
+}
+
 async function resolveHashedAssetUploadConfiguration({ metadata } = {}) {
   const { stageName, deploymentEnvironment, staticAssetsBucket, dataBucket } =
     applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
@@ -919,6 +949,10 @@ async function resolveHashedAssetUploadConfiguration({ metadata } = {}) {
   return {
     bucket,
     prefix: normalizedPrefix,
+    fallbackPrefixes: deriveFallbackPrefixes(normalizedPrefix, {
+      stageName,
+      deploymentEnvironment,
+    }),
   }
 }
 
@@ -926,6 +960,11 @@ function buildS3Key(prefix, relativePath) {
   const sanitizedPrefix = prefix.replace(/\/+$/, '')
   const sanitizedPath = relativePath.split(path.sep).join('/')
   return `${sanitizedPrefix}/${sanitizedPath}`
+}
+
+function buildS3CopySource(bucket, key) {
+  const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/')
+  return `${bucket}/${encodedKey}`
 }
 
 function resolveHashedAssetCacheControl(relativePath) {
@@ -1377,6 +1416,14 @@ export async function uploadHashedIndexAssets(options = {}) {
     distDirectory,
   })
 
+  await replicateUploadsToFallbackPrefixes({
+    s3,
+    bucket,
+    sourcePrefix: prefix,
+    fallbackPrefixes: configuration.fallbackPrefixes,
+    uploads,
+  })
+
   if (!options?.quiet) {
     const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
     const hashedSummary = entries.map((entry) => entry.relativePath)
@@ -1401,6 +1448,68 @@ export async function uploadHashedIndexAssets(options = {}) {
   }
 
   return { uploaded, bucket, prefix, versionLabel }
+}
+
+async function replicateUploadsToFallbackPrefixes({
+  s3,
+  bucket,
+  sourcePrefix,
+  fallbackPrefixes,
+  uploads,
+}) {
+  if (!Array.isArray(fallbackPrefixes) || fallbackPrefixes.length === 0) {
+    return
+  }
+
+  const normalizedSource = sanitizeS3PathSegment(sourcePrefix)
+  if (!normalizedSource) {
+    return
+  }
+
+  const entries = Array.isArray(uploads)
+    ? uploads.filter((entry) => entry && entry.relativePath)
+    : []
+
+  if (entries.length === 0) {
+    return
+  }
+
+  const prefixes = Array.from(
+    new Set(
+      fallbackPrefixes
+        .map((prefix) => sanitizeS3PathSegment(prefix))
+        .filter((prefix) => prefix && prefix !== normalizedSource),
+    ),
+  )
+
+  if (!prefixes.length) {
+    return
+  }
+
+  for (const fallbackPrefix of prefixes) {
+    for (const entry of entries) {
+      const sourceKey = buildS3Key(normalizedSource, entry.relativePath)
+      const targetKey = buildS3Key(fallbackPrefix, entry.relativePath)
+      if (sourceKey === targetKey) {
+        continue
+      }
+
+      await s3.send(
+        new CopyObjectCommand({
+          Bucket: bucket,
+          Key: targetKey,
+          CopySource: buildS3CopySource(bucket, sourceKey),
+          MetadataDirective: 'COPY',
+        }),
+      )
+    }
+
+    console.log(
+      `[upload-hashed-assets] Propagated ${entries.length} asset${
+        entries.length === 1 ? '' : 's'
+      } to s3://${bucket}/${fallbackPrefix}/ from ${normalizedSource}.`,
+    )
+  }
 }
 
 async function verifyUploadedObjects({ s3, bucket, prefix, uploads }) {
