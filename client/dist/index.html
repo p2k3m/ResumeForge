@@ -2100,7 +2100,7 @@
             const baseIndex = nextPointer % apiProxyCandidates.length
             const assetCandidate = candidateAssets[assetIndex]
             const baseCandidate = apiProxyCandidates[baseIndex]
-            const joined = joinAliasUrl(baseCandidate, assetCandidate)
+            const joined = buildStaticProxyUrl(baseCandidate, assetCandidate)
             nextPointer += 1
 
             if (joined) {
