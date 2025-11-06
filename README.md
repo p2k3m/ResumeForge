@@ -436,7 +436,6 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 | --- | --- |
 | `AWS_ACCESS_KEY_ID` | Access key for the IAM user with deployment permissions. |
 | `AWS_SECRET_ACCESS_KEY` | Corresponding secret access key. |
-| `AWS_SESSION_TOKEN` | Optional session token for temporary credentials (only when using access keys). |
 | `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
 | `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
 | `RESUMEFORGE_DATA_BUCKET` | Globally unique S3 bucket name passed to the `DataBucketName` parameter. |
@@ -444,7 +443,7 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 
 Provide the same secrets when running locally by exporting environment variables (for example, through `.env` files that are excluded from version control).
 
-> **Tip:** Store the access key pair in repository secrets and rotate it regularly. Temporary session tokens are supported when you generate short-lived credentials.
+> **Tip:** Store the access key pair in repository secrets and rotate it regularly.
 
 Optional secrets:
 
