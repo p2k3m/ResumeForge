@@ -1294,7 +1294,7 @@
                 ? window.__RESUMEFORGE_API_BASE_URL__.trim()
                 : ''
             if (explicitGlobal) {
-              addCandidate(explicitGlobal, { prioritize: true, allowAlias: false })
+              addCandidate(explicitGlobal, { prioritize: true })
             }
           } catch (error) {
             // Ignore global override parsing issues.
@@ -1305,7 +1305,6 @@
             if (meta && typeof meta.getAttribute === 'function') {
               addCandidate(meta.getAttribute('content'), {
                 prioritize: true,
-                allowAlias: false,
               })
             }
           } catch (error) {
@@ -1322,7 +1321,7 @@
                     : typeof input.getAttribute === 'function'
                       ? input.getAttribute('value')
                       : ''
-                addCandidate(value, { prioritize: true, allowAlias: false })
+                addCandidate(value, { prioritize: true })
               }
             })
           } catch (error) {
