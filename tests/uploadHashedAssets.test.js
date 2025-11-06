@@ -200,6 +200,31 @@ describe('uploadHashedIndexAssets', () => {
     expect(sendMock).toHaveBeenCalled()
     expect(putCommands).toHaveLength(9)
 
+    const copyCommands = sendMock.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof CopyObjectCommand)
+
+    expect(copyCommands).toHaveLength(8)
+    const copiedKeys = copyCommands.map((command) => command.input.Key)
+
+    expect(copiedKeys).toEqual(
+      expect.arrayContaining([
+        'static/client/prod/assets/index-20251029.css',
+        'static/client/prod/assets/index-20251029.js',
+        'static/client/prod/assets/index-latest.css',
+        'static/client/prod/assets/index-latest.js',
+        'static/client/prod/api/published-cloudfront',
+        'static/client/prod/api/published-cloudfront.json',
+        'static/client/prod/assets/v20251029/index-20251029.css',
+        'static/client/prod/assets/v20251029/index-20251029.js',
+      ]),
+    )
+
+    for (const command of copyCommands) {
+      expect(command.input.MetadataDirective).toBe('COPY')
+      expect(command.input.CopySource).toContain('static/client/prod/latest')
+    }
+
     const manifestPut = putCommands.find((command) =>
       command.input.Key.endsWith('/manifest.json'),
     )
@@ -316,6 +341,9 @@ describe('uploadHashedIndexAssets', () => {
         return {}
       }
       if (command instanceof HeadObjectCommand) {
+        return {}
+      }
+      if (command instanceof CopyObjectCommand) {
         return {}
       }
       if (command instanceof GetObjectCommand) {
@@ -669,21 +697,31 @@ describe('uploadHashedIndexAssets', () => {
       .map(([command]) => command)
       .filter((command) => command instanceof CopyObjectCommand)
 
-    expect(copyCalls).toHaveLength(1)
-    const copyInput = copyCalls[0].input
-    expect(copyInput.Key).toBe('static/client/prod/latest/assets/index-latest.css')
-    expect(copyInput.CopySource).toBe(
+    expect(copyCalls.length).toBeGreaterThanOrEqual(1)
+
+    const repairCopy = copyCalls.find(
+      (command) => command.input.MetadataDirective === 'REPLACE',
+    )
+
+    expect(repairCopy).toBeDefined()
+    expect(repairCopy.input.Key).toBe('static/client/prod/latest/assets/index-latest.css')
+    expect(repairCopy.input.CopySource).toBe(
       'static-bucket-test/static/client/prod/latest/assets/index-20251101.css',
     )
-    expect(copyInput.CacheControl).toMatch(/max-age=60/)
-    expect(copyInput.MetadataDirective).toBe('REPLACE')
-    expect(copyInput.Metadata).toEqual(
+    expect(repairCopy.input.CacheControl).toMatch(/max-age=60/)
+    expect(repairCopy.input.MetadataDirective).toBe('REPLACE')
+    expect(repairCopy.input.Metadata).toEqual(
       expect.objectContaining({
         'build-version': expect.any(String),
         'build-sha': expect.any(String),
         'build-timestamp': expect.any(String),
       }),
     )
+
+    const fallbackCopies = copyCalls.filter(
+      (command) => command.input.MetadataDirective === 'COPY',
+    )
+    expect(fallbackCopies.length).toBeGreaterThanOrEqual(8)
 
     expect(observedCommands).toContain('CopyObjectCommand')
   })
