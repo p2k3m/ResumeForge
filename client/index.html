@@ -238,6 +238,14 @@
         Please refresh the page in a few minutes. If the issue persists, contact support so we can restore
         access.
       </p>
+      <p class="static-asset-warning__body">
+        Support engineers should rebuild and republish the client bundles to S3/CloudFront:
+        <code>npm run build:client &amp;&amp; npm run upload:static</code>. See
+        <a href="https://github.com/ResumeForge/ResumeForge/blob/main/docs/troubleshooting-cloudfront.md" target="_blank" rel="noopener noreferrer">
+          CloudFront troubleshooting
+        </a>
+        for the full recovery playbook.
+      </p>
       <p class="static-asset-warning__body" data-static-asset-source-wrapper hidden>
         Missing file: <code data-static-asset-source></code>
       </p>
