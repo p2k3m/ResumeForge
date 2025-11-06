@@ -35,6 +35,7 @@ export function parseStaticPipelineArgs(argv = []) {
     skipClean: false,
     skipBuild: false,
     skipUpload: false,
+    skipHashedUpload: false,
     skipVerify: false,
     skipCloudfrontVerify: false,
     skipPublish: false,
@@ -129,6 +130,12 @@ export function parseStaticPipelineArgs(argv = []) {
       case '--skip-upload':
         options.skipUpload = true
         break
+      case '--skip-hashed':
+      case '--skip-hashed-upload':
+      case '--skip-upload-hashed':
+      case '--skip-hashed-assets':
+        options.skipHashedUpload = true
+        break
       case '--skip-verify':
       case '--skip-static-verify':
         options.skipVerify = true
@@ -182,6 +189,16 @@ export function buildStaticPipelinePlan(options = {}) {
       label: 'Upload static assets',
       command: 'npm',
       args: ['run', 'upload:static'],
+    })
+  }
+
+  if (!options.skipUpload && !options.skipHashedUpload) {
+    plan.push({
+      id: 'upload-hashed',
+      type: 'command',
+      label: 'Upload hashed index assets',
+      command: 'npm',
+      args: ['run', 'upload:hashed'],
     })
   }
 

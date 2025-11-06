@@ -9,6 +9,7 @@ describe('parseStaticPipelineArgs', () => {
       '--skip-clean',
       '--skip-build',
       '--skip-upload',
+      '--skip-hashed',
       '--skip-cloudfront',
       '--cloudfront-url',
       'https://example.cloudfront.net',
@@ -25,6 +26,7 @@ describe('parseStaticPipelineArgs', () => {
     expect(options.skipClean).toBe(true)
     expect(options.skipBuild).toBe(true)
     expect(options.skipUpload).toBe(true)
+    expect(options.skipHashedUpload).toBe(true)
     expect(options.skipCloudfrontVerify).toBe(true)
     expect(options.cloudfrontUrl).toBe('https://example.cloudfront.net')
     expect(options.assetPrefixes).toContain('static/client/prod/latest')
@@ -51,6 +53,7 @@ describe('buildStaticPipelinePlan', () => {
       'clean',
       'build-client',
       'upload-static',
+      'upload-hashed',
       'verify-static',
       'publish-cloudfront',
       'verify-cloudfront',

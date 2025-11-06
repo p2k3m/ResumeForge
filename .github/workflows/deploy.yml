@@ -3,14 +3,6 @@ name: Deploy
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Target environment to deploy"
-        type: choice
-        default: staging
-        options:
-          - dev
-          - staging
-          - prod
       skip_tests:
         description: "Skip running the test suite before deployment"
         type: boolean
@@ -21,15 +13,15 @@ on:
         default: false
 
 concurrency:
-  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  group: deploy-prod
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy to ${{ github.event.inputs.environment || 'staging' }}
+    name: Deploy to prod
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.event.inputs.environment || 'staging' }}
+      name: prod
     permissions:
       contents: read
     env:
@@ -40,7 +32,8 @@ jobs:
       SAM_STACK_NAME: ${{ secrets.SAM_STACK_NAME }}
       SAM_DEPLOY_ARGS: ${{ secrets.SAM_DEPLOY_ARGS }}
       CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
-      TARGET_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+      STAGE_NAME: prod
+      DEPLOYMENT_ENVIRONMENT: prod
       ALLOW_CLOUDFRONT_VERIFY_FAILURE: ${{ github.event.inputs.allow_cloudfront_failure }}
     steps:
       - name: Validate deployment secrets
@@ -92,33 +85,40 @@ jobs:
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 
       - name: Prepare deployment artifacts
-        env:
-          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
         run: |
           set -euo pipefail
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
           npm run clean
           npm run predeploy:sam
           sam build --template-file template.yaml --cached --parallel
 
       - name: Upload static client assets
-        env:
-          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
         run: |
           set -euo pipefail
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
           npm run upload:static
 
-      - name: Verify static asset upload
-        env:
-          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
+      - name: Upload hashed index bundles
         run: |
           set -euo pipefail
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
+          npm run upload:hashed
+
+      - name: Verify static asset upload
+        run: |
+          set -euo pipefail
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
           npm run verify:static -- --skip-cloudfront
 
       - name: Deploy SAM stack
-        env:
-          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
         run: |
           set -euo pipefail
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
           extra_args=()
           if [ -n "${SAM_DEPLOY_ARGS:-}" ]; then
             # shellcheck disable=SC2206
@@ -162,10 +162,11 @@ jobs:
       - name: Smoke test CDN assets
         if: steps.resolve_domain.outputs.url != ''
         env:
-          STAGE_NAME: ${{ env.TARGET_ENVIRONMENT }}
           CLOUDFRONT_URL: ${{ steps.resolve_domain.outputs.url }}
         run: |
           set -euo pipefail
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
           npm run verify:static
 
       - name: Verify CloudFront distribution
@@ -180,7 +181,7 @@ jobs:
           {
             echo "## ResumeForge deployment"
             echo
-            echo "* Environment: ${{ env.TARGET_ENVIRONMENT }}"
+            echo "* Environment: ${STAGE_NAME:-prod}"
             echo "* Status: ${{ job.status }}"
             if [ "${{ steps.resolve_domain.outputs.url }}" != "" ]; then
               echo "* CloudFront domain: ${{ steps.resolve_domain.outputs.url }}"
