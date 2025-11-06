@@ -34,7 +34,8 @@
     "verify:static": "node scripts/verify-static-deployment.mjs",
     "repair:cloudfront": "node scripts/repair-cloudfront-assets.mjs",
     "watch:cloudfront": "node scripts/watch-cloudfront-assets.mjs",
-    "autofix:pipeline": "node scripts/auto-pipeline-repair.mjs"
+    "autofix:pipeline": "node scripts/auto-pipeline-repair.mjs",
+    "pipeline:static": "node scripts/static-asset-pipeline.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-cloudformation": "^3.432.0",

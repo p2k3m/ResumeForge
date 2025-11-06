@@ -11,11 +11,10 @@ To skip only the CDN probe while still validating the S3 upload, run `npm run ve
 The most common customer-facing regression is CloudFront returning `404` for hashed bundles such as `/assets/index-<hash>.js` or `/assets/index-<hash>.css`. Treat this as an emergency publish/verify scenario:
 
 ```bash
-npm run publish:cloudfront-url -- <stack-name>
-npm run verify:static
+npm run pipeline:static -- --environment <env> --stack <stack-name>
 ```
 
-Republishing refreshes `config/published-cloudfront.json` and issues cache invalidations so CloudFront stops serving stale manifests. The static verifier then confirms the manifest references objects that exist in S3 and that the CDN can fetch them. If your build generates uniquely hashed filenames on every deploy, re-upload the **entire** client build output (for example via `npm run upload:static`) so the new hashes are present alongside the `assets/index-latest.*` aliases—uploading only the `latest` alias will still leave references to the missing hashed bundles and cause 404s. If the verifier continues to report missing bundles after this cycle, escalate to the full repair workflow in step 3.
+The pipeline helper rebuilds the client bundle, uploads the refreshed `client/dist/` output, publishes the latest CloudFront metadata (updating `config/published-cloudfront.json` and triggering the invalidations), and verifies both the S3 upload and the CDN aliases in one shot. If your build generates uniquely hashed filenames on every deploy, this command ensures the `assets/index-latest.*` aliases are re-created alongside the new hashes. When the verifier still reports missing bundles after this cycle, escalate to the full repair workflow in step 3.
 
 ### Alias fallbacks returning 404/500
 
@@ -36,13 +35,11 @@ You may also see Chrome-specific noise such as `net::ERR_ABORTED 500 (Internal S
 Recover by uploading the full build output so the alias objects are recreated and backed by fresh hashes:
 
 ```bash
-npm run build:client
-npm run upload:static
-npm run verify:static
+npm run pipeline:static -- --environment <env> --stack <stack-name>
 ```
 
-- `upload:static` publishes every file under `client/dist/` *and* recreates the alias objects (`static/client/prod/latest/assets/index-latest.css` and `.js`).
-- `verify:static` confirms the aliases resolve to the new hashed bundles and that CloudFront can fetch them. If the aliases are still missing, inspect the uploader logs for skipped alias entries and rerun with `DEBUG=upload-static` for verbose output.
+- The static pipeline copies every artifact under `client/dist/` and recreates the alias objects (`static/client/<env>/latest/assets/index-latest.css` and `.js`).
+- The built-in verification confirms the aliases resolve to the new hashed bundles and that CloudFront can fetch them. If the aliases are still missing, inspect the uploader logs for skipped alias entries and rerun with `DEBUG=upload-static` for verbose output.
 
 If the `/api/published-cloudfront` probe continues to return `404`, the metadata file was never uploaded. Re-run `npm run upload:static` to push the supplementary `api/published-cloudfront(.json)` artifacts, then `npm run verify:static -- --skip-cloudfront` to confirm S3 now serves them. Once the metadata is present you can rerun the full verifier without the skip flag.
 
