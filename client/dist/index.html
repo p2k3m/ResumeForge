@@ -1765,6 +1765,41 @@
             // Ignore runtime metadata access errors.
           }
 
+          try {
+            const metadata = resolveEffectiveCloudfrontMetadata()
+            if (metadata && typeof metadata === 'object') {
+              const bucket =
+                typeof metadata.originBucket === 'string' && metadata.originBucket.trim()
+                  ? metadata.originBucket.trim()
+                  : ''
+              if (bucket) {
+                const originPath = normalizeAliasOriginPath(metadata.originPath)
+                const regionHints = new Set()
+                const addRegionHint = (value) => {
+                  if (!value) {
+                    return
+                  }
+                  const normalized = String(value).trim().toLowerCase()
+                  if (normalized) {
+                    regionHints.add(normalized)
+                  }
+                }
+                addRegionHint(metadata.originRegion)
+                addRegionHint(extractAwsRegionFromUrl(metadata.apiGatewayUrl))
+                addRegionHint(extractAwsRegionFromUrl(metadata.url))
+                const bucketBases = buildS3BaseCandidates(bucket, Array.from(regionHints))
+                bucketBases.forEach((base) => {
+                  appendBase(base)
+                  if (originPath && shouldAppendOriginPathToBase(base, originPath)) {
+                    appendBase(joinAliasUrl(base, originPath))
+                  }
+                })
+              }
+            }
+          } catch (error) {
+            // Ignore metadata resolution failures when preparing API fallback bases.
+          }
+
           aliasBaseCandidates.forEach((candidate) => appendBase(candidate))
           apiProxyCandidates.forEach((candidate) => appendBase(candidate))
 

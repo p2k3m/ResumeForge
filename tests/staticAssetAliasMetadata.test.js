@@ -130,4 +130,9 @@ describe('static asset alias metadata helpers', () => {
     expect(context.attemptProxyOrAliasReloadCallCount).toBeGreaterThan(0)
     expect(context.attemptStaticProxyReloadCallCount).toBeGreaterThan(0)
   })
+
+  test('gatherApiFallbackBases considers S3 origins from metadata', () => {
+    expect(htmlContent).toMatch(/const\s+bucketBases\s*=\s*buildS3BaseCandidates\(/)
+    expect(htmlContent).toMatch(/shouldAppendOriginPathToBase\(base,\s*originPath\)/)
+  })
 })
