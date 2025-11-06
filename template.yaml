@@ -57,6 +57,22 @@ Parameters:
     Description: >-
       Set to 'false' to use an existing S3 bucket specified in DataBucketName
       instead of creating a new one.
+  StaticAssetsBucketName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional name of the S3 bucket that hosts the built ResumeForge client
+      application. Provide a value when reusing an existing bucket.
+  CreateStaticAssetsBucket:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+    Description: >-
+      Set to 'true' to provision and manage the static asset bucket within this
+      stack. When set to 'false', the deployment expects StaticAssetsBucketName
+      (or deployment automation) to supply the existing bucket name.
   ResumeTableName:
     Type: String
     Default: ResumeForge
@@ -118,6 +134,8 @@ Parameters:
 Conditions:
   CreateResumeTableCondition: !Equals [!Ref CreateResumeTable, 'true']
   CreateDataBucketCondition: !Equals [!Ref CreateDataBucket, 'true']
+  CreateStaticAssetsBucketCondition: !Equals [!Ref CreateStaticAssetsBucket, 'true']
+  HasStaticAssetsBucketName: !Not [!Equals [!Ref StaticAssetsBucketName, '']]
   EnableProvisionedConcurrency: !Not [!Equals [!Ref ProvisionedConcurrency, 0]]
   UseProvidedWebAcl: !Not [!Equals [!Ref WebAclArn, '']]
   CreateDefaultWebAcl: !Not [!Condition UseProvidedWebAcl]
@@ -145,6 +163,11 @@ Rules:
     Assertions:
       - Assert: !Not [!Equals [!Ref ResumeTableName, '']]
         AssertDescription: Provide ResumeTableName when CreateResumeTable is false.
+  RequireStaticBucketName:
+    RuleCondition: !Equals [!Ref CreateStaticAssetsBucket, 'false']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref StaticAssetsBucketName, '']]
+        AssertDescription: Provide StaticAssetsBucketName when CreateStaticAssetsBucket is false.
 
 Globals:
   Function:
@@ -160,6 +183,7 @@ Globals:
         ORCHESTRATION_BUS_NAME: !Ref ResumeForgeOrchestrationBus
         LOG_LEVEL: !If [IsProductionStage, 'info', 'debug']
         ENABLE_DEBUG_LOGGING: 'false'
+        STATIC_ASSETS_BUCKET: !If [CreateStaticAssetsBucketCondition, !Ref StaticAssetsBucket, !Ref StaticAssetsBucketName]
 
 Resources:
   ResumeForgeApi:
@@ -273,6 +297,44 @@ Resources:
               - CreateDataBucketCondition
               - !Sub arn:aws:s3:::${DataBucket}/assets/*
               - !Sub arn:aws:s3:::${DataBucketName}/assets/*
+
+  StaticAssetsBucket:
+    Type: AWS::S3::Bucket
+    Condition: CreateStaticAssetsBucketCondition
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !If [HasStaticAssetsBucketName, !Ref StaticAssetsBucketName, !Ref AWS::NoValue]
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      VersioningConfiguration:
+        Status: Enabled
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: 404.html
+      Tags:
+        - Key: Environment
+          Value: !Ref StageName
+
+  StaticAssetsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: CreateStaticAssetsBucketCondition
+    Properties:
+      Bucket: !Ref StaticAssetsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPublicReadStaticAssets
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub arn:aws:s3:::${StaticAssetsBucket}/*
 
   CloudFrontLogBucket:
     Type: AWS::S3::Bucket
@@ -2464,6 +2526,9 @@ Outputs:
   DataBucket:
     Description: Bucket used for uploads and generated files.
     Value: !If [CreateDataBucketCondition, !Ref DataBucket, !Ref DataBucketName]
+  StaticAssetsBucket:
+    Description: Bucket that stores the published ResumeForge client assets.
+    Value: !If [CreateStaticAssetsBucketCondition, !Ref StaticAssetsBucket, !Ref StaticAssetsBucketName]
   ResumeTable:
     Description: DynamoDB table that stores resume processing metadata.
     Value: !If [CreateResumeTableCondition, !Ref ResumeForgeTable, !Ref ResumeTableName]
