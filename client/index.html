@@ -898,8 +898,43 @@
             candidate = candidate.slice(0, annotationIndex)
           }
 
-          candidate = candidate.replace(/[,;]+$/, '')
-          return candidate.trim()
+          candidate = candidate.replace(/[,;]+$/, '').trim()
+          if (!candidate) {
+            return ''
+          }
+
+          let sameOrigin = false
+          try {
+            const parsed = new URL(candidate, window.location.href)
+            if (!parsed.host || parsed.origin === window.location.origin) {
+              candidate = `${parsed.pathname}${parsed.search}`
+              sameOrigin = true
+            } else {
+              candidate = parsed.href
+            }
+          } catch (error) {
+            // Ignore URL parsing failures and fall back to manual normalization.
+          }
+
+          if (
+            sameOrigin ||
+            candidate.startsWith('/') ||
+            candidate.startsWith('./') ||
+            candidate.startsWith('../')
+          ) {
+            candidate = candidate.replace(/[#?].*$/, '')
+            candidate = candidate.replace(/^(?:\.\.\/|\.\/)+/, '')
+            candidate = candidate.replace(/^\/+/, '')
+            candidate = candidate.replace(/\\/g, '/')
+
+            if (!candidate) {
+              return ''
+            }
+
+            return `/${candidate}`
+          }
+
+          return candidate
         }
 
         const normalizeAliasBase = (value) => {

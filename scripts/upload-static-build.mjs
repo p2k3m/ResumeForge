@@ -1496,7 +1496,21 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error?.message || error)
-  process.exitCode = 1
-})
+const isCliInvocation = (() => {
+  if (!process.argv?.[1]) {
+    return false
+  }
+
+  try {
+    return path.resolve(process.argv[1]) === __filename
+  } catch (error) {
+    return false
+  }
+})()
+
+if (isCliInvocation) {
+  main().catch((error) => {
+    console.error(error?.message || error)
+    process.exitCode = 1
+  })
+}
