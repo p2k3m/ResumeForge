@@ -3,6 +3,7 @@ import path from 'node:path'
 import { promises as fs } from 'node:fs'
 import { jest } from '@jest/globals'
 import {
+  CopyObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
@@ -95,6 +96,9 @@ describe('uploadHashedIndexAssets', () => {
           return {}
         }
         if (command instanceof HeadObjectCommand) {
+          return {}
+        }
+        if (command instanceof CopyObjectCommand) {
           return {}
         }
         if (command instanceof GetObjectCommand) {
@@ -544,6 +548,107 @@ describe('uploadHashedIndexAssets', () => {
       ]),
     )
   })
+
+  it('rebuilds missing alias objects in S3 by copying from the hashed bundle', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+
+    const distDir = path.join(tempDir, 'dist-alias-repair')
+    const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
+    await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251101.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251101.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251101.css'), 'body{color:red;}', 'utf8')
+    await fs.writeFile(
+      path.join(assetsDir, 'index-20251101.js'),
+      'console.log("alias repair")',
+      'utf8',
+    )
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{"url":"https://example.com"}', 'utf8')
+    await fs.writeFile(
+      path.join(apiDir, 'published-cloudfront.json'),
+      '{"url":"https://example.com"}',
+      'utf8',
+    )
+
+    const observedCommands = []
+    let aliasHeadCount = 0
+    sendMock.mockImplementation(async (command) => {
+      observedCommands.push(command.constructor.name)
+      if (command instanceof HeadBucketCommand) {
+        return {}
+      }
+      if (command instanceof PutObjectCommand) {
+        return {}
+      }
+      if (command instanceof HeadObjectCommand) {
+        const key = command.input.Key
+        if (key.endsWith('assets/index-latest.css')) {
+          aliasHeadCount += 1
+          if (aliasHeadCount > 1) {
+            const error = new Error('NotFound')
+            error.name = 'NotFound'
+            error.$metadata = { httpStatusCode: 404 }
+            throw error
+          }
+        }
+        return {}
+      }
+      if (command instanceof CopyObjectCommand) {
+        return {}
+      }
+      if (command instanceof GetObjectCommand) {
+        return {
+          Body: Buffer.from(JSON.stringify(manifestPayload)),
+        }
+      }
+      throw new Error(`Unexpected command: ${command?.constructor?.name ?? 'unknown'}`)
+    })
+
+    await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    const copyCalls = sendMock.mock.calls
+      .map(([command]) => command)
+      .filter((command) => command instanceof CopyObjectCommand)
+
+    expect(copyCalls).toHaveLength(1)
+    const copyInput = copyCalls[0].input
+    expect(copyInput.Key).toBe('static/client/prod/latest/assets/index-latest.css')
+    expect(copyInput.CopySource).toBe(
+      'static-bucket-test/static/client/prod/latest/assets/index-20251101.css',
+    )
+    expect(copyInput.CacheControl).toMatch(/max-age=60/)
+    expect(copyInput.MetadataDirective).toBe('REPLACE')
+    expect(copyInput.Metadata).toEqual(
+      expect.objectContaining({
+        'build-version': expect.any(String),
+        'build-sha': expect.any(String),
+        'build-timestamp': expect.any(String),
+      }),
+    )
+
+    expect(observedCommands).toContain('CopyObjectCommand')
+  })
 })
 
 describe('gatherHashedAssetUploadEntries', () => {
@@ -693,4 +798,5 @@ describe('gatherHashedAssetUploadEntries', () => {
       warnSpy.mockRestore()
     }
   })
+
 })
