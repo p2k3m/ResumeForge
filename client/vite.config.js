@@ -60,6 +60,29 @@ function loadPublishedCloudfrontMetadata() {
 
 const publishedCloudfrontMetadata = loadPublishedCloudfrontMetadata()
 
+function serializePublishedCloudfrontMetadata(metadata) {
+  const json = JSON.stringify(metadata ?? null)
+  if (!json) {
+    return 'null'
+  }
+
+  const escapeMap = new Map([
+    ['<', '\\u003c'],
+    ['>', '\\u003e'],
+    ['&', '\\u0026'],
+  ])
+
+  return json.replace(/[<>&\u2028\u2029]/g, (character) => {
+    if (character === '\u2028') {
+      return '\\u2028'
+    }
+    if (character === '\u2029') {
+      return '\\u2029'
+    }
+    return escapeMap.get(character) || character
+  })
+}
+
 function resolveApiBase(metadata) {
   const normalize = (value) => {
     if (typeof value !== 'string') {
@@ -100,6 +123,9 @@ function resolveApiBase(metadata) {
 const resolvedApiBase = resolveApiBase(publishedCloudfrontMetadata)
 
 process.env.VITE_API_BASE_URL = resolvedApiBase
+process.env.VITE_PUBLISHED_CLOUDFRONT_METADATA = serializePublishedCloudfrontMetadata(
+  publishedCloudfrontMetadata,
+)
 
 export default defineConfig({
   base: './',
