@@ -46,7 +46,7 @@ jobs:
     name: Publish static assets
     runs-on: ubuntu-latest
     environment:
-    name: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
+      name: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
     permissions:
       contents: read
       id-token: write
