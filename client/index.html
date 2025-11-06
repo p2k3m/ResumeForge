@@ -1389,7 +1389,9 @@
             }
 
             if (/\.cloudfront\.net$/.test(host)) {
-              return originPath ? true : false
+              // CloudFront viewers already map the origin path internally, so the
+              // public URL should not repeat it.
+              return false
             }
 
             const canonicalHosts = (() => {
