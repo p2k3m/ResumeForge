@@ -225,6 +225,44 @@ describe('uploadHashedIndexAssets', () => {
     }
   })
 
+  it('removes hashed index entry references from index.html before publishing', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+
+    const distDir = path.join(tempDir, 'dist-strip-index')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexContent = `
+      <html>
+        <head>
+          <script type="module" crossorigin src="./assets/index-abc12345.js"></script>
+          <link rel="stylesheet" href="./assets/index-abc12345.css" />
+        </head>
+        <body></body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexContent, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-abc12345.js'), 'console.log("hello")', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-abc12345.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(distDir, 'manifest.json'), JSON.stringify({ files: [] }), 'utf8')
+
+    await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      supplementaryFiles: [],
+      quiet: true,
+    })
+
+    const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
+    expect(updatedIndex).not.toMatch(/index-abc12345\.js/)
+    expect(updatedIndex).not.toMatch(/index-abc12345\.css/)
+  })
+
   it('recreates manifest.json from the local build when the remote copy is missing', async () => {
     process.env.STAGE_NAME = 'prod'
     process.env.DEPLOYMENT_ENVIRONMENT = 'prod'

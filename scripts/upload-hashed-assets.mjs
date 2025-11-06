@@ -37,6 +37,10 @@ const JS_ALIAS_RELATIVE_PATH = 'assets/index-latest.js'
 
 export const HASHED_INDEX_ASSET_FILENAME_PATTERN = /^index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/i
 const HASHED_INDEX_REFERENCE_PATTERN = /assets\/(index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'\s>]+)?/gi
+const HASHED_ENTRY_SCRIPT_PATTERN =
+  /<script\b[^>]*\bsrc=("|')[^"'>]*assets\/index-(?!latest(?:\.|$))[\w.-]+\.js(?:\?[^"'>]*)?\1[^>]*>\s*<\/script>\s*/gi
+const HASHED_ENTRY_STYLESHEET_PATTERN =
+  /<link\b[^>]*\bhref=("|')[^"'>]*assets\/index-(?!latest(?:\.|$))[\w.-]+\.css(?:\?[^"'>]*)?\1[^>]*>\s*/gi
 
 export function normalizeHashedAssetReference(candidate) {
   if (typeof candidate !== 'string') {
@@ -82,6 +86,41 @@ export function extractHashedIndexAssetReferences(html) {
   }
 
   return Array.from(assets).sort((a, b) => a.localeCompare(b))
+}
+
+function stripHashedEntryTagsFromHtml(html) {
+  if (typeof html !== 'string' || !html) {
+    return html
+  }
+
+  let updated = html.replace(HASHED_ENTRY_SCRIPT_PATTERN, '')
+  updated = updated.replace(HASHED_ENTRY_STYLESHEET_PATTERN, '')
+
+  return updated
+}
+
+async function stripHashedEntryTagsFromIndex({ indexHtmlPath }) {
+  if (!indexHtmlPath) {
+    return false
+  }
+
+  let html
+  try {
+    html = await fs.readFile(indexHtmlPath, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return false
+    }
+    throw error
+  }
+
+  const updated = stripHashedEntryTagsFromHtml(html)
+  if (typeof updated !== 'string' || updated === html) {
+    return false
+  }
+
+  await fs.writeFile(indexHtmlPath, updated, 'utf8')
+  return true
 }
 
 export function isHashedIndexAssetFilename(name) {
@@ -1232,6 +1271,8 @@ export async function uploadHashedIndexAssets(options = {}) {
     distDirectory,
     metadata: effectiveMetadata,
   })
+
+  await stripHashedEntryTagsFromIndex({ indexHtmlPath })
 
   const supplementaryFiles = Array.isArray(options?.supplementaryFiles)
     ? options.supplementaryFiles
