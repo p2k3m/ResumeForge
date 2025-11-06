@@ -30,6 +30,7 @@
     "test:sam": "sam local invoke AuditingFunction --event tests/sam/healthz-event.json",
     "publish:cloudfront-url": "node scripts/publish-cloudfront-url.mjs",
     "upload:static": "node scripts/upload-static-build.mjs",
+    "upload:hashed": "node scripts/upload-hashed-assets.mjs",
     "verify:cloudfront": "node scripts/verify-cloudfront.mjs",
     "verify:static": "node scripts/verify-static-deployment.mjs",
     "repair:cloudfront": "node scripts/repair-cloudfront-assets.mjs",

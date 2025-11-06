@@ -16,14 +16,6 @@ on:
       - '.github/workflows/publish-static-assets.yml'
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Target environment to publish static assets'
-        type: choice
-        default: prod
-        options:
-          - dev
-          - staging
-          - prod
       skip_verify:
         description: 'Skip the verification step after uploading assets'
         type: boolean
@@ -38,7 +30,7 @@ on:
         required: false
 
 concurrency:
-  group: publish-static-${{ github.event_name == 'push' && github.ref || github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
+  group: publish-static-${{ github.event_name == 'push' && github.ref || 'prod' }}
   cancel-in-progress: false
 
 jobs:
@@ -46,20 +38,18 @@ jobs:
     name: Publish static assets
     runs-on: ubuntu-latest
     environment:
-      name: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
+      name: prod
     permissions:
       contents: read
     env:
       NODE_VERSION: '20'
-      DEFAULT_STATIC_ENVIRONMENT: ${{ vars.DEFAULT_STATIC_ENVIRONMENT }}
-      TARGET_ENVIRONMENT: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
-      STAGE_NAME: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
-      DEPLOYMENT_ENVIRONMENT: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
+      STAGE_NAME: prod
+      DEPLOYMENT_ENVIRONMENT: prod
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       STATIC_ASSETS_BUCKET: ${{ secrets.STATIC_ASSETS_BUCKET }}
-      STATIC_ASSETS_PREFIX: ${{ format('static/client/{0}/latest', github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod') }}
+      STATIC_ASSETS_PREFIX: static/client/prod/latest
       DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
       S3_BUCKET: ${{ secrets.S3_BUCKET }}
       LOGS_BUCKET: ${{ secrets.LOGS_BUCKET }}
@@ -109,7 +99,9 @@ jobs:
           TARGET_STACK_NAME: ${{ env.STACK_NAME_INPUT != '' && env.STACK_NAME_INPUT || env.SAM_STACK_NAME_SECRET || '' }}
         run: |
           set -euo pipefail
-          args=(--environment "${TARGET_ENVIRONMENT}")
+          export STAGE_NAME="${STAGE_NAME:-prod}"
+          export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
+          args=()
           if [ "${SKIP_VERIFY_INPUT}" = 'true' ]; then
             args+=(--skip-verify)
           fi
@@ -129,7 +121,7 @@ jobs:
             echo '## Static asset publication'
             echo
             echo "* Status: ${{ job.status }}"
-            echo "* Environment: ${{ env.TARGET_ENVIRONMENT }}"
+            echo "* Environment: ${STAGE_NAME:-prod}"
             bucket="${STATIC_ASSETS_BUCKET:-${DATA_BUCKET:-${S3_BUCKET:-}}}"
             if [ -n "$bucket" ]; then
               echo "* Bucket: $bucket"
