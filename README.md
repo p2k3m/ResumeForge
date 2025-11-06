@@ -434,14 +434,18 @@ Add the following secrets under **Settings → Secrets and variables → Actions
 
 | Secret | Description |
 | --- | --- |
-| `AWS_ACCESS_KEY_ID` | Access key for the IAM user or role with deployment permissions. |
-| `AWS_SECRET_ACCESS_KEY` | Corresponding secret access key. |
+| `AWS_ACCESS_KEY_ID` | Access key for the IAM user or role with deployment permissions (omit when using OIDC role assumption). |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding secret access key (omit when using OIDC role assumption). |
+| `AWS_ROLE_TO_ASSUME` | Optional IAM role ARN for GitHub's OIDC provider. When set, access keys are not required. |
+| `AWS_SESSION_TOKEN` | Optional session token for temporary credentials (only when using access keys). |
 | `AWS_REGION` | Region that hosts the ResumeForge stack (e.g., `ap-south-1`). |
 | `RESUMEFORGE_STACK_NAME` | CloudFormation stack name used by `sam deploy` (e.g., `ResumeForge`). |
 | `RESUMEFORGE_DATA_BUCKET` | Globally unique S3 bucket name passed to the `DataBucketName` parameter. |
 | `GEMINI_API_KEY` | Gemini API key injected into Lambda and server environments. |
 
 Provide the same secrets when running locally by exporting environment variables (for example, through `.env` files that are excluded from version control).
+
+> **Tip:** Supply either `AWS_ROLE_TO_ASSUME` (for GitHub OIDC deployments) **or** the `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` pair. The workflows automatically fall back to access keys when a role ARN is not provided.
 
 Optional secrets:
 

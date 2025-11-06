@@ -58,6 +58,9 @@ jobs:
       DEPLOYMENT_ENVIRONMENT: ${{ github.event.inputs.environment || vars.DEFAULT_STATIC_ENVIRONMENT || 'prod' }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
       STATIC_ASSETS_BUCKET: ${{ secrets.STATIC_ASSETS_BUCKET }}
       DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
       S3_BUCKET: ${{ secrets.S3_BUCKET }}
@@ -75,8 +78,8 @@ jobs:
             echo 'AWS_REGION secret is required for publishing static assets.' >&2
             exit 1
           fi
-          if [ -z "${AWS_ROLE_TO_ASSUME:-}" ]; then
-            echo 'AWS_ROLE_TO_ASSUME secret is required to assume deployment credentials.' >&2
+          if [ -z "${AWS_ROLE_TO_ASSUME:-}" ] && { [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; }; then
+            echo 'Provide either AWS_ROLE_TO_ASSUME or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY for publishing static assets.' >&2
             exit 1
           fi
           if [ -z "${STATIC_ASSETS_BUCKET:-}" ] && [ -z "${DATA_BUCKET:-}" ] && [ -z "${S3_BUCKET:-}" ]; then
@@ -96,11 +99,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (federated)
+        if: env.AWS_ROLE_TO_ASSUME != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (access keys)
+        if: env.AWS_ROLE_TO_ASSUME == ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ env.AWS_SESSION_TOKEN }}
 
       - name: Run static asset pipeline
         env:
