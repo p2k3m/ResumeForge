@@ -223,6 +223,23 @@ function resolveRegion(metadata) {
   return 'us-east-1'
 }
 
+function resolveStackName(metadata) {
+  const candidates = [
+    process.env.SAM_STACK_NAME,
+    process.env.STACK_NAME,
+    process.env.RESUMEFORGE_STACK_NAME,
+    metadata?.stackName,
+  ]
+
+  for (const candidate of candidates) {
+    if (hasString(candidate)) {
+      return candidate.trim()
+    }
+  }
+
+  return ''
+}
+
 function buildContext(metadata, stageEnv) {
   const resolvedStage = normalizeStage(stageEnv?.stageName, metadata?.stage)
   const stageName = resolvedStage || resolveDefaultStage(metadata, stageEnv)
@@ -230,6 +247,7 @@ function buildContext(metadata, stageEnv) {
   const bucket = resolveBucket(metadata, stageEnv)
   const prefix = resolvePrefix(metadata, deploymentEnvironment)
   const region = resolveRegion(metadata)
+  const stackName = resolveStackName(metadata)
 
   if (!hasString(bucket)) {
     throw new Error('Unable to resolve the static asset bucket. Provide STATIC_ASSETS_BUCKET or populate config/published-cloudfront.json.')
@@ -254,6 +272,16 @@ function buildContext(metadata, stageEnv) {
 
   if (!hasString(process.env.S3_BUCKET)) {
     context.S3_BUCKET = bucket
+  }
+
+  if (hasString(stackName)) {
+    context.STACK_NAME = stackName
+    if (!hasString(process.env.SAM_STACK_NAME)) {
+      context.SAM_STACK_NAME = stackName
+    }
+    if (!hasString(process.env.RESUMEFORGE_STACK_NAME)) {
+      context.RESUMEFORGE_STACK_NAME = stackName
+    }
   }
 
   if (hasString(metadata?.distributionId)) {

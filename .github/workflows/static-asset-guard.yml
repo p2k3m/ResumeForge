@@ -97,7 +97,7 @@ jobs:
       - name: Rebuild and publish static assets
         if: steps.verify.outcome == 'failure' && env.AUTO_REPAIR_INPUT != 'false'
         env:
-          TARGET_STACK_NAME: ${{ env.STACK_NAME_INPUT != '' && env.STACK_NAME_INPUT || env.SAM_STACK_NAME_SECRET || '' }}
+          TARGET_STACK_NAME: ${{ env.STACK_NAME_INPUT != '' && env.STACK_NAME_INPUT || env.SAM_STACK_NAME_SECRET || env.SAM_STACK_NAME || env.STACK_NAME || '' }}
         run: |
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
