@@ -36,22 +36,6 @@ jobs:
       DEPLOYMENT_ENVIRONMENT: prod
       ALLOW_CLOUDFRONT_VERIFY_FAILURE: ${{ github.event.inputs.allow_cloudfront_failure }}
     steps:
-      - name: Validate deployment secrets
-        run: |
-          set -euo pipefail
-          if [ -z "${SAM_STACK_NAME:-}" ]; then
-            echo "SAM_STACK_NAME secret is required" >&2
-            exit 1
-          fi
-          if [ -z "${CLOUDFRONT_DISTRIBUTION_ID:-}" ]; then
-            echo "CLOUDFRONT_DISTRIBUTION_ID secret is required to invalidate the cache after deployment" >&2
-            exit 1
-          fi
-          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-            echo "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for deployments" >&2
-            exit 1
-          fi
-
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -66,9 +50,13 @@ jobs:
           set -euo pipefail
           node scripts/export-static-deployment-context.mjs --format=github >> "$GITHUB_ENV"
 
-      - name: Validate deployment context
+      - name: Validate deployment configuration
         run: |
           set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for deployments.' >&2
+            exit 1
+          fi
           if [ -z "${AWS_REGION:-${AWS_DEFAULT_REGION:-}}" ]; then
             echo 'AWS region could not be resolved. Ensure config/published-cloudfront.json includes originRegion.' >&2
             exit 1
@@ -79,6 +67,16 @@ jobs:
           fi
           if [ -z "${STATIC_ASSETS_PREFIX:-}" ]; then
             echo 'Unable to determine static asset prefix. Update config/published-cloudfront.json with originPath.' >&2
+            exit 1
+          fi
+          stack_name="${SAM_STACK_NAME:-${STACK_NAME:-}}"
+          if [ -z "$stack_name" ]; then
+            echo 'Unable to resolve the SAM stack name. Set the SAM_STACK_NAME secret or populate config/published-cloudfront.json with stackName.' >&2
+            exit 1
+          fi
+          distribution_id="${CLOUDFRONT_DISTRIBUTION_ID:-}"
+          if [ -z "$distribution_id" ]; then
+            echo 'Unable to resolve CloudFront distribution id. Set the CLOUDFRONT_DISTRIBUTION_ID secret or ensure config/published-cloudfront.json includes distributionId.' >&2
             exit 1
           fi
 

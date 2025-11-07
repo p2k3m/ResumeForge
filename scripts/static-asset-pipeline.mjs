@@ -159,6 +159,47 @@ export function parseStaticPipelineArgs(argv = []) {
   return options
 }
 
+function pickFirstNonEmpty(...candidates) {
+  for (const candidate of candidates) {
+    const normalized = normalizeString(candidate)
+    if (normalized) {
+      return normalized
+    }
+  }
+  return ''
+}
+
+async function resolvePipelineStackName(options = {}) {
+  const explicit = pickFirstNonEmpty(
+    options?.stackName,
+    process.env.SAM_STACK_NAME,
+    process.env.STACK_NAME,
+    process.env.RESUMEFORGE_STACK_NAME,
+  )
+
+  if (explicit) {
+    return explicit
+  }
+
+  try {
+    const metadata = await loadPublishedCloudfrontMetadata()
+    if (metadata && typeof metadata === 'object') {
+      const stackFromMetadata = pickFirstNonEmpty(metadata.stackName)
+      if (stackFromMetadata) {
+        return stackFromMetadata
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[static-pipeline] Unable to read published CloudFront metadata while resolving stack name: ${
+        error?.message || error
+      }`,
+    )
+  }
+
+  return ''
+}
+
 export function buildStaticPipelinePlan(options = {}) {
   const plan = []
 
@@ -356,16 +397,24 @@ export async function runStaticPipeline(options = {}) {
 
   applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: true })
 
-  const plan = buildStaticPipelinePlan(options)
+  const stackName = await resolvePipelineStackName(options)
+  const effectiveOptions = stackName ? { ...options, stackName } : { ...options }
+
+  if (stackName && !options.stackName) {
+    effectiveOptions.stackName = stackName
+    console.log(`[static-pipeline] Using stack ${stackName} from environment/metadata.`)
+  }
+
+  const plan = buildStaticPipelinePlan(effectiveOptions)
 
   for (const step of plan) {
     console.log(`\n[static-pipeline] Starting: ${step.label}`)
     if (step.type === 'cloudfront-verify') {
       await verifyCloudfrontDistribution({
-        explicitUrl: options.cloudfrontUrl,
-        assetPrefixes: options.assetPrefixes,
-        retries: options.cloudfrontRetries,
-        retryDelayMs: options.cloudfrontRetryDelayMs,
+        explicitUrl: effectiveOptions.cloudfrontUrl,
+        assetPrefixes: effectiveOptions.assetPrefixes,
+        retries: effectiveOptions.cloudfrontRetries,
+        retryDelayMs: effectiveOptions.cloudfrontRetryDelayMs,
       })
     } else {
       await runCommandStep(step)

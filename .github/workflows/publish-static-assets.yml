@@ -4,16 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'client/**'
-      - 'scripts/build-client.mjs'
-      - 'scripts/upload-static-build.mjs'
-      - 'scripts/verify-static-deployment.mjs'
-      - 'scripts/upload-hashed-assets.mjs'
-      - 'config/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/publish-static-assets.yml'
   workflow_dispatch:
     inputs:
       skip_verify:
@@ -100,7 +90,7 @@ jobs:
 
       - name: Run static asset pipeline
         env:
-          TARGET_STACK_NAME: ${{ env.STACK_NAME_INPUT != '' && env.STACK_NAME_INPUT || env.SAM_STACK_NAME_SECRET || '' }}
+          TARGET_STACK_NAME: ${{ env.STACK_NAME_INPUT != '' && env.STACK_NAME_INPUT || env.SAM_STACK_NAME_SECRET || env.SAM_STACK_NAME || env.STACK_NAME || '' }}
         run: |
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
@@ -129,6 +119,10 @@ jobs:
             bucket="${STATIC_ASSETS_BUCKET:-${DATA_BUCKET:-${S3_BUCKET:-}}}"
             if [ -n "$bucket" ]; then
               echo "* Bucket: $bucket"
+            fi
+            stack_name="${TARGET_STACK_NAME:-${STACK_NAME:-}}"
+            if [ -n "$stack_name" ]; then
+              echo "* Stack: $stack_name"
             fi
             echo "* Build version: ${{ env.BUILD_VERSION }}"
             if [ "${SKIP_VERIFY_INPUT}" = 'true' ]; then
