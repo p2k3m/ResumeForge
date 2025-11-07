@@ -39,10 +39,6 @@ jobs:
       - name: Validate deployment secrets
         run: |
           set -euo pipefail
-          if [ -z "${AWS_REGION:-}" ]; then
-            echo "AWS_REGION secret is required" >&2
-            exit 1
-          fi
           if [ -z "${SAM_STACK_NAME:-}" ]; then
             echo "SAM_STACK_NAME secret is required" >&2
             exit 1
@@ -65,6 +61,27 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Resolve deployment context
+        run: |
+          set -euo pipefail
+          node scripts/export-static-deployment-context.mjs --format=github >> "$GITHUB_ENV"
+
+      - name: Validate deployment context
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_REGION:-${AWS_DEFAULT_REGION:-}}" ]; then
+            echo 'AWS region could not be resolved. Ensure config/published-cloudfront.json includes originRegion.' >&2
+            exit 1
+          fi
+          if [ -z "${STATIC_ASSETS_BUCKET:-}" ]; then
+            echo 'Unable to determine static asset bucket. Populate config/published-cloudfront.json or set STATIC_ASSETS_BUCKET.' >&2
+            exit 1
+          fi
+          if [ -z "${STATIC_ASSETS_PREFIX:-}" ]; then
+            echo 'Unable to determine static asset prefix. Update config/published-cloudfront.json with originPath.' >&2
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
@@ -80,7 +97,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || env.AWS_DEFAULT_REGION }}
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 

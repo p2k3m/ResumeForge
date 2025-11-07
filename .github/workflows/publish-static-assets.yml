@@ -48,33 +48,12 @@ jobs:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      STATIC_ASSETS_BUCKET: ${{ secrets.STATIC_ASSETS_BUCKET }}
-      STATIC_ASSETS_PREFIX: static/client/prod/latest
-      DATA_BUCKET: ${{ secrets.DATA_BUCKET }}
-      S3_BUCKET: ${{ secrets.S3_BUCKET }}
-      LOGS_BUCKET: ${{ secrets.LOGS_BUCKET }}
       BUILD_VERSION: ${{ github.sha }}
       STACK_NAME_INPUT: ${{ github.event.inputs.stack_name || '' }}
       SAM_STACK_NAME_SECRET: ${{ secrets.SAM_STACK_NAME }}
       SKIP_VERIFY_INPUT: ${{ github.event.inputs.skip_verify || 'false' }}
       VERIFY_CLOUDFRONT_INPUT: ${{ github.event.inputs.verify_cloudfront || 'false' }}
     steps:
-      - name: Validate required secrets
-        run: |
-          set -euo pipefail
-          if [ -z "${AWS_REGION:-}" ]; then
-            echo 'AWS_REGION secret is required for publishing static assets.' >&2
-            exit 1
-          fi
-          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-            echo 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for publishing static assets.' >&2
-            exit 1
-          fi
-          if [ -z "${STATIC_ASSETS_BUCKET:-}" ] && [ -z "${DATA_BUCKET:-}" ] && [ -z "${S3_BUCKET:-}" ]; then
-            echo 'Provide STATIC_ASSETS_BUCKET (or DATA_BUCKET/S3_BUCKET) so assets can be uploaded.' >&2
-            exit 1
-          fi
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -84,13 +63,38 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Resolve deployment context
+        run: |
+          set -euo pipefail
+          node scripts/export-static-deployment-context.mjs --format=github >> "$GITHUB_ENV"
+
+      - name: Validate deployment configuration
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_REGION:-${AWS_DEFAULT_REGION:-}}" ]; then
+            echo 'AWS region could not be resolved. Ensure config/published-cloudfront.json includes originRegion.' >&2
+            exit 1
+          fi
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets are required for publishing static assets.' >&2
+            exit 1
+          fi
+          if [ -z "${STATIC_ASSETS_BUCKET:-}" ]; then
+            echo 'Unable to determine static asset bucket. Populate config/published-cloudfront.json or set STATIC_ASSETS_BUCKET.' >&2
+            exit 1
+          fi
+          if [ -z "${STATIC_ASSETS_PREFIX:-}" ]; then
+            echo 'Unable to determine static asset prefix. Update config/published-cloudfront.json with originPath.' >&2
+            exit 1
+          fi
+
       - name: Install dependencies
         run: npm ci
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || env.AWS_DEFAULT_REGION }}
           aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
 
