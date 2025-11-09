@@ -36,6 +36,8 @@ jobs:
       NODE_VERSION: '20'
       STAGE_NAME: prod
       DEPLOYMENT_ENVIRONMENT: prod
+      # Prevent uploader from auto-creating buckets; provision via IaC instead
+      DISABLE_BUCKET_AUTOCREATE: 'true'
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -96,6 +98,7 @@ jobs:
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
           export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
+          export DISABLE_BUCKET_AUTOCREATE="${DISABLE_BUCKET_AUTOCREATE:-true}"
           args=()
           if [ "${SKIP_VERIFY_INPUT}" = 'true' ]; then
             args+=(--skip-verify)

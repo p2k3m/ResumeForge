@@ -8,6 +8,7 @@ import {
   CopyObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  CreateBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
   S3Client,
@@ -294,6 +295,7 @@ async function generateIndexAliasUploadEntries({
   return uploads
 }
 
+// Ensure alias objects exist in S3 even if deleted (recreate from hashed source)
 async function ensureAliasObjectsInS3({
   s3,
   bucket,
@@ -331,9 +333,7 @@ async function ensureAliasObjectsInS3({
     }
 
     try {
-      await s3.send(
-        new HeadObjectCommand({ Bucket: bucket, Key: sourceKey }),
-      )
+      await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: sourceKey }))
     } catch (error) {
       if (isNotFoundError(error)) {
         throw new Error(
@@ -1356,7 +1356,50 @@ export async function uploadHashedIndexAssets(options = {}) {
     const statusCode = error?.$metadata?.httpStatusCode
     const errorCode = error?.name || error?.Code || error?.code
 
-    if (statusCode === 403 || errorCode === 'AccessDenied') {
+    if (statusCode === 404 || errorCode === 'NotFound' || errorCode === 'NoSuchBucket') {
+      const disableAutocreate = /^true$/i.test(
+        String(process.env.DISABLE_BUCKET_AUTOCREATE || '').trim(),
+      )
+      if (disableAutocreate) {
+        throw new Error(
+          `Bucket "${bucket}" does not exist. Provision it via infrastructure (IaC) or unset DISABLE_BUCKET_AUTOCREATE to allow runtime creation.`,
+        )
+      }
+      // Attempt to create the bucket automatically when it does not exist and autocreation is enabled.
+      const region = (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1').trim()
+      const createParams = { Bucket: bucket }
+      if (region && region !== 'us-east-1') {
+        createParams.CreateBucketConfiguration = { LocationConstraint: region }
+      }
+
+      if (!options?.quiet) {
+        console.warn(
+          `[upload-hashed-assets] Bucket "${bucket}" not found (creating in ${region})...`,
+        )
+      }
+
+      await s3.send(new CreateBucketCommand(createParams))
+
+      // Wait briefly for bucket to become available
+      const maxAttempts = 5
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          await s3.send(new HeadBucketCommand({ Bucket: bucket }))
+          break
+        } catch (e) {
+          if (attempt === maxAttempts) {
+            throw new Error(
+              `Created bucket "${bucket}" but it is not yet accessible. Please retry shortly.`,
+            )
+          }
+          await new Promise((r) => setTimeout(r, attempt * 300))
+        }
+      }
+
+      if (!options?.quiet) {
+        console.log(`[upload-hashed-assets] Bucket "${bucket}" is ready.`)
+      }
+    } else if (statusCode === 403 || errorCode === 'AccessDenied') {
       console.warn(
         `Warning: Unable to verify bucket "${bucket}" with HeadBucket (access denied). Continuing upload attempts – ensure the IAM policy allows PutObject and GetObject.`,
       )

@@ -120,9 +120,23 @@ Deployments still expect the following AWS SAM parameters:
 - `ResumeTableName` – DynamoDB table for metadata (defaults to `ResumeForge`).
 - `CreateDataBucket` – set to `false` when pointing at an existing bucket so the stack does not try to create it again (defaults to `true`).
 - `CreateResumeTable` – set to `false` when reusing a DynamoDB table created outside the stack (defaults to `true`).
+- `CreateStaticAssetsBucket` – set to `true` (now the default) to provision a dedicated S3 bucket for static client assets (hashed bundles, manifests, and CloudFront metadata). Set to `false` if you manage the bucket externally.
+- `StaticAssetsBucketName` – optional explicit name for the static assets bucket. When omitted, CloudFormation generates a unique name. Recommended for deterministic deployments.
 - `WebAclArn` – optional ARN of an AWS WAFv2 web ACL to associate with the CloudFront distribution for upload abuse protection. Leave blank to skip WAF attachment.
 
 Whether the stack creates the S3 bucket or reuses an existing one, it now attaches a bucket policy that allows the Lambda execution role to `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`, and `s3:ListBucket`. This ensures every artifact type (original uploads, generated PDFs, logs, and change histories) can be written without requiring out-of-band IAM changes.
+
+#### Static asset bucket management
+
+The stack now provisions a dedicated S3 bucket for static client assets (hashed JavaScript/CSS bundles, manifests, and CloudFront metadata) when `CreateStaticAssetsBucket` is `true` (the default). This separates immutable frontend artifacts from dynamic user content stored in the data bucket, simplifying cache policies and improving CloudFront performance.
+
+**Infrastructure-managed bucket (recommended):** Deploy the stack with `CreateStaticAssetsBucket=true` and optionally specify `StaticAssetsBucketName` for a predictable name. The upload scripts check the `DISABLE_BUCKET_AUTOCREATE` environment variable; when set to `true` (as in CI/CD workflows), the uploader will throw an error if the bucket does not exist, ensuring all resources are provisioned via CloudFormation rather than created at runtime.
+
+**Runtime fallback (local development):** If `DISABLE_BUCKET_AUTOCREATE` is unset or `false`, the upload script automatically creates the bucket when it detects a 404 response from S3. This fallback is useful during local development when you want to iterate quickly without updating the CloudFormation stack.
+
+**Workflow integration:** The deploy and publish-static-assets GitHub Actions workflows now set `DISABLE_BUCKET_AUTOCREATE=true` and pass `CreateStaticAssetsBucket=true` to `sam deploy`, guaranteeing the bucket is managed by infrastructure. If you deploy manually, either:
+- Rely on the default (`CreateStaticAssetsBucket=true`) and let CloudFormation provision the bucket.
+- Set `DISABLE_BUCKET_AUTOCREATE=false` locally to allow runtime bucket creation during development.
 
 ## IAM Policy
 Minimal permissions required by the server:

@@ -33,6 +33,8 @@ jobs:
       STAGE_NAME: prod
       DEPLOYMENT_ENVIRONMENT: prod
       ALLOW_CLOUDFRONT_VERIFY_FAILURE: "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_cloudfront_failure || 'false' }}"
+      # Prevent uploader from auto-creating buckets; provision via IaC instead
+      DISABLE_BUCKET_AUTOCREATE: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -129,6 +131,7 @@ jobs:
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
           export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
+          export DISABLE_BUCKET_AUTOCREATE="${DISABLE_BUCKET_AUTOCREATE:-true}"
           npm run upload:static
 
       - name: Upload hashed index bundles
@@ -136,6 +139,7 @@ jobs:
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
           export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
+          export DISABLE_BUCKET_AUTOCREATE="${DISABLE_BUCKET_AUTOCREATE:-true}"
           npm run upload:hashed
 
       - name: Verify static asset upload
@@ -143,6 +147,7 @@ jobs:
           set -euo pipefail
           export STAGE_NAME="${STAGE_NAME:-prod}"
           export DEPLOYMENT_ENVIRONMENT="${DEPLOYMENT_ENVIRONMENT:-prod}"
+          export DISABLE_BUCKET_AUTOCREATE="${DISABLE_BUCKET_AUTOCREATE:-true}"
           npm run verify:static -- --skip-cloudfront
 
       - name: Deploy SAM stack
@@ -154,6 +159,17 @@ jobs:
           if [ -n "${SAM_DEPLOY_ARGS:-}" ]; then
             # shellcheck disable=SC2206
             extra_args=(${SAM_DEPLOY_ARGS})
+          fi
+          # Ensure static assets bucket is provisioned by the stack with a stable name
+          if [ -n "${STATIC_ASSETS_BUCKET:-}" ]; then
+            extra_args+=(
+              --parameter-overrides
+              CreateStaticAssetsBucket=true
+              StaticAssetsBucketName="${STATIC_ASSETS_BUCKET}"
+            )
+          else
+            # Fall back to template default which now creates the bucket with generated name
+            extra_args+=( --parameter-overrides CreateStaticAssetsBucket=true )
           fi
           sam deploy \
             --template-file template.yaml \

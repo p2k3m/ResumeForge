@@ -68,7 +68,7 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
-    Default: 'false'
+    Default: 'true'
     Description: >-
       Set to 'true' to provision and manage the static asset bucket within this
       stack. When set to 'false', the deployment expects StaticAssetsBucketName
