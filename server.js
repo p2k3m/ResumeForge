@@ -60,7 +60,7 @@ import {
   S3_STORAGE_ERROR_MESSAGE,
   buildServiceErrorFallbackMessages
 } from './client/src/shared/serviceErrorContracts.js';
-import { MIMEType } from 'node:util';
+import MIMEType from 'whatwg-mimetype';
 import { renderTemplatePdf } from './lib/pdf/index.js';
 import { backstopPdfTemplates as runPdfTemplateBackstop } from './lib/pdf/backstop.js';
 import {
