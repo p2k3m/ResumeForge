@@ -1,6 +1,10 @@
 name: Deploy
 
 on:
+  push:
+    branches:
+      - main
+      - v2
   workflow_dispatch:
     inputs:
       skip_tests:
@@ -13,7 +17,7 @@ on:
         default: false
 
 concurrency:
-  group: deploy-prod
+  group: deploy-${{ github.ref || 'manual' }}
   cancel-in-progress: false
 
 jobs:
@@ -26,15 +30,9 @@ jobs:
       contents: read
     env:
       NODE_VERSION: '20'
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      SAM_STACK_NAME: ${{ secrets.SAM_STACK_NAME }}
-      SAM_DEPLOY_ARGS: ${{ secrets.SAM_DEPLOY_ARGS }}
-      CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
       STAGE_NAME: prod
       DEPLOYMENT_ENVIRONMENT: prod
-      ALLOW_CLOUDFRONT_VERIFY_FAILURE: ${{ github.event.inputs.allow_cloudfront_failure }}
+      ALLOW_CLOUDFRONT_VERIFY_FAILURE: "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_cloudfront_failure || 'false' }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,6 +42,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Export deployment secrets
+        env:
+          SECRET_AWS_REGION: ${{ secrets.AWS_REGION }} # actionlint: allow
+          SECRET_AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }} # actionlint: allow
+          SECRET_AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }} # actionlint: allow
+          SECRET_SAM_STACK_NAME: ${{ secrets.SAM_STACK_NAME }} # actionlint: allow
+          SECRET_SAM_DEPLOY_ARGS: ${{ secrets.SAM_DEPLOY_ARGS || '' }} # actionlint: allow
+          SECRET_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} # actionlint: allow
+        run: |
+          cat <<EOF >> "$GITHUB_ENV"
+          AWS_REGION=${SECRET_AWS_REGION}
+          AWS_ACCESS_KEY_ID=${SECRET_AWS_ACCESS_KEY_ID}
+          AWS_SECRET_ACCESS_KEY=${SECRET_AWS_SECRET_ACCESS_KEY}
+          SAM_STACK_NAME=${SECRET_SAM_STACK_NAME}
+          SAM_DEPLOY_ARGS=${SECRET_SAM_DEPLOY_ARGS}
+          CLOUDFRONT_DISTRIBUTION_ID=${SECRET_CLOUDFRONT_DISTRIBUTION_ID}
+          EOF
 
       - name: Resolve deployment context
         run: |
@@ -84,7 +100,7 @@ jobs:
         run: npm ci
 
       - name: Run verification suite
-        if: github.event.inputs.skip_tests != 'true'
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.skip_tests != 'true' }}
         run: npm run verify
 
       - name: Setup AWS SAM CLI
@@ -95,9 +111,9 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || env.AWS_DEFAULT_REGION }}
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION != '' && env.AWS_REGION || env.AWS_DEFAULT_REGION }} # actionlint: allow
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }} # actionlint: allow
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }} # actionlint: allow
 
       - name: Prepare deployment artifacts
         run: |
