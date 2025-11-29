@@ -421,7 +421,7 @@ async function ensureObjectSignedUrlAccessible({ s3, bucket, key }) {
   }
 
   try {
-    const response = await fetch(trimmedUrl, { method: 'HEAD' })
+    const response = await fetch(trimmedUrl, { method: 'GET' })
     if (!response.ok) {
       const status = response.status || 0
       const statusText = response.statusText ? ` ${response.statusText}` : ''
