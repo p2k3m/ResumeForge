@@ -411,22 +411,8 @@ function createVersionedUploadEntries(entries, versionLabel) {
 }
 
 function resolveObjectAcl(relativePath) {
-  if (typeof relativePath !== 'string' || !relativePath.trim()) {
-    return undefined
-  }
-
-  const normalized = relativePath.replace(/\\/g, '/').trim()
-  if (normalized.startsWith('assets/')) {
-    return 'public-read'
-  }
-
-  if (
-    normalized === 'api/published-cloudfront' ||
-    normalized === 'api/published-cloudfront.json'
-  ) {
-    return 'public-read'
-  }
-
+  // ACLs are not supported on buckets with "Bucket owner enforced" setting.
+  // Public access is managed via the bucket policy.
   return undefined
 }
 
@@ -456,8 +442,7 @@ export async function gatherHashedAssetUploadEntries({
 
   if (jsCount === 0) {
     throw new Error(
-      `[upload-hashed-assets] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${
-        jsCount === 1 ? '' : 's'
+      `[upload-hashed-assets] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${jsCount === 1 ? '' : 's'
       }.`,
     )
   }
@@ -1064,7 +1049,7 @@ async function resolveSupplementaryUploadEntries({
     const plural = missingRequired.size === 1 ? '' : 's'
     throw new Error(
       `[upload-hashed-assets] Required supplementary asset${plural} ${summary} missing from ${distDirectory}. ` +
-        'Ensure the client build embeds the CloudFront fallback metadata (run "npm run build:client" before uploading).',
+      'Ensure the client build embeds the CloudFront fallback metadata (run "npm run build:client" before uploading).',
     )
   }
 
@@ -1316,9 +1301,9 @@ export async function uploadHashedIndexAssets(options = {}) {
   const supplementaryFiles = Array.isArray(options?.supplementaryFiles)
     ? options.supplementaryFiles
     : [
-        'api/published-cloudfront',
-        'api/published-cloudfront.json',
-      ]
+      'api/published-cloudfront',
+      'api/published-cloudfront.json',
+    ]
 
   const supplementaryEntries = await resolveSupplementaryUploadEntries({
     distDirectory,
@@ -1548,8 +1533,7 @@ async function replicateUploadsToFallbackPrefixes({
     }
 
     console.log(
-      `[upload-hashed-assets] Propagated ${entries.length} asset${
-        entries.length === 1 ? '' : 's'
+      `[upload-hashed-assets] Propagated ${entries.length} asset${entries.length === 1 ? '' : 's'
       } to s3://${bucket}/${fallbackPrefix}/ from ${normalizedSource}.`,
     )
   }
@@ -1606,15 +1590,13 @@ async function verifyUploadedObjects({ s3, bucket, prefix, uploads }) {
       .join('\n')
 
     throw new Error(
-      `[upload-hashed-assets] ${failures.length} uploaded asset${
-        failures.length === 1 ? '' : 's'
+      `[upload-hashed-assets] ${failures.length} uploaded asset${failures.length === 1 ? '' : 's'
       } failed verification.\n${summary}`,
     )
   }
 
   console.log(
-    `[upload-hashed-assets] Verified ${uploads.length} uploaded asset${
-      uploads.length === 1 ? '' : 's'
+    `[upload-hashed-assets] Verified ${uploads.length} uploaded asset${uploads.length === 1 ? '' : 's'
     } are accessible in s3://${bucket}/${prefix}/`,
   )
 }

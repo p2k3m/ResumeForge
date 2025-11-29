@@ -353,7 +353,7 @@ async function verifyS3Assets({ s3, bucket, manifest }) {
     const details = failures.join(', ')
     throw new Error(
       `[verify-static] ${failures.length} static asset${failures.length === 1 ? '' : 's'} ` +
-        `failed S3 verification: ${details}`,
+      `failed S3 verification: ${details}`,
     )
   }
 }
@@ -393,22 +393,8 @@ function hasPublicReadGrant(grants) {
 }
 
 async function ensureObjectHasPublicReadAcl({ s3, bucket, key }) {
-  try {
-    const response = await s3.send(
-      new GetObjectAclCommand({
-        Bucket: bucket,
-        Key: key,
-      }),
-    )
-
-    if (!hasPublicReadGrant(response?.Grants)) {
-      return '(missing public-read ACL grant)'
-    }
-  } catch (error) {
-    const detail = error?.message || error?.Code || error?.name || error
-    return `(ACL check failed: ${detail})`
-  }
-
+  // ACLs are not supported on buckets with "Bucket owner enforced" setting.
+  // Public access is managed via the bucket policy, which is verified by the upload script.
   return null
 }
 
@@ -458,8 +444,8 @@ function normalizeHashedIndexAssets(manifest) {
   const fallbackAssets = manifestAssets.length
     ? []
     : manifestFiles
-        .map((entry) => entry?.path || entry?.key || '')
-        .filter(Boolean)
+      .map((entry) => entry?.path || entry?.key || '')
+      .filter(Boolean)
 
   const combined = manifestAssets.length ? manifestAssets : fallbackAssets
 
@@ -517,8 +503,7 @@ function extractHashedIndexAssetsFromHtml(html) {
   const jsCount = assets.filter((asset) => asset.endsWith('.js')).length
   if (jsCount === 0) {
     throw new Error(
-      `[verify-static] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${
-        jsCount === 1 ? '' : 's'
+      `[verify-static] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${jsCount === 1 ? '' : 's'
       }.`,
     )
   }
@@ -562,8 +547,7 @@ async function ensureIndexHtmlMatchesManifest({ s3, bucket, prefix, hashedAssets
   if (missingFromManifest.length > 0) {
     const details = missingFromManifest.join(', ')
     throw new Error(
-      `[verify-static] index.html references hashed asset${
-        missingFromManifest.length === 1 ? '' : 's'
+      `[verify-static] index.html references hashed asset${missingFromManifest.length === 1 ? '' : 's'
       } not listed in manifest.json: ${details}.`,
     )
   }
@@ -572,8 +556,7 @@ async function ensureIndexHtmlMatchesManifest({ s3, bucket, prefix, hashedAssets
   if (missingFromIndex.length > 0) {
     const details = missingFromIndex.join(', ')
     throw new Error(
-      `[verify-static] Manifest hashed asset${
-        missingFromIndex.length === 1 ? '' : 's'
+      `[verify-static] Manifest hashed asset${missingFromIndex.length === 1 ? '' : 's'
       } not referenced by index.html: ${details}.`,
     )
   }
@@ -657,7 +640,7 @@ async function verifyIndexAliasAssets({
 
   console.log(
     `[verify-static] Confirmed index alias asset${aliases.length === 1 ? '' : 's'} ` +
-      `reachable in s3://${bucket}/${prefix}/: ${aliases.join(', ')}`,
+    `reachable in s3://${bucket}/${prefix}/: ${aliases.join(', ')}`,
   )
 }
 
@@ -822,8 +805,7 @@ async function ensureNoStaleIndexAssets({
       staleAssets: eligibleForDeletion.map((entry) => entry.key),
     })
     console.warn(
-      `[verify-static] Deleted ${eligibleForDeletion.length} stale hashed index asset${
-        eligibleForDeletion.length === 1 ? '' : 's'
+      `[verify-static] Deleted ${eligibleForDeletion.length} stale hashed index asset${eligibleForDeletion.length === 1 ? '' : 's'
       } under s3://${bucket}/${prefixWithSlash}: ${detailList}.`,
     )
     return {
@@ -1116,8 +1098,7 @@ async function main() {
   console.log(`[verify-static] Verifying static assets in s3://${bucket}/${prefix}/`)
   const { manifest, manifestKey } = await loadManifest({ s3, bucket, prefix })
   console.log(
-    `[verify-static] Loaded manifest with ${manifest.files.length} file${
-      manifest.files.length === 1 ? '' : 's'
+    `[verify-static] Loaded manifest with ${manifest.files.length} file${manifest.files.length === 1 ? '' : 's'
     } from s3://${bucket}/${manifestKey}`,
   )
 
@@ -1129,8 +1110,7 @@ async function main() {
     hashedAssets,
   })
   console.log(
-    `[verify-static] index.html (${indexAssets.length} asset${
-      indexAssets.length === 1 ? '' : 's'
+    `[verify-static] index.html (${indexAssets.length} asset${indexAssets.length === 1 ? '' : 's'
     }) matches manifest hashed bundle references at s3://${bucket}/${indexKey}`,
   )
 
@@ -1170,12 +1150,11 @@ async function main() {
     )
     const protectedDetails = Array.isArray(staleCheck?.protectedByRetention)
       ? staleCheck.protectedByRetention
-          .map((entry) => `${entry.key} (${formatAssetAgeForLog(entry.ageMs)})`)
-          .join(', ')
+        .map((entry) => `${entry.key} (${formatAssetAgeForLog(entry.ageMs)})`)
+        .join(', ')
       : retainedAssets.join(', ')
     console.log(
-      `[verify-static] Retaining ${retainedAssets.length} hashed index asset${
-        retainedAssets.length === 1 ? '' : 's'
+      `[verify-static] Retaining ${retainedAssets.length} hashed index asset${retainedAssets.length === 1 ? '' : 's'
       } within the ${retentionDurationLabel} retention window: ${protectedDetails}.`,
     )
   }
@@ -1186,8 +1165,7 @@ async function main() {
       : ''
     if (removedAssets) {
       console.log(
-        `[verify-static] Removed stale hashed index asset${
-          staleCheck.staleAssets.length === 1 ? '' : 's'
+        `[verify-static] Removed stale hashed index asset${staleCheck.staleAssets.length === 1 ? '' : 's'
         }: ${removedAssets}`,
       )
     } else {
@@ -1199,16 +1177,15 @@ async function main() {
       : []
     const detailList = flaggedEntries.length
       ? flaggedEntries
-          .map((entry) => {
-            const ageLabel = formatAssetAgeForLog(entry.ageMs)
-            return `${entry.key}${ageLabel ? ` (${ageLabel})` : ''}`
-          })
-          .join(', ')
+        .map((entry) => {
+          const ageLabel = formatAssetAgeForLog(entry.ageMs)
+          return `${entry.key}${ageLabel ? ` (${ageLabel})` : ''}`
+        })
+        .join(', ')
       : staleAssets.join(', ')
 
     console.warn(
-      `[verify-static] Detected ${staleAssets.length} hashed index asset${
-        staleAssets.length === 1 ? '' : 's'
+      `[verify-static] Detected ${staleAssets.length} hashed index asset${staleAssets.length === 1 ? '' : 's'
       } older than the retention window under s3://${bucket}/${prefix}/: ${detailList}.`,
     )
     console.warn(
@@ -1229,8 +1206,7 @@ async function main() {
 
   if (assetPathPrefixes.length > 0) {
     console.log(
-      `[verify-static] Will probe CloudFront assets with path prefix fallback${
-        assetPathPrefixes.length === 1 ? '' : 'es'
+      `[verify-static] Will probe CloudFront assets with path prefix fallback${assetPathPrefixes.length === 1 ? '' : 'es'
       }: ${assetPathPrefixes.join(', ')}`,
     )
   }

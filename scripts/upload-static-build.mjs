@@ -214,16 +214,14 @@ export function extractHashedIndexAssets(html) {
   const jsCount = Array.from(assets).filter((asset) => asset.endsWith('.js')).length
   if (jsCount === 0) {
     throw createValidationError(
-      `[upload-static] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${
-        jsCount === 1 ? '' : 's'
+      `[upload-static] index.html must reference at least one hashed JS bundle. Found ${jsCount} JS asset${jsCount === 1 ? '' : 's'
       }.`,
     )
   }
 
   if (cssCount === 0) {
     throw createValidationError(
-      `[upload-static] index.html must reference at least one hashed CSS bundle. Found ${cssCount} CSS asset${
-        cssCount === 1 ? '' : 's'
+      `[upload-static] index.html must reference at least one hashed CSS bundle. Found ${cssCount} CSS asset${cssCount === 1 ? '' : 's'
       }.`,
     )
   }
@@ -248,8 +246,8 @@ function selectPrimaryAssetFromList(assets = [], extension) {
 function collectHashedAssetCandidates(hashedAssets = [], files = []) {
   const normalizedFromHtml = Array.isArray(hashedAssets)
     ? hashedAssets
-        .map((asset) => normalizeClientAssetPath(asset))
-        .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
+      .map((asset) => normalizeClientAssetPath(asset))
+      .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
     : []
 
   if (normalizedFromHtml.length) {
@@ -258,8 +256,8 @@ function collectHashedAssetCandidates(hashedAssets = [], files = []) {
 
   const normalizedFiles = Array.isArray(files)
     ? files
-        .map((asset) => normalizeClientAssetPath(asset))
-        .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
+      .map((asset) => normalizeClientAssetPath(asset))
+      .filter((asset) => HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(asset))
     : []
 
   if (!normalizedFiles.length) {
@@ -370,8 +368,7 @@ async function configureStaticWebsiteHosting({ s3, bucket }) {
     )
   } catch (error) {
     throw new Error(
-      `[upload-static] Failed to configure static website hosting on bucket "${bucket}": ${
-        error?.message || error
+      `[upload-static] Failed to configure static website hosting on bucket "${bucket}": ${error?.message || error
       }`,
     )
   }
@@ -1083,9 +1080,9 @@ async function ensureBucketPolicyAllowsPublicAssetAccess({
 
   const normalizedRequiredKeys = Array.isArray(requiredKeys)
     ? requiredKeys
-        .filter((key) => typeof key === 'string')
-        .map((key) => joinBucketPrefix(prefix, key))
-        .filter(Boolean)
+      .filter((key) => typeof key === 'string')
+      .map((key) => joinBucketPrefix(prefix, key))
+      .filter(Boolean)
     : []
 
   for (const key of normalizedRequiredKeys) {
@@ -1171,8 +1168,7 @@ async function purgeExistingObjects({
   }
 
   console.log(
-    `[upload-static] Removed ${deletionTargets.length} stale object${
-      deletionTargets.length === 1 ? '' : 's'
+    `[upload-static] Removed ${deletionTargets.length} stale object${deletionTargets.length === 1 ? '' : 's'
     } from s3://${bucket}/${prefixWithSlash}`,
   )
 }
@@ -1198,19 +1194,8 @@ function resolveContentType(relativePath) {
 }
 
 function resolveObjectAcl(relativePath) {
-  const normalized = normalizeClientAssetPath(relativePath)
-  if (normalized.startsWith('assets/')) {
-    return 'public-read'
-  }
-
-  if (
-    normalized === 'manifest.json' ||
-    normalized === 'api/published-cloudfront' ||
-    normalized === 'api/published-cloudfront.json'
-  ) {
-    return 'public-read'
-  }
-
+  // ACLs are not supported on buckets with "Bucket owner enforced" setting.
+  // Public access is managed via the bucket policy.
   return undefined
 }
 
@@ -1609,8 +1594,7 @@ async function main() {
     })
 
     console.log(
-      `[upload-static] Uploaded ${files.length + versionedUploads.length} static asset${
-        files.length + versionedUploads.length === 1 ? '' : 's'
+      `[upload-static] Uploaded ${files.length + versionedUploads.length} static asset${files.length + versionedUploads.length === 1 ? '' : 's'
       } to s3://${bucket}/${prefix}/`,
     )
   } catch (error) {
