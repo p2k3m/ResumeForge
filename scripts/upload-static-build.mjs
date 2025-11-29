@@ -193,11 +193,11 @@ export function extractHashedIndexAssets(html) {
   }
 
   const assetPattern =
-    /(?:src|href)=["']([^"']*assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js))(?:\?[^"'>\s]+)?["']/gi
+    /assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\?[^"'\s>]+)?/gi
   const assets = new Set()
   let match
   while ((match = assetPattern.exec(html)) !== null) {
-    const [, captured] = match
+    const [captured] = match
     if (captured) {
       const normalized = normalizeClientAssetPath(captured.replace(/\?.*$/, ''))
       if (HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(normalized)) {

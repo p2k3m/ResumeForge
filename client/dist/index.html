@@ -4,6 +4,74 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="resumeforge-api-base" content="https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod" />
+    <script id="resumeforge-cloudfront-metadata">window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = {"success":true,"cloudfront":{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2HWMZRQR39W0","apiGatewayUrl":"https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}};</script>
+    <script>
+      ;(function seedPublishedCloudfrontMetadata() {
+        const parseInlineMetadata = () => {
+          try {
+            if (typeof window === 'undefined') {
+              return null
+            }
+
+            const existing = window.__PUBLISHED_CLOUDFRONT_METADATA__
+            if (existing && typeof existing === 'object') {
+              return existing
+            }
+          } catch (error) {
+            // Ignore global inspection failures.
+          }
+
+          try {
+            const script = document.getElementById('resumeforge-cloudfront-metadata')
+            if (!script) {
+              return null
+            }
+
+            const raw =
+              typeof script.textContent === 'string'
+                ? script.textContent
+                : typeof script.innerText === 'string'
+                  ? script.innerText
+                  : ''
+
+            const trimmed = raw ? raw.trim() : ''
+            if (!trimmed) {
+              return null
+            }
+
+            const parsed = JSON.parse(trimmed)
+            return parsed && typeof parsed === 'object' ? parsed : null
+          } catch (error) {
+            try {
+              console.warn('Unable to parse inline CloudFront metadata.', error)
+            } catch (loggingError) {
+              // Ignore logging failures in constrained environments.
+            }
+            return null
+          }
+        }
+
+        const metadata = parseInlineMetadata()
+        if (!metadata) {
+          return
+        }
+
+        try {
+          if (typeof window === 'undefined') {
+            return
+          }
+
+          window.__PUBLISHED_CLOUDFRONT_METADATA__ = metadata
+
+          const current = window.__RESUMEFORGE_CLOUDFRONT_METADATA__
+          if (!current || typeof current !== 'object') {
+            window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = metadata
+          }
+        } catch (error) {
+          // Ignore assignment errors in restricted environments.
+        }
+      })();
+    </script>
     <script>
       ;(function setResumeForgeApiBase() {
         const resolveFallbackApiBase = () => {
@@ -188,10 +256,9 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-0da0d266.js"></script>
-    <link rel="stylesheet" href="./assets/index-1e47f298.css">
-  <script id="resumeforge-cloudfront-metadata">window.__RESUMEFORGE_CLOUDFRONT_METADATA__ = {"success":true,"cloudfront":{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2HWMZRQR39W0","apiGatewayUrl":"https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}};</script>
-</head>
+    <script type="module" crossorigin src="./assets/index-70ce539f.js"></script>
+    <link rel="stylesheet" href="./assets/index-88182d50.css">
+  </head>
   <body>
     <div id="root"></div>
     <section
@@ -219,6 +286,10 @@
         Metadata last updated at <time data-cloudfront-updated></time>
       </p>
       <input type="hidden" name="resumeforge-backup-api-base" data-backup-api-base value="https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod" />
+      <input type="hidden" data-cloudfront-origin-bucket value="resume-forge-app-2025" />
+      <input type="hidden" data-cloudfront-origin-region value="ap-south-1" />
+      <input type="hidden" data-cloudfront-origin-path value="/static/client/prod/latest" />
+      <input type="hidden" data-cloudfront-origin-url value="https://d109hwmzrqr39w.cloudfront.net" />
     </section>
     <div
       id="static-asset-warning"
@@ -238,8 +309,8 @@
         access.
       </p>
       <p class="static-asset-warning__body">
-        Support engineers should rebuild and republish the client bundles to S3/CloudFront and verify the upload
-        completed successfully:
+        Support engineers should rebuild and republish the client bundles to S3/CloudFront and verify the
+        upload completed successfully:
         <code>npm run build:client &amp;&amp; npm run upload:static &amp;&amp; npm run verify:static</code>. See
         <a href="https://github.com/ResumeForge/ResumeForge/blob/main/docs/troubleshooting-cloudfront.md" target="_blank" rel="noopener noreferrer">
           CloudFront troubleshooting
@@ -261,6 +332,34 @@
               input.setAttribute('value', nextValue)
             }
           })
+        }
+
+        const readDataInputValue = (selector) => {
+          if (!selector) {
+            return ''
+          }
+
+          try {
+            const input = document.querySelector(selector)
+            if (!input) {
+              return ''
+            }
+
+            if (typeof input.value === 'string' && input.value.trim()) {
+              return input.value.trim()
+            }
+
+            if (typeof input.getAttribute === 'function') {
+              const attributeValue = input.getAttribute('value')
+              if (typeof attributeValue === 'string' && attributeValue.trim()) {
+                return attributeValue.trim()
+              }
+            }
+          } catch (error) {
+            // Ignore selector resolution failures in constrained environments.
+          }
+
+          return ''
         }
 
         const initialBackupApiBase = (() => {
@@ -570,6 +669,49 @@
               : inlineMetadata
           }
 
+          const fallbackMetadata = (() => {
+            const bucket = readDataInputValue('input[data-cloudfront-origin-bucket]')
+            const region = readDataInputValue('input[data-cloudfront-origin-region]')
+            const originPath = readDataInputValue('input[data-cloudfront-origin-path]')
+            const cloudfrontUrl = readDataInputValue('input[data-cloudfront-origin-url]')
+
+            if (!bucket && !region && !originPath && !cloudfrontUrl) {
+              return null
+            }
+
+            const backupApiBase = (() => {
+              if (initialBackupApiBase) {
+                return initialBackupApiBase
+              }
+
+              try {
+                const meta = document.querySelector('meta[name="resumeforge-api-base"]')
+                if (meta && typeof meta.getAttribute === 'function') {
+                  const value = meta.getAttribute('content')
+                  if (typeof value === 'string' && value.trim()) {
+                    return value.trim()
+                  }
+                }
+              } catch (error) {
+                // Ignore metadata lookup failures when resolving fallback CloudFront metadata.
+              }
+
+              return ''
+            })()
+
+            return {
+              originBucket: bucket || '',
+              originRegion: region || '',
+              originPath: originPath || '',
+              url: cloudfrontUrl || '',
+              apiGatewayUrl: backupApiBase || ''
+            }
+          })()
+
+          if (fallbackMetadata) {
+            return fallbackMetadata
+          }
+
           return null
         }
 
@@ -849,7 +991,9 @@
             } else {
               candidate = parsed.href
             }
-          } catch (error) {}
+          } catch (error) {
+            // Ignore URL parsing failures and fall back to manual normalization.
+          }
 
           if (
             sameOrigin ||
@@ -1150,7 +1294,7 @@
                 ? window.__RESUMEFORGE_API_BASE_URL__.trim()
                 : ''
             if (explicitGlobal) {
-              addCandidate(explicitGlobal, { prioritize: true, allowAlias: false })
+              addCandidate(explicitGlobal, { prioritize: true })
             }
           } catch (error) {
             // Ignore global override parsing issues.
@@ -1161,7 +1305,6 @@
             if (meta && typeof meta.getAttribute === 'function') {
               addCandidate(meta.getAttribute('content'), {
                 prioritize: true,
-                allowAlias: false,
               })
             }
           } catch (error) {
@@ -1178,7 +1321,7 @@
                     : typeof input.getAttribute === 'function'
                       ? input.getAttribute('value')
                       : ''
-                addCandidate(value, { prioritize: true, allowAlias: false })
+                addCandidate(value, { prioritize: true })
               }
             })
           } catch (error) {
@@ -1843,6 +1986,7 @@
                 typeof metadata.originBucket === 'string' && metadata.originBucket.trim()
                   ? metadata.originBucket.trim()
                   : ''
+
               if (bucket) {
                 const originPath = normalizeAliasOriginPath(metadata.originPath)
                 const regionHints = new Set()
@@ -1855,9 +1999,11 @@
                     regionHints.add(normalized)
                   }
                 }
+
                 addRegionHint(metadata.originRegion)
                 addRegionHint(extractAwsRegionFromUrl(metadata.apiGatewayUrl))
                 addRegionHint(extractAwsRegionFromUrl(metadata.url))
+
                 const bucketBases = buildS3BaseCandidates(bucket, Array.from(regionHints))
                 bucketBases.forEach((base) => {
                   appendBase(base)
@@ -3197,336 +3343,6 @@
         })
       })()
     </script>
-    <script type="module">
-      const DEV_ENTRY_SOURCE = '/src/main.jsx'
-      const PROD_ENTRY_SOURCE = '/assets/index-latest.js'
-      const PROD_STYLESHEET_HREF =
-        typeof window !== 'undefined' && window.__RESUMEFORGE_HAS_INDEX_CSS__
-          ? '/assets/index-latest.css'
-          : ''
-
-      const detectDevEnvironment = () => {
-        try {
-          return Boolean(import.meta?.env?.DEV)
-        } catch (error) {
-          if (typeof window !== 'undefined' && window.location) {
-            const host = window.location.hostname || ''
-            return host === 'localhost' || host === '127.0.0.1'
-          }
-          return false
-        }
-      }
-
-      const normalizeProxyBase = (value) => {
-        if (typeof value !== 'string') {
-          return ''
-        }
-
-        const trimmed = value.trim()
-        if (!trimmed) {
-          return ''
-        }
-
-        try {
-          const resolved = new URL(trimmed, window.location.href)
-          const pathname = resolved.pathname.replace(/\/+$/, '')
-          return `${resolved.origin}${pathname}`
-        } catch (error) {
-          return ''
-        }
-      }
-
-      const extractApiBaseFromMetadata = (metadata) => {
-        if (!metadata || typeof metadata !== 'object') {
-          return ''
-        }
-
-        const candidate =
-          (typeof metadata.cloudfront === 'object' && metadata.cloudfront
-            ? metadata.cloudfront.apiGatewayUrl || metadata.cloudfront.url
-            : metadata.apiGatewayUrl || metadata.url) || ''
-
-        return typeof candidate === 'string' ? candidate : ''
-      }
-
-      const resolveProxyBaseCandidates = () => {
-        const bases = []
-        const seen = new Set()
-
-        const addCandidate = (raw) => {
-          const normalized = normalizeProxyBase(raw)
-          if (!normalized || seen.has(normalized)) {
-            return false
-          }
-          seen.add(normalized)
-          bases.push(normalized)
-          return true
-        }
-
-        try {
-          if (typeof window !== 'undefined') {
-            addCandidate(window.__RESUMEFORGE_API_BASE_URL__)
-          }
-        } catch (error) {
-          // Ignore failures when probing the API base global.
-        }
-
-        try {
-          if (typeof window !== 'undefined') {
-            const degraded = window.__RESUMEFORGE_CLOUDFRONT_DEGRADE__
-            if (degraded && typeof degraded === 'object') {
-              addCandidate(degraded.backupApiGatewayUrl)
-            }
-          }
-        } catch (error) {
-          // Ignore degraded state parsing failures in constrained environments.
-        }
-
-        try {
-          if (typeof window !== 'undefined') {
-            addCandidate(extractApiBaseFromMetadata(window.__RESUMEFORGE_CLOUDFRONT_METADATA__))
-          }
-        } catch (error) {
-          // Ignore runtime metadata parsing failures.
-        }
-
-        try {
-          if (typeof __PUBLISHED_CLOUDFRONT_METADATA__ !== 'undefined') {
-            addCandidate(extractApiBaseFromMetadata(__PUBLISHED_CLOUDFRONT_METADATA__))
-          }
-        } catch (error) {
-          // Ignore published metadata probes when not defined.
-        }
-
-        try {
-          const meta = document.querySelector('meta[name="resumeforge-api-base"]')
-          if (meta && typeof meta.getAttribute === 'function') {
-            addCandidate(meta.getAttribute('content'))
-          }
-        } catch (error) {
-          // Ignore meta tag extraction failures.
-        }
-
-        try {
-          const inputs = document.querySelectorAll('input[data-backup-api-base]')
-          inputs.forEach((input) => {
-            if (!input) {
-              return
-            }
-
-            const value =
-              typeof input.value === 'string'
-                ? input.value
-                : typeof input.getAttribute === 'function'
-                  ? input.getAttribute('value')
-                  : ''
-
-            addCandidate(value)
-          })
-        } catch (error) {
-          // Ignore backup input parsing failures.
-        }
-
-        try {
-          if (typeof window !== 'undefined') {
-            const host = typeof window.location?.hostname === 'string' ? window.location.hostname : ''
-            if (host && /\.execute-api\./i.test(host)) {
-              addCandidate(window.location?.origin)
-            }
-          }
-        } catch (error) {
-          // Ignore location probing failures.
-        }
-
-        return bases
-      }
-
-      const buildStaticProxyUrl = (base, assetPath) => {
-        const normalizedBase = normalizeProxyBase(base)
-        if (!normalizedBase) {
-          return ''
-        }
-
-        if (typeof assetPath !== 'string') {
-          return ''
-        }
-
-        let sanitized = assetPath.trim()
-        if (!sanitized) {
-          return ''
-        }
-
-        while (sanitized.startsWith('../')) {
-          sanitized = sanitized.slice(3)
-        }
-        while (sanitized.startsWith('./')) {
-          sanitized = sanitized.slice(2)
-        }
-
-        sanitized = sanitized.replace(/^\/+/, '')
-        if (!sanitized) {
-          return ''
-        }
-
-        return `${normalizedBase}/api/static-proxy?asset=${encodeURIComponent(sanitized)}`
-      }
-
-      const appendStylesheet = (href) => {
-        if (typeof href !== 'string' || !href.trim()) {
-          return Promise.resolve()
-        }
-
-        return new Promise((resolve, reject) => {
-          const link = document.createElement('link')
-          link.rel = 'stylesheet'
-          link.href = href
-          link.setAttribute('data-src', href)
-          link.dataset.resumeforgeEntry = 'true'
-
-          link.addEventListener('load', () => resolve(), { once: true })
-          link.addEventListener(
-            'error',
-            (event) => {
-              reject(event?.error || new Error(`Failed to load stylesheet: ${href}`))
-            },
-            { once: true }
-          )
-
-          document.head.appendChild(link)
-        })
-      }
-
-      const appendModuleScript = (src) => {
-        if (typeof src !== 'string' || !src.trim()) {
-          return Promise.reject(new Error('Missing module source.'))
-        }
-
-        return new Promise((resolve, reject) => {
-          const script = document.createElement('script')
-          script.type = 'module'
-          script.async = false
-          script.src = src
-          script.setAttribute('data-src', src)
-          script.dataset.resumeforgeEntry = 'true'
-
-          script.addEventListener('load', () => resolve(), { once: true })
-          script.addEventListener(
-            'error',
-            (event) => {
-              reject(event?.error || new Error(`Failed to load module script: ${src}`))
-            },
-            { once: true }
-          )
-
-          document.body.appendChild(script)
-        })
-      }
-
-      const loadStylesheetWithFallback = async (href) => {
-        if (typeof href !== 'string' || !href.trim()) {
-          return
-        }
-
-        try {
-          await appendStylesheet(href)
-          return
-        } catch (error) {
-          console.warn('ResumeForge entry stylesheet failed to load.', {
-            source: href,
-            error,
-          })
-        }
-
-        const candidates = resolveProxyBaseCandidates()
-        for (const base of candidates) {
-          const proxyUrl = buildStaticProxyUrl(base, href)
-          if (!proxyUrl) {
-            continue
-          }
-
-          try {
-            console.warn('Retrying ResumeForge entry stylesheet via static proxy fallback.', {
-              source: href,
-              proxy: proxyUrl,
-              base,
-            })
-            await appendStylesheet(proxyUrl)
-            return
-          } catch (proxyError) {
-            console.warn('ResumeForge entry stylesheet static proxy fallback failed.', {
-              source: href,
-              proxy: proxyUrl,
-              base,
-              error: proxyError,
-            })
-          }
-        }
-
-        throw new Error(`Unable to load stylesheet: ${href}`)
-      }
-
-      const loadModuleWithFallback = async (src) => {
-        try {
-          await appendModuleScript(src)
-          return
-        } catch (error) {
-          console.warn('ResumeForge entry module failed to load.', {
-            source: src,
-            error,
-          })
-        }
-
-        const candidates = resolveProxyBaseCandidates()
-        for (const base of candidates) {
-          const proxyUrl = buildStaticProxyUrl(base, src)
-          if (!proxyUrl) {
-            continue
-          }
-
-          try {
-            console.warn('Retrying ResumeForge entry module via static proxy fallback.', {
-              source: src,
-              proxy: proxyUrl,
-              base,
-            })
-            await appendModuleScript(proxyUrl)
-            return
-          } catch (proxyError) {
-            console.warn('ResumeForge entry module static proxy fallback failed.', {
-              source: src,
-              proxy: proxyUrl,
-              base,
-              error: proxyError,
-            })
-          }
-        }
-
-        throw new Error(`Unable to load module script: ${src}`)
-      }
-
-      const bootstrap = async () => {
-        const devEnvironment = detectDevEnvironment()
-
-        if (devEnvironment) {
-          await appendModuleScript(DEV_ENTRY_SOURCE)
-          return
-        }
-
-        try {
-          await loadStylesheetWithFallback(PROD_STYLESHEET_HREF)
-        } catch (error) {
-          console.warn('ResumeForge entry stylesheet fallback exhausted.', {
-            source: PROD_STYLESHEET_HREF,
-            error,
-          })
-        }
-
-        await loadModuleWithFallback(PROD_ENTRY_SOURCE)
-      }
-
-      bootstrap().catch((error) => {
-        console.error('ResumeForge client bootstrap failed.', error)
-      })
-    </script>
+    
   </body>
 </html>
