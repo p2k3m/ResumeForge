@@ -196,15 +196,22 @@ export function extractHashedIndexAssets(html) {
     /assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\?[^"'\s>]+)?/gi
   const assets = new Set()
   let match
+  console.log('[DEBUG] Starting asset extraction...')
   while ((match = assetPattern.exec(html)) !== null) {
     const [captured] = match
+    console.log('[DEBUG] Found match:', captured)
     if (captured) {
       const normalized = normalizeClientAssetPath(captured.replace(/\?.*$/, ''))
+      console.log('[DEBUG] Normalized:', normalized)
       if (HASHED_INDEX_ASSET_RELATIVE_PATTERN.test(normalized)) {
+        console.log('[DEBUG] Pattern matched, adding to assets.')
         assets.add(normalized)
+      } else {
+        console.log('[DEBUG] Pattern mismatch for:', normalized)
       }
     }
   }
+  console.log('[DEBUG] Extraction complete. Assets found:', assets.size)
 
   if (assets.size === 0) {
     throw createValidationError('[upload-static] index.html does not reference any hashed index assets.')
@@ -287,6 +294,7 @@ async function gatherClientAssetFiles() {
   await ensureFileExists(serviceWorkerPath, { label: 'service worker' })
 
   const indexHtml = await readFile(clientIndexPath, 'utf8')
+  console.log('[DEBUG] index.html content (first 1000 chars):', indexHtml.slice(0, 1000))
   const hashedAssets = extractHashedIndexAssets(indexHtml)
 
   for (const assetPath of hashedAssets) {
