@@ -70,8 +70,12 @@ function isNotFoundError(error) {
 
 export function extractHashedIndexAssetReferences(html) {
   if (typeof html !== 'string') {
+    console.log('[debug] html is not a string:', typeof html)
     return []
   }
+  console.log('[debug] html length:', html.length)
+  console.log('[debug] html preview:', html.substring(0, 500))
+
 
   HASHED_INDEX_REFERENCE_PATTERN.lastIndex = 0
   const assets = new Set()
@@ -422,7 +426,9 @@ export async function gatherHashedAssetUploadEntries({
 } = {}) {
   let html
   try {
+    console.log('[debug] reading index from:', indexHtmlPath)
     html = await fs.readFile(indexHtmlPath, 'utf8')
+
   } catch (error) {
     if (error?.code === 'ENOENT') {
       throw new Error(
@@ -434,7 +440,12 @@ export async function gatherHashedAssetUploadEntries({
 
   const referencedAssets = extractHashedIndexAssetReferences(html)
   if (!referencedAssets.length) {
-    throw new Error('[upload-hashed-assets] index.html does not reference any hashed index assets.')
+    const preview = html.length > 500 ? `${html.substring(0, 500)}...` : html
+    throw new Error(
+      `[upload-hashed-assets] index.html does not reference any hashed index assets.\n` +
+      `HTML Preview (${html.length} bytes):\n${preview}\n\n` +
+      `Tip: If this script previously failed, index.html might have been modified. Run "npm run build:client" to restore it.`
+    )
   }
 
   const cssCount = referencedAssets.filter((asset) => asset.endsWith('.css')).length
@@ -1296,7 +1307,7 @@ export async function uploadHashedIndexAssets(options = {}) {
     metadata: effectiveMetadata,
   })
 
-  await stripHashedEntryTagsFromIndex({ indexHtmlPath })
+
 
   const supplementaryFiles = Array.isArray(options?.supplementaryFiles)
     ? options.supplementaryFiles
@@ -1332,7 +1343,13 @@ export async function uploadHashedIndexAssets(options = {}) {
     return { uploaded: [] }
   }
 
-  const s3 = new S3Client({})
+  const region =
+    process.env.AWS_REGION ||
+    effectiveMetadata?.originRegion ||
+    (effectiveMetadata?.cloudfront?.originRegion) ||
+    'us-east-1'
+
+  const s3 = new S3Client({ region })
   const { bucket, prefix } = configuration
 
   try {
@@ -1451,6 +1468,8 @@ export async function uploadHashedIndexAssets(options = {}) {
     fallbackPrefixes: configuration.fallbackPrefixes,
     uploads,
   })
+
+  await stripHashedEntryTagsFromIndex({ indexHtmlPath })
 
   if (!options?.quiet) {
     const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
