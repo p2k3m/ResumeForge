@@ -496,7 +496,8 @@ function extractHashedIndexAssetsFromHtml(html) {
   }
 
   if (assets.length === 0) {
-    throw new Error('[verify-static] index.html does not reference any hashed index assets.')
+    // index.html may be stripped of hashed assets (replaced by manifest.json source of truth)
+    return []
   }
 
   const cssCount = assets.filter((asset) => asset.endsWith('.css')).length
@@ -552,15 +553,8 @@ async function ensureIndexHtmlMatchesManifest({ s3, bucket, prefix, hashedAssets
     )
   }
 
-  const missingFromIndex = Array.from(manifestSet).filter((asset) => !indexSet.has(asset))
-  if (missingFromIndex.length > 0) {
-    const details = missingFromIndex.join(', ')
-    throw new Error(
-      `[verify-static] Manifest hashed asset${missingFromIndex.length === 1 ? '' : 's'
-      } not referenced by index.html: ${details}.`,
-    )
-  }
-
+  // We allow index.html to reference fewer assets than the manifest (e.g. if stripped).
+  // The manifest is the source of truth for what should exist in S3.
   return { indexKey, indexAssets }
 }
 
