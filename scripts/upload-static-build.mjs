@@ -1039,20 +1039,23 @@ async function ensureBucketPolicyAllowsPublicAssetAccess({
     const errorCode = (error?.name || error?.Code || error?.code || '').trim()
 
     if (errorCode === 'NoSuchBucketPolicy' || statusCode === 404) {
-      throw new Error(
-        `[upload-static] Bucket "${bucket}" does not have a bucket policy. Configure a policy that allows public s3:GetObject access to s3://${bucket}/${prefix}/ before deploying.`,
+      console.warn(
+        `Warning: Bucket "${bucket}" does not have a bucket policy. Ensure a policy allows public s3:GetObject access to s3://${bucket}/${prefix}/, or that CloudFront is configured correctly.`,
       )
+      return
     }
 
     if (statusCode === 403 || errorCode === 'AccessDenied') {
-      throw new Error(
-        `[upload-static] Unable to read the bucket policy for "${bucket}" (access denied). Grant GetBucketPolicy permission or confirm the policy allows public reads for s3://${bucket}/${prefix}/.`,
+      console.warn(
+        `Warning: Unable to read the bucket policy for "${bucket}" (access denied). Ensure the policy allows public reads for s3://${bucket}/${prefix}/.`,
       )
+      return
     }
 
-    throw new Error(
-      `[upload-static] Unable to load the bucket policy for "${bucket}": ${error?.message || error}`,
+    console.warn(
+      `Warning: Unable to load the bucket policy for "${bucket}": ${error?.message || error}`,
     )
+    return
   }
 
   const policyString = typeof response?.Policy === 'string' ? response.Policy.trim() : ''
