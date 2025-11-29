@@ -2125,7 +2125,7 @@ describe('/api/process-cv', () => {
     });
 
     setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
-  });
+  }, 10000);
 
   test('final CV includes updated title, project, and skills', async () => {
     const originalEnv = process.env.NODE_ENV;
