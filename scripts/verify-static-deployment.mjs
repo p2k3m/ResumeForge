@@ -1087,7 +1087,8 @@ async function main() {
     return
   }
 
-  const s3 = new S3Client({})
+  const region = (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1').trim()
+  const s3 = new S3Client({ region })
 
   console.log(`[verify-static] Verifying static assets in s3://${bucket}/${prefix}/`)
   const { manifest, manifestKey } = await loadManifest({ s3, bucket, prefix })
