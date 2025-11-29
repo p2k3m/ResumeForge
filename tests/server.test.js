@@ -9,6 +9,8 @@ import { createTextDigest } from '../lib/resume/utils.js';
 
 process.env.NODE_ENV = 'test';
 process.env.DEPLOYMENT_ENVIRONMENT = 'test';
+delete process.env.DATA_BUCKET;
+delete process.env.STATIC_ASSETS_BUCKET;
 process.env.S3_BUCKET = 'test-bucket';
 process.env.GEMINI_API_KEY = 'test-key';
 process.env.AWS_REGION = 'us-east-1';
