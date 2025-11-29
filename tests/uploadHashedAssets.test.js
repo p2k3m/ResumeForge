@@ -782,6 +782,83 @@ describe('uploadHashedIndexAssets', () => {
       }),
     ).resolves.not.toThrow()
   })
+
+  it('preserves local manifest data (Vite build info) when merging with S3 manifest', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+
+    const distDir = path.join(tempDir, 'dist-manifest-merge')
+    const assetsDir = path.join(distDir, 'assets')
+    await fs.mkdir(assetsDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-local.css" />
+        </head>
+        <body>
+          <script src="/assets/index-local.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-local.css'), 'body{}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-local.js'), 'console.log("local")', 'utf8')
+
+    // Local manifest with Vite-specific keys
+    const localManifest = {
+      'index.html': {
+        file: 'assets/index-local.js',
+        css: ['assets/index-local.css'],
+        isEntry: true,
+      },
+      'index.css': {
+        file: 'assets/index-local.css',
+      },
+    }
+    await fs.writeFile(
+      path.join(distDir, 'manifest.json'),
+      JSON.stringify(localManifest),
+      'utf8',
+    )
+
+    // S3 manifest with history
+    const s3Manifest = {
+      files: ['assets/index-old.css'],
+      hashedIndexAssets: ['assets/index-old.css'],
+    }
+
+    sendMock.mockImplementation(async (command) => {
+      if (command instanceof GetObjectCommand) {
+        return {
+          Body: Buffer.from(JSON.stringify(s3Manifest)),
+        }
+      }
+      return {}
+    })
+
+    await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    // Verify the manifest written to disk contains both local and S3 data
+    const updatedManifestRaw = await fs.readFile(path.join(distDir, 'manifest.json'), 'utf8')
+    const updatedManifest = JSON.parse(updatedManifestRaw)
+
+    // Check for Vite keys
+    expect(updatedManifest['index.html']).toBeDefined()
+    expect(updatedManifest['index.html'].file).toBe('assets/index-local.js')
+
+    // Check for merged files
+    expect(updatedManifest.files).toContain('assets/index-local.js')
+    expect(updatedManifest.files).toContain('assets/index-old.css')
+  })
 })
 
 describe('gatherHashedAssetUploadEntries', () => {

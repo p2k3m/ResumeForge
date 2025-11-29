@@ -1177,15 +1177,26 @@ async function updateManifestHashedAssets({
 
   const manifestKey = buildS3Key(prefix, 'manifest.json')
 
-  let manifest
-  let existing
+  // Always start with the local manifest (Vite output) to preserve build info
+  let manifest = await loadLocalManifest({ distDirectory })
+  if (!manifest) {
+    manifest = { files: [] }
+  }
+
+  let s3Manifest
   try {
-    existing = await s3.send(
+    const existing = await s3.send(
       new GetObjectCommand({
         Bucket: bucket,
         Key: manifestKey,
       }),
     )
+    if (existing?.Body) {
+      const raw = await readStreamToString(existing.Body)
+      if (raw && raw.trim()) {
+        s3Manifest = JSON.parse(raw)
+      }
+    }
   } catch (error) {
     const statusCode = error?.$metadata?.httpStatusCode
     const errorCode = error?.name || error?.Code || error?.code || ''
@@ -1196,36 +1207,6 @@ async function updateManifestHashedAssets({
         `[upload-hashed-assets] Unable to load manifest at s3://${bucket}/${manifestKey}:`,
         error?.message || error,
       )
-      return false
-    }
-  }
-
-  if (existing?.Body) {
-    const raw = await readStreamToString(existing.Body)
-    if (raw && raw.trim()) {
-      try {
-        const parsed = JSON.parse(raw)
-        if (parsed && typeof parsed === 'object') {
-          manifest = parsed
-        }
-      } catch (error) {
-        console.warn(
-          `[upload-hashed-assets] Unable to parse manifest at s3://${bucket}/${manifestKey}:`,
-          error?.message || error,
-        )
-      }
-    } else {
-      console.warn(
-        `[upload-hashed-assets] Existing manifest at s3://${bucket}/${manifestKey} was empty; falling back to local copy.`,
-      )
-    }
-  }
-
-  if (!manifest) {
-    manifest = await loadLocalManifest({ distDirectory })
-
-    if (!manifest) {
-      manifest = { files: [] }
     }
   }
 
@@ -1233,7 +1214,21 @@ async function updateManifestHashedAssets({
     manifest.files = []
   }
 
-  const fileSet = new Set()
+  // Merge files from S3 manifest if available
+  if (s3Manifest && Array.isArray(s3Manifest.files)) {
+    const localFiles = new Set(manifest.files)
+    for (const file of s3Manifest.files) {
+      if (typeof file === 'string' && file.trim()) {
+        const normalized = file.trim()
+        if (!localFiles.has(normalized)) {
+          manifest.files.push(normalized)
+          localFiles.add(normalized)
+        }
+      }
+    }
+  }
+
+  const fileSet = new Set(manifest.files)
   for (const entry of manifest.files) {
     if (typeof entry === 'string') {
       const normalized = entry.trim()
