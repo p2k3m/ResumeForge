@@ -70,11 +70,9 @@ function isNotFoundError(error) {
 
 export function extractHashedIndexAssetReferences(html) {
   if (typeof html !== 'string') {
-    console.log('[debug] html is not a string:', typeof html)
     return []
   }
-  console.log('[debug] html length:', html.length)
-  console.log('[debug] html preview:', html.substring(0, 500))
+
 
 
   HASHED_INDEX_REFERENCE_PATTERN.lastIndex = 0
@@ -426,8 +424,8 @@ export async function gatherHashedAssetUploadEntries({
 } = {}) {
   let html
   try {
-    console.log('[debug] reading index from:', indexHtmlPath)
     html = await fs.readFile(indexHtmlPath, 'utf8')
+
 
   } catch (error) {
     if (error?.code === 'ENOENT') {
@@ -451,7 +449,7 @@ export async function gatherHashedAssetUploadEntries({
       `HTML Preview (${html.length} bytes):\n${preview}\n\n` +
       `Found Scripts:\n${scriptMatches.join('\n')}\n\n` +
       `Found Links:\n${linkMatches.join('\n')}\n\n` +
-      `Tip: If this script previously failed, index.html might have been modified. Run "npm run build:client" to restore it.`
+      `Tip: If this script previously failed, index.html might have been corrupted. Run "npm run build:client" to restore it.`
     )
   }
 
@@ -1476,7 +1474,7 @@ export async function uploadHashedIndexAssets(options = {}) {
     uploads,
   })
 
-  await stripHashedEntryTagsFromIndex({ indexHtmlPath })
+
 
   if (!options?.quiet) {
     const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
