@@ -1312,6 +1312,8 @@ export async function uploadHashedIndexAssets(options = {}) {
     metadata: effectiveMetadata,
   })
 
+  await stripHashedEntryTagsFromIndex({ indexHtmlPath })
+
 
 
   const supplementaryFiles = Array.isArray(options?.supplementaryFiles)
