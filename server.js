@@ -361,6 +361,19 @@ function buildStaticAssetKey(prefix, requestPath) {
   let sanitizedPath = (() => {
     const normalizedHashed = normalizeManifestHashedAssetPath(rawPath);
     if (normalizedHashed) {
+      if (rawPath.startsWith('static/')) {
+        let candidate = rawPath.replace(/[#?].*$/, '').trim();
+        for (const separator of STATIC_PROXY_ALIAS_METADATA_SEPARATORS) {
+          const metadataIndex = candidate.indexOf(separator);
+          if (metadataIndex !== -1) {
+            candidate = candidate.slice(0, metadataIndex).trim();
+          }
+        }
+        while (/^(?:\.\.\/|\.\/)/.test(candidate)) {
+          candidate = candidate.replace(/^(?:\.\.\/|\.\/)/, '');
+        }
+        return candidate;
+      }
       return normalizedHashed.replace(/^\//, '');
     }
 
@@ -444,21 +457,21 @@ async function streamS3BodyToResponse(body, res) {
       typeof Readable.fromWeb === 'function'
         ? Readable.fromWeb(webStream)
         : Readable.from(
-            (async function* streamWebReadable() {
-              const reader = webStream.getReader();
-              try {
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) break;
-                  if (value !== undefined) {
-                    yield value;
-                  }
+          (async function* streamWebReadable() {
+            const reader = webStream.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                if (value !== undefined) {
+                  yield value;
                 }
-              } finally {
-                reader.releaseLock?.();
               }
-            })()
-          );
+            } finally {
+              reader.releaseLock?.();
+            }
+          })()
+        );
     await streamPipeline(nodeStream, res);
     return;
   }
@@ -850,19 +863,19 @@ async function loadStaticAssetManifestFromS3({ forceRefresh = false } = {}) {
       const fallbackAssets = hashedAssets.length
         ? []
         : (Array.isArray(parsed?.files) ? parsed.files : [])
-            .map((entry) => {
-              if (!entry) {
-                return '';
-              }
-              if (typeof entry === 'string') {
-                return entry;
-              }
-              if (typeof entry === 'object') {
-                return entry.path || entry.key || '';
-              }
+          .map((entry) => {
+            if (!entry) {
               return '';
-            })
-            .filter(Boolean);
+            }
+            if (typeof entry === 'string') {
+              return entry;
+            }
+            if (typeof entry === 'object') {
+              return entry.path || entry.key || '';
+            }
+            return '';
+          })
+          .filter(Boolean);
 
       const combined = hashedAssets.length ? hashedAssets : fallbackAssets;
       const normalizedAssets = [];
@@ -1147,8 +1160,8 @@ async function tryServeHashedIndexAssetFromS3(req, res, next) {
   const aliasPath = req.path.toLowerCase().endsWith('.css')
     ? '/assets/index-latest.css'
     : req.path.toLowerCase().endsWith('.js')
-    ? '/assets/index-latest.js'
-    : '';
+      ? '/assets/index-latest.js'
+      : '';
 
   if (aliasPath) {
     const logContext = {
@@ -1353,9 +1366,9 @@ async function handleIndexAssetAliasRequest({
   const fallbackCandidates = manifestFallbackCandidates.length
     ? manifestFallbackCandidates
     : await resolveFallbackHashedAssetPaths({
-        extension,
-        exclude: normalizedHashedAssetPath ? [normalizedHashedAssetPath] : [],
-      });
+      extension,
+      exclude: normalizedHashedAssetPath ? [normalizedHashedAssetPath] : [],
+    });
 
   const attemptedFallbacks = [];
   for (const candidate of fallbackCandidates) {
@@ -3260,7 +3273,7 @@ function scheduleErrorLog(entry) {
         } catch {
           console.error('Failed to persist error log', err);
         }
-    });
+      });
   });
 }
 
@@ -3287,16 +3300,16 @@ function logStructured(level, message, context = {}) {
     level === 'error'
       ? console.error
       : level === 'warn'
-      ? console.warn
-      : console.log;
+        ? console.warn
+        : console.log;
   const logFn =
     typeof baseLogger === 'function'
       ? baseLogger.bind(console)
       : (...args) => {
-          if (typeof console.log === 'function') {
-            console.log(...args);
-          }
-        };
+        if (typeof console.log === 'function') {
+          console.log(...args);
+        }
+      };
   try {
     const safePayload = sanitizeLogPayload(payload);
     const serialised = JSON.stringify(safePayload);
@@ -3752,8 +3765,8 @@ function sendError(res, status, code, message, details) {
         }
         const existingLogs =
           enrichedDetails &&
-          typeof enrichedDetails === 'object' &&
-          typeof enrichedDetails.logs === 'object'
+            typeof enrichedDetails === 'object' &&
+            typeof enrichedDetails.logs === 'object'
             ? enrichedDetails.logs
             : undefined;
         const mergedLogs = {
@@ -4188,9 +4201,8 @@ async function loadPublishedCloudfrontMetadata() {
       try {
         const normalized = new URL(metadata.url);
         const cleanedPath = normalized.pathname?.replace(/\/$/, '') || '';
-        const normalizedUrl = `${normalized.origin}${cleanedPath}${
-          normalized.search || ''
-        }${normalized.hash || ''}`;
+        const normalizedUrl = `${normalized.origin}${cleanedPath}${normalized.search || ''
+          }${normalized.hash || ''}`;
         metadata.url = normalizedUrl || normalized.toString();
       } catch (err) {
         logStructured('warn', 'published_cloudfront_invalid_url', {
@@ -4205,9 +4217,8 @@ async function loadPublishedCloudfrontMetadata() {
       try {
         const normalized = new URL(metadata.apiGatewayUrl);
         const cleanedPath = normalized.pathname?.replace(/\/$/, '') || '';
-        const normalizedUrl = `${normalized.origin}${cleanedPath}${
-          normalized.search || ''
-        }${normalized.hash || ''}`;
+        const normalizedUrl = `${normalized.origin}${cleanedPath}${normalized.search || ''
+          }${normalized.hash || ''}`;
         metadata.apiGatewayUrl = normalizedUrl || normalized.toString();
       } catch (err) {
         logStructured('warn', 'published_cloudfront_invalid_api_gateway_url', {
@@ -4372,9 +4383,9 @@ function buildRuntimeConfig() {
     readEnvValue('GEMINI_API_KEY') || fileConfig.GEMINI_API_KEY;
   const allowedOrigins = parseAllowedOrigins(
     readEnvValue('CLOUDFRONT_ORIGINS') ||
-      readEnvValue('ALLOWED_ORIGINS') ||
-      fileConfig.CLOUDFRONT_ORIGINS ||
-      fileConfig.ALLOWED_ORIGINS
+    readEnvValue('ALLOWED_ORIGINS') ||
+    fileConfig.CLOUDFRONT_ORIGINS ||
+    fileConfig.ALLOWED_ORIGINS
   );
   const plainPdfFallbackEnabled = readBooleanEnv(
     'ENABLE_PLAIN_PDF_FALLBACK',
@@ -4686,7 +4697,7 @@ app.use((req, res, next) => {
   const socket = req.socket;
   if (!socket || typeof socket.on !== 'function') {
     const emitter = new EventEmitter();
-    const noop = () => {};
+    const noop = () => { };
     const proxy = {
       destroyed: false,
       readable: true,
@@ -5941,8 +5952,8 @@ function applySectionUpdate(originalResume, updatedResume, options = {}) {
   const pruneSet = new Set(
     Array.isArray(pruneValues)
       ? pruneValues
-          .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
-          .filter(Boolean)
+        .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+        .filter(Boolean)
       : []
   );
   const sanitizeAndPrune = (lines = []) =>
@@ -6180,8 +6191,8 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       const reasonList = Array.isArray(reasons)
         ? reasons.filter(Boolean)
         : reasons
-        ? [reasons]
-        : [];
+          ? [reasons]
+          : [];
       changeDetails.push({
         key,
         section: label,
@@ -6282,7 +6293,7 @@ function enforceTargetedUpdate(type, originalResume, result = {}, context = {}) 
       {
         forceRecord: Boolean(
           (context && (context.jobTitle || context.currentTitle || context.originalTitle)) ||
-            (baseResult.beforeExcerpt || baseResult.afterExcerpt)
+          (baseResult.beforeExcerpt || baseResult.afterExcerpt)
         ),
       }
     );
@@ -6875,9 +6886,8 @@ function fallbackImprovement(type, context) {
     const section = extractSectionContent(resumeText, SUMMARY_SECTION_PATTERN);
     const headingLabel = deriveHeadingLabel(section.heading, 'Summary');
     const before = section.content.join('\n').trim();
-    const summaryLine = `Forward-looking ${jobTitle || 'professional'} with strengths in ${
-      fallbackSkillText || 'delivering measurable outcomes'
-    } and a record of translating goals into results.`;
+    const summaryLine = `Forward-looking ${jobTitle || 'professional'} with strengths in ${fallbackSkillText || 'delivering measurable outcomes'
+      } and a record of translating goals into results.`;
     const updatedResume = replaceSectionContent(resumeText, SUMMARY_SECTION_PATTERN, [summaryLine], {
       headingLabel: 'Summary',
       insertIndex: 1,
@@ -7776,8 +7786,8 @@ function collectSectionText(resumeText = '', linkedinData = {}, credlyCertificat
     endDate: exp.endDate || '',
     responsibilities: Array.isArray(exp.responsibilities)
       ? exp.responsibilities
-          .map((item) => (typeof item === 'string' ? item.trim() : ''))
-          .filter(Boolean)
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
       : [],
   }));
   const education = [
@@ -8151,8 +8161,8 @@ function mergeResumeDataSections(baseData = {}, updatesData = {}) {
     heading: normalizeHeading(section.heading || ''),
     items: Array.isArray(section.items)
       ? section.items.map((tokens) =>
-          Array.isArray(tokens) ? tokens.map((token) => ({ ...token })) : []
-        )
+        Array.isArray(tokens) ? tokens.map((token) => ({ ...token })) : []
+      )
       : [],
   });
 
@@ -9701,8 +9711,8 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
   const buildPlainPdfFallbackPayload = () => {
     const contextContactLines = Array.isArray(contactContext.contactLines)
       ? contactContext.contactLines
-          .map((line) => (typeof line === 'string' ? line.trim() : ''))
-          .filter(Boolean)
+        .map((line) => (typeof line === 'string' ? line.trim() : ''))
+        .filter(Boolean)
       : [];
     const fallbackContactLines =
       contextContactLines.length > 0
@@ -10307,7 +10317,7 @@ let generatePdf = async function (text, templateId = 'modern', options = {}) {
         if (fsSync.existsSync(hReg)) doc.registerFont('Helvetica', hReg);
         if (fsSync.existsSync(hBold)) doc.registerFont('Helvetica-Bold', hBold);
         if (fsSync.existsSync(hItalic)) doc.registerFont('Helvetica-Oblique', hItalic);
-      } catch {}
+      } catch { }
       if (robotoAvailable) {
         [
           'modern',
@@ -10845,9 +10855,9 @@ async function generatePdfWithFallback({
             });
             const sanitizedResults = Array.isArray(backstopResults)
               ? backstopResults.map((entry) => ({
-                  templateId: entry?.templateId,
-                  bytes: entry?.bytes,
-                }))
+                templateId: entry?.templateId,
+                bytes: entry?.bytes,
+              }))
               : [];
             logStructured('info', 'pdf_generation_backstop_succeeded', {
               ...logContext,
@@ -11263,9 +11273,9 @@ function summarizeList(values = [], { limit = 3, conjunction = 'and', decorate }
   const decorated =
     typeof decorate === 'function'
       ? unique
-          .map((value) => decorate(value))
-          .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
-          .filter(Boolean)
+        .map((value) => decorate(value))
+        .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
+        .filter(Boolean)
       : unique;
   if (!decorated.length) return '';
   if (decorated.length === 1) return decorated[0];
@@ -11649,9 +11659,9 @@ function buildSelectionInsights(context = {}) {
 
   const jobFitAverage = jobFitScores.length
     ? Math.round(
-        jobFitScores.reduce((total, metric) => total + (typeof metric.score === 'number' ? metric.score : 0), 0) /
-          jobFitScores.length,
-      )
+      jobFitScores.reduce((total, metric) => total + (typeof metric.score === 'number' ? metric.score : 0), 0) /
+      jobFitScores.length,
+    )
     : 0;
 
   const baselineImpactScore = Number(baselineScoreBreakdown?.impact?.score) || impactScore;
@@ -12336,7 +12346,7 @@ function analyzeResumeForMetrics(
     : 0;
   const keywordStuffingSignal = bulletKeywordUniqueCount
     ? (totalBulletKeywordMentions - bulletKeywordUniqueCount) /
-      Math.max(1, bulletKeywordUniqueCount)
+    Math.max(1, bulletKeywordUniqueCount)
     : 0;
   const keywordStuffingPenalty = clamp01(keywordStuffingSignal / 4);
 
@@ -12347,13 +12357,13 @@ function analyzeResumeForMetrics(
   const summaryText = extractSummaryText(text);
   const summaryKeywordHits = summaryText
     ? jobKeywords.filter((keyword) =>
-        new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(summaryText)
-      )
+      new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(summaryText)
+    )
     : [];
   const summarySkillHits = summaryText
     ? Array.from(normalizedJobSkills).filter((skill) =>
-        new RegExp(`\\b${escapeRegex(skill)}\\b`, 'i').test(summaryText)
-      )
+      new RegExp(`\\b${escapeRegex(skill)}\\b`, 'i').test(summaryText)
+    )
     : [];
 
   const rawLineCount = allLines.length;
@@ -12440,12 +12450,12 @@ function evaluateLayoutMetric(analysis) {
     100 *
     clamp01(
       headingScore * 0.23 +
-        sectionScore * 0.24 +
-        bulletScore * 0.33 +
-        contactScore * 0.14 -
-        paragraphPenalty -
-        pagePenalty -
-        lengthPenalty
+      sectionScore * 0.24 +
+      bulletScore * 0.33 +
+      contactScore * 0.14 -
+      paragraphPenalty -
+      pagePenalty -
+      lengthPenalty
     );
 
   const missingHeadings = keySections
@@ -12610,9 +12620,9 @@ function evaluateImpactMetric(analysis) {
     : 0;
   const summaryKeywordScore = summaryPresent
     ? clamp01(
-        (summaryKeywordHits.length + summarySkillScore * Math.min(jobKeywordSet.size, 6)) /
-          Math.max(2, Math.min(jobKeywordSet.size, 10))
-      )
+      (summaryKeywordHits.length + summarySkillScore * Math.min(jobKeywordSet.size, 6)) /
+      Math.max(2, Math.min(jobKeywordSet.size, 10))
+    )
     : 0;
 
   const keywordMatchCount = jobKeywordSet.size
@@ -12625,9 +12635,9 @@ function evaluateImpactMetric(analysis) {
     100 *
     clamp01(
       achievementRatio * 0.45 +
-        keywordQualityScore * 0.22 +
-        achievementVolumeScore * 0.23 +
-        Math.max(summaryKeywordScore, summarySkillScore) * 0.1
+      keywordQualityScore * 0.22 +
+      achievementVolumeScore * 0.23 +
+      Math.max(summaryKeywordScore, summarySkillScore) * 0.1
     );
 
   const impactTips = [];
@@ -12807,14 +12817,14 @@ function evaluateOtherMetric(analysis) {
   const skillCoverage = normalizedJobSkills.size
     ? normalizedResumeSkills.size / Math.max(normalizedJobSkills.size, 1)
     : normalizedResumeSkills.size > 0
-    ? 1
-    : 0;
+      ? 1
+      : 0;
 
   const keywordCoverageScore = jobKeywordMatches.length
     ? jobKeywordMatches.length / Math.max(normalizedJobSkills.size || jobKeywordMatches.length, 6)
     : normalizedResumeSkills.size
-    ? Math.min(1, normalizedResumeSkills.size / 12)
-    : 0;
+      ? Math.min(1, normalizedResumeSkills.size / 12)
+      : 0;
 
   let keywordVarietyScore = bulletKeywordVariety;
   if (keywordVarietyScore <= 0) {
@@ -14087,19 +14097,19 @@ async function writeSessionChangeLog({
     : [];
   const normalizedCoverLetterEntries = Array.isArray(coverLetterEntries)
     ? coverLetterEntries
-        .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
-        .filter(Boolean)
+      .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+      .filter(Boolean)
     : [];
   const normalizedDismissedCoverLetters = Array.isArray(dismissedCoverLetterEntries)
     ? dismissedCoverLetterEntries
-        .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
-        .filter(Boolean)
-        .map((entry) => ({
-          ...entry,
-          rejected: true,
-          rejectedAt: entry.rejectedAt || null,
-          rejectionReason: entry.rejectionReason || null,
-        }))
+      .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
+      .filter(Boolean)
+      .map((entry) => ({
+        ...entry,
+        rejected: true,
+        rejectedAt: entry.rejectedAt || null,
+        rejectionReason: entry.rejectionReason || null,
+      }))
     : [];
   const normalizedSessionLogs = normalizeChangeLogActivityArray(sessionLogs);
   const normalizedEvaluationLogs = normalizeChangeLogActivityArray(evaluationLogs);
@@ -14503,10 +14513,10 @@ function buildTemplateScopedPdfKey({
     documentType === 'cover_letter'
       ? 'cover-letter'
       : documentType === 'resume'
-      ? 'resume'
-      : documentType === 'original'
-      ? 'original'
-      : 'document';
+        ? 'resume'
+        : documentType === 'original'
+          ? 'original'
+          : 'document';
   const templateSegment =
     sanitizeS3KeyComponent(templateId, { fallback: templateFallback }) ||
     templateFallback;
@@ -14514,10 +14524,10 @@ function buildTemplateScopedPdfKey({
     documentType === 'cover_letter'
       ? 'cover-letter'
       : documentType === 'resume'
-      ? 'version'
-      : documentType === 'original'
-      ? 'original'
-      : 'document';
+        ? 'version'
+        : documentType === 'original'
+          ? 'original'
+          : 'document';
   const versionSegment =
     sanitizeS3KeyComponent(variant, { fallback: variantFallback }) || variantFallback;
   const candidateKey = `${normalizedPrefix}${templateSegment}/${versionSegment}.pdf`;
@@ -14934,14 +14944,14 @@ function mapCoverLetterFields({
     motivationBodyIndex !== -1 ? bodyParagraphs[motivationBodyIndex] : '';
   const motivationKeywords = motivationParagraph
     ? COVER_LETTER_MOTIVATION_KEYWORDS.filter((keyword) =>
-        new RegExp(`\\b${keyword}\\w*\\b`, 'i').test(motivationParagraph)
-      )
+      new RegExp(`\\b${keyword}\\w*\\b`, 'i').test(motivationParagraph)
+    )
     : [];
 
   const normalizedSkills = Array.isArray(jobSkills)
     ? jobSkills
-        .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
-        .filter(Boolean)
+      .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+      .filter(Boolean)
     : [];
   const letterLower = normalizedText.toLowerCase();
   const matchedSkills = Array.from(
@@ -14953,27 +14963,27 @@ function mapCoverLetterFields({
   const explicitContact =
     contactDetails && typeof contactDetails === 'object'
       ? {
-          email: typeof contactDetails.email === 'string' ? contactDetails.email.trim() : '',
-          phone: typeof contactDetails.phone === 'string' ? contactDetails.phone.trim() : '',
-          linkedin:
-            typeof contactDetails.linkedin === 'string'
-              ? normalizeUrl(contactDetails.linkedin) || contactDetails.linkedin.trim()
-              : '',
-          cityState:
-            typeof contactDetails.cityState === 'string' ? contactDetails.cityState.trim() : '',
-          contactLines: filterSensitiveContactLines(
-            Array.isArray(contactDetails.contactLines)
-              ? contactDetails.contactLines.filter((line) => typeof line === 'string')
-              : [],
-          ),
-        }
+        email: typeof contactDetails.email === 'string' ? contactDetails.email.trim() : '',
+        phone: typeof contactDetails.phone === 'string' ? contactDetails.phone.trim() : '',
+        linkedin:
+          typeof contactDetails.linkedin === 'string'
+            ? normalizeUrl(contactDetails.linkedin) || contactDetails.linkedin.trim()
+            : '',
+        cityState:
+          typeof contactDetails.cityState === 'string' ? contactDetails.cityState.trim() : '',
+        contactLines: filterSensitiveContactLines(
+          Array.isArray(contactDetails.contactLines)
+            ? contactDetails.contactLines.filter((line) => typeof line === 'string')
+            : [],
+        ),
+      }
       : {
-          email: '',
-          phone: '',
-          linkedin: '',
-          cityState: '',
-          contactLines: [],
-        };
+        email: '',
+        phone: '',
+        linkedin: '',
+        cityState: '',
+        contactLines: [],
+      };
 
   const detectedContactRaw = extractContactDetails(normalizedText, explicitContact.linkedin);
   const detectedContactLines = filterSensitiveContactLines(
@@ -15026,9 +15036,9 @@ function mapCoverLetterFields({
   const jobFocus = summarizeJobFocus(jobDescription);
   const jobSummarySentences = jobSummary && normalizedText
     ? jobSummary
-        .split(/(?<=[.!?])\s+/)
-        .map((sentence) => sentence.trim())
-        .filter(Boolean)
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)
     : [];
 
   const normalizedJobDescription =
@@ -15036,16 +15046,16 @@ function mapCoverLetterFields({
 
   const normalizedJobSentences = normalizedJobDescription
     ? normalizedJobDescription
-        .split(/(?<=[.!?])\s+/)
-        .map((sentence) => sentence.trim())
-        .filter(Boolean)
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)
     : [];
 
   const motivationSentences = motivationParagraph
     ? motivationParagraph
-        .split(/(?<=[.!?])\s+/)
-        .map((sentence) => sentence.trim())
-        .filter(Boolean)
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)
     : [];
 
   return {
@@ -15176,13 +15186,13 @@ function auditCoverLetterStructure(
     : 0;
   const hasStrongClosing = normalizedClosingEvaluation
     ? COVER_LETTER_STRONG_CLOSING_PATTERNS.some((pattern) =>
-        pattern.test(normalizedClosingEvaluation)
-      )
+      pattern.test(normalizedClosingEvaluation)
+    )
     : false;
   const hasWeakClosingCue = normalizedClosingEvaluation
     ? COVER_LETTER_WEAK_CLOSING_ONLY_PATTERNS.some((pattern) =>
-        pattern.test(normalizedClosingEvaluation)
-      )
+      pattern.test(normalizedClosingEvaluation)
+    )
     : false;
   if (
     normalizedClosingEvaluation &&
@@ -15223,12 +15233,12 @@ function auditCoverLetterStructure(
     const normalizedHeading = withoutBullets.replace(/[:\-–—]+$/, '').trim();
     const looksLikeHeading = Boolean(
       withoutBullets &&
-        normalizedHeading &&
-        normalizedHeading.length <= 80 &&
-        !/[.!?]/.test(normalizedHeading) &&
-        COVER_LETTER_SECTION_HEADING_PATTERNS.some((pattern) =>
-          pattern.test(normalizedHeading)
-        )
+      normalizedHeading &&
+      normalizedHeading.length <= 80 &&
+      !/[.!?]/.test(normalizedHeading) &&
+      COVER_LETTER_SECTION_HEADING_PATTERNS.some((pattern) =>
+        pattern.test(normalizedHeading)
+      )
     );
 
     return {
@@ -15443,7 +15453,7 @@ function buildFallbackCoverLetters({
       .filter(Boolean)
       .join(' ')
       .trim() ||
-      'In my recent roles I have led cross-functional initiatives, translated ambiguous goals into action, and consistently delivered on schedule.',
+    'In my recent roles I have led cross-functional initiatives, translated ambiguous goals into action, and consistently delivered on schedule.',
     closingParagraph,
     `Sincerely,\n${safeName}`,
   ]
@@ -15466,7 +15476,7 @@ function buildFallbackCoverLetters({
     reinforcementParagraph,
     alignmentParagraph,
     primaryExperience ||
-      'I thrive when collaborating with diverse partners, simplifying complex requirements, and guiding initiatives from concept through successful delivery.',
+    'I thrive when collaborating with diverse partners, simplifying complex requirements, and guiding initiatives from concept through successful delivery.',
     closingParagraphVariantTwo,
     `Best regards,\n${safeName}`,
   ]
@@ -15701,9 +15711,9 @@ function buildSectionPreservationContext(text = '') {
   );
   const contactLinesFromSection = contactSection
     ? (contactSection.items || [])
-        .map((tokens) => stringifyTokens(tokens || []))
-        .map((line) => String(line || '').trim())
-        .filter(Boolean)
+      .map((tokens) => stringifyTokens(tokens || []))
+      .map((line) => String(line || '').trim())
+      .filter(Boolean)
     : [];
 
   const detectedContactDetails = extractContactDetails(text);
@@ -15737,8 +15747,8 @@ function sanitizeGeneratedText(text, options = {}) {
     : undefined;
   const contactLines = Array.isArray(options.contactLines)
     ? options.contactLines
-        .map((line) => String(line || '').trim())
-        .filter(Boolean)
+      .map((line) => String(line || '').trim())
+      .filter(Boolean)
     : [];
   const hasContactSection = sections.some(
     (sec) => normalizeHeading(sec.heading || '').toLowerCase() === 'contact'
@@ -15878,15 +15888,15 @@ function cloneResumeData(data = {}) {
     name: data?.name || 'Resume',
     sections: Array.isArray(data?.sections)
       ? data.sections.map((sec) => ({
-          heading: sec?.heading || '',
-          items: Array.isArray(sec?.items)
-            ? sec.items.map((tokens) =>
-                Array.isArray(tokens)
-                  ? tokens.map((token) => ({ ...token }))
-                  : []
-              )
-            : [],
-        }))
+        heading: sec?.heading || '',
+        items: Array.isArray(sec?.items)
+          ? sec.items.map((tokens) =>
+            Array.isArray(tokens)
+              ? tokens.map((token) => ({ ...token }))
+              : []
+          )
+          : [],
+      }))
       : [],
     placeholders:
       data?.placeholders && typeof data.placeholders === 'object'
@@ -16473,10 +16483,10 @@ function buildImprovementSummary(
         : fallbackReasons.length
           ? fallbackReasons
           : [
-              detail?.section
-                ? `${detail.section} updated to align with the job description.`
-                : 'Update applied to align with the job description.',
-            ];
+            detail?.section
+              ? `${detail.section} updated to align with the job description.`
+              : 'Update applied to align with the job description.',
+          ];
 
       const sectionLabel = typeof detail?.section === 'string'
         ? detail.section
@@ -17284,18 +17294,18 @@ function normalizeCoverLetterChangeLogEntry(entry = {}) {
   );
   const originalText = normalizeChangeLogText(
     entry.originalText ||
-      entry.before ||
-      entry.previousText ||
-      entry.baselineText ||
-      entry.initialText,
+    entry.before ||
+    entry.previousText ||
+    entry.baselineText ||
+    entry.initialText,
     MAX_COVER_LETTER_CHANGE_LOG_TEXT_LENGTH
   );
   const editedText = normalizeChangeLogText(
     entry.editedText ||
-      entry.updatedText ||
-      entry.draftText ||
-      entry.after ||
-      entry.text,
+    entry.updatedText ||
+    entry.draftText ||
+    entry.after ||
+    entry.text,
     MAX_COVER_LETTER_CHANGE_LOG_TEXT_LENGTH
   );
   const notes = normalizeChangeLogString(entry.notes || entry.summary || entry.detail);
@@ -17313,8 +17323,8 @@ function normalizeCoverLetterChangeLogEntry(entry = {}) {
   const source = normalizeChangeLogString(entry.source || entry.origin);
   const summarySegments = Array.isArray(entry.summarySegments)
     ? entry.summarySegments
-        .map((segment) => normalizeChangeLogSegment(segment))
-        .filter(Boolean)
+      .map((segment) => normalizeChangeLogSegment(segment))
+      .filter(Boolean)
     : [];
 
   const normalized = {
@@ -17390,13 +17400,13 @@ function normalizeChangeLogEntryInput(entry) {
     : [];
   const itemizedChanges = Array.isArray(entry.itemizedChanges)
     ? entry.itemizedChanges
-        .map((change) => normalizeChangeLogItemizedChange(change))
-        .filter(Boolean)
+      .map((change) => normalizeChangeLogItemizedChange(change))
+      .filter(Boolean)
     : [];
   const categoryChangelog = Array.isArray(entry.categoryChangelog)
     ? entry.categoryChangelog
-        .map((category) => normalizeChangeLogCategoryEntry(category))
-        .filter(Boolean)
+      .map((category) => normalizeChangeLogCategoryEntry(category))
+      .filter(Boolean)
     : [];
   const sectionChanges = buildSectionChangeEntries({
     entry,
@@ -17667,72 +17677,72 @@ function normalizeChangeLogSummaryPayload(summary) {
 
   const categories = Array.isArray(summary.categories)
     ? summary.categories
-        .map((category) => {
-          if (!category || typeof category !== 'object') {
-            return null;
-          }
-          const key = normalizeChangeLogString(category.key);
-          const label = normalizeChangeLogString(category.label);
-          const description = normalizeChangeLogString(category.description);
-          const added = normalizeChangeLogList(category.added);
-          const removed = normalizeChangeLogList(category.removed);
-          const reasons = normalizeChangeLogList(category.reasons);
-          if (!key && !label && !description && !added.length && !removed.length && !reasons.length) {
-            return null;
-          }
-          const totalAdded = Number.isFinite(category.totalAdded)
-            ? Number(category.totalAdded)
-            : added.length;
-          const totalRemoved = Number.isFinite(category.totalRemoved)
-            ? Number(category.totalRemoved)
-            : removed.length;
-          const totalReasons = Number.isFinite(category.totalReasons)
-            ? Number(category.totalReasons)
-            : reasons.length;
-          const totalChanges = Number.isFinite(category.totalChanges)
-            ? Number(category.totalChanges)
-            : added.length + removed.length;
-          return {
-            key,
-            label,
-            description,
-            added,
-            removed,
-            reasons,
-            totalAdded,
-            totalRemoved,
-            totalReasons,
-            totalChanges,
-          };
-        })
-        .filter(Boolean)
+      .map((category) => {
+        if (!category || typeof category !== 'object') {
+          return null;
+        }
+        const key = normalizeChangeLogString(category.key);
+        const label = normalizeChangeLogString(category.label);
+        const description = normalizeChangeLogString(category.description);
+        const added = normalizeChangeLogList(category.added);
+        const removed = normalizeChangeLogList(category.removed);
+        const reasons = normalizeChangeLogList(category.reasons);
+        if (!key && !label && !description && !added.length && !removed.length && !reasons.length) {
+          return null;
+        }
+        const totalAdded = Number.isFinite(category.totalAdded)
+          ? Number(category.totalAdded)
+          : added.length;
+        const totalRemoved = Number.isFinite(category.totalRemoved)
+          ? Number(category.totalRemoved)
+          : removed.length;
+        const totalReasons = Number.isFinite(category.totalReasons)
+          ? Number(category.totalReasons)
+          : reasons.length;
+        const totalChanges = Number.isFinite(category.totalChanges)
+          ? Number(category.totalChanges)
+          : added.length + removed.length;
+        return {
+          key,
+          label,
+          description,
+          added,
+          removed,
+          reasons,
+          totalAdded,
+          totalRemoved,
+          totalReasons,
+          totalChanges,
+        };
+      })
+      .filter(Boolean)
     : [];
 
   const highlights = Array.isArray(summary.highlights)
     ? summary.highlights
-        .map((highlight) => {
-          if (!highlight || typeof highlight !== 'object') {
-            return null;
-          }
-          const key = normalizeChangeLogString(highlight.key);
-          const label = normalizeChangeLogString(highlight.label);
-          const type = normalizeChangeLogString(highlight.type);
-          const category = normalizeChangeLogString(highlight.category);
-          const items = normalizeChangeLogList(highlight.items);
-          const count = Number.isFinite(highlight.count) ? Number(highlight.count) : items.length;
-          if (!key && !label && !type && !category && !items.length) {
-            return null;
-          }
-          return {
-            key,
-            label,
-            type,
-            category,
-            items,
-            count,
-          };
-        })
-        .filter(Boolean)
+      .map((highlight) => {
+        if (!highlight || typeof highlight !== 'object') {
+          return null;
+        }
+        const key = normalizeChangeLogString(highlight.key);
+        const label = normalizeChangeLogString(highlight.label);
+        const type = normalizeChangeLogString(highlight.type);
+        const category = normalizeChangeLogString(highlight.category);
+        const items = normalizeChangeLogList(highlight.items);
+        const count = Number.isFinite(highlight.count) ? Number(highlight.count) : items.length;
+        if (!key && !label && !type && !category && !items.length) {
+          return null;
+        }
+        return {
+          key,
+          label,
+          type,
+          category,
+          items,
+          count,
+        };
+      })
+      .filter(Boolean)
     : [];
 
   const totalsSource = summary.totals && typeof summary.totals === 'object' ? summary.totals : {};
@@ -17842,8 +17852,8 @@ async function handleImprovementRequest(type, req, res) {
         new GetItemCommand({
           TableName: tableName,
           Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-        ProjectionExpression:
-          'jobId, status, s3Bucket, s3Key, changeLog, sessionChangeLogKey, sessionId',
+          ProjectionExpression:
+            'jobId, status, s3Bucket, s3Key, changeLog, sessionChangeLogKey, sessionId',
         })
       );
       const item = record.Item || {};
@@ -17993,23 +18003,23 @@ async function handleImprovementRequest(type, req, res) {
   const credlyStatus =
     typeof payload.credlyStatus === 'object' && payload.credlyStatus
       ? {
-          attempted:
-            typeof payload.credlyStatus.attempted === 'boolean'
-              ? payload.credlyStatus.attempted
-              : Boolean(credlyProfileUrl),
-          success: Boolean(payload.credlyStatus.success),
-          manualEntryRequired: Boolean(payload.credlyStatus.manualEntryRequired),
-          message:
-            typeof payload.credlyStatus.message === 'string'
-              ? payload.credlyStatus.message
-              : '',
-        }
+        attempted:
+          typeof payload.credlyStatus.attempted === 'boolean'
+            ? payload.credlyStatus.attempted
+            : Boolean(credlyProfileUrl),
+        success: Boolean(payload.credlyStatus.success),
+        manualEntryRequired: Boolean(payload.credlyStatus.manualEntryRequired),
+        message:
+          typeof payload.credlyStatus.message === 'string'
+            ? payload.credlyStatus.message
+            : '',
+      }
       : {
-          attempted: Boolean(credlyProfileUrl),
-          success: false,
-          manualEntryRequired: false,
-          message: '',
-        };
+        attempted: Boolean(credlyProfileUrl),
+        success: false,
+        manualEntryRequired: false,
+        message: '',
+      };
 
   try {
     const result = await runTargetedImprovement(type, {
@@ -18106,17 +18116,17 @@ async function handleImprovementRequest(type, req, res) {
 
     const learningResourcesPromise = afterMissingOverall.length
       ? generateLearningResources(afterMissingOverall, {
-          jobTitle: payload.jobTitle || payload.targetTitle || '',
-          jobDescription: jobDescription,
-          requestId,
-        }).catch((err) => {
-          logStructured('warn', 'targeted_improvement_learning_resources_failed', {
-            ...logContext,
-            error: serializeError(err),
-            missingSkillCount: afterMissingOverall.length,
-          });
-          return [];
-        })
+        jobTitle: payload.jobTitle || payload.targetTitle || '',
+        jobDescription: jobDescription,
+        requestId,
+      }).catch((err) => {
+        logStructured('warn', 'targeted_improvement_learning_resources_failed', {
+          ...logContext,
+          error: serializeError(err),
+          missingSkillCount: afterMissingOverall.length,
+        });
+        return [];
+      })
       : Promise.resolve([]);
 
     const selectionInsightsPromise = learningResourcesPromise.then((learningResources) => {
@@ -18602,20 +18612,20 @@ async function handleImprovementBatchRequest(req, res) {
   const credlyStatus =
     typeof payload.credlyStatus === 'object' && payload.credlyStatus
       ? {
-          attempted:
-            typeof payload.credlyStatus.attempted === 'boolean'
-              ? payload.credlyStatus.attempted
-              : Boolean(credlyProfileUrl),
-          success: Boolean(payload.credlyStatus.success),
-          manualEntryRequired: Boolean(payload.credlyStatus.manualEntryRequired),
-          message: typeof payload.credlyStatus.message === 'string' ? payload.credlyStatus.message : '',
-        }
+        attempted:
+          typeof payload.credlyStatus.attempted === 'boolean'
+            ? payload.credlyStatus.attempted
+            : Boolean(credlyProfileUrl),
+        success: Boolean(payload.credlyStatus.success),
+        manualEntryRequired: Boolean(payload.credlyStatus.manualEntryRequired),
+        message: typeof payload.credlyStatus.message === 'string' ? payload.credlyStatus.message : '',
+      }
       : {
-          attempted: Boolean(credlyProfileUrl),
-          success: false,
-          manualEntryRequired: false,
-          message: '',
-        };
+        attempted: Boolean(credlyProfileUrl),
+        success: false,
+        manualEntryRequired: false,
+        message: '',
+      };
 
   const jobTitleInput = typeof payload.jobTitle === 'string' ? payload.jobTitle.trim() : '';
   const currentTitleInput = typeof payload.currentTitle === 'string' ? payload.currentTitle.trim() : '';
@@ -19743,71 +19753,71 @@ async function generateEnhancedDocumentsResponse({
   let persistedSessionChangeLogResult = null;
 
   try {
-  let sessionChangeLogKey = deriveSessionChangeLogKey({
-    changeLogKey: existingRecord?.sessionChangeLogKey?.S,
-    originalUploadKey,
-  });
+    let sessionChangeLogKey = deriveSessionChangeLogKey({
+      changeLogKey: existingRecord?.sessionChangeLogKey?.S,
+      originalUploadKey,
+    });
 
-  const readExistingArtifactKey = (field) => {
-    const attribute = existingRecord?.[field];
-    if (attribute && typeof attribute.S === 'string') {
-      return attribute.S.trim();
-    }
-    return '';
-  };
+    const readExistingArtifactKey = (field) => {
+      const attribute = existingRecord?.[field];
+      if (attribute && typeof attribute.S === 'string') {
+        return attribute.S.trim();
+      }
+      return '';
+    };
 
-  const existingArtifactKeys = {
-    cv1Url: readExistingArtifactKey('cv1Url'),
-    cv2Url: readExistingArtifactKey('cv2Url'),
-    coverLetter1Url: readExistingArtifactKey('coverLetter1Url'),
-    coverLetter2Url: readExistingArtifactKey('coverLetter2Url'),
-    originalTextKey: readExistingArtifactKey('originalTextKey'),
-    enhancedVersion1Key: readExistingArtifactKey('enhancedVersion1Key'),
-    enhancedVersion2Key: readExistingArtifactKey('enhancedVersion2Key'),
-    coverLetter1TextKey: readExistingArtifactKey('coverLetter1TextKey'),
-    coverLetter2TextKey: readExistingArtifactKey('coverLetter2TextKey'),
-    changeLogKey: readExistingArtifactKey('changeLogKey'),
-  };
-  let stageMetadataKey = '';
+    const existingArtifactKeys = {
+      cv1Url: readExistingArtifactKey('cv1Url'),
+      cv2Url: readExistingArtifactKey('cv2Url'),
+      coverLetter1Url: readExistingArtifactKey('coverLetter1Url'),
+      coverLetter2Url: readExistingArtifactKey('coverLetter2Url'),
+      originalTextKey: readExistingArtifactKey('originalTextKey'),
+      enhancedVersion1Key: readExistingArtifactKey('enhancedVersion1Key'),
+      enhancedVersion2Key: readExistingArtifactKey('enhancedVersion2Key'),
+      coverLetter1TextKey: readExistingArtifactKey('coverLetter1TextKey'),
+      coverLetter2TextKey: readExistingArtifactKey('coverLetter2TextKey'),
+      changeLogKey: readExistingArtifactKey('changeLogKey'),
+    };
+    let stageMetadataKey = '';
 
-  const effectiveChangeLogEntries = refreshSessionArtifacts ? [] : changeLogEntries;
-  const effectiveDismissedChangeLogEntries = refreshSessionArtifacts
-    ? []
-    : dismissedChangeLogEntries;
-  const effectiveCoverLetterEntries = refreshSessionArtifacts
-    ? []
-    : coverLetterChangeLogEntries;
-  const effectiveDismissedCoverLetterEntries = refreshSessionArtifacts
-    ? []
-    : dismissedCoverLetterChangeLogEntries;
-  const effectiveSessionLogs = refreshSessionArtifacts ? [] : sessionLogs;
-  const effectiveEvaluationLogs = refreshSessionArtifacts ? [] : evaluationLogs;
-  const effectiveEnhancementLogs = refreshSessionArtifacts ? [] : enhancementLogs;
-  const effectiveDownloadLogs = refreshSessionArtifacts ? [] : downloadLogs;
+    const effectiveChangeLogEntries = refreshSessionArtifacts ? [] : changeLogEntries;
+    const effectiveDismissedChangeLogEntries = refreshSessionArtifacts
+      ? []
+      : dismissedChangeLogEntries;
+    const effectiveCoverLetterEntries = refreshSessionArtifacts
+      ? []
+      : coverLetterChangeLogEntries;
+    const effectiveDismissedCoverLetterEntries = refreshSessionArtifacts
+      ? []
+      : dismissedCoverLetterChangeLogEntries;
+    const effectiveSessionLogs = refreshSessionArtifacts ? [] : sessionLogs;
+    const effectiveEvaluationLogs = refreshSessionArtifacts ? [] : evaluationLogs;
+    const effectiveEnhancementLogs = refreshSessionArtifacts ? [] : enhancementLogs;
+    const effectiveDownloadLogs = refreshSessionArtifacts ? [] : downloadLogs;
 
-  const normalizedChangeLogEntries = Array.isArray(effectiveChangeLogEntries)
-    ? effectiveChangeLogEntries
+    const normalizedChangeLogEntries = Array.isArray(effectiveChangeLogEntries)
+      ? effectiveChangeLogEntries
         .map((entry) => normalizeChangeLogEntryInput(entry))
         .filter(Boolean)
-    : [];
-  const normalizedDismissedChangeLogEntries = Array.isArray(effectiveDismissedChangeLogEntries)
-    ? effectiveDismissedChangeLogEntries
+      : [];
+    const normalizedDismissedChangeLogEntries = Array.isArray(effectiveDismissedChangeLogEntries)
+      ? effectiveDismissedChangeLogEntries
         .map((entry) => normalizeChangeLogEntryInput(entry))
         .filter(Boolean)
-    : [];
-  const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
-    normalizedChangeLogEntries
-  );
-  const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
-  const normalizedCoverLetterEntries = Array.isArray(effectiveCoverLetterEntries)
-    ? effectiveCoverLetterEntries
+      : [];
+    const aggregatedChangeLogSummary = buildAggregatedChangeLogSummary(
+      normalizedChangeLogEntries
+    );
+    const changeLogSummary = normalizeChangeLogSummaryPayload(aggregatedChangeLogSummary);
+    const normalizedCoverLetterEntries = Array.isArray(effectiveCoverLetterEntries)
+      ? effectiveCoverLetterEntries
         .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
         .filter(Boolean)
-    : [];
-  const normalizedDismissedCoverLetterEntries = Array.isArray(
-    effectiveDismissedCoverLetterEntries
-  )
-    ? effectiveDismissedCoverLetterEntries
+      : [];
+    const normalizedDismissedCoverLetterEntries = Array.isArray(
+      effectiveDismissedCoverLetterEntries
+    )
+      ? effectiveDismissedCoverLetterEntries
         .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
         .filter(Boolean)
         .map((entry) => ({
@@ -19816,614 +19826,588 @@ async function generateEnhancedDocumentsResponse({
           rejectedAt: entry.rejectedAt || null,
           rejectionReason: entry.rejectionReason || null,
         }))
-    : [];
-  const normalizedSessionLogs = normalizeChangeLogActivityArray(effectiveSessionLogs);
-  const normalizedEvaluationLogs = normalizeChangeLogActivityArray(
-    effectiveEvaluationLogs
-  );
-  const normalizedEnhancementLogs = normalizeChangeLogActivityArray(
-    effectiveEnhancementLogs
-  );
-  const normalizedDownloadLogs = normalizeChangeLogActivityArray(
-    effectiveDownloadLogs
-  );
-
-  const generationRunSegment =
-    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
-    sanitizeS3KeyComponent(`session-${createIdentifier()}`);
-
-  logContext = {
-    ...logContext,
-    generationRunId: logContext?.generationRunId || generationRunSegment,
-  };
-
-  const resumeExperience = extractExperience(resumeText);
-  const linkedinExperience = extractExperience(linkedinData.experience || []);
-  const resumeEducation = extractEducation(resumeText);
-  const linkedinEducation = extractEducation(linkedinData.education || []);
-  const resumeCertifications = extractCertifications(resumeText);
-  const linkedinCertifications = extractCertifications(
-    linkedinData.certifications || []
-  );
-  const aggregatedCertifications = [
-    ...credlyCertifications,
-    ...manualCertificates,
-  ];
-
-  const knownCertificates = dedupeCertificates([
-    ...resumeCertifications,
-    ...linkedinCertifications,
-    ...aggregatedCertifications,
-  ]);
-  const certificateSuggestions = suggestRelevantCertifications(
-    jobDescription,
-    jobSkills,
-    knownCertificates
-  );
-  const manualCertificatesRequired =
-    credlyStatus.manualEntryRequired && manualCertificates.length === 0;
-
-  const applicantTitle =
-    resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
-  const sectionPreservation = buildSectionPreservationContext(resumeText);
-  const contactDetails = extractContactDetails(resumeText, linkedinProfileUrl);
-
-  const templateSelection =
-    selection ||
-    selectTemplates({
-      defaultCvTemplate: templateContextInput.template1 || CV_TEMPLATES[0],
-      defaultClTemplate: templateContextInput.coverTemplate1 || CL_TEMPLATES[0],
-      template1: templateContextInput.template1,
-      template2: templateContextInput.template2,
-      coverTemplate1: templateContextInput.coverTemplate1,
-      coverTemplate2: templateContextInput.coverTemplate2,
-      cvTemplates: templateContextInput.templates,
-      clTemplates: templateContextInput.coverTemplates,
-      preferredTemplate:
-        templateContextInput.selectedTemplate || templateContextInput.template1,
-    });
-  let {
-    template1,
-    template2,
-    coverTemplate1,
-    coverTemplate2,
-    templates: availableCvTemplates,
-    coverTemplates: availableCoverTemplates,
-  } = templateSelection;
-
-  if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
-    availableCvTemplates = [...CV_TEMPLATES];
-  }
-  if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
-    availableCoverTemplates = [...CL_TEMPLATES];
-  }
-
-  let templateHistory = normalizeTemplateHistory(
-    templateContextInput.templateHistory,
-    [
-      template1,
-      templateContextInput.selectedTemplate,
-      templateContextInput.template1,
-      templateContextInput.template2,
-    ]
-  );
-  const requestedCanonicalTemplate = canonicalizeCvTemplateId(
-    templateContextInput.selectedTemplate
-  );
-  let canonicalSelectedTemplate = requestedCanonicalTemplate || '';
-
-  const templateParamsConfig =
-    templateParamConfig ?? parseTemplateParamsConfig(undefined);
-
-  let resumeSkillsList = Array.isArray(resumeSkills)
-    ? resumeSkills
-    : extractResumeSkills(resumeText);
-  const baselineScoreBreakdown = buildScoreBreakdown(resumeText, {
-    jobSkills,
-    resumeSkills: resumeSkillsList,
-    jobText: jobDescription,
-  });
-  let originalMatchResult = originalMatch;
-  if (!originalMatchResult || !Array.isArray(originalMatchResult.table)) {
-    originalMatchResult = calculateMatchScore(jobSkills, resumeSkillsList);
-  }
-
-  const isImprovementRoute =
-    logContext && typeof logContext.route === 'string'
-      ? logContext.route.startsWith('improvement:')
-      : false;
-  const enableGenerativeEnhancements =
-    (!isTestEnvironment || !isImprovementRoute || process.env.ENABLE_TEST_GENERATIVE === 'true') &&
-    geminiApiKey;
-
-  let generativeModel = null;
-  if (enableGenerativeEnhancements) {
-    generativeModel = createGeminiGenerativeModel({
-      apiKey: geminiApiKey,
-      model: 'gemini-1.5-flash',
-    });
-  }
-  const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
-  const resolvedJobDescriptionDigest =
-    jobDescriptionDigestInput || createTextDigest(jobDescription);
-
-  let text = resumeText;
-  let resolvedTextForContext = null;
-  let projectText = '';
-  let modifiedTitle = '';
-  let geminiAddedSkills = [];
-  let sanitizedFallbackUsed = false;
-  let enhancementTokenMap = {};
-
-  if (canUseGenerativeModel) {
-    try {
-      const sectionTexts = collectSectionText(
-        resumeText,
-        linkedinData,
-        aggregatedCertifications
-      );
-      const enhanced = await rewriteSectionsWithGemini(
-        applicantName,
-        sectionTexts,
-        jobDescription,
-        jobSkills,
-        generativeModel,
-        {
-          resumeExperience,
-          linkedinExperience,
-          resumeEducation,
-          linkedinEducation,
-          resumeCertifications,
-          linkedinCertifications,
-          credlyCertifications: aggregatedCertifications,
-          credlyProfileUrl,
-          contactLines: contactDetails.contactLines,
-          ...sectionPreservation,
-        },
-        resumeText,
-        { requestId, operation: logContext?.route || 'resume_rewrite' }
-      );
-      enhancementTokenMap =
-        enhanced.placeholders && typeof enhanced.placeholders === 'object'
-          ? enhanced.placeholders
-          : {};
-      const tokenizedEnhancedText =
-        typeof enhanced.tokenizedText === 'string' && enhanced.tokenizedText.trim()
-          ? enhanced.tokenizedText
-          : typeof enhanced.text === 'string' && enhanced.text.trim()
-            ? enhanced.text
-            : resumeText;
-      const resolvedEnhancedText =
-        typeof enhanced.resolvedText === 'string' && enhanced.resolvedText.trim()
-          ? enhanced.resolvedText
-          : resolveEnhancementTokens(tokenizedEnhancedText, enhancementTokenMap);
-      text = tokenizedEnhancedText;
-      resolvedTextForContext = resolvedEnhancedText;
-      projectText = enhanced.project;
-      modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
-      geminiAddedSkills = enhanced.addedSkills || [];
-      sanitizedFallbackUsed = Boolean(enhanced.sanitizedFallbackUsed);
-      logStructured('info', 'generation_section_rewrite_completed', {
-        ...logContext,
-        modifiedTitle: modifiedTitle || '',
-        addedSkills: geminiAddedSkills.length,
-      });
-    } catch (err) {
-      logStructured('warn', 'generation_section_rewrite_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-      throw err;
-    }
-  }
-
-  const resolvedCombinedProfileCandidate =
-    typeof resolvedTextForContext === 'string' && resolvedTextForContext.trim()
-      ? resolvedTextForContext
-      : resolveEnhancementTokens(text, enhancementTokenMap);
-
-  let combinedProfile =
-    typeof resolvedCombinedProfileCandidate === 'string' &&
-    resolvedCombinedProfileCandidate.trim()
-      ? resolvedCombinedProfileCandidate
-      : resumeText;
-
-  const versionsContext = {
-    cvText: combinedProfile,
-    jobDescription,
-    jobTitle: modifiedTitle || applicantTitle || '',
-    jobSkills,
-    note: 'The candidate performed duties matching the job description in their last role.',
-  };
-
-  let versionData = {};
-
-  const ensureProjectSummary = async () => {
-    if (projectText) return;
-    projectText = await generateProjectSummary(
-      jobDescription,
-      resumeSkillsList,
-      jobSkills,
-      canUseGenerativeModel ? generativeModel : null,
-      { requestId, operation: 'project_summary' }
+      : [];
+    const normalizedSessionLogs = normalizeChangeLogActivityArray(effectiveSessionLogs);
+    const normalizedEvaluationLogs = normalizeChangeLogActivityArray(
+      effectiveEvaluationLogs
     );
-  };
+    const normalizedEnhancementLogs = normalizeChangeLogActivityArray(
+      effectiveEnhancementLogs
+    );
+    const normalizedDownloadLogs = normalizeChangeLogActivityArray(
+      effectiveDownloadLogs
+    );
 
-  const buildSanitizeOptions = () => ({
-    resumeExperience,
-    linkedinExperience,
-    resumeEducation,
-    linkedinEducation,
-    resumeCertifications,
-    linkedinCertifications,
-    credlyCertifications: aggregatedCertifications,
-    credlyProfileUrl,
-    jobTitle: versionsContext.jobTitle,
-    project: projectText,
-    contactLines: contactDetails.contactLines,
-    ...sectionPreservation,
-  });
+    const generationRunSegment =
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+      sanitizeS3KeyComponent(`session-${createIdentifier()}`);
 
-  await ensureProjectSummary();
-
-  const sanitizeOptions = buildSanitizeOptions();
-  const sanitizedResolvedProfile =
-    sanitizeGeneratedText(combinedProfile, sanitizeOptions);
-  const sanitizedTokenizedText = sanitizeGeneratedText(text, sanitizeOptions);
-  let baseResumeText =
-    sanitizedResolvedProfile ||
-    sanitizedTokenizedText ||
-    combinedProfile ||
-    text;
-
-  if (!sanitizedFallbackUsed && canUseGenerativeModel) {
-    try {
-      const verified = await verifyResume(
-        baseResumeText,
-        jobDescription,
-        generativeModel,
-        sanitizeOptions
-      );
-      const sanitizedVerified = sanitizeGeneratedText(verified, sanitizeOptions);
-      if (sanitizedVerified?.trim()) {
-        baseResumeText = sanitizedVerified;
-        combinedProfile = sanitizedVerified;
-        versionsContext.cvText = sanitizedVerified;
-        logStructured('info', 'generation_resume_verified', {
-          ...logContext,
-        });
-      }
-    } catch (err) {
-      logStructured('warn', 'generation_resume_verification_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-    }
-  }
-
-  resumeSkillsList = extractResumeSkills(baseResumeText);
-
-  const skillsToHighlight = Array.from(
-    new Set([
-      ...(Array.isArray(geminiAddedSkills) ? geminiAddedSkills : []),
-      ...(Array.isArray(originalMatchResult?.newSkills)
-        ? originalMatchResult.newSkills
-        : []),
-    ])
-  ).filter(Boolean);
-
-  try {
-    versionData = createResumeVariants({
-      baseText: baseResumeText,
-      projectText,
-      modifiedTitle: versionsContext.jobTitle,
-      skillsToInclude: skillsToHighlight,
-      baseSkills: Array.isArray(geminiAddedSkills) ? geminiAddedSkills : [],
-      sanitizeOptions,
-    });
-  } catch (err) {
-    logStructured('error', 'generation_variants_failed', {
+    logContext = {
       ...logContext,
-      error: serializeError(err),
-    });
-    const enhancementError = new Error(CV_GENERATION_ERROR_MESSAGE);
-    enhancementError.code = 'ENHANCEMENT_VARIANT_FAILED';
-    enhancementError.cause = err;
-    throw enhancementError;
-  }
-
-  if (versionData?.placeholders && Object.keys(versionData.placeholders).length) {
-    enhancementTokenMap = {
-      ...enhancementTokenMap,
-      ...versionData.placeholders,
+      generationRunId: logContext?.generationRunId || generationRunSegment,
     };
-  }
 
-  if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
-    cleanupReason = 'variants_unavailable';
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'generation_versions_missing',
-      level: 'error',
-      message: 'Unable to construct resume variants from extracted content',
-    });
-    sendError(
-      res,
-      500,
-      'AI_RESPONSE_INVALID',
-      DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
+    const resumeExperience = extractExperience(resumeText);
+    const linkedinExperience = extractExperience(linkedinData.experience || []);
+    const resumeEducation = extractEducation(resumeText);
+    const linkedinEducation = extractEducation(linkedinData.education || []);
+    const resumeCertifications = extractCertifications(resumeText);
+    const linkedinCertifications = extractCertifications(
+      linkedinData.certifications || []
     );
-    return null;
-  }
+    const aggregatedCertifications = [
+      ...credlyCertifications,
+      ...manualCertificates,
+    ];
 
-  const version1Resolved = resolveEnhancementTokens(
-    typeof versionData.version1 === 'string' ? versionData.version1 : '',
-    enhancementTokenMap
-  );
-  const version2Resolved = resolveEnhancementTokens(
-    typeof versionData.version2 === 'string' ? versionData.version2 : '',
-    enhancementTokenMap
-  );
+    const knownCertificates = dedupeCertificates([
+      ...resumeCertifications,
+      ...linkedinCertifications,
+      ...aggregatedCertifications,
+    ]);
+    const certificateSuggestions = suggestRelevantCertifications(
+      jobDescription,
+      jobSkills,
+      knownCertificates
+    );
+    const manualCertificatesRequired =
+      credlyStatus.manualEntryRequired && manualCertificates.length === 0;
 
-  const version1Tokenized = injectEnhancementTokens(
-    version1Resolved,
-    enhancementTokenMap
-  );
-  const version2Tokenized = injectEnhancementTokens(
-    version2Resolved,
-    enhancementTokenMap
-  );
+    const applicantTitle =
+      resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
+    const sectionPreservation = buildSectionPreservationContext(resumeText);
+    const contactDetails = extractContactDetails(resumeText, linkedinProfileUrl);
 
-  const version1Skills = extractResumeSkills(version1Resolved);
-  const match1 = calculateMatchScore(jobSkills, version1Skills);
-  const version2Skills = extractResumeSkills(version2Resolved);
-  const match2 = calculateMatchScore(jobSkills, version2Skills);
-  const bestMatch = match1.score >= match2.score ? match1 : match2;
+    const templateSelection =
+      selection ||
+      selectTemplates({
+        defaultCvTemplate: templateContextInput.template1 || CV_TEMPLATES[0],
+        defaultClTemplate: templateContextInput.coverTemplate1 || CL_TEMPLATES[0],
+        template1: templateContextInput.template1,
+        template2: templateContextInput.template2,
+        coverTemplate1: templateContextInput.coverTemplate1,
+        coverTemplate2: templateContextInput.coverTemplate2,
+        cvTemplates: templateContextInput.templates,
+        clTemplates: templateContextInput.coverTemplates,
+        preferredTemplate:
+          templateContextInput.selectedTemplate || templateContextInput.template1,
+      });
+    let {
+      template1,
+      template2,
+      coverTemplate1,
+      coverTemplate2,
+      templates: availableCvTemplates,
+      coverTemplates: availableCoverTemplates,
+    } = templateSelection;
 
-  const coverSchema = {
-    cover_letter1: 'string cover letter tailored to the job description',
-    cover_letter2: 'string cover letter tailored to the job description',
-  };
-  const coverContext = {
-    jobTitle: versionsContext.jobTitle,
-    designation: versionsContext.jobTitle || applicantTitle || '',
-    jobSkills,
-    targetedSkills: Array.isArray(jobSkills) ? [...jobSkills] : [],
-    resumeSkills: Array.isArray(resumeSkillsList) ? [...resumeSkillsList] : [],
-    resume: combinedProfile,
-    jobDescription,
-    contactDetails: {
-      email: contactDetails.email || '',
-      phone: contactDetails.phone || '',
-      linkedin: contactDetails.linkedin || '',
-      cityState: contactDetails.cityState || '',
-      contactLines: Array.isArray(contactDetails.contactLines)
-        ? [...contactDetails.contactLines]
-        : [],
-    },
-  };
-  const coverPrompt = [
-    'You are an elite career copywriter supporting Gemini/OpenAI workflows.',
-    'Instructions:',
-    '- Produce exactly two distinct, ATS-aware cover letters.',
-    '- Mirror critical language from the job description and respect accomplishments from the resume.',
-    '- Open with job-specific motivation that references the target role and employer from the job description.',
-    '- Surface the candidate designation provided in the context when positioning achievements.',
-    '- Highlight the most relevant targeted skills from the provided lists, weaving them naturally into the narrative.',
-    '- Present the candidate contact information from contactDetails at the top, omitting only fields that are blank.',
-    '- Preserve every URL appearing in the resume text.',
-    '- Maintain professional tone and structure without degrading the CV context referenced.',
-    '- Respond ONLY with JSON conforming to the schema below.',
-    '',
-    'OUTPUT_SCHEMA:',
-    JSON.stringify(coverSchema, null, 2),
-    '',
-    'INPUT_CONTEXT:',
-    JSON.stringify(coverContext, null, 2),
-  ].join('\n');
+    if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
+      availableCvTemplates = [...CV_TEMPLATES];
+    }
+    if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
+      availableCoverTemplates = [...CL_TEMPLATES];
+    }
 
-  let coverData = {};
-  if (canUseGenerativeModel) {
-    const coverLogger = createStructuredLogger(logContext);
-    const maxAttempts = 2;
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    let templateHistory = normalizeTemplateHistory(
+      templateContextInput.templateHistory,
+      [
+        template1,
+        templateContextInput.selectedTemplate,
+        templateContextInput.template1,
+        templateContextInput.template2,
+      ]
+    );
+    const requestedCanonicalTemplate = canonicalizeCvTemplateId(
+      templateContextInput.selectedTemplate
+    );
+    let canonicalSelectedTemplate = requestedCanonicalTemplate || '';
+
+    const templateParamsConfig =
+      templateParamConfig ?? parseTemplateParamsConfig(undefined);
+
+    let resumeSkillsList = Array.isArray(resumeSkills)
+      ? resumeSkills
+      : extractResumeSkills(resumeText);
+    const baselineScoreBreakdown = buildScoreBreakdown(resumeText, {
+      jobSkills,
+      resumeSkills: resumeSkillsList,
+      jobText: jobDescription,
+    });
+    let originalMatchResult = originalMatch;
+    if (!originalMatchResult || !Array.isArray(originalMatchResult.table)) {
+      originalMatchResult = calculateMatchScore(jobSkills, resumeSkillsList);
+    }
+
+    const isImprovementRoute =
+      logContext && typeof logContext.route === 'string'
+        ? logContext.route.startsWith('improvement:')
+        : false;
+    const enableGenerativeEnhancements =
+      (!isTestEnvironment || !isImprovementRoute || process.env.ENABLE_TEST_GENERATIVE === 'true') &&
+      geminiApiKey;
+
+    let generativeModel = null;
+    if (enableGenerativeEnhancements) {
+      generativeModel = createGeminiGenerativeModel({
+        apiKey: geminiApiKey,
+        model: 'gemini-1.5-flash',
+      });
+    }
+    const canUseGenerativeModel = Boolean(generativeModel?.generateContent);
+    const resolvedJobDescriptionDigest =
+      jobDescriptionDigestInput || createTextDigest(jobDescription);
+
+    let text = resumeText;
+    let resolvedTextForContext = null;
+    let projectText = '';
+    let modifiedTitle = '';
+    let geminiAddedSkills = [];
+    let sanitizedFallbackUsed = false;
+    let enhancementTokenMap = {};
+
+    if (canUseGenerativeModel) {
       try {
-        const coverResult = await generateContentWithRetry(
-          generativeModel,
-          coverPrompt,
-          {
-            retryLogEvent: 'generation_cover_letters',
-            retryLogContext: {
-              ...logContext,
-              outerAttempt: attempt,
-            },
-            logger: coverLogger,
-          }
+        const sectionTexts = collectSectionText(
+          resumeText,
+          linkedinData,
+          aggregatedCertifications
         );
-        const coverText = coverResult?.response?.text?.();
-        const parsed = parseGeminiJsonResponse(coverText, { logger: coverLogger });
-        if (parsed && typeof parsed === 'object') {
-          coverData = parsed;
-          break;
-        }
-        logStructured('warn', 'generation_cover_letters_invalid', {
+        const enhanced = await rewriteSectionsWithGemini(
+          applicantName,
+          sectionTexts,
+          jobDescription,
+          jobSkills,
+          generativeModel,
+          {
+            resumeExperience,
+            linkedinExperience,
+            resumeEducation,
+            linkedinEducation,
+            resumeCertifications,
+            linkedinCertifications,
+            credlyCertifications: aggregatedCertifications,
+            credlyProfileUrl,
+            contactLines: contactDetails.contactLines,
+            ...sectionPreservation,
+          },
+          resumeText,
+          { requestId, operation: logContext?.route || 'resume_rewrite' }
+        );
+        enhancementTokenMap =
+          enhanced.placeholders && typeof enhanced.placeholders === 'object'
+            ? enhanced.placeholders
+            : {};
+        const tokenizedEnhancedText =
+          typeof enhanced.tokenizedText === 'string' && enhanced.tokenizedText.trim()
+            ? enhanced.tokenizedText
+            : typeof enhanced.text === 'string' && enhanced.text.trim()
+              ? enhanced.text
+              : resumeText;
+        const resolvedEnhancedText =
+          typeof enhanced.resolvedText === 'string' && enhanced.resolvedText.trim()
+            ? enhanced.resolvedText
+            : resolveEnhancementTokens(tokenizedEnhancedText, enhancementTokenMap);
+        text = tokenizedEnhancedText;
+        resolvedTextForContext = resolvedEnhancedText;
+        projectText = enhanced.project;
+        modifiedTitle = enhanced.modifiedTitle || applicantTitle || '';
+        geminiAddedSkills = enhanced.addedSkills || [];
+        sanitizedFallbackUsed = Boolean(enhanced.sanitizedFallbackUsed);
+        logStructured('info', 'generation_section_rewrite_completed', {
           ...logContext,
-          attempt,
-          sample:
-            typeof coverText === 'string' ? coverText.slice(0, 200) : undefined,
+          modifiedTitle: modifiedTitle || '',
+          addedSkills: geminiAddedSkills.length,
         });
       } catch (err) {
-        if (attempt >= maxAttempts) {
-          logStructured('warn', 'generation_cover_letters_failed', {
-            ...logContext,
-            error: serializeError(err),
-          });
-        } else {
-          logStructured('warn', 'generation_cover_letters_retry', {
-            ...logContext,
-            attempt,
-            error: serializeError(err),
-          });
-        }
+        logStructured('warn', 'generation_section_rewrite_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+        throw err;
       }
     }
-  }
 
-  const { normalized: normalizedCoverData, normalizedFrom, invalidKeys } =
-    normalizeCoverLetterOutputs(coverData);
+    const resolvedCombinedProfileCandidate =
+      typeof resolvedTextForContext === 'string' && resolvedTextForContext.trim()
+        ? resolvedTextForContext
+        : resolveEnhancementTokens(text, enhancementTokenMap);
 
-  if (normalizedFrom.length) {
-    logStructured('info', 'generation_cover_letters_normalized', {
-      ...logContext,
-      variants: normalizedFrom,
-    });
-  }
+    let combinedProfile =
+      typeof resolvedCombinedProfileCandidate === 'string' &&
+        resolvedCombinedProfileCandidate.trim()
+        ? resolvedCombinedProfileCandidate
+        : resumeText;
 
-  if (invalidKeys.length) {
-    logStructured('warn', 'generation_cover_letters_invalid_type', {
-      ...logContext,
-      variants: invalidKeys,
-    });
-  }
-
-  coverData = normalizedCoverData;
-
-  const structurallyInvalidLetters = [];
-  const recoverableCoverLetters = new Map();
-  COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
-    const value = typeof coverData[key] === 'string' ? coverData[key] : '';
-    if (!value.trim()) {
-      return;
-    }
-    const auditResult = auditCoverLetterStructure(value, {
-      contactDetails: coverContext.contactDetails,
-      jobTitle: coverContext.jobTitle,
+    const versionsContext = {
+      cvText: combinedProfile,
       jobDescription,
+      jobTitle: modifiedTitle || applicantTitle || '',
       jobSkills,
-      applicantName,
-      letterIndex: index + 1,
+      note: 'The candidate performed duties matching the job description in their last role.',
+    };
+
+    let versionData = {};
+
+    const ensureProjectSummary = async () => {
+      if (projectText) return;
+      projectText = await generateProjectSummary(
+        jobDescription,
+        resumeSkillsList,
+        jobSkills,
+        canUseGenerativeModel ? generativeModel : null,
+        { requestId, operation: 'project_summary' }
+      );
+    };
+
+    const buildSanitizeOptions = () => ({
+      resumeExperience,
+      linkedinExperience,
+      resumeEducation,
+      linkedinEducation,
+      resumeCertifications,
+      linkedinCertifications,
+      credlyCertifications: aggregatedCertifications,
+      credlyProfileUrl,
+      jobTitle: versionsContext.jobTitle,
+      project: projectText,
+      contactLines: contactDetails.contactLines,
+      ...sectionPreservation,
     });
-    if (!auditResult.valid) {
-      structurallyInvalidLetters.push({ key, issues: auditResult.issues });
-      const onlyRecoverableIssues = Array.isArray(auditResult.issues)
-        ? auditResult.issues.every((issue) =>
-            COVER_LETTER_RECOVERABLE_ISSUES.has(issue)
-          )
-        : false;
-      if (!onlyRecoverableIssues) {
-        coverData[key] = '';
-      } else {
-        recoverableCoverLetters.set(key, {
-          issues: Array.isArray(auditResult.issues) ? [...auditResult.issues] : [],
+
+    await ensureProjectSummary();
+
+    const sanitizeOptions = buildSanitizeOptions();
+    const sanitizedResolvedProfile =
+      sanitizeGeneratedText(combinedProfile, sanitizeOptions);
+    const sanitizedTokenizedText = sanitizeGeneratedText(text, sanitizeOptions);
+    let baseResumeText =
+      sanitizedResolvedProfile ||
+      sanitizedTokenizedText ||
+      combinedProfile ||
+      text;
+
+    if (!sanitizedFallbackUsed && canUseGenerativeModel) {
+      try {
+        const verified = await verifyResume(
+          baseResumeText,
+          jobDescription,
+          generativeModel,
+          sanitizeOptions
+        );
+        const sanitizedVerified = sanitizeGeneratedText(verified, sanitizeOptions);
+        if (sanitizedVerified?.trim()) {
+          baseResumeText = sanitizedVerified;
+          combinedProfile = sanitizedVerified;
+          versionsContext.cvText = sanitizedVerified;
+          logStructured('info', 'generation_resume_verified', {
+            ...logContext,
+          });
+        }
+      } catch (err) {
+        logStructured('warn', 'generation_resume_verification_failed', {
+          ...logContext,
+          error: serializeError(err),
         });
       }
     }
-  });
 
-  if (structurallyInvalidLetters.length) {
-    logStructured('warn', 'generation_cover_letters_structural_issues', {
-      ...logContext,
-      invalidLetters: structurallyInvalidLetters,
-    });
-  }
+    resumeSkillsList = extractResumeSkills(baseResumeText);
 
-  const fallbackLetters = activeCoverLetterFallbackBuilder({
-    applicantName,
-    jobTitle: versionsContext.jobTitle || applicantTitle,
-    designation: coverContext.designation,
-    jobDescription,
-    jobSkills,
-    targetedSkills: coverContext.targetedSkills,
-    contactDetails: coverContext.contactDetails,
-    resumeText: combinedProfile,
-  });
-  const pushUnique = (list = [], value) => {
-    if (!Array.isArray(list)) {
-      return;
-    }
-    if (!list.includes(value)) {
-      list.push(value);
-    }
-  };
-  const fallbackAdjustedCoverLetters = [];
-  const bestPracticeAdjustedCoverLetters = [];
-  const missingCoverLetters = [];
-  const disqualifiedCoverLetters = new Set();
-  recoverableCoverLetters.forEach((details, key) => {
-    if (!details || !Array.isArray(details.issues)) {
-      return;
-    }
-    if (!details.issues.includes('weak_closing')) {
-      return;
-    }
-    const fallbackValue = fallbackLetters?.[key];
-    if (typeof fallbackValue !== 'string' || !fallbackValue.trim()) {
-      return;
-    }
-    const upgradedText = upgradeCoverLetterClosingWithFallback({
-      originalText: coverData[key],
-      fallbackText: fallbackValue,
-      applicantName,
-    });
-    if (typeof upgradedText !== 'string') {
-      return;
-    }
-    const normalizedOriginal = typeof coverData[key] === 'string' ? coverData[key] : '';
-    if (!normalizedOriginal.trim()) {
-      return;
-    }
-    const trimmedUpgraded = upgradedText.trim();
-    if (!trimmedUpgraded || trimmedUpgraded === normalizedOriginal.trim()) {
-      return;
-    }
-    coverData[key] = trimmedUpgraded;
-    pushUnique(fallbackAdjustedCoverLetters, key);
-  });
+    const skillsToHighlight = Array.from(
+      new Set([
+        ...(Array.isArray(geminiAddedSkills) ? geminiAddedSkills : []),
+        ...(Array.isArray(originalMatchResult?.newSkills)
+          ? originalMatchResult.newSkills
+          : []),
+      ])
+    ).filter(Boolean);
 
-  if (fallbackAdjustedCoverLetters.length) {
-    logStructured('info', 'generation_cover_letters_confident_closing_applied', {
-      ...logContext,
-      variants: fallbackAdjustedCoverLetters,
-    });
-  }
-
-  const enforceCoverLetterBestPractices = (key, index) => {
-    const value = typeof coverData[key] === 'string' ? coverData[key] : '';
-    const trimmedValue = value.trim();
-    if (!trimmedValue) {
-      return;
+    try {
+      versionData = createResumeVariants({
+        baseText: baseResumeText,
+        projectText,
+        modifiedTitle: versionsContext.jobTitle,
+        skillsToInclude: skillsToHighlight,
+        baseSkills: Array.isArray(geminiAddedSkills) ? geminiAddedSkills : [],
+        sanitizeOptions,
+      });
+    } catch (err) {
+      logStructured('error', 'generation_variants_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+      const enhancementError = new Error(CV_GENERATION_ERROR_MESSAGE);
+      enhancementError.code = 'ENHANCEMENT_VARIANT_FAILED';
+      enhancementError.cause = err;
+      throw enhancementError;
     }
 
-    const auditResult = auditCoverLetterStructure(trimmedValue, {
-      contactDetails: coverContext.contactDetails,
-      jobTitle: coverContext.jobTitle,
-      jobDescription,
-      jobSkills,
-      applicantName,
-      letterIndex: index + 1,
-    });
+    if (versionData?.placeholders && Object.keys(versionData.placeholders).length) {
+      enhancementTokenMap = {
+        ...enhancementTokenMap,
+        ...versionData.placeholders,
+      };
+    }
 
-    const issues = Array.isArray(auditResult.issues) ? auditResult.issues : [];
-    const blockingIssues = issues.filter((issue) =>
-      issue === 'exceeds_word_limit' || issue === 'weak_closing'
+    if (!versionData.version1?.trim() || !versionData.version2?.trim()) {
+      cleanupReason = 'variants_unavailable';
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'generation_versions_missing',
+        level: 'error',
+        message: 'Unable to construct resume variants from extracted content',
+      });
+      sendError(
+        res,
+        500,
+        'AI_RESPONSE_INVALID',
+        DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
+      );
+      return null;
+    }
+
+    const version1Resolved = resolveEnhancementTokens(
+      typeof versionData.version1 === 'string' ? versionData.version1 : '',
+      enhancementTokenMap
+    );
+    const version2Resolved = resolveEnhancementTokens(
+      typeof versionData.version2 === 'string' ? versionData.version2 : '',
+      enhancementTokenMap
     );
 
-    if (!blockingIssues.length) {
-      return;
+    const version1Tokenized = injectEnhancementTokens(
+      version1Resolved,
+      enhancementTokenMap
+    );
+    const version2Tokenized = injectEnhancementTokens(
+      version2Resolved,
+      enhancementTokenMap
+    );
+
+    const version1Skills = extractResumeSkills(version1Resolved);
+    const match1 = calculateMatchScore(jobSkills, version1Skills);
+    const version2Skills = extractResumeSkills(version2Resolved);
+    const match2 = calculateMatchScore(jobSkills, version2Skills);
+    const bestMatch = match1.score >= match2.score ? match1 : match2;
+
+    const coverSchema = {
+      cover_letter1: 'string cover letter tailored to the job description',
+      cover_letter2: 'string cover letter tailored to the job description',
+    };
+    const coverContext = {
+      jobTitle: versionsContext.jobTitle,
+      designation: versionsContext.jobTitle || applicantTitle || '',
+      jobSkills,
+      targetedSkills: Array.isArray(jobSkills) ? [...jobSkills] : [],
+      resumeSkills: Array.isArray(resumeSkillsList) ? [...resumeSkillsList] : [],
+      resume: combinedProfile,
+      jobDescription,
+      contactDetails: {
+        email: contactDetails.email || '',
+        phone: contactDetails.phone || '',
+        linkedin: contactDetails.linkedin || '',
+        cityState: contactDetails.cityState || '',
+        contactLines: Array.isArray(contactDetails.contactLines)
+          ? [...contactDetails.contactLines]
+          : [],
+      },
+    };
+    const coverPrompt = [
+      'You are an elite career copywriter supporting Gemini/OpenAI workflows.',
+      'Instructions:',
+      '- Produce exactly two distinct, ATS-aware cover letters.',
+      '- Mirror critical language from the job description and respect accomplishments from the resume.',
+      '- Open with job-specific motivation that references the target role and employer from the job description.',
+      '- Surface the candidate designation provided in the context when positioning achievements.',
+      '- Highlight the most relevant targeted skills from the provided lists, weaving them naturally into the narrative.',
+      '- Present the candidate contact information from contactDetails at the top, omitting only fields that are blank.',
+      '- Preserve every URL appearing in the resume text.',
+      '- Maintain professional tone and structure without degrading the CV context referenced.',
+      '- Respond ONLY with JSON conforming to the schema below.',
+      '',
+      'OUTPUT_SCHEMA:',
+      JSON.stringify(coverSchema, null, 2),
+      '',
+      'INPUT_CONTEXT:',
+      JSON.stringify(coverContext, null, 2),
+    ].join('\n');
+
+    let coverData = {};
+    if (canUseGenerativeModel) {
+      const coverLogger = createStructuredLogger(logContext);
+      const maxAttempts = 2;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          const coverResult = await generateContentWithRetry(
+            generativeModel,
+            coverPrompt,
+            {
+              retryLogEvent: 'generation_cover_letters',
+              retryLogContext: {
+                ...logContext,
+                outerAttempt: attempt,
+              },
+              logger: coverLogger,
+            }
+          );
+          const coverText = coverResult?.response?.text?.();
+          const parsed = parseGeminiJsonResponse(coverText, { logger: coverLogger });
+          if (parsed && typeof parsed === 'object') {
+            coverData = parsed;
+            break;
+          }
+          logStructured('warn', 'generation_cover_letters_invalid', {
+            ...logContext,
+            attempt,
+            sample:
+              typeof coverText === 'string' ? coverText.slice(0, 200) : undefined,
+          });
+        } catch (err) {
+          if (attempt >= maxAttempts) {
+            logStructured('warn', 'generation_cover_letters_failed', {
+              ...logContext,
+              error: serializeError(err),
+            });
+          } else {
+            logStructured('warn', 'generation_cover_letters_retry', {
+              ...logContext,
+              attempt,
+              error: serializeError(err),
+            });
+          }
+        }
+      }
     }
 
-    const fallbackValue = fallbackLetters?.[key];
-    const normalizedFallback =
-      typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
+    const { normalized: normalizedCoverData, normalizedFrom, invalidKeys } =
+      normalizeCoverLetterOutputs(coverData);
 
-    if (normalizedFallback) {
-      coverData[key] = normalizedFallback;
-      pushUnique(bestPracticeAdjustedCoverLetters, key);
+    if (normalizedFrom.length) {
+      logStructured('info', 'generation_cover_letters_normalized', {
+        ...logContext,
+        variants: normalizedFrom,
+      });
+    }
 
-      const fallbackAudit = auditCoverLetterStructure(normalizedFallback, {
+    if (invalidKeys.length) {
+      logStructured('warn', 'generation_cover_letters_invalid_type', {
+        ...logContext,
+        variants: invalidKeys,
+      });
+    }
+
+    coverData = normalizedCoverData;
+
+    const structurallyInvalidLetters = [];
+    const recoverableCoverLetters = new Map();
+    COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
+      const value = typeof coverData[key] === 'string' ? coverData[key] : '';
+      if (!value.trim()) {
+        return;
+      }
+      const auditResult = auditCoverLetterStructure(value, {
+        contactDetails: coverContext.contactDetails,
+        jobTitle: coverContext.jobTitle,
+        jobDescription,
+        jobSkills,
+        applicantName,
+        letterIndex: index + 1,
+      });
+      if (!auditResult.valid) {
+        structurallyInvalidLetters.push({ key, issues: auditResult.issues });
+        const onlyRecoverableIssues = Array.isArray(auditResult.issues)
+          ? auditResult.issues.every((issue) =>
+            COVER_LETTER_RECOVERABLE_ISSUES.has(issue)
+          )
+          : false;
+        if (!onlyRecoverableIssues) {
+          coverData[key] = '';
+        } else {
+          recoverableCoverLetters.set(key, {
+            issues: Array.isArray(auditResult.issues) ? [...auditResult.issues] : [],
+          });
+        }
+      }
+    });
+
+    if (structurallyInvalidLetters.length) {
+      logStructured('warn', 'generation_cover_letters_structural_issues', {
+        ...logContext,
+        invalidLetters: structurallyInvalidLetters,
+      });
+    }
+
+    const fallbackLetters = activeCoverLetterFallbackBuilder({
+      applicantName,
+      jobTitle: versionsContext.jobTitle || applicantTitle,
+      designation: coverContext.designation,
+      jobDescription,
+      jobSkills,
+      targetedSkills: coverContext.targetedSkills,
+      contactDetails: coverContext.contactDetails,
+      resumeText: combinedProfile,
+    });
+    const pushUnique = (list = [], value) => {
+      if (!Array.isArray(list)) {
+        return;
+      }
+      if (!list.includes(value)) {
+        list.push(value);
+      }
+    };
+    const fallbackAdjustedCoverLetters = [];
+    const bestPracticeAdjustedCoverLetters = [];
+    const missingCoverLetters = [];
+    const disqualifiedCoverLetters = new Set();
+    recoverableCoverLetters.forEach((details, key) => {
+      if (!details || !Array.isArray(details.issues)) {
+        return;
+      }
+      if (!details.issues.includes('weak_closing')) {
+        return;
+      }
+      const fallbackValue = fallbackLetters?.[key];
+      if (typeof fallbackValue !== 'string' || !fallbackValue.trim()) {
+        return;
+      }
+      const upgradedText = upgradeCoverLetterClosingWithFallback({
+        originalText: coverData[key],
+        fallbackText: fallbackValue,
+        applicantName,
+      });
+      if (typeof upgradedText !== 'string') {
+        return;
+      }
+      const normalizedOriginal = typeof coverData[key] === 'string' ? coverData[key] : '';
+      if (!normalizedOriginal.trim()) {
+        return;
+      }
+      const trimmedUpgraded = upgradedText.trim();
+      if (!trimmedUpgraded || trimmedUpgraded === normalizedOriginal.trim()) {
+        return;
+      }
+      coverData[key] = trimmedUpgraded;
+      pushUnique(fallbackAdjustedCoverLetters, key);
+    });
+
+    if (fallbackAdjustedCoverLetters.length) {
+      logStructured('info', 'generation_cover_letters_confident_closing_applied', {
+        ...logContext,
+        variants: fallbackAdjustedCoverLetters,
+      });
+    }
+
+    const enforceCoverLetterBestPractices = (key, index) => {
+      const value = typeof coverData[key] === 'string' ? coverData[key] : '';
+      const trimmedValue = value.trim();
+      if (!trimmedValue) {
+        return;
+      }
+
+      const auditResult = auditCoverLetterStructure(trimmedValue, {
         contactDetails: coverContext.contactDetails,
         jobTitle: coverContext.jobTitle,
         jobDescription,
@@ -20432,670 +20416,696 @@ async function generateEnhancedDocumentsResponse({
         letterIndex: index + 1,
       });
 
-      const fallbackIssues = Array.isArray(fallbackAudit.issues)
-        ? fallbackAudit.issues
-        : [];
-      const fallbackStillBlocks = fallbackIssues.some((issue) =>
+      const issues = Array.isArray(auditResult.issues) ? auditResult.issues : [];
+      const blockingIssues = issues.filter((issue) =>
         issue === 'exceeds_word_limit' || issue === 'weak_closing'
       );
 
-      if (!fallbackAudit.valid && fallbackStillBlocks) {
-        coverData[key] = '';
-        pushUnique(missingCoverLetters, key);
-        disqualifiedCoverLetters.add(key);
+      if (!blockingIssues.length) {
+        return;
       }
 
-      return;
-    }
+      const fallbackValue = fallbackLetters?.[key];
+      const normalizedFallback =
+        typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
 
-    coverData[key] = '';
-    pushUnique(missingCoverLetters, key);
-    disqualifiedCoverLetters.add(key);
-  };
+      if (normalizedFallback) {
+        coverData[key] = normalizedFallback;
+        pushUnique(bestPracticeAdjustedCoverLetters, key);
 
-  COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
-    enforceCoverLetterBestPractices(key, index);
-  });
+        const fallbackAudit = auditCoverLetterStructure(normalizedFallback, {
+          contactDetails: coverContext.contactDetails,
+          jobTitle: coverContext.jobTitle,
+          jobDescription,
+          jobSkills,
+          applicantName,
+          letterIndex: index + 1,
+        });
 
-  const ensureCoverLetterValue = (key) => {
-    if (disqualifiedCoverLetters.has(key)) {
-      return;
-    }
-    const currentValue = coverData[key];
-    const hasUsableValue =
-      typeof currentValue === 'string' && currentValue.trim().length > 0;
-    if (hasUsableValue) {
-      return;
-    }
-    const fallbackValue = fallbackLetters?.[key];
-    const normalizedFallback =
-      typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
-    if (normalizedFallback) {
-      coverData[key] = normalizedFallback;
+        const fallbackIssues = Array.isArray(fallbackAudit.issues)
+          ? fallbackAudit.issues
+          : [];
+        const fallbackStillBlocks = fallbackIssues.some((issue) =>
+          issue === 'exceeds_word_limit' || issue === 'weak_closing'
+        );
+
+        if (!fallbackAudit.valid && fallbackStillBlocks) {
+          coverData[key] = '';
+          pushUnique(missingCoverLetters, key);
+          disqualifiedCoverLetters.add(key);
+        }
+
+        return;
+      }
+
+      coverData[key] = '';
       pushUnique(missingCoverLetters, key);
-    }
-  };
+      disqualifiedCoverLetters.add(key);
+    };
 
-  ensureCoverLetterValue('cover_letter1');
-  ensureCoverLetterValue('cover_letter2');
-
-  const removeIfBestPracticesFail = (key, index) => {
-    const value = typeof coverData[key] === 'string' ? coverData[key].trim() : '';
-    if (!value) {
-      return;
-    }
-
-    const auditResult = auditCoverLetterStructure(value, {
-      contactDetails: coverContext.contactDetails,
-      jobTitle: coverContext.jobTitle,
-      jobDescription,
-      jobSkills,
-      applicantName,
-      letterIndex: index + 1,
+    COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
+      enforceCoverLetterBestPractices(key, index);
     });
 
-    const blockingIssues = Array.isArray(auditResult.issues)
-      ? auditResult.issues.filter(
+    const ensureCoverLetterValue = (key) => {
+      if (disqualifiedCoverLetters.has(key)) {
+        return;
+      }
+      const currentValue = coverData[key];
+      const hasUsableValue =
+        typeof currentValue === 'string' && currentValue.trim().length > 0;
+      if (hasUsableValue) {
+        return;
+      }
+      const fallbackValue = fallbackLetters?.[key];
+      const normalizedFallback =
+        typeof fallbackValue === 'string' ? fallbackValue.trim() : '';
+      if (normalizedFallback) {
+        coverData[key] = normalizedFallback;
+        pushUnique(missingCoverLetters, key);
+      }
+    };
+
+    ensureCoverLetterValue('cover_letter1');
+    ensureCoverLetterValue('cover_letter2');
+
+    const removeIfBestPracticesFail = (key, index) => {
+      const value = typeof coverData[key] === 'string' ? coverData[key].trim() : '';
+      if (!value) {
+        return;
+      }
+
+      const auditResult = auditCoverLetterStructure(value, {
+        contactDetails: coverContext.contactDetails,
+        jobTitle: coverContext.jobTitle,
+        jobDescription,
+        jobSkills,
+        applicantName,
+        letterIndex: index + 1,
+      });
+
+      const blockingIssues = Array.isArray(auditResult.issues)
+        ? auditResult.issues.filter(
           (issue) => issue === 'exceeds_word_limit' || issue === 'weak_closing'
         )
-      : [];
-
-    if (!blockingIssues.length) {
-      return;
-    }
-
-    coverData[key] = '';
-    disqualifiedCoverLetters.add(key);
-    pushUnique(missingCoverLetters, key);
-  };
-
-  COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
-    removeIfBestPracticesFail(key, index);
-  });
-  if (missingCoverLetters.length) {
-    logStructured('warn', 'generation_cover_letters_fallback', {
-      ...logContext,
-      missing: missingCoverLetters,
-    });
-  }
-  const fallbackAppliedCoverLetters = Array.from(
-    new Set([
-      ...missingCoverLetters,
-      ...fallbackAdjustedCoverLetters,
-      ...bestPracticeAdjustedCoverLetters,
-    ])
-  );
-  const unavailableCoverLetters = COVER_LETTER_VARIANT_KEYS.filter(
-    (key) => typeof coverData[key] !== 'string' || !coverData[key].trim()
-  );
-
-  if (unavailableCoverLetters.length) {
-    logStructured('warn', 'generation_cover_letters_unavailable', {
-      ...logContext,
-      unavailable: unavailableCoverLetters,
-    });
-  }
-
-  const coverLetterStatus = {
-    fallbackApplied: fallbackAppliedCoverLetters,
-    unavailable: unavailableCoverLetters,
-  };
-  const coverVariants = COVER_LETTER_VARIANT_KEYS.filter(
-    (key) => typeof coverData[key] === 'string' && coverData[key].trim()
-  ).length;
-
-  logStructured('info', 'generation_cover_letters_completed', {
-    ...logContext,
-    variants: coverVariants,
-    fallbackApplied: fallbackAppliedCoverLetters.length > 0,
-  });
-
-  await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
-
-  const ownerSegmentForKeys = resolveDocumentOwnerSegment({
-    userId,
-    sanitizedName,
-  });
-  const jobSegmentForKeys = sanitizeJobSegment(jobId);
-  const generationDateSegment = new Date().toISOString().slice(0, 10);
-  const sessionPrefix = resolveSessionArtifactPrefix({
-    originalUploadKey,
-    ownerSegment: ownerSegmentForKeys,
-    sanitizedName,
-    userId,
-    sessionSegment: generationRunSegment,
-    requestId,
-    dateSegment: generationDateSegment,
-    jobId,
-    jobSegment: jobSegmentForKeys,
-  });
-  const existingRecordSessionId =
-    typeof existingRecord?.sessionId?.S === 'string'
-      ? existingRecord.sessionId.S.trim()
-      : '';
-  const canonicalSessionId = resolveCanonicalSessionId({
-    sessionId: existingRecordSessionId || sessionIdInput,
-    sessionSegment: generationRunSegment,
-    requestId,
-    sessionPrefix,
-    originalUploadKey,
-    sessionChangeLogKey,
-  });
-  const pointerFromInput =
-    sessionPointerInput && typeof sessionPointerInput === 'object'
-      ? buildCanonicalSessionPointer(sessionPointerInput)
-      : {};
-  const canonicalSessionPointer = {
-    ...pointerFromInput,
-    ...buildCanonicalSessionPointer({
-      bucket,
-      prefix: sessionPrefix,
-      sessionId: canonicalSessionId,
-      sessionChangeLogKey,
-    }),
-  };
-  stageMetadataKey = sessionPrefix ? `${sessionPrefix}logs/log.json` : '';
-  const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
-    letterIndex: 1,
-  });
-  const coverLetter2Tokens = tokenizeCoverLetterText(coverData.cover_letter2 || '', {
-    letterIndex: 2,
-  });
-
-  const coverLetter1PlaceholderMap = expandEnhancementTokenMap(
-    coverLetter1Tokens.placeholders || {}
-  );
-  const coverLetter2PlaceholderMap = expandEnhancementTokenMap(
-    coverLetter2Tokens.placeholders || {}
-  );
-  const coverLetterPlaceholderMap = {
-    ...coverLetter1PlaceholderMap,
-    ...coverLetter2PlaceholderMap,
-  };
-
-  if (Object.keys(coverLetterPlaceholderMap).length) {
-    enhancementTokenMap = {
-      ...enhancementTokenMap,
-      ...coverLetterPlaceholderMap,
-    };
-  }
-
-  const coverLetterEnhancementTokenMaps = {
-    cover_letter1: coverLetter1PlaceholderMap,
-    cover_letter2: coverLetter2PlaceholderMap,
-  };
-
-  const outputs = {
-    version1: {
-      text: version1Resolved,
-      templateText: version1Resolved,
-      tokenizedText: version1Tokenized,
-    },
-    version2: {
-      text: version2Resolved,
-      templateText: version2Resolved,
-      tokenizedText: version2Tokenized,
-    },
-    cover_letter1: {
-      text: coverData.cover_letter1,
-      templateText:
-        coverLetter1Tokens.tokenizedText || coverData.cover_letter1 || '',
-    },
-    cover_letter2: {
-      text: coverData.cover_letter2,
-      templateText:
-        coverLetter2Tokens.tokenizedText || coverData.cover_letter2 || '',
-    },
-  };
-  const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
-  const downloadsRestricted = allowedOriginsForDownloads.length === 0;
-  const urls = [];
-  const downloadArtifacts = [];
-  const artifactTimestamp = new Date().toISOString();
-  const jobDescriptionSnapshot = buildJobDescriptionSnapshot(jobDescription, {
-    digest: resolvedJobDescriptionDigest,
-    recordedAt: artifactTimestamp,
-  });
-  const uploadedArtifacts = [];
-  const textArtifactKeys = {};
-  const usedPdfKeys = new Set();
-  const generatedTemplates = {};
-  const generationMessages = [];
-  const templateCreationMessages = [];
-  const documentPopulationMessages = [];
-
-  const pushUniqueMessage = (collection, value) => {
-    if (!Array.isArray(collection)) {
-      return;
-    }
-    if (!collection.includes(value)) {
-      collection.push(value);
-    }
-  };
-
-  const normalizeMessage = (value) => {
-    if (typeof value !== 'string') return '';
-    const trimmed = value.trim();
-    return trimmed;
-  };
-
-  const pushCategorizedMessage = (value, categoryCollection) => {
-    const normalized = normalizeMessage(value);
-    if (!normalized) return;
-    pushUniqueMessage(generationMessages, normalized);
-    if (categoryCollection) {
-      pushUniqueMessage(categoryCollection, normalized);
-    }
-  };
-
-  const pushTemplateCreationMessage = (value) => {
-    pushCategorizedMessage(value, templateCreationMessages);
-  };
-
-  const pushDocumentPopulationMessage = (value) => {
-    pushCategorizedMessage(value, documentPopulationMessages);
-  };
-  if (expiredDownloadSessionNotice) {
-    pushUniqueMessage(generationMessages, expiredDownloadSessionNotice);
-  }
-  const templateFallbackApplied = {
-    resumePrimary: false,
-    resumeSecondary: false,
-    coverPrimary: false,
-    coverSecondary: false,
-  };
-  const finalTemplateMapping = {
-    resume: { primary: template1, secondary: template2 },
-    cover: { primary: coverTemplate1, secondary: coverTemplate2 },
-  };
-
-  const buildResumeTemplateContextEntry = (templateId) => {
-    const canonical = canonicalizeCvTemplateId(templateId || '');
-    if (!canonical) {
-      return null;
-    }
-    const templateName = formatTemplateDisplayName(canonical);
-    const templateLabel = templateName
-      ? `${templateName} Resume`
-      : 'Resume Template';
-    return {
-      templateId: canonical,
-      templateName,
-      templateType: 'resume',
-      templateLabel,
-    };
-  };
-
-  const buildCoverTemplateContextEntry = (templateId) => {
-    const canonical = canonicalizeCoverTemplateId(templateId || '');
-    if (!canonical) {
-      return null;
-    }
-    const templateName = formatCoverTemplateDisplayName(canonical);
-    const templateLabel = templateName || 'Cover Letter';
-    return {
-      templateId: canonical,
-      templateName,
-      templateType: 'cover',
-      templateLabel,
-    };
-  };
-  const originalResumeForStorage =
-    typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
-      ? originalResumeTextInput
-      : resumeText;
-  let originalHandledViaArtifacts = false;
-
-  if (coverLetterStatus.fallbackApplied.length) {
-    const fallbackMessage =
-      coverLetterStatus.fallbackApplied.length === COVER_LETTER_VARIANT_KEYS.length
-        ? 'Cover letters were generated using fallback copy because the AI response was incomplete.'
-        : 'At least one cover letter was generated using fallback copy because the AI response was incomplete.';
-    pushDocumentPopulationMessage(fallbackMessage);
-  }
-
-  if (coverLetterStatus.unavailable.length) {
-    const unavailableMessage =
-      coverLetterStatus.unavailable.length === COVER_LETTER_VARIANT_KEYS.length
-        ? 'CV generated, cover letter unavailable.'
-        : 'CV generated successfully, but at least one cover letter variant was unavailable.';
-    pushDocumentPopulationMessage(unavailableMessage);
-  }
-  if (downloadsRestricted) {
-    logStructured('info', 'generation_downloads_restricted', {
-      ...logContext,
-      reason: 'no_allowed_origins',
-      allowedOriginsCount: allowedOriginsForDownloads.length,
-    });
-  }
-
-  const normalizedOriginalUploadKey = normalizeArtifactKey(originalUploadKey);
-  const originalTemplateMetadata = {
-    templateId: 'original',
-    templateName: 'Original Upload',
-    templateType: 'resume',
-  };
-  const originalPdfTemplateMetadata = {
-    templateId: 'original_pdf',
-    templateName: 'Original Upload (Plain PDF)',
-    templateType: 'resume',
-  };
-  let originalExtension = '';
-  let originalIsPdfLike = false;
-
-  if (normalizedOriginalUploadKey) {
-    originalExtension = (path.extname(normalizedOriginalUploadKey) || '').toLowerCase();
-    originalIsPdfLike = !originalExtension || originalExtension === '.pdf';
-  }
-
-  if (normalizedOriginalUploadKey) {
-    if (originalIsPdfLike) {
-      const originalArtifact = {
-        type: 'original_upload',
-        key: normalizedOriginalUploadKey,
-        templateMetadata: originalTemplateMetadata,
-        text: originalResumeForStorage,
-      };
-      enrichArtifactWithVersionMetadata(originalArtifact, {
-        timestamp: artifactTimestamp,
-        storageKey: normalizedOriginalUploadKey,
-        type: 'original_upload',
-        textContent: originalResumeForStorage,
-      });
-      downloadArtifacts.unshift(originalArtifact);
-      originalHandledViaArtifacts = true;
-    } else {
-      const originalPdfKey = buildTemplateScopedPdfKey({
-        basePrefix: sessionPrefix,
-        documentType: 'original',
-        templateId: 'original',
-        variant: 'original_upload',
-        usedKeys: usedPdfKeys,
-      });
-      const contactLinesForOriginal = Array.isArray(contactDetails.contactLines)
-        ? contactDetails.contactLines
         : [];
-      const originalFallbackPayload = {
-        requestedTemplateId: selection?.template1 || '',
-        templateId: selection?.template1 || '',
-        text: originalResumeForStorage,
-        name: applicantName,
-        jobTitle: versionsContext.jobTitle || applicantTitle || '',
-        contactLines: contactLinesForOriginal,
-        documentType: 'resume',
-        logContext: {
-          ...logContext,
-          documentType: 'resume',
-          outputName: 'original_upload',
-          outputKeyPrefix: sessionPrefix,
-          originalUploadKey: normalizedOriginalUploadKey,
-          originalUploadExtension: originalExtension,
-        },
-      };
 
-      let originalPdfBuffer = null;
-      let originalUsedMinimalFallback = false;
-
-      try {
-        originalPdfBuffer = await generatePlainPdfFallback(originalFallbackPayload);
-      } catch (err) {
-        logStructured('warn', 'original_upload_plain_pdf_failed', {
-          ...logContext,
-          error: serializeError(err),
-          originalUploadKey: normalizedOriginalUploadKey,
-          originalUploadExtension: originalExtension,
-        });
+      if (!blockingIssues.length) {
+        return;
       }
 
-      if (!originalPdfBuffer) {
-        try {
-          originalPdfBuffer = minimalPlainPdfBufferGenerator({
-            lines: originalResumeForStorage.split('\n'),
-            name: applicantName,
-            jobTitle: versionsContext.jobTitle || applicantTitle || '',
-            contactLines: contactLinesForOriginal,
-            documentType: 'resume',
-            requestedTemplateId: selection?.template1 || '',
-          });
-          originalUsedMinimalFallback = true;
-        } catch (minimalErr) {
-          logStructured('error', 'original_upload_minimal_pdf_failed', {
+      coverData[key] = '';
+      disqualifiedCoverLetters.add(key);
+      pushUnique(missingCoverLetters, key);
+    };
+
+    COVER_LETTER_VARIANT_KEYS.forEach((key, index) => {
+      removeIfBestPracticesFail(key, index);
+    });
+    if (missingCoverLetters.length) {
+      logStructured('warn', 'generation_cover_letters_fallback', {
+        ...logContext,
+        missing: missingCoverLetters,
+      });
+    }
+    const fallbackAppliedCoverLetters = Array.from(
+      new Set([
+        ...missingCoverLetters,
+        ...fallbackAdjustedCoverLetters,
+        ...bestPracticeAdjustedCoverLetters,
+      ])
+    );
+    const unavailableCoverLetters = COVER_LETTER_VARIANT_KEYS.filter(
+      (key) => typeof coverData[key] !== 'string' || !coverData[key].trim()
+    );
+
+    if (unavailableCoverLetters.length) {
+      logStructured('warn', 'generation_cover_letters_unavailable', {
+        ...logContext,
+        unavailable: unavailableCoverLetters,
+      });
+    }
+
+    const coverLetterStatus = {
+      fallbackApplied: fallbackAppliedCoverLetters,
+      unavailable: unavailableCoverLetters,
+    };
+    const coverVariants = COVER_LETTER_VARIANT_KEYS.filter(
+      (key) => typeof coverData[key] === 'string' && coverData[key].trim()
+    ).length;
+
+    logStructured('info', 'generation_cover_letters_completed', {
+      ...logContext,
+      variants: coverVariants,
+      fallbackApplied: fallbackAppliedCoverLetters.length > 0,
+    });
+
+    await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_outputs_ready' });
+
+    const ownerSegmentForKeys = resolveDocumentOwnerSegment({
+      userId,
+      sanitizedName,
+    });
+    const jobSegmentForKeys = sanitizeJobSegment(jobId);
+    const generationDateSegment = new Date().toISOString().slice(0, 10);
+    const sessionPrefix = resolveSessionArtifactPrefix({
+      originalUploadKey,
+      ownerSegment: ownerSegmentForKeys,
+      sanitizedName,
+      userId,
+      sessionSegment: generationRunSegment,
+      requestId,
+      dateSegment: generationDateSegment,
+      jobId,
+      jobSegment: jobSegmentForKeys,
+    });
+    const existingRecordSessionId =
+      typeof existingRecord?.sessionId?.S === 'string'
+        ? existingRecord.sessionId.S.trim()
+        : '';
+    const canonicalSessionId = resolveCanonicalSessionId({
+      sessionId: existingRecordSessionId || sessionIdInput,
+      sessionSegment: generationRunSegment,
+      requestId,
+      sessionPrefix,
+      originalUploadKey,
+      sessionChangeLogKey,
+    });
+    const pointerFromInput =
+      sessionPointerInput && typeof sessionPointerInput === 'object'
+        ? buildCanonicalSessionPointer(sessionPointerInput)
+        : {};
+    const canonicalSessionPointer = {
+      ...pointerFromInput,
+      ...buildCanonicalSessionPointer({
+        bucket,
+        prefix: sessionPrefix,
+        sessionId: canonicalSessionId,
+        sessionChangeLogKey,
+      }),
+    };
+    stageMetadataKey = sessionPrefix ? `${sessionPrefix}logs/log.json` : '';
+    const coverLetter1Tokens = tokenizeCoverLetterText(coverData.cover_letter1 || '', {
+      letterIndex: 1,
+    });
+    const coverLetter2Tokens = tokenizeCoverLetterText(coverData.cover_letter2 || '', {
+      letterIndex: 2,
+    });
+
+    const coverLetter1PlaceholderMap = expandEnhancementTokenMap(
+      coverLetter1Tokens.placeholders || {}
+    );
+    const coverLetter2PlaceholderMap = expandEnhancementTokenMap(
+      coverLetter2Tokens.placeholders || {}
+    );
+    const coverLetterPlaceholderMap = {
+      ...coverLetter1PlaceholderMap,
+      ...coverLetter2PlaceholderMap,
+    };
+
+    if (Object.keys(coverLetterPlaceholderMap).length) {
+      enhancementTokenMap = {
+        ...enhancementTokenMap,
+        ...coverLetterPlaceholderMap,
+      };
+    }
+
+    const coverLetterEnhancementTokenMaps = {
+      cover_letter1: coverLetter1PlaceholderMap,
+      cover_letter2: coverLetter2PlaceholderMap,
+    };
+
+    const outputs = {
+      version1: {
+        text: version1Resolved,
+        templateText: version1Resolved,
+        tokenizedText: version1Tokenized,
+      },
+      version2: {
+        text: version2Resolved,
+        templateText: version2Resolved,
+        tokenizedText: version2Tokenized,
+      },
+      cover_letter1: {
+        text: coverData.cover_letter1,
+        templateText:
+          coverLetter1Tokens.tokenizedText || coverData.cover_letter1 || '',
+      },
+      cover_letter2: {
+        text: coverData.cover_letter2,
+        templateText:
+          coverLetter2Tokens.tokenizedText || coverData.cover_letter2 || '',
+      },
+    };
+    const allowedOriginsForDownloads = resolveCurrentAllowedOrigins();
+    const downloadsRestricted = allowedOriginsForDownloads.length === 0;
+    const urls = [];
+    const downloadArtifacts = [];
+    const artifactTimestamp = new Date().toISOString();
+    const jobDescriptionSnapshot = buildJobDescriptionSnapshot(jobDescription, {
+      digest: resolvedJobDescriptionDigest,
+      recordedAt: artifactTimestamp,
+    });
+    const uploadedArtifacts = [];
+    const textArtifactKeys = {};
+    const usedPdfKeys = new Set();
+    const generatedTemplates = {};
+    const generationMessages = [];
+    const templateCreationMessages = [];
+    const documentPopulationMessages = [];
+
+    const pushUniqueMessage = (collection, value) => {
+      if (!Array.isArray(collection)) {
+        return;
+      }
+      if (!collection.includes(value)) {
+        collection.push(value);
+      }
+    };
+
+    const normalizeMessage = (value) => {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      return trimmed;
+    };
+
+    const pushCategorizedMessage = (value, categoryCollection) => {
+      const normalized = normalizeMessage(value);
+      if (!normalized) return;
+      pushUniqueMessage(generationMessages, normalized);
+      if (categoryCollection) {
+        pushUniqueMessage(categoryCollection, normalized);
+      }
+    };
+
+    const pushTemplateCreationMessage = (value) => {
+      pushCategorizedMessage(value, templateCreationMessages);
+    };
+
+    const pushDocumentPopulationMessage = (value) => {
+      pushCategorizedMessage(value, documentPopulationMessages);
+    };
+    if (expiredDownloadSessionNotice) {
+      pushUniqueMessage(generationMessages, expiredDownloadSessionNotice);
+    }
+    const templateFallbackApplied = {
+      resumePrimary: false,
+      resumeSecondary: false,
+      coverPrimary: false,
+      coverSecondary: false,
+    };
+    const finalTemplateMapping = {
+      resume: { primary: template1, secondary: template2 },
+      cover: { primary: coverTemplate1, secondary: coverTemplate2 },
+    };
+
+    const buildResumeTemplateContextEntry = (templateId) => {
+      const canonical = canonicalizeCvTemplateId(templateId || '');
+      if (!canonical) {
+        return null;
+      }
+      const templateName = formatTemplateDisplayName(canonical);
+      const templateLabel = templateName
+        ? `${templateName} Resume`
+        : 'Resume Template';
+      return {
+        templateId: canonical,
+        templateName,
+        templateType: 'resume',
+        templateLabel,
+      };
+    };
+
+    const buildCoverTemplateContextEntry = (templateId) => {
+      const canonical = canonicalizeCoverTemplateId(templateId || '');
+      if (!canonical) {
+        return null;
+      }
+      const templateName = formatCoverTemplateDisplayName(canonical);
+      const templateLabel = templateName || 'Cover Letter';
+      return {
+        templateId: canonical,
+        templateName,
+        templateType: 'cover',
+        templateLabel,
+      };
+    };
+    const originalResumeForStorage =
+      typeof originalResumeTextInput === 'string' && originalResumeTextInput.trim()
+        ? originalResumeTextInput
+        : resumeText;
+    let originalHandledViaArtifacts = false;
+
+    if (coverLetterStatus.fallbackApplied.length) {
+      const fallbackMessage =
+        coverLetterStatus.fallbackApplied.length === COVER_LETTER_VARIANT_KEYS.length
+          ? 'Cover letters were generated using fallback copy because the AI response was incomplete.'
+          : 'At least one cover letter was generated using fallback copy because the AI response was incomplete.';
+      pushDocumentPopulationMessage(fallbackMessage);
+    }
+
+    if (coverLetterStatus.unavailable.length) {
+      const unavailableMessage =
+        coverLetterStatus.unavailable.length === COVER_LETTER_VARIANT_KEYS.length
+          ? 'CV generated, cover letter unavailable.'
+          : 'CV generated successfully, but at least one cover letter variant was unavailable.';
+      pushDocumentPopulationMessage(unavailableMessage);
+    }
+    if (downloadsRestricted) {
+      logStructured('info', 'generation_downloads_restricted', {
+        ...logContext,
+        reason: 'no_allowed_origins',
+        allowedOriginsCount: allowedOriginsForDownloads.length,
+      });
+    }
+
+    const normalizedOriginalUploadKey = normalizeArtifactKey(originalUploadKey);
+    const originalTemplateMetadata = {
+      templateId: 'original',
+      templateName: 'Original Upload',
+      templateType: 'resume',
+    };
+    const originalPdfTemplateMetadata = {
+      templateId: 'original_pdf',
+      templateName: 'Original Upload (Plain PDF)',
+      templateType: 'resume',
+    };
+    let originalExtension = '';
+    let originalIsPdfLike = false;
+
+    if (normalizedOriginalUploadKey) {
+      originalExtension = (path.extname(normalizedOriginalUploadKey) || '').toLowerCase();
+      originalIsPdfLike = !originalExtension || originalExtension === '.pdf';
+    }
+
+    if (normalizedOriginalUploadKey) {
+      if (originalIsPdfLike) {
+        const originalArtifact = {
+          type: 'original_upload',
+          key: normalizedOriginalUploadKey,
+          templateMetadata: originalTemplateMetadata,
+          text: originalResumeForStorage,
+        };
+        enrichArtifactWithVersionMetadata(originalArtifact, {
+          timestamp: artifactTimestamp,
+          storageKey: normalizedOriginalUploadKey,
+          type: 'original_upload',
+          textContent: originalResumeForStorage,
+        });
+        downloadArtifacts.unshift(originalArtifact);
+        originalHandledViaArtifacts = true;
+      } else {
+        const originalPdfKey = buildTemplateScopedPdfKey({
+          basePrefix: sessionPrefix,
+          documentType: 'original',
+          templateId: 'original',
+          variant: 'original_upload',
+          usedKeys: usedPdfKeys,
+        });
+        const contactLinesForOriginal = Array.isArray(contactDetails.contactLines)
+          ? contactDetails.contactLines
+          : [];
+        const originalFallbackPayload = {
+          requestedTemplateId: selection?.template1 || '',
+          templateId: selection?.template1 || '',
+          text: originalResumeForStorage,
+          name: applicantName,
+          jobTitle: versionsContext.jobTitle || applicantTitle || '',
+          contactLines: contactLinesForOriginal,
+          documentType: 'resume',
+          logContext: {
             ...logContext,
-            error: serializeError(minimalErr),
+            documentType: 'resume',
+            outputName: 'original_upload',
+            outputKeyPrefix: sessionPrefix,
+            originalUploadKey: normalizedOriginalUploadKey,
+            originalUploadExtension: originalExtension,
+          },
+        };
+
+        let originalPdfBuffer = null;
+        let originalUsedMinimalFallback = false;
+
+        try {
+          originalPdfBuffer = await generatePlainPdfFallback(originalFallbackPayload);
+        } catch (err) {
+          logStructured('warn', 'original_upload_plain_pdf_failed', {
+            ...logContext,
+            error: serializeError(err),
             originalUploadKey: normalizedOriginalUploadKey,
             originalUploadExtension: originalExtension,
           });
         }
-      }
 
-      if (originalPdfBuffer) {
-        try {
-          await sendS3CommandWithRetry(
-            s3,
-            () =>
-              new PutObjectCommand(
-                withEnvironmentTagging(
-                  withBuildMetadata({
-                    Bucket: bucket,
-                    Key: originalPdfKey,
-                    Body: originalPdfBuffer,
-                    ContentType: 'application/pdf',
-                  })
-                )
-              ),
-            {
-              maxAttempts: 4,
-              baseDelayMs: 500,
-              maxDelayMs: 5000,
-              jitterMs: 300,
-              retryLogEvent: 'original_upload_pdf_upload_retry',
-              retryLogContext: {
-                ...logContext,
-                originalUploadKey: normalizedOriginalUploadKey,
-                originalUploadExtension: originalExtension,
-                storageKey: originalPdfKey,
-              },
-            }
-          );
-          registerArtifactKey(originalPdfKey);
-          const originalPdfArtifact = {
-            type: 'original_upload_pdf',
-            key: originalPdfKey,
-            templateMetadata: originalPdfTemplateMetadata,
-            text: originalResumeForStorage,
-          };
-          const originalPdfVersion = enrichArtifactWithVersionMetadata(
-            originalPdfArtifact,
-            {
-              timestamp: artifactTimestamp,
-              storageKey: originalPdfKey,
-              type: 'original_upload_pdf',
-              contentBuffer: originalPdfBuffer,
-              textContent: originalResumeForStorage,
-            }
-          );
-          uploadedArtifacts.push({
-            type: 'original_upload_pdf',
-            key: originalPdfKey,
-            versionId: originalPdfVersion.versionId,
-            versionHash: originalPdfVersion.versionHash,
-            generatedAt: originalPdfVersion.generatedAt,
-          });
-          downloadArtifacts.unshift(originalPdfArtifact);
-          originalHandledViaArtifacts = true;
-          logStructured(
-            originalUsedMinimalFallback ? 'warn' : 'info',
-            originalUsedMinimalFallback
-              ? 'original_upload_minimal_pdf_generated'
-              : 'original_upload_pdf_generated',
-            {
+        if (!originalPdfBuffer) {
+          try {
+            originalPdfBuffer = minimalPlainPdfBufferGenerator({
+              lines: originalResumeForStorage.split('\n'),
+              name: applicantName,
+              jobTitle: versionsContext.jobTitle || applicantTitle || '',
+              contactLines: contactLinesForOriginal,
+              documentType: 'resume',
+              requestedTemplateId: selection?.template1 || '',
+            });
+            originalUsedMinimalFallback = true;
+          } catch (minimalErr) {
+            logStructured('error', 'original_upload_minimal_pdf_failed', {
               ...logContext,
-              storageKey: originalPdfKey,
+              error: serializeError(minimalErr),
               originalUploadKey: normalizedOriginalUploadKey,
               originalUploadExtension: originalExtension,
-            }
-          );
-        } catch (uploadErr) {
-          logStructured('error', 'original_upload_pdf_upload_failed', {
+            });
+          }
+        }
+
+        if (originalPdfBuffer) {
+          try {
+            await sendS3CommandWithRetry(
+              s3,
+              () =>
+                new PutObjectCommand(
+                  withEnvironmentTagging(
+                    withBuildMetadata({
+                      Bucket: bucket,
+                      Key: originalPdfKey,
+                      Body: originalPdfBuffer,
+                      ContentType: 'application/pdf',
+                    })
+                  )
+                ),
+              {
+                maxAttempts: 4,
+                baseDelayMs: 500,
+                maxDelayMs: 5000,
+                jitterMs: 300,
+                retryLogEvent: 'original_upload_pdf_upload_retry',
+                retryLogContext: {
+                  ...logContext,
+                  originalUploadKey: normalizedOriginalUploadKey,
+                  originalUploadExtension: originalExtension,
+                  storageKey: originalPdfKey,
+                },
+              }
+            );
+            registerArtifactKey(originalPdfKey);
+            const originalPdfArtifact = {
+              type: 'original_upload_pdf',
+              key: originalPdfKey,
+              templateMetadata: originalPdfTemplateMetadata,
+              text: originalResumeForStorage,
+            };
+            const originalPdfVersion = enrichArtifactWithVersionMetadata(
+              originalPdfArtifact,
+              {
+                timestamp: artifactTimestamp,
+                storageKey: originalPdfKey,
+                type: 'original_upload_pdf',
+                contentBuffer: originalPdfBuffer,
+                textContent: originalResumeForStorage,
+              }
+            );
+            uploadedArtifacts.push({
+              type: 'original_upload_pdf',
+              key: originalPdfKey,
+              versionId: originalPdfVersion.versionId,
+              versionHash: originalPdfVersion.versionHash,
+              generatedAt: originalPdfVersion.generatedAt,
+            });
+            downloadArtifacts.unshift(originalPdfArtifact);
+            originalHandledViaArtifacts = true;
+            logStructured(
+              originalUsedMinimalFallback ? 'warn' : 'info',
+              originalUsedMinimalFallback
+                ? 'original_upload_minimal_pdf_generated'
+                : 'original_upload_pdf_generated',
+              {
+                ...logContext,
+                storageKey: originalPdfKey,
+                originalUploadKey: normalizedOriginalUploadKey,
+                originalUploadExtension: originalExtension,
+              }
+            );
+          } catch (uploadErr) {
+            logStructured('error', 'original_upload_pdf_upload_failed', {
+              ...logContext,
+              error: serializeError(uploadErr),
+              originalUploadKey: normalizedOriginalUploadKey,
+              originalUploadExtension: originalExtension,
+              storageKey: originalPdfKey,
+            });
+          }
+        } else {
+          logStructured('error', 'original_upload_pdf_generation_failed', {
             ...logContext,
-            error: serializeError(uploadErr),
             originalUploadKey: normalizedOriginalUploadKey,
             originalUploadExtension: originalExtension,
-            storageKey: originalPdfKey,
           });
         }
-      } else {
-        logStructured('error', 'original_upload_pdf_generation_failed', {
+      }
+    }
+
+    const shouldExposeOriginalSource =
+      originalUploadKey &&
+      normalizedOriginalUploadKey &&
+      (!originalIsPdfLike || !originalHandledViaArtifacts);
+
+    if (shouldExposeOriginalSource) {
+      try {
+        const originalSignedUrl = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+          { expiresIn: URL_EXPIRATION_SECONDS }
+        );
+        const expiresAt = new Date(
+          Date.now() + URL_EXPIRATION_SECONDS * 1000
+        ).toISOString();
+        const typeFragment = encodeURIComponent('original_upload');
+        const originalSourceVersion = buildArtifactVersionMetadata({
+          timestamp: artifactTimestamp,
+          storageKey: originalUploadKey,
+          type: 'original_upload',
+          textContent: originalResumeForStorage,
+        });
+        urls.push({
+          type: 'original_upload',
+          url: originalSignedUrl,
+          fileUrl: originalSignedUrl,
+          typeUrl: `${originalSignedUrl}#${typeFragment}`,
+          expiresAt,
+          generatedAt: originalSourceVersion.generatedAt,
+          versionHash: originalSourceVersion.versionHash,
+          versionId: originalSourceVersion.versionId,
+          templateId: 'original',
+          templateName: 'Original Upload',
+          templateType: 'resume',
+          storageKey: originalUploadKey,
+          text: originalResumeForStorage,
+        });
+      } catch (err) {
+        logStructured('warn', 'generation_original_url_failed', {
           ...logContext,
-          originalUploadKey: normalizedOriginalUploadKey,
-          originalUploadExtension: originalExtension,
+          error: serializeError(err),
         });
       }
     }
-  }
 
-  const shouldExposeOriginalSource =
-    originalUploadKey &&
-    normalizedOriginalUploadKey &&
-    (!originalIsPdfLike || !originalHandledViaArtifacts);
+    for (const [name, entry] of Object.entries(outputs)) {
+      const templateTextCandidate =
+        typeof entry?.templateText === 'string' ? entry.templateText : '';
+      const fallbackTemplateText =
+        typeof entry?.text === 'string' ? entry.text : '';
+      const templateText =
+        templateTextCandidate && templateTextCandidate.trim()
+          ? templateTextCandidate
+          : fallbackTemplateText;
+      if (!templateText || !templateText.trim()) continue;
 
-  if (shouldExposeOriginalSource) {
-    try {
-      const originalSignedUrl = await getSignedUrl(
-        s3,
-        new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
-        { expiresIn: URL_EXPIRATION_SECONDS }
-      );
-      const expiresAt = new Date(
-        Date.now() + URL_EXPIRATION_SECONDS * 1000
-      ).toISOString();
-      const typeFragment = encodeURIComponent('original_upload');
-      const originalSourceVersion = buildArtifactVersionMetadata({
-        timestamp: artifactTimestamp,
-        storageKey: originalUploadKey,
-        type: 'original_upload',
-        textContent: originalResumeForStorage,
-      });
-      urls.push({
-        type: 'original_upload',
-        url: originalSignedUrl,
-        fileUrl: originalSignedUrl,
-        typeUrl: `${originalSignedUrl}#${typeFragment}`,
-        expiresAt,
-        generatedAt: originalSourceVersion.generatedAt,
-        versionHash: originalSourceVersion.versionHash,
-        versionId: originalSourceVersion.versionId,
-        templateId: 'original',
-        templateName: 'Original Upload',
-        templateType: 'resume',
-        storageKey: originalUploadKey,
-        text: originalResumeForStorage,
-      });
-    } catch (err) {
-      logStructured('warn', 'generation_original_url_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-    }
-  }
-
-  for (const [name, entry] of Object.entries(outputs)) {
-    const templateTextCandidate =
-      typeof entry?.templateText === 'string' ? entry.templateText : '';
-    const fallbackTemplateText =
-      typeof entry?.text === 'string' ? entry.text : '';
-    const templateText =
-      templateTextCandidate && templateTextCandidate.trim()
-        ? templateTextCandidate
-        : fallbackTemplateText;
-    if (!templateText || !templateText.trim()) continue;
-
-    const isCvDocument = name === 'version1' || name === 'version2';
-    const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
-    const documentType = isCvDocument ? 'resume' : isCoverLetter ? 'cover_letter' : name;
-    const primaryTemplate = isCvDocument
-      ? name === 'version1'
-        ? template1
-        : template2
-      : isCoverLetter
-        ? name === 'cover_letter1'
-          ? coverTemplate1
-          : coverTemplate2
-        : template1;
-
-    const sharedTemplateOptions = {
-      jobSkills,
-      linkedinExperience,
-      resumeEducation,
-      linkedinEducation,
-      resumeCertifications,
-      linkedinCertifications,
-      credlyCertifications,
-      credlyProfileUrl,
-      jobTitle: versionsContext.jobTitle,
-      project: projectText,
-      contactLines: contactDetails.contactLines,
-      contactDetails,
-      email: contactDetails.email,
-      phone: contactDetails.phone,
-      cityState: contactDetails.cityState,
-      linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
-      ...sectionPreservation,
-      templateParams: {},
-      enhancementTokenMap,
-    };
-
-    const baseTemplateOptions = { ...sharedTemplateOptions };
-
-    if (isCvDocument) {
-      baseTemplateOptions.resumeExperience = resumeExperience;
-    } else if (isCoverLetter) {
-      baseTemplateOptions.skipRequiredSections = true;
-      baseTemplateOptions.enhancementTokenMap = {
-        ...(sharedTemplateOptions.enhancementTokenMap || {}),
-        ...(coverLetterEnhancementTokenMaps[name] || {}),
-      };
-    }
-
-    const canonicalPrimaryTemplate = isCvDocument
-      ? canonicalizeCvTemplateId(primaryTemplate || '')
-      : primaryTemplate;
-
-    if (isCvDocument && canonicalPrimaryTemplate === 'ats') {
-      baseTemplateOptions.templateParams = {
-        ...(baseTemplateOptions.templateParams || {}),
-        mode: 'ats',
-        atsMode: true,
-      };
-    }
-
-    let candidateTemplates = (() => {
-      const fallbackTemplates = isCoverLetter ? CL_TEMPLATES : CV_TEMPLATES;
-      const requestedTemplates = isCvDocument
-        ? [template1, template2, ...(availableCvTemplates || [])]
+      const isCvDocument = name === 'version1' || name === 'version2';
+      const isCoverLetter = name === 'cover_letter1' || name === 'cover_letter2';
+      const documentType = isCvDocument ? 'resume' : isCoverLetter ? 'cover_letter' : name;
+      const primaryTemplate = isCvDocument
+        ? name === 'version1'
+          ? template1
+          : template2
         : isCoverLetter
-          ? [coverTemplate1, coverTemplate2, ...(availableCoverTemplates || [])]
-          : [primaryTemplate];
-      const merged = [primaryTemplate, ...requestedTemplates, ...fallbackTemplates].filter(Boolean);
-      return uniqueTemplates(merged);
-    })();
+          ? name === 'cover_letter1'
+            ? coverTemplate1
+            : coverTemplate2
+          : template1;
 
-    if (isCvDocument && baseTemplateOptions.templateParams?.mode === 'ats') {
-      const filtered = candidateTemplates.filter(
-        (tpl) => canonicalizeCvTemplateId(tpl) === 'ats'
-      );
-      candidateTemplates = filtered.length ? filtered : ['ats'];
-    }
+      const sharedTemplateOptions = {
+        jobSkills,
+        linkedinExperience,
+        resumeEducation,
+        linkedinEducation,
+        resumeCertifications,
+        linkedinCertifications,
+        credlyCertifications,
+        credlyProfileUrl,
+        jobTitle: versionsContext.jobTitle,
+        project: projectText,
+        contactLines: contactDetails.contactLines,
+        contactDetails,
+        email: contactDetails.email,
+        phone: contactDetails.phone,
+        cityState: contactDetails.cityState,
+        linkedinProfileUrl: contactDetails.linkedin || linkedinProfileUrl,
+        ...sectionPreservation,
+        templateParams: {},
+        enhancementTokenMap,
+      };
 
-    const {
-      buffer: pdfBuffer,
-      template: resolvedTemplate,
-      messages: attemptMessages = [],
-    } = await generatePdfWithFallback({
-      documentType,
-      templates: candidateTemplates,
-      inputText: templateText,
-      generativeModel,
+      const baseTemplateOptions = { ...sharedTemplateOptions };
+
+      if (isCvDocument) {
+        baseTemplateOptions.resumeExperience = resumeExperience;
+      } else if (isCoverLetter) {
+        baseTemplateOptions.skipRequiredSections = true;
+        baseTemplateOptions.enhancementTokenMap = {
+          ...(sharedTemplateOptions.enhancementTokenMap || {}),
+          ...(coverLetterEnhancementTokenMaps[name] || {}),
+        };
+      }
+
+      const canonicalPrimaryTemplate = isCvDocument
+        ? canonicalizeCvTemplateId(primaryTemplate || '')
+        : primaryTemplate;
+
+      if (isCvDocument && canonicalPrimaryTemplate === 'ats') {
+        baseTemplateOptions.templateParams = {
+          ...(baseTemplateOptions.templateParams || {}),
+          mode: 'ats',
+          atsMode: true,
+        };
+      }
+
+      let candidateTemplates = (() => {
+        const fallbackTemplates = isCoverLetter ? CL_TEMPLATES : CV_TEMPLATES;
+        const requestedTemplates = isCvDocument
+          ? [template1, template2, ...(availableCvTemplates || [])]
+          : isCoverLetter
+            ? [coverTemplate1, coverTemplate2, ...(availableCoverTemplates || [])]
+            : [primaryTemplate];
+        const merged = [primaryTemplate, ...requestedTemplates, ...fallbackTemplates].filter(Boolean);
+        return uniqueTemplates(merged);
+      })();
+
+      if (isCvDocument && baseTemplateOptions.templateParams?.mode === 'ats') {
+        const filtered = candidateTemplates.filter(
+          (tpl) => canonicalizeCvTemplateId(tpl) === 'ats'
+        );
+        candidateTemplates = filtered.length ? filtered : ['ats'];
+      }
+
+      const {
+        buffer: pdfBuffer,
+        template: resolvedTemplate,
+        messages: attemptMessages = [],
+      } = await generatePdfWithFallback({
+        documentType,
+        templates: candidateTemplates,
+        inputText: templateText,
+        generativeModel,
         logContext: {
           ...logContext,
           documentType,
@@ -21104,669 +21114,669 @@ async function generateEnhancedDocumentsResponse({
           sessionId: logContext?.sessionId || generationRunSegment,
           generationRunId: generationRunSegment,
         },
-      buildOptionsForTemplate: (templateId) => {
-        const resolvedTemplateParams = resolveTemplateParamsConfig(
-          templateParamsConfig,
-          templateId,
-          documentType
-        );
-        const outputTemplateParams =
-          name && name !== documentType
-            ? resolveTemplateParamsConfig(templateParamsConfig, templateId, name)
-            : {};
-        return {
-          ...baseTemplateOptions,
-          templateParams: {
-            ...(baseTemplateOptions.templateParams || {}),
-            ...(resolvedTemplateParams || {}),
-            ...(outputTemplateParams || {}),
-          },
-        };
-      },
-      allowPlainFallback: Boolean(plainPdfFallbackEnabled),
-    });
-
-    if (Array.isArray(attemptMessages)) {
-      for (const message of attemptMessages) {
-        pushTemplateCreationMessage(message);
-      }
-    }
-
-    const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
-    generatedTemplates[name] = effectiveTemplateId;
-
-    if (effectiveTemplateId) {
-      if (isCvDocument) {
-        if (name === 'version1') {
-          if (effectiveTemplateId !== finalTemplateMapping.resume.primary) {
-            if (effectiveTemplateId !== primaryTemplate) {
-              templateFallbackApplied.resumePrimary = true;
-            }
-            finalTemplateMapping.resume.primary = effectiveTemplateId;
-          }
-        } else if (name === 'version2') {
-          if (effectiveTemplateId !== finalTemplateMapping.resume.secondary) {
-            if (effectiveTemplateId !== primaryTemplate) {
-              templateFallbackApplied.resumeSecondary = true;
-            }
-            finalTemplateMapping.resume.secondary = effectiveTemplateId;
-          }
-        }
-        const nextTemplates = [
-          effectiveTemplateId,
-          ...(Array.isArray(availableCvTemplates) ? availableCvTemplates : []),
-        ];
-        availableCvTemplates = uniqueValidCvTemplates(nextTemplates);
-      } else if (isCoverLetter) {
-        if (name === 'cover_letter1') {
-          if (effectiveTemplateId !== finalTemplateMapping.cover.primary) {
-            if (effectiveTemplateId !== primaryTemplate) {
-              templateFallbackApplied.coverPrimary = true;
-            }
-            finalTemplateMapping.cover.primary = effectiveTemplateId;
-          }
-        } else if (name === 'cover_letter2') {
-          if (effectiveTemplateId !== finalTemplateMapping.cover.secondary) {
-            if (effectiveTemplateId !== primaryTemplate) {
-              templateFallbackApplied.coverSecondary = true;
-            }
-            finalTemplateMapping.cover.secondary = effectiveTemplateId;
-          }
-        }
-        const nextCoverTemplates = [
-          effectiveTemplateId,
-          ...(Array.isArray(availableCoverTemplates) ? availableCoverTemplates : []),
-        ];
-        availableCoverTemplates = uniqueValidCoverTemplates(nextCoverTemplates);
-      }
-    }
-
-    const key = buildTemplateScopedPdfKey({
-      basePrefix: sessionPrefix,
-      documentType,
-      templateId: effectiveTemplateId,
-      variant: name,
-      usedKeys: usedPdfKeys,
-    });
-
-    await sendS3CommandWithRetry(
-      s3,
-      () =>
-        new PutObjectCommand(
-          withEnvironmentTagging(
-            withBuildMetadata({
-              Bucket: bucket,
-              Key: key,
-              Body: pdfBuffer,
-              ContentType: 'application/pdf',
-            })
-          )
-        ),
-      {
-        maxAttempts: 4,
-        baseDelayMs: 500,
-        maxDelayMs: 5000,
-        jitterMs: 300,
-        retryLogEvent: 'generation_artifact_upload_retry',
-        retryLogContext: { ...logContext, artifactType: name, storageKey: key },
-      }
-    );
-
-    registerArtifactKey(key);
-
-    if (name === 'version1' && existingArtifactKeys.cv1Url && existingArtifactKeys.cv1Url !== key) {
-      registerStaleArtifactKey(existingArtifactKeys.cv1Url);
-    } else if (name === 'version2' && existingArtifactKeys.cv2Url && existingArtifactKeys.cv2Url !== key) {
-      registerStaleArtifactKey(existingArtifactKeys.cv2Url);
-    } else if (name === 'cover_letter1' && existingArtifactKeys.coverLetter1Url && existingArtifactKeys.coverLetter1Url !== key) {
-      registerStaleArtifactKey(existingArtifactKeys.coverLetter1Url);
-    } else if (name === 'cover_letter2' && existingArtifactKeys.coverLetter2Url && existingArtifactKeys.coverLetter2Url !== key) {
-      registerStaleArtifactKey(existingArtifactKeys.coverLetter2Url);
-    }
-
-    const artifactDownloadEntry = {
-      type: name,
-      key,
-      isCoverLetter,
-      templateMetadata: null,
-      text: undefined,
-      coverLetterFields: undefined,
-      rawText: undefined,
-    };
-
-    if (effectiveTemplateId) {
-      const templateType = isCoverLetter ? 'cover' : 'resume';
-      const templateName = isCoverLetter
-        ? formatCoverTemplateDisplayName(effectiveTemplateId)
-        : formatTemplateDisplayName(effectiveTemplateId);
-      artifactDownloadEntry.templateMetadata = {
-        templateId: effectiveTemplateId,
-        templateName,
-        templateType,
-      };
-    }
-
-    if (isCoverLetter) {
-      const coverLetterText =
-        typeof entry?.text === 'string' ? entry.text : '';
-      const coverLetterFields = mapCoverLetterFields({
-        text: coverLetterText,
-        contactDetails,
-        jobTitle: versionsContext.jobTitle,
-        jobDescription,
-        jobSkills,
-        applicantName,
-        letterIndex: name === 'cover_letter1' ? 1 : 2,
-      });
-      artifactDownloadEntry.text = coverLetterFields;
-      artifactDownloadEntry.coverLetterFields = coverLetterFields;
-      artifactDownloadEntry.rawText = coverLetterText;
-    } else if (typeof entry?.text === 'string') {
-      artifactDownloadEntry.text = entry.text;
-    } else if (name !== 'original_upload') {
-      artifactDownloadEntry.text = '';
-    }
-
-    if (isCvDocument || isCoverLetter) {
-      artifactDownloadEntry.jobDescriptionSnapshot = {
-        ...jobDescriptionSnapshot,
-      };
-    }
-
-    const versionInfo = enrichArtifactWithVersionMetadata(
-      artifactDownloadEntry,
-      {
-        timestamp: artifactTimestamp,
-        storageKey: key,
-        type: name,
-        contentBuffer: pdfBuffer,
-        textContent:
-          typeof artifactDownloadEntry.rawText === 'string'
-            ? artifactDownloadEntry.rawText
-            : typeof artifactDownloadEntry.text === 'string'
-              ? artifactDownloadEntry.text
-              : '',
-      }
-    );
-
-    downloadArtifacts.push(artifactDownloadEntry);
-    uploadedArtifacts.push({
-      type: name,
-      key,
-      versionId: versionInfo.versionId,
-      versionHash: versionInfo.versionHash,
-      generatedAt: versionInfo.generatedAt,
-    });
-  }
-
-  template1 = finalTemplateMapping.resume.primary || template1;
-  template2 = finalTemplateMapping.resume.secondary || template2;
-  coverTemplate1 = finalTemplateMapping.cover.primary || coverTemplate1;
-  coverTemplate2 = finalTemplateMapping.cover.secondary || coverTemplate2;
-
-  availableCvTemplates = uniqueValidCvTemplates([
-    template1,
-    template2,
-    ...(Array.isArray(availableCvTemplates) ? availableCvTemplates : []),
-  ]);
-  availableCoverTemplates = uniqueValidCoverTemplates([
-    coverTemplate1,
-    coverTemplate2,
-    ...(Array.isArray(availableCoverTemplates) ? availableCoverTemplates : []),
-  ]);
-
-  if (!canonicalSelectedTemplate || templateFallbackApplied.resumePrimary) {
-    const normalizedPrimary = canonicalizeCvTemplateId(template1);
-    canonicalSelectedTemplate = normalizedPrimary || template1;
-  }
-
-  templateHistory = normalizeTemplateHistory(templateHistory, [
-    template1,
-    template2,
-    canonicalSelectedTemplate,
-  ]);
-
-  if (dynamo && tableName && userId && canonicalSelectedTemplate) {
-    await persistUserTemplatePreference({
-      dynamo,
-      tableName,
-      userId,
-      templateId: canonicalSelectedTemplate,
-      logContext,
-    });
-  }
-
-  const textArtifactPrefix = `${sessionPrefix}artifacts/`;
-
-  const coverLetter1TextForStorage =
-    typeof coverData.cover_letter1 === 'string' ? coverData.cover_letter1 : '';
-  const coverLetter2TextForStorage =
-    typeof coverData.cover_letter2 === 'string' ? coverData.cover_letter2 : '';
-  const coverLetter1FieldsForStorage = mapCoverLetterFields({
-    text: coverLetter1TextForStorage,
-    contactDetails,
-    jobTitle: versionsContext.jobTitle,
-    jobDescription,
-    jobSkills,
-    applicantName,
-    letterIndex: 1,
-  });
-  const coverLetter2FieldsForStorage = mapCoverLetterFields({
-    text: coverLetter2TextForStorage,
-    contactDetails,
-    jobTitle: versionsContext.jobTitle,
-    jobDescription,
-    jobSkills,
-    applicantName,
-    letterIndex: 2,
-  });
-
-  const textArtifacts = [
-    {
-      type: 'original_text',
-      fileName: 'original.json',
-      payload: {
-        jobId,
-        generatedAt: artifactTimestamp,
-        version: 'original',
-        text: originalResumeForStorage,
-        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
-      },
-    },
-    {
-      type: 'version1_text',
-      fileName: 'version1.json',
-      payload: {
-        jobId,
-        generatedAt: artifactTimestamp,
-        version: 'version1',
-        text: outputs.version1?.text || '',
-        template: generatedTemplates.version1 || template1 || '',
-        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
-      },
-    },
-    {
-      type: 'version2_text',
-      fileName: 'version2.json',
-      payload: {
-        jobId,
-        generatedAt: artifactTimestamp,
-        version: 'version2',
-        text: outputs.version2?.text || '',
-        template: generatedTemplates.version2 || template2 || '',
-        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
-      },
-    },
-    {
-      type: 'cover_letter1_text',
-      fileName: 'cover-letter1.json',
-      payload: {
-        jobId,
-        generatedAt: artifactTimestamp,
-        version: 'cover_letter1',
-        text: coverLetter1TextForStorage,
-        template: generatedTemplates.cover_letter1 || coverTemplate1 || '',
-        fields: coverLetter1FieldsForStorage,
-        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
-      },
-    },
-    {
-      type: 'cover_letter2_text',
-      fileName: 'cover-letter2.json',
-      payload: {
-        jobId,
-        generatedAt: artifactTimestamp,
-        version: 'cover_letter2',
-        text: coverLetter2TextForStorage,
-        template: generatedTemplates.cover_letter2 || coverTemplate2 || '',
-        fields: coverLetter2FieldsForStorage,
-        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
-      },
-    },
-    {
-      type: 'change_log',
-      fileName: 'changelog.json',
-      payload: {
-        jobId,
-        generatedAt: artifactTimestamp,
-        entries: normalizedChangeLogEntries,
-        dismissedEntries: normalizedDismissedChangeLogEntries,
-        summary: changeLogSummary,
-        coverLetters: {
-          entries: normalizedCoverLetterEntries,
-          dismissedEntries: normalizedDismissedCoverLetterEntries,
+        buildOptionsForTemplate: (templateId) => {
+          const resolvedTemplateParams = resolveTemplateParamsConfig(
+            templateParamsConfig,
+            templateId,
+            documentType
+          );
+          const outputTemplateParams =
+            name && name !== documentType
+              ? resolveTemplateParamsConfig(templateParamsConfig, templateId, name)
+              : {};
+          return {
+            ...baseTemplateOptions,
+            templateParams: {
+              ...(baseTemplateOptions.templateParams || {}),
+              ...(resolvedTemplateParams || {}),
+              ...(outputTemplateParams || {}),
+            },
+          };
         },
+        allowPlainFallback: Boolean(plainPdfFallbackEnabled),
+      });
+
+      if (Array.isArray(attemptMessages)) {
+        for (const message of attemptMessages) {
+          pushTemplateCreationMessage(message);
+        }
+      }
+
+      const effectiveTemplateId = resolvedTemplate || candidateTemplates[0] || primaryTemplate;
+      generatedTemplates[name] = effectiveTemplateId;
+
+      if (effectiveTemplateId) {
+        if (isCvDocument) {
+          if (name === 'version1') {
+            if (effectiveTemplateId !== finalTemplateMapping.resume.primary) {
+              if (effectiveTemplateId !== primaryTemplate) {
+                templateFallbackApplied.resumePrimary = true;
+              }
+              finalTemplateMapping.resume.primary = effectiveTemplateId;
+            }
+          } else if (name === 'version2') {
+            if (effectiveTemplateId !== finalTemplateMapping.resume.secondary) {
+              if (effectiveTemplateId !== primaryTemplate) {
+                templateFallbackApplied.resumeSecondary = true;
+              }
+              finalTemplateMapping.resume.secondary = effectiveTemplateId;
+            }
+          }
+          const nextTemplates = [
+            effectiveTemplateId,
+            ...(Array.isArray(availableCvTemplates) ? availableCvTemplates : []),
+          ];
+          availableCvTemplates = uniqueValidCvTemplates(nextTemplates);
+        } else if (isCoverLetter) {
+          if (name === 'cover_letter1') {
+            if (effectiveTemplateId !== finalTemplateMapping.cover.primary) {
+              if (effectiveTemplateId !== primaryTemplate) {
+                templateFallbackApplied.coverPrimary = true;
+              }
+              finalTemplateMapping.cover.primary = effectiveTemplateId;
+            }
+          } else if (name === 'cover_letter2') {
+            if (effectiveTemplateId !== finalTemplateMapping.cover.secondary) {
+              if (effectiveTemplateId !== primaryTemplate) {
+                templateFallbackApplied.coverSecondary = true;
+              }
+              finalTemplateMapping.cover.secondary = effectiveTemplateId;
+            }
+          }
+          const nextCoverTemplates = [
+            effectiveTemplateId,
+            ...(Array.isArray(availableCoverTemplates) ? availableCoverTemplates : []),
+          ];
+          availableCoverTemplates = uniqueValidCoverTemplates(nextCoverTemplates);
+        }
+      }
+
+      const key = buildTemplateScopedPdfKey({
+        basePrefix: sessionPrefix,
+        documentType,
+        templateId: effectiveTemplateId,
+        variant: name,
+        usedKeys: usedPdfKeys,
+      });
+
+      await sendS3CommandWithRetry(
+        s3,
+        () =>
+          new PutObjectCommand(
+            withEnvironmentTagging(
+              withBuildMetadata({
+                Bucket: bucket,
+                Key: key,
+                Body: pdfBuffer,
+                ContentType: 'application/pdf',
+              })
+            )
+          ),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 500,
+          maxDelayMs: 5000,
+          jitterMs: 300,
+          retryLogEvent: 'generation_artifact_upload_retry',
+          retryLogContext: { ...logContext, artifactType: name, storageKey: key },
+        }
+      );
+
+      registerArtifactKey(key);
+
+      if (name === 'version1' && existingArtifactKeys.cv1Url && existingArtifactKeys.cv1Url !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.cv1Url);
+      } else if (name === 'version2' && existingArtifactKeys.cv2Url && existingArtifactKeys.cv2Url !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.cv2Url);
+      } else if (name === 'cover_letter1' && existingArtifactKeys.coverLetter1Url && existingArtifactKeys.coverLetter1Url !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.coverLetter1Url);
+      } else if (name === 'cover_letter2' && existingArtifactKeys.coverLetter2Url && existingArtifactKeys.coverLetter2Url !== key) {
+        registerStaleArtifactKey(existingArtifactKeys.coverLetter2Url);
+      }
+
+      const artifactDownloadEntry = {
+        type: name,
+        key,
+        isCoverLetter,
+        templateMetadata: null,
+        text: undefined,
+        coverLetterFields: undefined,
+        rawText: undefined,
+      };
+
+      if (effectiveTemplateId) {
+        const templateType = isCoverLetter ? 'cover' : 'resume';
+        const templateName = isCoverLetter
+          ? formatCoverTemplateDisplayName(effectiveTemplateId)
+          : formatTemplateDisplayName(effectiveTemplateId);
+        artifactDownloadEntry.templateMetadata = {
+          templateId: effectiveTemplateId,
+          templateName,
+          templateType,
+        };
+      }
+
+      if (isCoverLetter) {
+        const coverLetterText =
+          typeof entry?.text === 'string' ? entry.text : '';
+        const coverLetterFields = mapCoverLetterFields({
+          text: coverLetterText,
+          contactDetails,
+          jobTitle: versionsContext.jobTitle,
+          jobDescription,
+          jobSkills,
+          applicantName,
+          letterIndex: name === 'cover_letter1' ? 1 : 2,
+        });
+        artifactDownloadEntry.text = coverLetterFields;
+        artifactDownloadEntry.coverLetterFields = coverLetterFields;
+        artifactDownloadEntry.rawText = coverLetterText;
+      } else if (typeof entry?.text === 'string') {
+        artifactDownloadEntry.text = entry.text;
+      } else if (name !== 'original_upload') {
+        artifactDownloadEntry.text = '';
+      }
+
+      if (isCvDocument || isCoverLetter) {
+        artifactDownloadEntry.jobDescriptionSnapshot = {
+          ...jobDescriptionSnapshot,
+        };
+      }
+
+      const versionInfo = enrichArtifactWithVersionMetadata(
+        artifactDownloadEntry,
+        {
+          timestamp: artifactTimestamp,
+          storageKey: key,
+          type: name,
+          contentBuffer: pdfBuffer,
+          textContent:
+            typeof artifactDownloadEntry.rawText === 'string'
+              ? artifactDownloadEntry.rawText
+              : typeof artifactDownloadEntry.text === 'string'
+                ? artifactDownloadEntry.text
+                : '',
+        }
+      );
+
+      downloadArtifacts.push(artifactDownloadEntry);
+      uploadedArtifacts.push({
+        type: name,
+        key,
+        versionId: versionInfo.versionId,
+        versionHash: versionInfo.versionHash,
+        generatedAt: versionInfo.generatedAt,
+      });
+    }
+
+    template1 = finalTemplateMapping.resume.primary || template1;
+    template2 = finalTemplateMapping.resume.secondary || template2;
+    coverTemplate1 = finalTemplateMapping.cover.primary || coverTemplate1;
+    coverTemplate2 = finalTemplateMapping.cover.secondary || coverTemplate2;
+
+    availableCvTemplates = uniqueValidCvTemplates([
+      template1,
+      template2,
+      ...(Array.isArray(availableCvTemplates) ? availableCvTemplates : []),
+    ]);
+    availableCoverTemplates = uniqueValidCoverTemplates([
+      coverTemplate1,
+      coverTemplate2,
+      ...(Array.isArray(availableCoverTemplates) ? availableCoverTemplates : []),
+    ]);
+
+    if (!canonicalSelectedTemplate || templateFallbackApplied.resumePrimary) {
+      const normalizedPrimary = canonicalizeCvTemplateId(template1);
+      canonicalSelectedTemplate = normalizedPrimary || template1;
+    }
+
+    templateHistory = normalizeTemplateHistory(templateHistory, [
+      template1,
+      template2,
+      canonicalSelectedTemplate,
+    ]);
+
+    if (dynamo && tableName && userId && canonicalSelectedTemplate) {
+      await persistUserTemplatePreference({
+        dynamo,
+        tableName,
+        userId,
+        templateId: canonicalSelectedTemplate,
+        logContext,
+      });
+    }
+
+    const textArtifactPrefix = `${sessionPrefix}artifacts/`;
+
+    const coverLetter1TextForStorage =
+      typeof coverData.cover_letter1 === 'string' ? coverData.cover_letter1 : '';
+    const coverLetter2TextForStorage =
+      typeof coverData.cover_letter2 === 'string' ? coverData.cover_letter2 : '';
+    const coverLetter1FieldsForStorage = mapCoverLetterFields({
+      text: coverLetter1TextForStorage,
+      contactDetails,
+      jobTitle: versionsContext.jobTitle,
+      jobDescription,
+      jobSkills,
+      applicantName,
+      letterIndex: 1,
+    });
+    const coverLetter2FieldsForStorage = mapCoverLetterFields({
+      text: coverLetter2TextForStorage,
+      contactDetails,
+      jobTitle: versionsContext.jobTitle,
+      jobDescription,
+      jobSkills,
+      applicantName,
+      letterIndex: 2,
+    });
+
+    const textArtifacts = [
+      {
+        type: 'original_text',
+        fileName: 'original.json',
+        payload: {
+          jobId,
+          generatedAt: artifactTimestamp,
+          version: 'original',
+          text: originalResumeForStorage,
+          jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+        },
+      },
+      {
+        type: 'version1_text',
+        fileName: 'version1.json',
+        payload: {
+          jobId,
+          generatedAt: artifactTimestamp,
+          version: 'version1',
+          text: outputs.version1?.text || '',
+          template: generatedTemplates.version1 || template1 || '',
+          jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+        },
+      },
+      {
+        type: 'version2_text',
+        fileName: 'version2.json',
+        payload: {
+          jobId,
+          generatedAt: artifactTimestamp,
+          version: 'version2',
+          text: outputs.version2?.text || '',
+          template: generatedTemplates.version2 || template2 || '',
+          jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+        },
+      },
+      {
+        type: 'cover_letter1_text',
+        fileName: 'cover-letter1.json',
+        payload: {
+          jobId,
+          generatedAt: artifactTimestamp,
+          version: 'cover_letter1',
+          text: coverLetter1TextForStorage,
+          template: generatedTemplates.cover_letter1 || coverTemplate1 || '',
+          fields: coverLetter1FieldsForStorage,
+          jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+        },
+      },
+      {
+        type: 'cover_letter2_text',
+        fileName: 'cover-letter2.json',
+        payload: {
+          jobId,
+          generatedAt: artifactTimestamp,
+          version: 'cover_letter2',
+          text: coverLetter2TextForStorage,
+          template: generatedTemplates.cover_letter2 || coverTemplate2 || '',
+          fields: coverLetter2FieldsForStorage,
+          jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+        },
+      },
+      {
+        type: 'change_log',
+        fileName: 'changelog.json',
+        payload: {
+          jobId,
+          generatedAt: artifactTimestamp,
+          entries: normalizedChangeLogEntries,
+          dismissedEntries: normalizedDismissedChangeLogEntries,
+          summary: changeLogSummary,
+          coverLetters: {
+            entries: normalizedCoverLetterEntries,
+            dismissedEntries: normalizedDismissedCoverLetterEntries,
+          },
+          sessionLogs: normalizedSessionLogs,
+          evaluationLogs: normalizedEvaluationLogs,
+          enhancementLogs: normalizedEnhancementLogs,
+          downloadLogs: normalizedDownloadLogs,
+          jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
+          ...(sessionScoreSnapshot ? { scores: sessionScoreSnapshot } : {}),
+        },
+      },
+    ];
+
+    for (const artifact of textArtifacts) {
+      const key = `${textArtifactPrefix}${artifact.fileName}`;
+      await sendS3CommandWithRetry(
+        s3,
+        () =>
+          new PutObjectCommand(
+            withEnvironmentTagging(
+              withBuildMetadata({
+                Bucket: bucket,
+                Key: key,
+                Body: JSON.stringify(artifact.payload, null, 2),
+                ContentType: 'application/json',
+              })
+            )
+          ),
+        {
+          maxAttempts: 4,
+          baseDelayMs: 500,
+          maxDelayMs: 4000,
+          jitterMs: 300,
+          retryLogEvent: 'generation_text_artifact_upload_retry',
+          retryLogContext: {
+            ...logContext,
+            artifactType: artifact.type,
+            storageKey: key,
+          },
+        }
+      );
+      registerArtifactKey(key);
+      uploadedArtifacts.push({ type: artifact.type, key });
+      textArtifactKeys[artifact.type] = key;
+
+      if (artifact.type === 'original_text') {
+        if (existingArtifactKeys.originalTextKey && existingArtifactKeys.originalTextKey !== key) {
+          registerStaleArtifactKey(existingArtifactKeys.originalTextKey);
+        }
+      } else if (artifact.type === 'version1_text') {
+        if (existingArtifactKeys.enhancedVersion1Key && existingArtifactKeys.enhancedVersion1Key !== key) {
+          registerStaleArtifactKey(existingArtifactKeys.enhancedVersion1Key);
+        }
+      } else if (artifact.type === 'version2_text') {
+        if (existingArtifactKeys.enhancedVersion2Key && existingArtifactKeys.enhancedVersion2Key !== key) {
+          registerStaleArtifactKey(existingArtifactKeys.enhancedVersion2Key);
+        }
+      } else if (artifact.type === 'cover_letter1_text') {
+        if (existingArtifactKeys.coverLetter1TextKey && existingArtifactKeys.coverLetter1TextKey !== key) {
+          registerStaleArtifactKey(existingArtifactKeys.coverLetter1TextKey);
+        }
+      } else if (artifact.type === 'cover_letter2_text') {
+        if (existingArtifactKeys.coverLetter2TextKey && existingArtifactKeys.coverLetter2TextKey !== key) {
+          registerStaleArtifactKey(existingArtifactKeys.coverLetter2TextKey);
+        }
+      } else if (artifact.type === 'change_log') {
+        if (existingArtifactKeys.changeLogKey && existingArtifactKeys.changeLogKey !== key) {
+          registerStaleArtifactKey(existingArtifactKeys.changeLogKey);
+        }
+      }
+    }
+
+    try {
+      const persistedChangeLog = await writeSessionChangeLog({
+        s3,
+        bucket,
+        key: sessionChangeLogKey,
+        jobId,
+        originalUploadKey,
+        ownerSegment: ownerSegmentForKeys,
+        sanitizedName,
+        userId: res.locals.userId,
+        sessionSegment: generationRunSegment,
+        requestId,
+        dateSegment: generationDateSegment,
+        entries: normalizedChangeLogEntries,
+        summary: changeLogSummary,
+        dismissedEntries: normalizedDismissedChangeLogEntries,
+        coverLetterEntries: normalizedCoverLetterEntries,
+        dismissedCoverLetterEntries: normalizedDismissedCoverLetterEntries,
         sessionLogs: normalizedSessionLogs,
         evaluationLogs: normalizedEvaluationLogs,
         enhancementLogs: normalizedEnhancementLogs,
         downloadLogs: normalizedDownloadLogs,
-        jobDescriptionSnapshot: { ...jobDescriptionSnapshot },
-        ...(sessionScoreSnapshot ? { scores: sessionScoreSnapshot } : {}),
-      },
-    },
-  ];
+        scores: sessionScoreSnapshot,
+      });
+      persistedSessionChangeLogResult = persistedChangeLog;
 
-  for (const artifact of textArtifacts) {
-    const key = `${textArtifactPrefix}${artifact.fileName}`;
-    await sendS3CommandWithRetry(
-      s3,
-      () =>
-        new PutObjectCommand(
-          withEnvironmentTagging(
-            withBuildMetadata({
-              Bucket: bucket,
-              Key: key,
-              Body: JSON.stringify(artifact.payload, null, 2),
-              ContentType: 'application/json',
-            })
-          )
-        ),
-      {
-        maxAttempts: 4,
-        baseDelayMs: 500,
-        maxDelayMs: 4000,
-        jitterMs: 300,
-        retryLogEvent: 'generation_text_artifact_upload_retry',
-        retryLogContext: {
-          ...logContext,
-          artifactType: artifact.type,
-          storageKey: key,
-        },
+      if (persistedChangeLog?.key) {
+        sessionChangeLogKey = persistedChangeLog.key;
       }
-    );
-    registerArtifactKey(key);
-    uploadedArtifacts.push({ type: artifact.type, key });
-    textArtifactKeys[artifact.type] = key;
+      const changeLogBucket = persistedChangeLog?.bucket || bucket;
+      if (persistedChangeLog && logKey) {
+        await logEvent({
+          s3,
+          bucket: changeLogBucket,
+          key: logKey,
+          jobId,
+          event: 'session_change_log_synced',
+          metadata: { entries: normalizedChangeLogEntries.length },
+        });
+      }
+    } catch (err) {
+      logStructured('warn', 'session_change_log_write_failed', {
+        ...logContext,
+        bucket,
+        key: sessionChangeLogKey,
+        error: serializeError(err),
+      });
+    }
 
-    if (artifact.type === 'original_text') {
-      if (existingArtifactKeys.originalTextKey && existingArtifactKeys.originalTextKey !== key) {
-        registerStaleArtifactKey(existingArtifactKeys.originalTextKey);
-      }
-    } else if (artifact.type === 'version1_text') {
-      if (existingArtifactKeys.enhancedVersion1Key && existingArtifactKeys.enhancedVersion1Key !== key) {
-        registerStaleArtifactKey(existingArtifactKeys.enhancedVersion1Key);
-      }
-    } else if (artifact.type === 'version2_text') {
-      if (existingArtifactKeys.enhancedVersion2Key && existingArtifactKeys.enhancedVersion2Key !== key) {
-        registerStaleArtifactKey(existingArtifactKeys.enhancedVersion2Key);
-      }
-    } else if (artifact.type === 'cover_letter1_text') {
-      if (existingArtifactKeys.coverLetter1TextKey && existingArtifactKeys.coverLetter1TextKey !== key) {
-        registerStaleArtifactKey(existingArtifactKeys.coverLetter1TextKey);
-      }
-    } else if (artifact.type === 'cover_letter2_text') {
-      if (existingArtifactKeys.coverLetter2TextKey && existingArtifactKeys.coverLetter2TextKey !== key) {
-        registerStaleArtifactKey(existingArtifactKeys.coverLetter2TextKey);
-      }
-    } else if (artifact.type === 'change_log') {
-      if (existingArtifactKeys.changeLogKey && existingArtifactKeys.changeLogKey !== key) {
-        registerStaleArtifactKey(existingArtifactKeys.changeLogKey);
+    if (persistedSessionChangeLogResult) {
+      const nextSessionChangeLogKey = normalizeArtifactKey(
+        persistedSessionChangeLogResult.key || sessionChangeLogKey
+      );
+      const cleanupBucket =
+        normalizeArtifactKey(persistedSessionChangeLogResult.bucket) ||
+        previousSessionChangeLogBucket ||
+        bucket;
+
+      if (
+        cleanupBucket &&
+        previousSessionChangeLogKey &&
+        nextSessionChangeLogKey &&
+        previousSessionChangeLogKey !== nextSessionChangeLogKey
+      ) {
+        try {
+          await sendS3CommandWithRetry(
+            s3,
+            () =>
+              new DeleteObjectCommand({
+                Bucket: cleanupBucket,
+                Key: previousSessionChangeLogKey,
+              }),
+            {
+              maxAttempts: 3,
+              baseDelayMs: 300,
+              maxDelayMs: 2500,
+              retryLogEvent: 'session_change_log_cleanup_retry',
+              retryLogContext: {
+                ...logContext,
+                bucket: cleanupBucket,
+                key: previousSessionChangeLogKey,
+                reason: 'replaced',
+              },
+            }
+          );
+          logStructured('info', 'session_change_log_removed', {
+            ...logContext,
+            bucket: cleanupBucket,
+            key: previousSessionChangeLogKey,
+            reason: 'replaced',
+          });
+        } catch (cleanupErr) {
+          logStructured('warn', 'session_change_log_cleanup_failed', {
+            ...logContext,
+            bucket: cleanupBucket,
+            key: previousSessionChangeLogKey,
+            error: serializeError(cleanupErr),
+          });
+        }
       }
     }
-  }
 
-  try {
-    const persistedChangeLog = await writeSessionChangeLog({
+    const textArtifactTypes = Object.keys(textArtifactKeys);
+    await logEvent({
       s3,
       bucket,
-      key: sessionChangeLogKey,
+      key: logKey,
       jobId,
-      originalUploadKey,
-      ownerSegment: ownerSegmentForKeys,
-      sanitizedName,
-      userId: res.locals.userId,
-      sessionSegment: generationRunSegment,
-      requestId,
-      dateSegment: generationDateSegment,
-      entries: normalizedChangeLogEntries,
-      summary: changeLogSummary,
-      dismissedEntries: normalizedDismissedChangeLogEntries,
-      coverLetterEntries: normalizedCoverLetterEntries,
-      dismissedCoverLetterEntries: normalizedDismissedCoverLetterEntries,
-      sessionLogs: normalizedSessionLogs,
-      evaluationLogs: normalizedEvaluationLogs,
-      enhancementLogs: normalizedEnhancementLogs,
-      downloadLogs: normalizedDownloadLogs,
-      scores: sessionScoreSnapshot,
+      event: 'generation_text_artifacts_uploaded',
+      metadata: {
+        textArtifactCount: textArtifactTypes.length,
+      },
     });
-    persistedSessionChangeLogResult = persistedChangeLog;
 
-    if (persistedChangeLog?.key) {
-      sessionChangeLogKey = persistedChangeLog.key;
-    }
-    const changeLogBucket = persistedChangeLog?.bucket || bucket;
-    if (persistedChangeLog && logKey) {
+    if (downloadArtifacts.length === 0 && urls.length === 0) {
+      cleanupReason = 'no_outputs';
       await logEvent({
         s3,
-        bucket: changeLogBucket,
+        bucket,
         key: logKey,
         jobId,
-        event: 'session_change_log_synced',
-        metadata: { entries: normalizedChangeLogEntries.length },
+        event: 'generation_no_outputs',
+        level: 'error',
+        message: CV_GENERATION_ERROR_MESSAGE,
       });
+      sendError(
+        res,
+        500,
+        'AI_RESPONSE_INVALID',
+        DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
+      );
+      return null;
     }
-  } catch (err) {
-    logStructured('warn', 'session_change_log_write_failed', {
-      ...logContext,
-      bucket,
-      key: sessionChangeLogKey,
-      error: serializeError(err),
-    });
-  }
 
-  if (persistedSessionChangeLogResult) {
-    const nextSessionChangeLogKey = normalizeArtifactKey(
-      persistedSessionChangeLogResult.key || sessionChangeLogKey
-    );
-    const cleanupBucket =
-      normalizeArtifactKey(persistedSessionChangeLogResult.bucket) ||
-      previousSessionChangeLogBucket ||
-      bucket;
+    await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
 
-    if (
-      cleanupBucket &&
-      previousSessionChangeLogKey &&
-      nextSessionChangeLogKey &&
-      previousSessionChangeLogKey !== nextSessionChangeLogKey
-    ) {
-      try {
-        await sendS3CommandWithRetry(
-          s3,
-          () =>
-            new DeleteObjectCommand({
-              Bucket: cleanupBucket,
-              Key: previousSessionChangeLogKey,
-            }),
-          {
-            maxAttempts: 3,
-            baseDelayMs: 300,
-            maxDelayMs: 2500,
-            retryLogEvent: 'session_change_log_cleanup_retry',
-            retryLogContext: {
-              ...logContext,
-              bucket: cleanupBucket,
-              key: previousSessionChangeLogKey,
-              reason: 'replaced',
-            },
-          }
-        );
-        logStructured('info', 'session_change_log_removed', {
+    for (const artifact of downloadArtifacts) {
+      const rawSignedUrl = await getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: bucket, Key: artifact.key }),
+        { expiresIn: URL_EXPIRATION_SECONDS }
+      );
+      const signedUrl =
+        typeof rawSignedUrl === 'string' ? rawSignedUrl.trim() : '';
+      if (!signedUrl) {
+        logStructured('warn', 'download_artifact_signed_url_missing', {
           ...logContext,
-          bucket: cleanupBucket,
-          key: previousSessionChangeLogKey,
-          reason: 'replaced',
+          artifactType: artifact.type,
+          storageKey: artifact.key,
         });
-      } catch (cleanupErr) {
-        logStructured('warn', 'session_change_log_cleanup_failed', {
-          ...logContext,
-          bucket: cleanupBucket,
-          key: previousSessionChangeLogKey,
-          error: serializeError(cleanupErr),
-        });
+        continue;
       }
-    }
-  }
-
-  const textArtifactTypes = Object.keys(textArtifactKeys);
-  await logEvent({
-    s3,
-    bucket,
-    key: logKey,
-    jobId,
-    event: 'generation_text_artifacts_uploaded',
-    metadata: {
-      textArtifactCount: textArtifactTypes.length,
-    },
-  });
-
-  if (downloadArtifacts.length === 0 && urls.length === 0) {
-    cleanupReason = 'no_outputs';
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'generation_no_outputs',
-      level: 'error',
-      message: CV_GENERATION_ERROR_MESSAGE,
-    });
-    sendError(
-      res,
-      500,
-      'AI_RESPONSE_INVALID',
-      DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
-    );
-    return null;
-  }
-
-  await logEvent({ s3, bucket, key: logKey, jobId, event: 'generation_artifacts_uploaded' });
-
-  for (const artifact of downloadArtifacts) {
-    const rawSignedUrl = await getSignedUrl(
-      s3,
-      new GetObjectCommand({ Bucket: bucket, Key: artifact.key }),
-      { expiresIn: URL_EXPIRATION_SECONDS }
-    );
-    const signedUrl =
-      typeof rawSignedUrl === 'string' ? rawSignedUrl.trim() : '';
-    if (!signedUrl) {
-      logStructured('warn', 'download_artifact_signed_url_missing', {
-        ...logContext,
-        artifactType: artifact.type,
+      const expiresAt = new Date(
+        Date.now() + URL_EXPIRATION_SECONDS * 1000
+      ).toISOString();
+      const typeFragment = encodeURIComponent(artifact.type);
+      const urlEntry = {
+        type: artifact.type,
+        url: signedUrl,
+        fileUrl: signedUrl,
+        typeUrl: `${signedUrl}#${typeFragment}`,
+        expiresAt,
+        generatedAt: artifact.generatedAt || artifactTimestamp,
         storageKey: artifact.key,
+      };
+
+      if (artifact.versionHash) {
+        urlEntry.versionHash = artifact.versionHash;
+      }
+      if (artifact.versionId) {
+        urlEntry.versionId = artifact.versionId;
+      }
+
+      if (artifact.templateMetadata) {
+        urlEntry.templateId = artifact.templateMetadata.templateId;
+        urlEntry.templateName = artifact.templateMetadata.templateName;
+        urlEntry.templateType = artifact.templateMetadata.templateType;
+      }
+
+      if (artifact.isCoverLetter) {
+        if (artifact.coverLetterFields) {
+          urlEntry.text = artifact.coverLetterFields;
+          urlEntry.coverLetterFields = artifact.coverLetterFields;
+        }
+        if (typeof artifact.rawText === 'string') {
+          urlEntry.rawText = artifact.rawText;
+        }
+      } else if (typeof artifact.text === 'string') {
+        urlEntry.text = artifact.text;
+      } else if (artifact.type !== 'original_upload') {
+        urlEntry.text = '';
+      }
+
+      if (artifact.jobDescriptionSnapshot) {
+        urlEntry.jobDescriptionSnapshot = { ...artifact.jobDescriptionSnapshot };
+      }
+
+      urls.push(urlEntry);
+    }
+
+    let normalizedUrls = ensureOutputFileUrls(urls);
+    if (!normalizedUrls.length && urls.length) {
+      const fallbackUrls = urls
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return null;
+          }
+          const baseUrl =
+            typeof entry.url === 'string' && entry.url.trim()
+              ? entry.url.trim()
+              : typeof entry.fileUrl === 'string' && entry.fileUrl.trim()
+                ? entry.fileUrl.trim()
+                : '';
+          if (!baseUrl) {
+            return null;
+          }
+          const patched = { ...entry };
+          patched.url = baseUrl;
+          if (!patched.fileUrl || typeof patched.fileUrl !== 'string' || !patched.fileUrl.trim()) {
+            patched.fileUrl = baseUrl;
+          }
+          if (!patched.typeUrl || typeof patched.typeUrl !== 'string' || !patched.typeUrl.trim()) {
+            const typeFragmentSource =
+              (typeof patched.type === 'string' && patched.type.trim()) ||
+              (typeof patched.templateType === 'string' && patched.templateType.trim()) ||
+              'download';
+            patched.typeUrl = `${baseUrl}#${encodeURIComponent(typeFragmentSource)}`;
+          }
+          return patched;
+        })
+        .filter(Boolean);
+      normalizedUrls = ensureOutputFileUrls(fallbackUrls);
+    }
+
+
+    if (normalizedUrls.length === 0) {
+      cleanupReason = 'no_valid_urls';
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'generation_no_valid_urls',
+        level: 'error',
+        message: 'No downloadable artifacts were produced.',
       });
-      continue;
-    }
-    const expiresAt = new Date(
-      Date.now() + URL_EXPIRATION_SECONDS * 1000
-    ).toISOString();
-    const typeFragment = encodeURIComponent(artifact.type);
-    const urlEntry = {
-      type: artifact.type,
-      url: signedUrl,
-      fileUrl: signedUrl,
-      typeUrl: `${signedUrl}#${typeFragment}`,
-      expiresAt,
-      generatedAt: artifact.generatedAt || artifactTimestamp,
-      storageKey: artifact.key,
-    };
-
-    if (artifact.versionHash) {
-      urlEntry.versionHash = artifact.versionHash;
-    }
-    if (artifact.versionId) {
-      urlEntry.versionId = artifact.versionId;
+      logStructured('error', 'generation_urls_missing', {
+        ...logContext,
+        requestedUrlCount: urls.length,
+      });
+      sendError(
+        res,
+        500,
+        'AI_RESPONSE_INVALID',
+        DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
+      );
+      return null;
     }
 
-    if (artifact.templateMetadata) {
-      urlEntry.templateId = artifact.templateMetadata.templateId;
-      urlEntry.templateName = artifact.templateMetadata.templateName;
-      urlEntry.templateType = artifact.templateMetadata.templateType;
-    }
-
-    if (artifact.isCoverLetter) {
-      if (artifact.coverLetterFields) {
-        urlEntry.text = artifact.coverLetterFields;
-        urlEntry.coverLetterFields = artifact.coverLetterFields;
-      }
-      if (typeof artifact.rawText === 'string') {
-        urlEntry.rawText = artifact.rawText;
-      }
-    } else if (typeof artifact.text === 'string') {
-      urlEntry.text = artifact.text;
-    } else if (artifact.type !== 'original_upload') {
-      urlEntry.text = '';
-    }
-
-    if (artifact.jobDescriptionSnapshot) {
-      urlEntry.jobDescriptionSnapshot = { ...artifact.jobDescriptionSnapshot };
-    }
-
-    urls.push(urlEntry);
-  }
-
-  let normalizedUrls = ensureOutputFileUrls(urls);
-  if (!normalizedUrls.length && urls.length) {
-    const fallbackUrls = urls
-      .map((entry) => {
-        if (!entry || typeof entry !== 'object') {
-          return null;
-        }
-        const baseUrl =
-          typeof entry.url === 'string' && entry.url.trim()
-            ? entry.url.trim()
-            : typeof entry.fileUrl === 'string' && entry.fileUrl.trim()
-              ? entry.fileUrl.trim()
-              : '';
-        if (!baseUrl) {
-          return null;
-        }
-        const patched = { ...entry };
-        patched.url = baseUrl;
-        if (!patched.fileUrl || typeof patched.fileUrl !== 'string' || !patched.fileUrl.trim()) {
-          patched.fileUrl = baseUrl;
-        }
-        if (!patched.typeUrl || typeof patched.typeUrl !== 'string' || !patched.typeUrl.trim()) {
-          const typeFragmentSource =
-            (typeof patched.type === 'string' && patched.type.trim()) ||
-            (typeof patched.templateType === 'string' && patched.templateType.trim()) ||
-            'download';
-          patched.typeUrl = `${baseUrl}#${encodeURIComponent(typeFragmentSource)}`;
-        }
-        return patched;
-      })
-      .filter(Boolean);
-    normalizedUrls = ensureOutputFileUrls(fallbackUrls);
-  }
-
-
-  if (normalizedUrls.length === 0) {
-    cleanupReason = 'no_valid_urls';
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'generation_no_valid_urls',
-      level: 'error',
-      message: 'No downloadable artifacts were produced.',
-    });
-    logStructured('error', 'generation_urls_missing', {
-      ...logContext,
-      requestedUrlCount: urls.length,
-    });
-    sendError(
-      res,
-      500,
-      'AI_RESPONSE_INVALID',
-      DOWNLOAD_LINK_GENERATION_ERROR_MESSAGE
-    );
-    return null;
-  }
-
-  const addedSkills = sanitizedFallbackUsed
-    ? []
-    : Array.from(
+    const addedSkills = sanitizedFallbackUsed
+      ? []
+      : Array.from(
         new Set(
           (bestMatch.table || [])
             .filter((row) =>
@@ -21781,321 +21791,321 @@ async function generateEnhancedDocumentsResponse({
         )
       );
 
-  const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
-    jobSkills,
-    resumeSkills: extractResumeSkills(combinedProfile),
-    jobText: jobDescription,
-  });
-  const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
-  const baselineAtsScores = scoreBreakdownToArray(baselineScoreBreakdown);
-  const baselineCompositeScore = computeCompositeAtsScore(baselineScoreBreakdown);
-  const finalCompositeScore = computeCompositeAtsScore(finalScoreBreakdown);
+    const finalScoreBreakdown = buildScoreBreakdown(combinedProfile, {
+      jobSkills,
+      resumeSkills: extractResumeSkills(combinedProfile),
+      jobText: jobDescription,
+    });
+    const finalAtsScores = scoreBreakdownToArray(finalScoreBreakdown);
+    const baselineAtsScores = scoreBreakdownToArray(baselineScoreBreakdown);
+    const baselineCompositeScore = computeCompositeAtsScore(baselineScoreBreakdown);
+    const finalCompositeScore = computeCompositeAtsScore(finalScoreBreakdown);
 
-  const originalSkillCoverage = Number.isFinite(originalMatchResult.score)
-    ? Math.round(clamp(originalMatchResult.score, 0, 100))
-    : Math.round(clamp(bestMatch.score, 0, 100));
-  const enhancedSkillCoverage = Math.round(clamp(bestMatch.score, 0, 100));
+    const originalSkillCoverage = Number.isFinite(originalMatchResult.score)
+      ? Math.round(clamp(originalMatchResult.score, 0, 100))
+      : Math.round(clamp(bestMatch.score, 0, 100));
+    const enhancedSkillCoverage = Math.round(clamp(bestMatch.score, 0, 100));
 
-  const atsScoreBefore = baselineCompositeScore;
-  const atsScoreAfter = finalCompositeScore;
-  const atsScoreBeforeExplanation = buildAtsScoreExplanation(baselineScoreBreakdown, {
-    phase: 'uploaded',
-  });
-  const atsScoreAfterExplanation = buildAtsScoreExplanation(finalScoreBreakdown, {
-    phase: 'enhanced',
-  });
+    const atsScoreBefore = baselineCompositeScore;
+    const atsScoreAfter = finalCompositeScore;
+    const atsScoreBeforeExplanation = buildAtsScoreExplanation(baselineScoreBreakdown, {
+      phase: 'uploaded',
+    });
+    const atsScoreAfterExplanation = buildAtsScoreExplanation(finalScoreBreakdown, {
+      phase: 'enhanced',
+    });
 
-  let learningResources = [];
-  if (Array.isArray(bestMatch?.newSkills) && bestMatch.newSkills.length) {
-    try {
-      learningResources = await generateLearningResources(bestMatch.newSkills, {
-        jobTitle: versionsContext.jobTitle,
-        jobDescription,
-        disableGenerative: sanitizedFallbackUsed || !canUseGenerativeModel,
-        requestId,
-      });
-    } catch (err) {
-      logStructured('warn', 'generation_learning_resources_failed', {
-        error: serializeError(err),
-        missingSkillCount: bestMatch.newSkills.length,
-      });
-    }
-  }
-
-  const selectionInsights = buildSelectionInsights({
-    jobTitle: versionsContext.jobTitle,
-    originalTitle: applicantTitle,
-    modifiedTitle: modifiedTitle || applicantTitle,
-    jobDescriptionText: jobDescription,
-    bestMatch,
-    originalMatch: originalMatchResult,
-    missingSkills: bestMatch.newSkills,
-    addedSkills,
-    scoreBreakdown: finalScoreBreakdown,
-    baselineScoreBreakdown,
-    resumeExperience,
-    linkedinExperience,
-    knownCertificates,
-    certificateSuggestions,
-    manualCertificatesRequired,
-    learningResources,
-  });
-
-  logStructured('info', 'generation_completed', {
-    ...logContext,
-    enhancedScore: bestMatch.score,
-    outputs: normalizedUrls.length,
-  });
-
-  let generationCompletedAt = null;
-
-  if (dynamo) {
-    const findArtifactKey = (type) =>
-      uploadedArtifacts.find((artifact) => artifact.type === type)?.key || '';
-
-    const nowIso = new Date().toISOString();
-    generationCompletedAt = nowIso;
-    const updateExpressionParts = [
-      '#status = :status',
-      'generatedAt = :generatedAt',
-      'analysisCompletedAt = if_not_exists(analysisCompletedAt, :generatedAt)',
-    ];
-    const expressionAttributeNames = { '#status': 'status' };
-    const expressionAttributeValues = {
-      ':status': { S: 'completed' },
-      ':generatedAt': { S: nowIso },
-      ':jobId': { S: jobId },
-      ':statusScored': { S: 'scored' },
-      ':statusCompleted': { S: 'completed' },
-    };
-
-    const activityMetadata = {
-      templates: {
-        primary: template1 || '',
-        secondary: template2 || '',
-        coverPrimary: coverTemplate1 || '',
-        coverSecondary: coverTemplate2 || '',
-      },
-      artifacts: {
-        originalUploadKey: originalUploadKey || '',
-        generatedCount: uploadedArtifacts.length,
-        textArtifactCount: textArtifactTypes.length,
-        urlCount: normalizedUrls.length,
-      },
-    };
-
-    if (userId) {
-      activityMetadata.userId = userId;
-    }
-
-    updateExpressionParts.push('#lastAction = :lastAction');
-    updateExpressionParts.push('lastActionAt = :lastActionAt');
-    updateExpressionParts.push(
-      'activityLog = list_append(if_not_exists(activityLog, :emptyActivityLog), :activityEntry)'
-    );
-    updateExpressionParts.push('lastActionMetadata = :lastActionMetadata');
-    expressionAttributeNames['#lastAction'] = 'lastAction';
-    expressionAttributeValues[':lastAction'] = { S: 'artifacts_uploaded' };
-    expressionAttributeValues[':lastActionAt'] = { S: nowIso };
-    expressionAttributeValues[':emptyActivityLog'] = { L: [] };
-    expressionAttributeValues[':activityEntry'] = {
-      L: [
-        {
-          M: {
-            action: { S: 'artifacts_uploaded' },
-            timestamp: { S: nowIso },
-            metadata: { S: JSON.stringify(activityMetadata) },
-          },
-        },
-      ],
-    };
-    expressionAttributeValues[':lastActionMetadata'] = {
-      S: JSON.stringify(activityMetadata),
-    };
-
-    const assignKey = (field, placeholder, value) => {
-      if (!value) return;
-      updateExpressionParts.push(`${field} = ${placeholder}`);
-      expressionAttributeValues[placeholder] = { S: value };
-    };
-
-    assignKey('cv1Url', ':cv1', findArtifactKey('version1'));
-    assignKey('cv2Url', ':cv2', findArtifactKey('version2'));
-    assignKey('coverLetter1Url', ':cover1', findArtifactKey('cover_letter1'));
-    assignKey('coverLetter2Url', ':cover2', findArtifactKey('cover_letter2'));
-    assignKey('originalTextKey', ':originalTextKey', textArtifactKeys.original_text);
-    assignKey('enhancedVersion1Key', ':version1TextKey', textArtifactKeys.version1_text);
-    assignKey('enhancedVersion2Key', ':version2TextKey', textArtifactKeys.version2_text);
-    assignKey('coverLetter1TextKey', ':coverLetter1TextKey', textArtifactKeys.cover_letter1_text);
-    assignKey('coverLetter2TextKey', ':coverLetter2TextKey', textArtifactKeys.cover_letter2_text);
-    assignKey('changeLogKey', ':changeLogTextKey', textArtifactKeys.change_log);
-    assignKey('jobDescriptionDigest', ':jobDescriptionDigest', resolvedJobDescriptionDigest);
-
-    if (sessionChangeLogKey) {
-      updateExpressionParts.push('sessionChangeLogKey = :sessionChangeLogKey');
-      expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
-    }
-
-    if (canonicalSessionId) {
-      updateExpressionParts.push(
-        'sessionId = if_not_exists(sessionId, :sessionId)'
-      );
-      expressionAttributeValues[':sessionId'] = { S: canonicalSessionId };
-    }
-
-    updateExpressionParts.push('environment = if_not_exists(environment, :environment)');
-    expressionAttributeValues[':environment'] = { S: deploymentEnvironment };
-
-    try {
-      await dynamo.send(
-        new UpdateItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
-          ExpressionAttributeNames: expressionAttributeNames,
-          ExpressionAttributeValues: expressionAttributeValues,
-          ConditionExpression:
-            'jobId = :jobId AND (#status = :statusScored OR #status = :statusCompleted)',
-        })
-      );
-      if (staleArtifactCleanupEnabled && staleArtifactKeys.size) {
-        shouldDeleteStaleArtifacts = true;
+    let learningResources = [];
+    if (Array.isArray(bestMatch?.newSkills) && bestMatch.newSkills.length) {
+      try {
+        learningResources = await generateLearningResources(bestMatch.newSkills, {
+          jobTitle: versionsContext.jobTitle,
+          jobDescription,
+          disableGenerative: sanitizedFallbackUsed || !canUseGenerativeModel,
+          requestId,
+        });
+      } catch (err) {
+        logStructured('warn', 'generation_learning_resources_failed', {
+          error: serializeError(err),
+          missingSkillCount: bestMatch.newSkills.length,
+        });
       }
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'generation_record_updated',
-        metadata: { uploadedArtifacts: uploadedArtifacts.length },
-      });
+    }
+
+    const selectionInsights = buildSelectionInsights({
+      jobTitle: versionsContext.jobTitle,
+      originalTitle: applicantTitle,
+      modifiedTitle: modifiedTitle || applicantTitle,
+      jobDescriptionText: jobDescription,
+      bestMatch,
+      originalMatch: originalMatchResult,
+      missingSkills: bestMatch.newSkills,
+      addedSkills,
+      scoreBreakdown: finalScoreBreakdown,
+      baselineScoreBreakdown,
+      resumeExperience,
+      linkedinExperience,
+      knownCertificates,
+      certificateSuggestions,
+      manualCertificatesRequired,
+      learningResources,
+    });
+
+    logStructured('info', 'generation_completed', {
+      ...logContext,
+      enhancedScore: bestMatch.score,
+      outputs: normalizedUrls.length,
+    });
+
+    let generationCompletedAt = null;
+
+    if (dynamo) {
+      const findArtifactKey = (type) =>
+        uploadedArtifacts.find((artifact) => artifact.type === type)?.key || '';
+
+      const nowIso = new Date().toISOString();
+      generationCompletedAt = nowIso;
+      const updateExpressionParts = [
+        '#status = :status',
+        'generatedAt = :generatedAt',
+        'analysisCompletedAt = if_not_exists(analysisCompletedAt, :generatedAt)',
+      ];
+      const expressionAttributeNames = { '#status': 'status' };
+      const expressionAttributeValues = {
+        ':status': { S: 'completed' },
+        ':generatedAt': { S: nowIso },
+        ':jobId': { S: jobId },
+        ':statusScored': { S: 'scored' },
+        ':statusCompleted': { S: 'completed' },
+      };
+
+      const activityMetadata = {
+        templates: {
+          primary: template1 || '',
+          secondary: template2 || '',
+          coverPrimary: coverTemplate1 || '',
+          coverSecondary: coverTemplate2 || '',
+        },
+        artifacts: {
+          originalUploadKey: originalUploadKey || '',
+          generatedCount: uploadedArtifacts.length,
+          textArtifactCount: textArtifactTypes.length,
+          urlCount: normalizedUrls.length,
+        },
+      };
+
+      if (userId) {
+        activityMetadata.userId = userId;
+      }
+
+      updateExpressionParts.push('#lastAction = :lastAction');
+      updateExpressionParts.push('lastActionAt = :lastActionAt');
+      updateExpressionParts.push(
+        'activityLog = list_append(if_not_exists(activityLog, :emptyActivityLog), :activityEntry)'
+      );
+      updateExpressionParts.push('lastActionMetadata = :lastActionMetadata');
+      expressionAttributeNames['#lastAction'] = 'lastAction';
+      expressionAttributeValues[':lastAction'] = { S: 'artifacts_uploaded' };
+      expressionAttributeValues[':lastActionAt'] = { S: nowIso };
+      expressionAttributeValues[':emptyActivityLog'] = { L: [] };
+      expressionAttributeValues[':activityEntry'] = {
+        L: [
+          {
+            M: {
+              action: { S: 'artifacts_uploaded' },
+              timestamp: { S: nowIso },
+              metadata: { S: JSON.stringify(activityMetadata) },
+            },
+          },
+        ],
+      };
+      expressionAttributeValues[':lastActionMetadata'] = {
+        S: JSON.stringify(activityMetadata),
+      };
+
+      const assignKey = (field, placeholder, value) => {
+        if (!value) return;
+        updateExpressionParts.push(`${field} = ${placeholder}`);
+        expressionAttributeValues[placeholder] = { S: value };
+      };
+
+      assignKey('cv1Url', ':cv1', findArtifactKey('version1'));
+      assignKey('cv2Url', ':cv2', findArtifactKey('version2'));
+      assignKey('coverLetter1Url', ':cover1', findArtifactKey('cover_letter1'));
+      assignKey('coverLetter2Url', ':cover2', findArtifactKey('cover_letter2'));
+      assignKey('originalTextKey', ':originalTextKey', textArtifactKeys.original_text);
+      assignKey('enhancedVersion1Key', ':version1TextKey', textArtifactKeys.version1_text);
+      assignKey('enhancedVersion2Key', ':version2TextKey', textArtifactKeys.version2_text);
+      assignKey('coverLetter1TextKey', ':coverLetter1TextKey', textArtifactKeys.cover_letter1_text);
+      assignKey('coverLetter2TextKey', ':coverLetter2TextKey', textArtifactKeys.cover_letter2_text);
+      assignKey('changeLogKey', ':changeLogTextKey', textArtifactKeys.change_log);
+      assignKey('jobDescriptionDigest', ':jobDescriptionDigest', resolvedJobDescriptionDigest);
+
+      if (sessionChangeLogKey) {
+        updateExpressionParts.push('sessionChangeLogKey = :sessionChangeLogKey');
+        expressionAttributeValues[':sessionChangeLogKey'] = { S: sessionChangeLogKey };
+      }
+
+      if (canonicalSessionId) {
+        updateExpressionParts.push(
+          'sessionId = if_not_exists(sessionId, :sessionId)'
+        );
+        expressionAttributeValues[':sessionId'] = { S: canonicalSessionId };
+      }
+
+      updateExpressionParts.push('environment = if_not_exists(environment, :environment)');
+      expressionAttributeValues[':environment'] = { S: deploymentEnvironment };
+
+      try {
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: tableName,
+            Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+            UpdateExpression: `SET ${updateExpressionParts.join(', ')}`,
+            ExpressionAttributeNames: expressionAttributeNames,
+            ExpressionAttributeValues: expressionAttributeValues,
+            ConditionExpression:
+              'jobId = :jobId AND (#status = :statusScored OR #status = :statusCompleted)',
+          })
+        );
+        if (staleArtifactCleanupEnabled && staleArtifactKeys.size) {
+          shouldDeleteStaleArtifacts = true;
+        }
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'generation_record_updated',
+          metadata: { uploadedArtifacts: uploadedArtifacts.length },
+        });
+      } catch (err) {
+        logStructured('warn', 'generation_record_update_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+      }
+
+    }
+
+    generationSucceeded = true;
+    cleanupReason = 'completed';
+
+    try {
+      await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
     } catch (err) {
-      logStructured('warn', 'generation_record_update_failed', {
+      logStructured('warn', 'generation_completed_log_failed', {
         ...logContext,
         error: serializeError(err),
       });
     }
 
-  }
+    const downloadStageMetadata = {
+      completedAt: generationCompletedAt || new Date().toISOString(),
+      artifactCount: uploadedArtifacts.length,
+    };
 
-  generationSucceeded = true;
-  cleanupReason = 'completed';
-
-  try {
-    await logEvent({ s3, bucket, key: logKey, jobId, event: 'completed' });
-  } catch (err) {
-    logStructured('warn', 'generation_completed_log_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
-  }
-
-  const downloadStageMetadata = {
-    completedAt: generationCompletedAt || new Date().toISOString(),
-    artifactCount: uploadedArtifacts.length,
-  };
-
-  const resumeTemplatesForStage = {};
-  const canonicalResumeSelected =
-    typeof canonicalSelectedTemplate === 'string' && canonicalSelectedTemplate.trim()
-      ? canonicalizeCvTemplateId(canonicalSelectedTemplate, canonicalSelectedTemplate)
-      : '';
-  const canonicalResumePrimary =
-    typeof template1 === 'string' && template1.trim()
-      ? canonicalizeCvTemplateId(template1, template1)
-      : '';
-  const canonicalResumeSecondary =
-    typeof template2 === 'string' && template2.trim()
-      ? canonicalizeCvTemplateId(template2, template2)
-      : '';
-  if (canonicalResumeSelected) {
-    resumeTemplatesForStage.selected = canonicalResumeSelected;
-  }
-  if (canonicalResumePrimary) {
-    resumeTemplatesForStage.primary = canonicalResumePrimary;
-  }
-  if (canonicalResumeSecondary) {
-    resumeTemplatesForStage.secondary = canonicalResumeSecondary;
-  }
-  if (Array.isArray(templateHistory) && templateHistory.length) {
-    const dedupedHistory = templateHistory.filter((entry, index, list) => {
-      return typeof entry === 'string' && entry && list.indexOf(entry) === index;
-    });
-    if (dedupedHistory.length) {
-      resumeTemplatesForStage.history = dedupedHistory;
+    const resumeTemplatesForStage = {};
+    const canonicalResumeSelected =
+      typeof canonicalSelectedTemplate === 'string' && canonicalSelectedTemplate.trim()
+        ? canonicalizeCvTemplateId(canonicalSelectedTemplate, canonicalSelectedTemplate)
+        : '';
+    const canonicalResumePrimary =
+      typeof template1 === 'string' && template1.trim()
+        ? canonicalizeCvTemplateId(template1, template1)
+        : '';
+    const canonicalResumeSecondary =
+      typeof template2 === 'string' && template2.trim()
+        ? canonicalizeCvTemplateId(template2, template2)
+        : '';
+    if (canonicalResumeSelected) {
+      resumeTemplatesForStage.selected = canonicalResumeSelected;
     }
-  }
+    if (canonicalResumePrimary) {
+      resumeTemplatesForStage.primary = canonicalResumePrimary;
+    }
+    if (canonicalResumeSecondary) {
+      resumeTemplatesForStage.secondary = canonicalResumeSecondary;
+    }
+    if (Array.isArray(templateHistory) && templateHistory.length) {
+      const dedupedHistory = templateHistory.filter((entry, index, list) => {
+        return typeof entry === 'string' && entry && list.indexOf(entry) === index;
+      });
+      if (dedupedHistory.length) {
+        resumeTemplatesForStage.history = dedupedHistory;
+      }
+    }
 
-  const matchBeforeScore = Number.isFinite(originalMatchResult.score)
-    ? Math.round(clamp(originalMatchResult.score, 0, 100))
-    : null;
-  const matchAfterScore = Number.isFinite(bestMatch.score)
-    ? Math.round(clamp(bestMatch.score, 0, 100))
-    : null;
-  const matchBeforeMissing = Array.isArray(originalMatchResult.newSkills)
-    ? originalMatchResult.newSkills
-    : [];
-  const matchAfterMissing = Array.isArray(bestMatch.newSkills) ? bestMatch.newSkills : [];
-  const matchAfterSet = new Set(
-    matchAfterMissing
-      .map((skill) => (typeof skill === 'string' ? skill.trim().toLowerCase() : ''))
-      .filter(Boolean)
-  );
-  const matchCoveredSkills = matchBeforeMissing
-    .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
-    .filter((skill) => skill && !matchAfterSet.has(skill.toLowerCase()));
-  const selectionBeforeProbability =
-    typeof selectionInsights?.before?.probability === 'number'
-      ? selectionInsights.before.probability
+    const matchBeforeScore = Number.isFinite(originalMatchResult.score)
+      ? Math.round(clamp(originalMatchResult.score, 0, 100))
       : null;
-  const selectionAfterProbability =
-    typeof selectionInsights?.after?.probability === 'number'
-      ? selectionInsights.after.probability
-      : typeof selectionInsights?.probability === 'number'
-        ? selectionInsights.probability
+    const matchAfterScore = Number.isFinite(bestMatch.score)
+      ? Math.round(clamp(bestMatch.score, 0, 100))
+      : null;
+    const matchBeforeMissing = Array.isArray(originalMatchResult.newSkills)
+      ? originalMatchResult.newSkills
+      : [];
+    const matchAfterMissing = Array.isArray(bestMatch.newSkills) ? bestMatch.newSkills : [];
+    const matchAfterSet = new Set(
+      matchAfterMissing
+        .map((skill) => (typeof skill === 'string' ? skill.trim().toLowerCase() : ''))
+        .filter(Boolean)
+    );
+    const matchCoveredSkills = matchBeforeMissing
+      .map((skill) => (typeof skill === 'string' ? skill.trim() : ''))
+      .filter((skill) => skill && !matchAfterSet.has(skill.toLowerCase()));
+    const selectionBeforeProbability =
+      typeof selectionInsights?.before?.probability === 'number'
+        ? selectionInsights.before.probability
         : null;
-  const selectionDeltaProbability =
-    selectionBeforeProbability !== null && selectionAfterProbability !== null
-      ? Math.round(selectionAfterProbability - selectionBeforeProbability)
-      : null;
-  const scoreResultForSnapshot = {
-    match: {
-      before: {
-        score: matchBeforeScore,
-        missingSkills: matchBeforeMissing,
-        table: Array.isArray(originalMatchResult.table) ? originalMatchResult.table : [],
+    const selectionAfterProbability =
+      typeof selectionInsights?.after?.probability === 'number'
+        ? selectionInsights.after.probability
+        : typeof selectionInsights?.probability === 'number'
+          ? selectionInsights.probability
+          : null;
+    const selectionDeltaProbability =
+      selectionBeforeProbability !== null && selectionAfterProbability !== null
+        ? Math.round(selectionAfterProbability - selectionBeforeProbability)
+        : null;
+    const scoreResultForSnapshot = {
+      match: {
+        before: {
+          score: matchBeforeScore,
+          missingSkills: matchBeforeMissing,
+          table: Array.isArray(originalMatchResult.table) ? originalMatchResult.table : [],
+        },
+        after: {
+          score: matchAfterScore,
+          missingSkills: matchAfterMissing,
+          table: Array.isArray(bestMatch.table) ? bestMatch.table : [],
+        },
+        delta: {
+          score:
+            matchAfterScore !== null && matchBeforeScore !== null
+              ? Math.round(matchAfterScore - matchBeforeScore)
+              : null,
+          coveredSkills: matchCoveredSkills,
+        },
       },
-      after: {
-        score: matchAfterScore,
-        missingSkills: matchAfterMissing,
-        table: Array.isArray(bestMatch.table) ? bestMatch.table : [],
+      ats: {
+        before: {
+          score: Number.isFinite(atsScoreBefore) ? Math.round(clamp(atsScoreBefore, 0, 100)) : null,
+          breakdown: baselineScoreBreakdown,
+        },
+        after: {
+          score: Number.isFinite(atsScoreAfter) ? Math.round(clamp(atsScoreAfter, 0, 100)) : null,
+          breakdown: finalScoreBreakdown,
+        },
+        delta: {
+          score:
+            Number.isFinite(atsScoreAfter) && Number.isFinite(atsScoreBefore)
+              ? Math.round(atsScoreAfter - atsScoreBefore)
+              : null,
+        },
       },
-      delta: {
-        score:
-          matchAfterScore !== null && matchBeforeScore !== null
-            ? Math.round(matchAfterScore - matchBeforeScore)
-            : null,
-        coveredSkills: matchCoveredSkills,
-      },
-    },
-    ats: {
-      before: {
-        score: Number.isFinite(atsScoreBefore) ? Math.round(clamp(atsScoreBefore, 0, 100)) : null,
-        breakdown: baselineScoreBreakdown,
-      },
-      after: {
-        score: Number.isFinite(atsScoreAfter) ? Math.round(clamp(atsScoreAfter, 0, 100)) : null,
-        breakdown: finalScoreBreakdown,
-      },
-      delta: {
-        score:
-          Number.isFinite(atsScoreAfter) && Number.isFinite(atsScoreBefore)
-            ? Math.round(atsScoreAfter - atsScoreBefore)
-            : null,
-      },
-    },
-    selection: selectionInsights
-      ? {
+      selection: selectionInsights
+        ? {
           before: {
             probability: selectionBeforeProbability,
             level: selectionInsights.before?.level || null,
@@ -22111,171 +22121,171 @@ async function generateEnhancedDocumentsResponse({
             probability: selectionDeltaProbability,
             levelChange:
               selectionInsights.before?.level &&
-              (selectionInsights.level || selectionInsights.after?.level) &&
-              selectionInsights.before.level !== (selectionInsights.level || selectionInsights.after?.level)
+                (selectionInsights.level || selectionInsights.after?.level) &&
+                selectionInsights.before.level !== (selectionInsights.level || selectionInsights.after?.level)
                 ? selectionInsights.level || selectionInsights.after.level
                 : null,
           },
           factors: Array.isArray(selectionInsights.factors) ? selectionInsights.factors : [],
         }
-      : undefined,
-    selectionProbabilityBefore: selectionBeforeProbability,
-    selectionProbabilityAfter: selectionAfterProbability,
-    selectionProbabilityDelta: selectionDeltaProbability,
-    selectionProbabilityFactors: Array.isArray(selectionInsights?.factors)
-      ? selectionInsights.factors
-      : [],
-    atsScoreBeforeExplanation,
-    atsScoreAfterExplanation,
-  };
+        : undefined,
+      selectionProbabilityBefore: selectionBeforeProbability,
+      selectionProbabilityAfter: selectionAfterProbability,
+      selectionProbabilityDelta: selectionDeltaProbability,
+      selectionProbabilityFactors: Array.isArray(selectionInsights?.factors)
+        ? selectionInsights.factors
+        : [],
+      atsScoreBeforeExplanation,
+      atsScoreAfterExplanation,
+    };
 
-  const scoreSnapshotTimestamp = generationCompletedAt || new Date().toISOString();
-  const generatedScoreSnapshot =
-    buildSessionScoreSnapshotFromScoringResult(scoreResultForSnapshot, {
-      recordedAt: scoreSnapshotTimestamp,
-      source: 'generation',
-    }) || sessionScoreSnapshot;
-  sessionScoreSnapshot = generatedScoreSnapshot;
-  const resumeAvailableTemplates = uniqueValidCvTemplates(availableCvTemplates);
-  if (resumeAvailableTemplates.length) {
-    resumeTemplatesForStage.available = resumeAvailableTemplates;
-  }
+    const scoreSnapshotTimestamp = generationCompletedAt || new Date().toISOString();
+    const generatedScoreSnapshot =
+      buildSessionScoreSnapshotFromScoringResult(scoreResultForSnapshot, {
+        recordedAt: scoreSnapshotTimestamp,
+        source: 'generation',
+      }) || sessionScoreSnapshot;
+    sessionScoreSnapshot = generatedScoreSnapshot;
+    const resumeAvailableTemplates = uniqueValidCvTemplates(availableCvTemplates);
+    if (resumeAvailableTemplates.length) {
+      resumeTemplatesForStage.available = resumeAvailableTemplates;
+    }
 
-  const coverTemplatesForStage = {};
-  const canonicalCoverPrimary =
-    typeof coverTemplate1 === 'string' && coverTemplate1.trim()
-      ? canonicalizeCoverTemplateId(coverTemplate1, coverTemplate1)
-      : '';
-  const canonicalCoverSecondary =
-    typeof coverTemplate2 === 'string' && coverTemplate2.trim()
-      ? canonicalizeCoverTemplateId(coverTemplate2, coverTemplate2)
-      : '';
-  if (canonicalCoverPrimary) {
-    coverTemplatesForStage.primary = canonicalCoverPrimary;
-  }
-  if (canonicalCoverSecondary) {
-    coverTemplatesForStage.secondary = canonicalCoverSecondary;
-  }
-  const coverAvailableTemplates = uniqueValidCoverTemplates(availableCoverTemplates);
-  if (coverAvailableTemplates.length) {
-    coverTemplatesForStage.available = coverAvailableTemplates;
-  }
+    const coverTemplatesForStage = {};
+    const canonicalCoverPrimary =
+      typeof coverTemplate1 === 'string' && coverTemplate1.trim()
+        ? canonicalizeCoverTemplateId(coverTemplate1, coverTemplate1)
+        : '';
+    const canonicalCoverSecondary =
+      typeof coverTemplate2 === 'string' && coverTemplate2.trim()
+        ? canonicalizeCoverTemplateId(coverTemplate2, coverTemplate2)
+        : '';
+    if (canonicalCoverPrimary) {
+      coverTemplatesForStage.primary = canonicalCoverPrimary;
+    }
+    if (canonicalCoverSecondary) {
+      coverTemplatesForStage.secondary = canonicalCoverSecondary;
+    }
+    const coverAvailableTemplates = uniqueValidCoverTemplates(availableCoverTemplates);
+    if (coverAvailableTemplates.length) {
+      coverTemplatesForStage.available = coverAvailableTemplates;
+    }
 
-  const templatesForStage = {};
-  if (Object.keys(resumeTemplatesForStage).length) {
-    templatesForStage.resume = resumeTemplatesForStage;
-  }
-  if (Object.keys(coverTemplatesForStage).length) {
-    templatesForStage.cover = coverTemplatesForStage;
-  }
-  if (Object.keys(templatesForStage).length) {
-    downloadStageMetadata.templates = templatesForStage;
-  }
+    const templatesForStage = {};
+    if (Object.keys(resumeTemplatesForStage).length) {
+      templatesForStage.resume = resumeTemplatesForStage;
+    }
+    if (Object.keys(coverTemplatesForStage).length) {
+      templatesForStage.cover = coverTemplatesForStage;
+    }
+    if (Object.keys(templatesForStage).length) {
+      downloadStageMetadata.templates = templatesForStage;
+    }
 
-  if (templateCreationMessages.length) {
-    downloadStageMetadata.templateCreationErrors = templateCreationMessages;
-  }
+    if (templateCreationMessages.length) {
+      downloadStageMetadata.templateCreationErrors = templateCreationMessages;
+    }
 
-  if (documentPopulationMessages.length) {
-    downloadStageMetadata.documentPopulationErrors = documentPopulationMessages;
-  }
+    if (documentPopulationMessages.length) {
+      downloadStageMetadata.documentPopulationErrors = documentPopulationMessages;
+    }
 
-  await updateStageMetadata({
-    s3,
-    bucket,
-    metadataKey: stageMetadataKey,
-    jobId,
-    stage: 'download',
-    data: downloadStageMetadata,
-    logContext,
-  });
+    await updateStageMetadata({
+      s3,
+      bucket,
+      metadataKey: stageMetadataKey,
+      jobId,
+      stage: 'download',
+      data: downloadStageMetadata,
+      logContext,
+    });
 
-  if (shouldDeleteStaleArtifacts) {
-    await cleanupStaleArtifacts('replaced');
-  }
+    if (shouldDeleteStaleArtifacts) {
+      await cleanupStaleArtifacts('replaced');
+    }
 
-  return {
-    success: true,
-    requestId,
-    jobId,
-    urlExpiresInSeconds: normalizedUrls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
-    urls: normalizedUrls,
-    artifactCount: normalizedUrls.length,
-    artifactsUploaded: normalizedUrls.length > 0,
-    sessionPointer: canonicalSessionPointer,
-    applicantName,
-    originalScore: originalSkillCoverage,
-    enhancedScore: enhancedSkillCoverage,
-    atsScoreBefore,
-    atsScoreAfter,
-    table: bestMatch.table,
-    addedSkills,
-    missingSkills: bestMatch.newSkills,
-    originalTitle: applicantTitle,
-    modifiedTitle: modifiedTitle || applicantTitle,
-    scoreBreakdown: finalScoreBreakdown,
-    atsSubScores: finalAtsScores,
-    atsSubScoresBefore: baselineAtsScores,
-    atsSubScoresAfter: finalAtsScores,
-    atsScoreBeforeExplanation,
-    atsScoreAfterExplanation,
-    originalScoreExplanation: atsScoreBeforeExplanation,
-    enhancedScoreExplanation: atsScoreAfterExplanation,
-    resumeText: combinedProfile,
-    originalResumeText: originalResumeTextInput || resumeText,
-    jobDescriptionText: jobDescription,
-    jobSkills,
-    resumeSkills: resumeSkillsList,
-    certificateInsights: {
-      known: knownCertificates,
-      suggestions: certificateSuggestions,
-      manualEntryRequired: manualCertificatesRequired,
-      credlyStatus,
-    },
-    manualCertificates,
-    selectionProbability: selectionInsights?.probability ?? null,
-    selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
-    selectionProbabilityAfter: selectionInsights?.after?.probability ?? selectionInsights?.probability ?? null,
-    selectionInsights,
-    changeLog: normalizedChangeLogEntries,
-    changeLogSummary,
-    sessionLogs: normalizedSessionLogs,
-    evaluationLogs: normalizedEvaluationLogs,
-    enhancementLogs: normalizedEnhancementLogs,
-    downloadLogs: normalizedDownloadLogs,
-    coverLetterChangeLog: {
-      entries: normalizedCoverLetterEntries,
-      dismissedEntries: normalizedDismissedCoverLetterEntries,
-    },
-    scores: sessionScoreSnapshot,
-    templateContext: {
-      template1,
-      template2,
-      coverTemplate1,
-      coverTemplate2,
-      templates: availableCvTemplates,
-      coverTemplates: availableCoverTemplates,
-      selectedTemplate: canonicalSelectedTemplate,
-      templateHistory,
-      templateMetadata: {
-        resume: {
-          primary: buildResumeTemplateContextEntry(template1),
-          secondary: buildResumeTemplateContextEntry(template2),
-          selected: buildResumeTemplateContextEntry(
-            canonicalSelectedTemplate || template1 || template2,
-          ),
-        },
-        cover: {
-          primary: buildCoverTemplateContextEntry(coverTemplate1),
-          secondary: buildCoverTemplateContextEntry(coverTemplate2),
+    return {
+      success: true,
+      requestId,
+      jobId,
+      urlExpiresInSeconds: normalizedUrls.length > 0 ? URL_EXPIRATION_SECONDS : 0,
+      urls: normalizedUrls,
+      artifactCount: normalizedUrls.length,
+      artifactsUploaded: normalizedUrls.length > 0,
+      sessionPointer: canonicalSessionPointer,
+      applicantName,
+      originalScore: originalSkillCoverage,
+      enhancedScore: enhancedSkillCoverage,
+      atsScoreBefore,
+      atsScoreAfter,
+      table: bestMatch.table,
+      addedSkills,
+      missingSkills: bestMatch.newSkills,
+      originalTitle: applicantTitle,
+      modifiedTitle: modifiedTitle || applicantTitle,
+      scoreBreakdown: finalScoreBreakdown,
+      atsSubScores: finalAtsScores,
+      atsSubScoresBefore: baselineAtsScores,
+      atsSubScoresAfter: finalAtsScores,
+      atsScoreBeforeExplanation,
+      atsScoreAfterExplanation,
+      originalScoreExplanation: atsScoreBeforeExplanation,
+      enhancedScoreExplanation: atsScoreAfterExplanation,
+      resumeText: combinedProfile,
+      originalResumeText: originalResumeTextInput || resumeText,
+      jobDescriptionText: jobDescription,
+      jobSkills,
+      resumeSkills: resumeSkillsList,
+      certificateInsights: {
+        known: knownCertificates,
+        suggestions: certificateSuggestions,
+        manualEntryRequired: manualCertificatesRequired,
+        credlyStatus,
+      },
+      manualCertificates,
+      selectionProbability: selectionInsights?.probability ?? null,
+      selectionProbabilityBefore: selectionInsights?.before?.probability ?? null,
+      selectionProbabilityAfter: selectionInsights?.after?.probability ?? selectionInsights?.probability ?? null,
+      selectionInsights,
+      changeLog: normalizedChangeLogEntries,
+      changeLogSummary,
+      sessionLogs: normalizedSessionLogs,
+      evaluationLogs: normalizedEvaluationLogs,
+      enhancementLogs: normalizedEnhancementLogs,
+      downloadLogs: normalizedDownloadLogs,
+      coverLetterChangeLog: {
+        entries: normalizedCoverLetterEntries,
+        dismissedEntries: normalizedDismissedCoverLetterEntries,
+      },
+      scores: sessionScoreSnapshot,
+      templateContext: {
+        template1,
+        template2,
+        coverTemplate1,
+        coverTemplate2,
+        templates: availableCvTemplates,
+        coverTemplates: availableCoverTemplates,
+        selectedTemplate: canonicalSelectedTemplate,
+        templateHistory,
+        templateMetadata: {
+          resume: {
+            primary: buildResumeTemplateContextEntry(template1),
+            secondary: buildResumeTemplateContextEntry(template2),
+            selected: buildResumeTemplateContextEntry(
+              canonicalSelectedTemplate || template1 || template2,
+            ),
+          },
+          cover: {
+            primary: buildCoverTemplateContextEntry(coverTemplate1),
+            secondary: buildCoverTemplateContextEntry(coverTemplate2),
+          },
         },
       },
-    },
-    coverLetterStatus,
-    messages: generationMessages,
-    templateCreationMessages,
-    documentPopulationMessages,
-  };
+      coverLetterStatus,
+      messages: generationMessages,
+      templateCreationMessages,
+      documentPopulationMessages,
+    };
   } catch (err) {
     if (cleanupReason === 'aborted') {
       cleanupReason = 'error';
@@ -22730,9 +22740,9 @@ app.post(
         typeof req.body.template2 === 'string' ? req.body.template2.trim() : '';
       const hasExplicitTemplateRequest = Boolean(
         templateIdInput ||
-          legacyTemplateInput ||
-          requestTemplate1 ||
-          requestTemplate2
+        legacyTemplateInput ||
+        requestTemplate1 ||
+        requestTemplate2
       );
 
       const templateContextInput =
@@ -22756,9 +22766,9 @@ app.post(
       const effectivePreferredTemplate = hasExplicitTemplateRequest
         ? templateIdInput || legacyTemplateInput
         : templateIdInput ||
-          legacyTemplateInput ||
-          templateContextInput.selectedTemplate ||
-          templateContextInput.template1;
+        legacyTemplateInput ||
+        templateContextInput.selectedTemplate ||
+        templateContextInput.template1;
       const selection = selectTemplates({
         defaultCvTemplate:
           templateContextInput.template1 || effectivePreferredTemplate || CV_TEMPLATES[0],
@@ -22862,25 +22872,25 @@ app.post(
         error: serializeError(err),
         ...(pdfError
           ? {
-              pdfGeneration: {
-                code: pdfErrorCode,
-                summary: pdfMessage,
-                details: pdfDetails,
-              },
-            }
+            pdfGeneration: {
+              code: pdfErrorCode,
+              summary: pdfMessage,
+              details: pdfDetails,
+            },
+          }
           : {}),
       });
       if (pdfError) {
         const responseDetails = pdfDetails && typeof pdfDetails === 'object'
           ? {
-              ...pdfDetails,
-              ...(Array.isArray(pdfDetails.messages)
-                ? { messages: [...pdfDetails.messages] }
-                : {}),
-              ...(Array.isArray(pdfDetails.templates)
-                ? { templates: [...pdfDetails.templates] }
-                : {}),
-            }
+            ...pdfDetails,
+            ...(Array.isArray(pdfDetails.messages)
+              ? { messages: [...pdfDetails.messages] }
+              : {}),
+            ...(Array.isArray(pdfDetails.templates)
+              ? { templates: [...pdfDetails.templates] }
+              : {}),
+          }
           : pdfDetails;
         return sendError(
           res,
@@ -22933,7 +22943,7 @@ app.post(
         message,
         hasDetails ? details : undefined
       );
-  }
+    }
   }
 );
 
@@ -23375,25 +23385,25 @@ app.post('/api/render-cover-letter', assignJobContext, async (req, res) => {
       error: serializeError(err),
       ...(pdfError
         ? {
-            pdfGeneration: {
-              code: pdfErrorCode,
-              summary: pdfMessage,
-              details: pdfDetails,
-            },
-          }
+          pdfGeneration: {
+            code: pdfErrorCode,
+            summary: pdfMessage,
+            details: pdfDetails,
+          },
+        }
         : {}),
     });
     if (pdfError) {
       const responseDetails = pdfDetails && typeof pdfDetails === 'object'
         ? {
-            ...pdfDetails,
-            ...(Array.isArray(pdfDetails.messages)
-              ? { messages: [...pdfDetails.messages] }
-              : {}),
-            ...(Array.isArray(pdfDetails.templates)
-              ? { templates: [...pdfDetails.templates] }
-              : {}),
-          }
+          ...pdfDetails,
+          ...(Array.isArray(pdfDetails.messages)
+            ? { messages: [...pdfDetails.messages] }
+            : {}),
+          ...(Array.isArray(pdfDetails.templates)
+            ? { templates: [...pdfDetails.templates] }
+            : {}),
+        }
         : pdfDetails;
       return sendError(
         res,
@@ -23884,8 +23894,8 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   const coverLetterEntriesInput = Array.isArray(coverLettersPayload?.entries)
     ? coverLettersPayload.entries
     : Array.isArray(req.body.coverLetterEntries)
-    ? req.body.coverLetterEntries
-    : null;
+      ? req.body.coverLetterEntries
+      : null;
   if (coverLetterEntriesInput) {
     coverLetterEntries = coverLetterEntriesInput
       .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
@@ -23897,10 +23907,10 @@ app.post('/api/change-log', assignJobContext, async (req, res) => {
   )
     ? coverLettersPayload.dismissedEntries
     : Array.isArray(req.body.dismissedCoverLetterEntries)
-    ? req.body.dismissedCoverLetterEntries
-    : Array.isArray(req.body.dismissedCoverLetters)
-    ? req.body.dismissedCoverLetters
-    : null;
+      ? req.body.dismissedCoverLetterEntries
+      : Array.isArray(req.body.dismissedCoverLetters)
+        ? req.body.dismissedCoverLetters
+        : null;
   if (coverLetterDismissedInput) {
     dismissedCoverLetterEntries = coverLetterDismissedInput
       .map((entry) => normalizeCoverLetterChangeLogEntry(entry))
@@ -24627,614 +24637,614 @@ app.post(
     });
   },
   async (req, res) => {
-  const jobId = res.locals.jobId || req.jobId || createIdentifier();
-  const requestId = res.locals.requestId;
-  let userId = res.locals.userId;
-  if (!userId) {
-    userId = captureUserContext(req, res) || undefined;
-  }
-  if (userId) {
-    const existingLogContext = res.locals.uploadLogContext || {};
-    if (existingLogContext.userId !== userId) {
-      res.locals.uploadLogContext = {
-        requestId,
-        jobId,
-        ...existingLogContext,
-        userId,
-      };
+    const jobId = res.locals.jobId || req.jobId || createIdentifier();
+    const requestId = res.locals.requestId;
+    let userId = res.locals.userId;
+    if (!userId) {
+      userId = captureUserContext(req, res) || undefined;
     }
-  }
-  const logContext =
-    res.locals.uploadLogContext ||
-    (userId ? { requestId, jobId, userId } : { requestId, jobId });
-  const activeServiceKey =
-    typeof res.locals.activeService === 'string' ? res.locals.activeService : '';
-  const isUploadMicroservice = activeServiceKey === 'resumeUpload';
-  const sessionSegment =
-    res.locals.sessionSegment ||
-    sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+    if (userId) {
+      const existingLogContext = res.locals.uploadLogContext || {};
+      if (existingLogContext.userId !== userId) {
+        res.locals.uploadLogContext = {
+          requestId,
+          jobId,
+          ...existingLogContext,
+          userId,
+        };
+      }
+    }
+    const logContext =
+      res.locals.uploadLogContext ||
+      (userId ? { requestId, jobId, userId } : { requestId, jobId });
+    const activeServiceKey =
+      typeof res.locals.activeService === 'string' ? res.locals.activeService : '';
+    const isUploadMicroservice = activeServiceKey === 'resumeUpload';
+    const sessionSegment =
+      res.locals.sessionSegment ||
+      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
       sanitizeS3KeyComponent(`session-${createIdentifier()}`);
-  const date =
-    res.locals.uploadDateSegment ||
-    req.resumeUploadContext?.dateSegment ||
-    new Date().toISOString().slice(0, 10);
-  const s3 = s3Client;
-  const bucket = res.locals.uploadBucket;
-  const secrets = res.locals.secrets || {};
-  if (!bucket) {
-    logStructured('error', 'upload_bucket_missing', logContext);
-    return sendError(res, 500, 'STORAGE_UNAVAILABLE', S3_STORAGE_ERROR_MESSAGE);
-  }
+    const date =
+      res.locals.uploadDateSegment ||
+      req.resumeUploadContext?.dateSegment ||
+      new Date().toISOString().slice(0, 10);
+    const s3 = s3Client;
+    const bucket = res.locals.uploadBucket;
+    const secrets = res.locals.secrets || {};
+    if (!bucket) {
+      logStructured('error', 'upload_bucket_missing', logContext);
+      return sendError(res, 500, 'STORAGE_UNAVAILABLE', S3_STORAGE_ERROR_MESSAGE);
+    }
 
-  const dynamo = new DynamoDBClient({ region });
-  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
-  const tablePollInterval = Math.max(
-    1,
-    Math.min(DYNAMO_TABLE_POLL_INTERVAL_MS, DYNAMO_TABLE_MAX_WAIT_MS)
-  );
-  let tableEnsured = false;
-  let tableCreatedThisRequest = false;
+    const dynamo = new DynamoDBClient({ region });
+    const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+    const tablePollInterval = Math.max(
+      1,
+      Math.min(DYNAMO_TABLE_POLL_INTERVAL_MS, DYNAMO_TABLE_MAX_WAIT_MS)
+    );
+    let tableEnsured = false;
+    let tableCreatedThisRequest = false;
 
-  const waitForTableActive = async (ignoreNotFound = false) => {
-    const startedAt = Date.now();
-    while (true) {
-      try {
-        const desc = await dynamo.send(
-          new DescribeTableCommand({ TableName: tableName })
-        );
-        if (desc.Table && desc.Table.TableStatus === 'ACTIVE') {
-          return;
+    const waitForTableActive = async (ignoreNotFound = false) => {
+      const startedAt = Date.now();
+      while (true) {
+        try {
+          const desc = await dynamo.send(
+            new DescribeTableCommand({ TableName: tableName })
+          );
+          if (desc.Table && desc.Table.TableStatus === 'ACTIVE') {
+            return;
+          }
+        } catch (err) {
+          if (!ignoreNotFound || err.name !== 'ResourceNotFoundException') {
+            throw err;
+          }
         }
+
+        if (Date.now() - startedAt >= DYNAMO_TABLE_MAX_WAIT_MS) {
+          throw new Error(
+            `DynamoDB table ${tableName} did not become ACTIVE within ${DYNAMO_TABLE_MAX_WAIT_MS} ms`
+          );
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, tablePollInterval));
+      }
+    };
+
+    const ensureTableExists = async () => {
+      if (tableEnsured) {
+        return;
+      }
+      try {
+        await waitForTableActive(false);
+        tableEnsured = true;
+        return;
       } catch (err) {
-        if (!ignoreNotFound || err.name !== 'ResourceNotFoundException') {
+        if (err.name !== 'ResourceNotFoundException') {
           throw err;
         }
       }
 
-      if (Date.now() - startedAt >= DYNAMO_TABLE_MAX_WAIT_MS) {
-        throw new Error(
-          `DynamoDB table ${tableName} did not become ACTIVE within ${DYNAMO_TABLE_MAX_WAIT_MS} ms`
+      try {
+        tableCreatedThisRequest = true;
+        await dynamo.send(
+          new CreateTableCommand({
+            TableName: tableName,
+            AttributeDefinitions: [
+              { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
+            ],
+            KeySchema: [
+              { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
+            ],
+            BillingMode: 'PAY_PER_REQUEST'
+          })
         );
+      } catch (createErr) {
+        if (createErr.name !== 'ResourceInUseException') throw createErr;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, tablePollInterval));
-    }
-  };
-
-  const ensureTableExists = async () => {
-    if (tableEnsured) {
-      return;
-    }
-    try {
-      await waitForTableActive(false);
+      await waitForTableActive(true);
       tableEnsured = true;
-      return;
-    } catch (err) {
-      if (err.name !== 'ResourceNotFoundException') {
-        throw err;
+    };
+
+    let storedTemplatePreference = '';
+    if (userId) {
+      try {
+        await ensureTableExists();
+        const preference = await loadUserTemplatePreference({
+          dynamo,
+          tableName,
+          userId,
+          logContext,
+        });
+        if (preference) {
+          storedTemplatePreference = preference;
+        }
+      } catch (err) {
+        logStructured('warn', 'user_template_preference_lookup_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
       }
     }
 
-    try {
-      tableCreatedThisRequest = true;
-      await dynamo.send(
-        new CreateTableCommand({
-          TableName: tableName,
-          AttributeDefinitions: [
-            { AttributeName: 'linkedinProfileUrl', AttributeType: 'S' }
-          ],
-          KeySchema: [
-            { AttributeName: 'linkedinProfileUrl', KeyType: 'HASH' }
-          ],
-          BillingMode: 'PAY_PER_REQUEST'
-        })
+    const { credlyProfileUrl } = req.body;
+    const rawLinkedInBody =
+      typeof req.body.linkedinProfileUrl === 'string'
+        ? req.body.linkedinProfileUrl.trim()
+        : '';
+    const rawLinkedInQuery =
+      typeof req.query?.linkedinProfileUrl === 'string'
+        ? req.query.linkedinProfileUrl.trim()
+        : '';
+    const submittedLinkedInInput = rawLinkedInBody || rawLinkedInQuery;
+    const normalizedLinkedInInput = normalizeUrl(submittedLinkedInInput);
+    const linkedinProfileUrlInput = normalizedLinkedInInput || normalizePersonalData(submittedLinkedInInput);
+    const linkedinProfileUrl = normalizedLinkedInInput;
+    const manualJobDescriptionInput =
+      typeof req.body.manualJobDescription === 'string'
+        ? req.body.manualJobDescription
+        : typeof req.body.jobDescriptionText === 'string'
+          ? req.body.jobDescriptionText
+          : '';
+    if (manualJobDescriptionContainsProhibitedHtml(manualJobDescriptionInput)) {
+      logStructured('warn', 'job_description_prohibited_html_detected', logContext);
+      return sendError(
+        res,
+        400,
+        'JOB_DESCRIPTION_PROHIBITED_TAGS',
+        'Remove HTML tags like <script> before continuing.',
+        { field: 'manualJobDescription' }
       );
-    } catch (createErr) {
-      if (createErr.name !== 'ResourceInUseException') throw createErr;
+    }
+    const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
+    const normalizedManualJobDescription = manualJobDescription
+      ? manualJobDescription.replace(/\s+/g, ' ').trim()
+      : '';
+    const manualJobDescriptionDigest = createTextDigest(normalizedManualJobDescription);
+    const hasManualJobDescription = Boolean(normalizedManualJobDescription);
+    const submittedCredly = '';
+    const profileIdentifier =
+      resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId }) || jobId;
+    logStructured('info', 'process_cv_started', {
+      ...logContext,
+      credlyHost: getUrlHost(submittedCredly),
+      linkedinHost: getUrlHost(linkedinProfileUrl),
+      manualJobDescriptionProvided: hasManualJobDescription,
+    });
+    const bodyTemplate =
+      typeof req.body.template === 'string' ? req.body.template.trim() : '';
+    const queryTemplate =
+      typeof req.query?.template === 'string' ? req.query.template.trim() : '';
+    const bodyTemplateId =
+      typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
+    const queryTemplateId =
+      typeof req.query?.templateId === 'string' ? req.query.templateId.trim() : '';
+    const bodyTemplate1 =
+      typeof req.body.template1 === 'string' ? req.body.template1.trim() : '';
+    const queryTemplate1 =
+      typeof req.query?.template1 === 'string' ? req.query.template1.trim() : '';
+    const bodyTemplate2 =
+      typeof req.body.template2 === 'string' ? req.body.template2.trim() : '';
+    const queryTemplate2 =
+      typeof req.query?.template2 === 'string' ? req.query.template2.trim() : '';
+    const requestedTemplateInput =
+      bodyTemplateId || queryTemplateId || bodyTemplate || queryTemplate;
+    const requestTemplate1 = bodyTemplate1 || queryTemplate1;
+    const requestTemplate2 = bodyTemplate2 || queryTemplate2;
+    const hasExplicitTemplateRequest = Boolean(
+      requestedTemplateInput || requestTemplate1 || requestTemplate2
+    );
+    const effectivePreferredTemplate = hasExplicitTemplateRequest
+      ? requestedTemplateInput
+      : requestedTemplateInput || storedTemplatePreference;
+    if (!hasExplicitTemplateRequest && storedTemplatePreference) {
+      logStructured('info', 'user_template_preference_applied', {
+        ...logContext,
+        template: storedTemplatePreference,
+      });
+    }
+    const defaultCvTemplate =
+      requestTemplate1 || effectivePreferredTemplate || CV_TEMPLATES[0];
+    const defaultClTemplate =
+      req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
+    const selection = selectTemplates({
+      defaultCvTemplate,
+      defaultClTemplate,
+      template1: requestTemplate1,
+      template2: requestTemplate2,
+      coverTemplate1: req.body.coverTemplate1 || req.query.coverTemplate1,
+      coverTemplate2: req.body.coverTemplate2 || req.query.coverTemplate2,
+      cvTemplates: req.body.templates || req.query.templates,
+      clTemplates: req.body.coverTemplates || req.query.coverTemplates,
+      preferredTemplate: effectivePreferredTemplate,
+    });
+    let {
+      template1,
+      template2,
+      coverTemplate1,
+      coverTemplate2,
+      templates: availableCvTemplates,
+      coverTemplates: availableCoverTemplates,
+    } = selection;
+    if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
+      availableCvTemplates = [...CV_TEMPLATES];
+    }
+    if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
+      availableCoverTemplates = [...CL_TEMPLATES];
+    }
+    logStructured('info', 'template_selection', {
+      ...logContext,
+      template1,
+      template2,
+      coverTemplate1,
+      coverTemplate2,
+      availableCvTemplates,
+      availableCoverTemplates,
+    });
+    const canonicalSelectedTemplate =
+      canonicalizeCvTemplateId(effectivePreferredTemplate) || template1;
+    if (!req.file) {
+      logStructured('warn', 'resume_missing', logContext);
+      return sendError(
+        res,
+        400,
+        'RESUME_FILE_REQUIRED',
+        'resume file required',
+        { field: 'resume' }
+      );
+    }
+    if (!hasManualJobDescription) {
+      logStructured('warn', 'job_description_missing', logContext);
+      return sendError(
+        res,
+        400,
+        'JOB_DESCRIPTION_REQUIRED',
+        'manualJobDescription required',
+        { field: 'manualJobDescription' }
+      );
+    }
+    const ext = (path.extname(req.file.originalname) || '').toLowerCase();
+    const normalizedExt = ext || '.pdf';
+    const storedFileType =
+      req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
+    const uploadContext = req.resumeUploadContext || {};
+    const fallbackOwnerSegment =
+      uploadContext.ownerSegment ||
+      res.locals.resumeOwnerSegment ||
+      resolveDocumentOwnerSegment({ userId });
+    const fallbackSessionPrefix = buildDocumentSessionPrefix({
+      ownerSegment: fallbackOwnerSegment,
+      dateSegment: date,
+      jobSegment: sanitizeJobSegment(jobId),
+      sessionSegment,
+    });
+    const initialSessionPrefix =
+      uploadContext.sessionPrefix ||
+      res.locals.sessionPrefix ||
+      res.locals.initialSessionPrefix ||
+      fallbackSessionPrefix;
+    let originalUploadKey =
+      (typeof req.file?.key === 'string' && req.file.key) ||
+      `${initialSessionPrefix}original.pdf`;
+    const initialUploadKey = originalUploadKey;
+    let logKey = `${initialSessionPrefix}logs/processing.jsonl`;
+    const originalContentType = determineUploadContentType(req.file);
+    if (originalContentType !== req.file.mimetype) {
+      logStructured('warn', 'initial_upload_content_type_adjusted', {
+        ...logContext,
+        originalContentType: req.file.mimetype,
+        normalizedContentType: originalContentType,
+      });
     }
 
-    await waitForTableActive(true);
-    tableEnsured = true;
-  };
-
-  let storedTemplatePreference = '';
-  if (userId) {
+    let uploadedFileBuffer;
     try {
-      await ensureTableExists();
-      const preference = await loadUserTemplatePreference({
-        dynamo,
-        tableName,
-        userId,
-        logContext,
+      const downloadResponse = await sendS3CommandWithRetry(
+        s3,
+        () => new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+        {
+          maxAttempts: 3,
+          baseDelayMs: 300,
+          maxDelayMs: 2500,
+          retryLogEvent: 'initial_upload_download_retry',
+          retryLogContext: { ...logContext, bucket, key: originalUploadKey },
+        }
+      );
+      uploadedFileBuffer = await streamToBuffer(downloadResponse.Body);
+    } catch (err) {
+      logStructured('error', 'initial_upload_download_failed', {
+        ...logContext,
+        bucket,
+        key: originalUploadKey,
+        error: serializeError(err),
       });
-      if (preference) {
-        storedTemplatePreference = preference;
+      return sendError(
+        res,
+        500,
+        'INITIAL_UPLOAD_FAILED',
+        S3_STORAGE_ERROR_MESSAGE,
+        { bucket, reason: err?.message || 'Unable to read uploaded file.' }
+      );
+    }
+
+    req.file.buffer = uploadedFileBuffer;
+
+    let sanitizedUploadBuffer = req.file.buffer;
+    try {
+      const strippedBuffer = await stripUploadMetadata({
+        buffer: req.file.buffer,
+        mimeType: req.file.mimetype,
+        originalName: req.file.originalname,
+      });
+      if (Buffer.isBuffer(strippedBuffer)) {
+        sanitizedUploadBuffer = strippedBuffer;
+        if (strippedBuffer !== req.file.buffer) {
+          logStructured('debug', 'upload_metadata_sanitized', logContext);
+        }
       }
     } catch (err) {
-      logStructured('warn', 'user_template_preference_lookup_failed', {
+      logStructured('warn', 'upload_metadata_sanitization_failed', {
         ...logContext,
         error: serializeError(err),
       });
     }
-  }
-
-  const { credlyProfileUrl } = req.body;
-  const rawLinkedInBody =
-    typeof req.body.linkedinProfileUrl === 'string'
-      ? req.body.linkedinProfileUrl.trim()
-      : '';
-  const rawLinkedInQuery =
-    typeof req.query?.linkedinProfileUrl === 'string'
-      ? req.query.linkedinProfileUrl.trim()
-      : '';
-  const submittedLinkedInInput = rawLinkedInBody || rawLinkedInQuery;
-  const normalizedLinkedInInput = normalizeUrl(submittedLinkedInInput);
-  const linkedinProfileUrlInput = normalizedLinkedInInput || normalizePersonalData(submittedLinkedInInput);
-  const linkedinProfileUrl = normalizedLinkedInInput;
-  const manualJobDescriptionInput =
-    typeof req.body.manualJobDescription === 'string'
-      ? req.body.manualJobDescription
-      : typeof req.body.jobDescriptionText === 'string'
-        ? req.body.jobDescriptionText
-        : '';
-  if (manualJobDescriptionContainsProhibitedHtml(manualJobDescriptionInput)) {
-    logStructured('warn', 'job_description_prohibited_html_detected', logContext);
-    return sendError(
-      res,
-      400,
-      'JOB_DESCRIPTION_PROHIBITED_TAGS',
-      'Remove HTML tags like <script> before continuing.',
-      { field: 'manualJobDescription' }
-    );
-  }
-  const manualJobDescription = sanitizeManualJobDescription(manualJobDescriptionInput);
-  const normalizedManualJobDescription = manualJobDescription
-    ? manualJobDescription.replace(/\s+/g, ' ').trim()
-    : '';
-  const manualJobDescriptionDigest = createTextDigest(normalizedManualJobDescription);
-  const hasManualJobDescription = Boolean(normalizedManualJobDescription);
-  const submittedCredly = '';
-  const profileIdentifier =
-    resolveProfileIdentifier({ linkedinProfileUrl, userId, jobId }) || jobId;
-  logStructured('info', 'process_cv_started', {
-    ...logContext,
-    credlyHost: getUrlHost(submittedCredly),
-    linkedinHost: getUrlHost(linkedinProfileUrl),
-    manualJobDescriptionProvided: hasManualJobDescription,
-  });
-  const bodyTemplate =
-    typeof req.body.template === 'string' ? req.body.template.trim() : '';
-  const queryTemplate =
-    typeof req.query?.template === 'string' ? req.query.template.trim() : '';
-  const bodyTemplateId =
-    typeof req.body.templateId === 'string' ? req.body.templateId.trim() : '';
-  const queryTemplateId =
-    typeof req.query?.templateId === 'string' ? req.query.templateId.trim() : '';
-  const bodyTemplate1 =
-    typeof req.body.template1 === 'string' ? req.body.template1.trim() : '';
-  const queryTemplate1 =
-    typeof req.query?.template1 === 'string' ? req.query.template1.trim() : '';
-  const bodyTemplate2 =
-    typeof req.body.template2 === 'string' ? req.body.template2.trim() : '';
-  const queryTemplate2 =
-    typeof req.query?.template2 === 'string' ? req.query.template2.trim() : '';
-  const requestedTemplateInput =
-    bodyTemplateId || queryTemplateId || bodyTemplate || queryTemplate;
-  const requestTemplate1 = bodyTemplate1 || queryTemplate1;
-  const requestTemplate2 = bodyTemplate2 || queryTemplate2;
-  const hasExplicitTemplateRequest = Boolean(
-    requestedTemplateInput || requestTemplate1 || requestTemplate2
-  );
-  const effectivePreferredTemplate = hasExplicitTemplateRequest
-    ? requestedTemplateInput
-    : requestedTemplateInput || storedTemplatePreference;
-  if (!hasExplicitTemplateRequest && storedTemplatePreference) {
-    logStructured('info', 'user_template_preference_applied', {
-      ...logContext,
-      template: storedTemplatePreference,
-    });
-  }
-  const defaultCvTemplate =
-    requestTemplate1 || effectivePreferredTemplate || CV_TEMPLATES[0];
-  const defaultClTemplate =
-    req.body.coverTemplate || req.query.coverTemplate || CL_TEMPLATES[0];
-  const selection = selectTemplates({
-    defaultCvTemplate,
-    defaultClTemplate,
-    template1: requestTemplate1,
-    template2: requestTemplate2,
-    coverTemplate1: req.body.coverTemplate1 || req.query.coverTemplate1,
-    coverTemplate2: req.body.coverTemplate2 || req.query.coverTemplate2,
-    cvTemplates: req.body.templates || req.query.templates,
-    clTemplates: req.body.coverTemplates || req.query.coverTemplates,
-    preferredTemplate: effectivePreferredTemplate,
-  });
-  let {
-    template1,
-    template2,
-    coverTemplate1,
-    coverTemplate2,
-    templates: availableCvTemplates,
-    coverTemplates: availableCoverTemplates,
-  } = selection;
-  if (!Array.isArray(availableCvTemplates) || !availableCvTemplates.length) {
-    availableCvTemplates = [...CV_TEMPLATES];
-  }
-  if (!Array.isArray(availableCoverTemplates) || !availableCoverTemplates.length) {
-    availableCoverTemplates = [...CL_TEMPLATES];
-  }
-  logStructured('info', 'template_selection', {
-    ...logContext,
-    template1,
-    template2,
-    coverTemplate1,
-    coverTemplate2,
-    availableCvTemplates,
-    availableCoverTemplates,
-  });
-  const canonicalSelectedTemplate =
-    canonicalizeCvTemplateId(effectivePreferredTemplate) || template1;
-  if (!req.file) {
-    logStructured('warn', 'resume_missing', logContext);
-    return sendError(
-      res,
-      400,
-      'RESUME_FILE_REQUIRED',
-      'resume file required',
-      { field: 'resume' }
-    );
-  }
-  if (!hasManualJobDescription) {
-    logStructured('warn', 'job_description_missing', logContext);
-    return sendError(
-      res,
-      400,
-      'JOB_DESCRIPTION_REQUIRED',
-      'manualJobDescription required',
-      { field: 'manualJobDescription' }
-    );
-  }
-  const ext = (path.extname(req.file.originalname) || '').toLowerCase();
-  const normalizedExt = ext || '.pdf';
-  const storedFileType =
-    req.file.mimetype || (normalizedExt.startsWith('.') ? normalizedExt.slice(1) : normalizedExt) || 'unknown';
-  const uploadContext = req.resumeUploadContext || {};
-  const fallbackOwnerSegment =
-    uploadContext.ownerSegment ||
-    res.locals.resumeOwnerSegment ||
-    resolveDocumentOwnerSegment({ userId });
-  const fallbackSessionPrefix = buildDocumentSessionPrefix({
-    ownerSegment: fallbackOwnerSegment,
-    dateSegment: date,
-    jobSegment: sanitizeJobSegment(jobId),
-    sessionSegment,
-  });
-  const initialSessionPrefix =
-    uploadContext.sessionPrefix ||
-    res.locals.sessionPrefix ||
-    res.locals.initialSessionPrefix ||
-    fallbackSessionPrefix;
-  let originalUploadKey =
-    (typeof req.file?.key === 'string' && req.file.key) ||
-    `${initialSessionPrefix}original.pdf`;
-  const initialUploadKey = originalUploadKey;
-  let logKey = `${initialSessionPrefix}logs/processing.jsonl`;
-  const originalContentType = determineUploadContentType(req.file);
-  if (originalContentType !== req.file.mimetype) {
-    logStructured('warn', 'initial_upload_content_type_adjusted', {
-      ...logContext,
-      originalContentType: req.file.mimetype,
-      normalizedContentType: originalContentType,
-    });
-  }
-
-  let uploadedFileBuffer;
-  try {
-    const downloadResponse = await sendS3CommandWithRetry(
-      s3,
-      () => new GetObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
-      {
-        maxAttempts: 3,
-        baseDelayMs: 300,
-        maxDelayMs: 2500,
-        retryLogEvent: 'initial_upload_download_retry',
-        retryLogContext: { ...logContext, bucket, key: originalUploadKey },
-      }
-    );
-    uploadedFileBuffer = await streamToBuffer(downloadResponse.Body);
-  } catch (err) {
-    logStructured('error', 'initial_upload_download_failed', {
-      ...logContext,
-      bucket,
-      key: originalUploadKey,
-      error: serializeError(err),
-    });
-    return sendError(
-      res,
-      500,
-      'INITIAL_UPLOAD_FAILED',
-      S3_STORAGE_ERROR_MESSAGE,
-      { bucket, reason: err?.message || 'Unable to read uploaded file.' }
-    );
-  }
-
-  req.file.buffer = uploadedFileBuffer;
-
-  let sanitizedUploadBuffer = req.file.buffer;
-  try {
-    const strippedBuffer = await stripUploadMetadata({
-      buffer: req.file.buffer,
-      mimeType: req.file.mimetype,
-      originalName: req.file.originalname,
-    });
-    if (Buffer.isBuffer(strippedBuffer)) {
-      sanitizedUploadBuffer = strippedBuffer;
-      if (strippedBuffer !== req.file.buffer) {
-        logStructured('debug', 'upload_metadata_sanitized', logContext);
-      }
-    }
-  } catch (err) {
-    logStructured('warn', 'upload_metadata_sanitization_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
-  }
-  req.file.buffer = sanitizedUploadBuffer;
-
-  try {
-    await sendS3CommandWithRetry(
-      s3,
-      () =>
-        new PutObjectCommand(
-          withEnvironmentTagging(
-            withBuildMetadata({
-              Bucket: bucket,
-              Key: originalUploadKey,
-              Body: req.file.buffer,
-              ContentType: originalContentType,
-            })
-          )
-        ),
-      {
-        maxAttempts: 4,
-        baseDelayMs: 500,
-        maxDelayMs: 5000,
-        jitterMs: 300,
-        retryLogEvent: 'initial_upload_retry',
-        retryLogContext: { ...logContext, bucket, key: originalUploadKey },
-      }
-    );
-    logStructured('info', 'initial_upload_completed', {
-      ...logContext,
-      bucket,
-      key: originalUploadKey,
-    });
-  } catch (e) {
-    logStructured('error', 'initial_upload_failed', {
-      ...logContext,
-      bucket,
-      error: serializeError(e),
-    });
-    const message = e.message || 'initial S3 upload failed';
-    try {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'initial_upload_failed',
-        level: 'error',
-        message: `Failed to upload to bucket ${bucket}: ${message}`
-      });
-    } catch (logErr) {
-      logStructured('error', 's3_log_failure', {
-        ...logContext,
-        error: serializeError(logErr),
-      });
-    }
-    return sendError(
-      res,
-      500,
-      'INITIAL_UPLOAD_FAILED',
-      S3_STORAGE_ERROR_MESSAGE,
-      { bucket, reason: message }
-    );
-  }
-
-  const ipAddress =
-    (req.headers['x-forwarded-for'] || '')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)[0] || req.ip;
-  const userAgent = req.headers['user-agent'] || '';
-  const locationMeta = extractLocationMetadata(req);
-  const { browser, os, device } = await parseUserAgent(userAgent);
-  const safeRequestId =
-    typeof requestId === 'string' && requestId.trim()
-      ? requestId.trim()
-      : String(requestId || '');
-  const requestScopedIdentifier = normalizePersonalData(safeRequestId);
-  let placeholderIdentifier =
-    requestScopedIdentifier || normalizePersonalData(profileIdentifier || jobId);
-  let placeholderRecordIdentifier = '';
-  let shouldDeletePlaceholder = false;
-  const initialTimestamp = new Date().toISOString();
-  const initialS3Location = `s3://${bucket}/${originalUploadKey}`;
-
-  const relocateFailedUploadToInvalid = async ({
-    descriptor = 'processing-failed',
-    reason = '',
-  } = {}) => {
-    const normalizedOriginalKey =
-      typeof originalUploadKey === 'string' ? originalUploadKey.trim() : '';
-    if (!bucket || !normalizedOriginalKey) {
-      return { storageKey: normalizedOriginalKey, invalidStorageKey: '' };
-    }
-    if (normalizedOriginalKey.startsWith('invalid/')) {
-      return {
-        storageKey: normalizedOriginalKey,
-        invalidStorageKey: normalizedOriginalKey,
-      };
-    }
-
-    const invalidOwnerSegment =
-      sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: '' }) ||
-      sanitizeS3KeyComponent(fallbackOwnerSegment, { fallback: '' }) ||
-      'candidate';
-    const invalidDateSegment = sanitizeS3KeyComponent(date);
-    const invalidSessionSegment =
-      sanitizeS3KeyComponent(sessionSegment, { fallback: '' }) ||
-      sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
-      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
-      sanitizeS3KeyComponent(createIdentifier());
-    const invalidPrefixParts = ['invalid', invalidOwnerSegment];
-    if (invalidDateSegment) {
-      invalidPrefixParts.push(invalidDateSegment);
-    }
-    if (invalidSessionSegment) {
-      invalidPrefixParts.push(invalidSessionSegment);
-    }
-    const invalidPrefix = `${invalidPrefixParts.join('/')}/`;
-    const descriptorSegment =
-      sanitizeS3KeyComponent(descriptor, { fallback: '' }) ||
-      sanitizeS3KeyComponent(reason, { fallback: 'processing-failed' }) ||
-      'processing-failed';
-    const identifierSegment =
-      sanitizeS3KeyComponent(createIdentifier(), { fallback: '' });
-    const invalidFileName = identifierSegment
-      ? `${descriptorSegment}-${identifierSegment}${normalizedExt}`
-      : `${descriptorSegment}${normalizedExt}`;
-    const invalidUploadKey = `${invalidPrefix}${invalidFileName}`;
+    req.file.buffer = sanitizedUploadBuffer;
 
     try {
       await sendS3CommandWithRetry(
         s3,
         () =>
-          new CopyObjectCommand(
-            withEnvironmentTagging({
-              Bucket: bucket,
-              CopySource: buildCopySource(bucket, normalizedOriginalKey),
-              Key: invalidUploadKey,
-              MetadataDirective: 'COPY',
-              TaggingDirective: 'REPLACE',
-            })
+          new PutObjectCommand(
+            withEnvironmentTagging(
+              withBuildMetadata({
+                Bucket: bucket,
+                Key: originalUploadKey,
+                Body: req.file.buffer,
+                ContentType: originalContentType,
+              })
+            )
           ),
         {
           maxAttempts: 4,
           baseDelayMs: 500,
           maxDelayMs: 5000,
           jitterMs: 300,
-          retryLogEvent: 'invalid_upload_relocation_retry',
-          retryLogContext: {
-            ...logContext,
-            bucket,
-            fromKey: normalizedOriginalKey,
-            toKey: invalidUploadKey,
-            failure: descriptorSegment,
-          },
+          retryLogEvent: 'initial_upload_retry',
+          retryLogContext: { ...logContext, bucket, key: originalUploadKey },
         }
       );
-      const deleteCandidates = new Set([normalizedOriginalKey]);
-      if (
-        typeof normalizedOriginalKey === 'string' &&
-        normalizedOriginalKey.startsWith('cv/') &&
-        !normalizedOriginalKey.includes('/cv/')
-      ) {
-        deleteCandidates.add(`cv/${normalizedOriginalKey}`);
+      logStructured('info', 'initial_upload_completed', {
+        ...logContext,
+        bucket,
+        key: originalUploadKey,
+      });
+    } catch (e) {
+      logStructured('error', 'initial_upload_failed', {
+        ...logContext,
+        bucket,
+        error: serializeError(e),
+      });
+      const message = e.message || 'initial S3 upload failed';
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'initial_upload_failed',
+          level: 'error',
+          message: `Failed to upload to bucket ${bucket}: ${message}`
+        });
+      } catch (logErr) {
+        logStructured('error', 's3_log_failure', {
+          ...logContext,
+          error: serializeError(logErr),
+        });
       }
-      for (const candidateKey of deleteCandidates) {
-        try {
-          await sendS3CommandWithRetry(
-            s3,
-            () => new DeleteObjectCommand({ Bucket: bucket, Key: candidateKey }),
-            {
-              maxAttempts: 3,
-              baseDelayMs: 300,
-              maxDelayMs: 3000,
-              retryLogEvent: 'invalid_upload_relocation_retry',
-              retryLogContext: {
-                ...logContext,
-                bucket,
-                fromKey: candidateKey,
-                toKey: invalidUploadKey,
-                operation: 'delete_source',
-              },
-            }
-          );
-        } catch (deleteErr) {
-          logStructured('warn', 'failed_upload_source_cleanup_failed', {
-            ...logContext,
-            bucket,
-            fromKey: candidateKey,
-            toKey: invalidUploadKey,
-            error: serializeError(deleteErr),
-          });
+      return sendError(
+        res,
+        500,
+        'INITIAL_UPLOAD_FAILED',
+        S3_STORAGE_ERROR_MESSAGE,
+        { bucket, reason: message }
+      );
+    }
+
+    const ipAddress =
+      (req.headers['x-forwarded-for'] || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)[0] || req.ip;
+    const userAgent = req.headers['user-agent'] || '';
+    const locationMeta = extractLocationMetadata(req);
+    const { browser, os, device } = await parseUserAgent(userAgent);
+    const safeRequestId =
+      typeof requestId === 'string' && requestId.trim()
+        ? requestId.trim()
+        : String(requestId || '');
+    const requestScopedIdentifier = normalizePersonalData(safeRequestId);
+    let placeholderIdentifier =
+      requestScopedIdentifier || normalizePersonalData(profileIdentifier || jobId);
+    let placeholderRecordIdentifier = '';
+    let shouldDeletePlaceholder = false;
+    const initialTimestamp = new Date().toISOString();
+    const initialS3Location = `s3://${bucket}/${originalUploadKey}`;
+
+    const relocateFailedUploadToInvalid = async ({
+      descriptor = 'processing-failed',
+      reason = '',
+    } = {}) => {
+      const normalizedOriginalKey =
+        typeof originalUploadKey === 'string' ? originalUploadKey.trim() : '';
+      if (!bucket || !normalizedOriginalKey) {
+        return { storageKey: normalizedOriginalKey, invalidStorageKey: '' };
+      }
+      if (normalizedOriginalKey.startsWith('invalid/')) {
+        return {
+          storageKey: normalizedOriginalKey,
+          invalidStorageKey: normalizedOriginalKey,
+        };
+      }
+
+      const invalidOwnerSegment =
+        sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: '' }) ||
+        sanitizeS3KeyComponent(fallbackOwnerSegment, { fallback: '' }) ||
+        'candidate';
+      const invalidDateSegment = sanitizeS3KeyComponent(date);
+      const invalidSessionSegment =
+        sanitizeS3KeyComponent(sessionSegment, { fallback: '' }) ||
+        sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
+        sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+        sanitizeS3KeyComponent(createIdentifier());
+      const invalidPrefixParts = ['invalid', invalidOwnerSegment];
+      if (invalidDateSegment) {
+        invalidPrefixParts.push(invalidDateSegment);
+      }
+      if (invalidSessionSegment) {
+        invalidPrefixParts.push(invalidSessionSegment);
+      }
+      const invalidPrefix = `${invalidPrefixParts.join('/')}/`;
+      const descriptorSegment =
+        sanitizeS3KeyComponent(descriptor, { fallback: '' }) ||
+        sanitizeS3KeyComponent(reason, { fallback: 'processing-failed' }) ||
+        'processing-failed';
+      const identifierSegment =
+        sanitizeS3KeyComponent(createIdentifier(), { fallback: '' });
+      const invalidFileName = identifierSegment
+        ? `${descriptorSegment}-${identifierSegment}${normalizedExt}`
+        : `${descriptorSegment}${normalizedExt}`;
+      const invalidUploadKey = `${invalidPrefix}${invalidFileName}`;
+
+      try {
+        await sendS3CommandWithRetry(
+          s3,
+          () =>
+            new CopyObjectCommand(
+              withEnvironmentTagging({
+                Bucket: bucket,
+                CopySource: buildCopySource(bucket, normalizedOriginalKey),
+                Key: invalidUploadKey,
+                MetadataDirective: 'COPY',
+                TaggingDirective: 'REPLACE',
+              })
+            ),
+          {
+            maxAttempts: 4,
+            baseDelayMs: 500,
+            maxDelayMs: 5000,
+            jitterMs: 300,
+            retryLogEvent: 'invalid_upload_relocation_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket,
+              fromKey: normalizedOriginalKey,
+              toKey: invalidUploadKey,
+              failure: descriptorSegment,
+            },
+          }
+        );
+        const deleteCandidates = new Set([normalizedOriginalKey]);
+        if (
+          typeof normalizedOriginalKey === 'string' &&
+          normalizedOriginalKey.startsWith('cv/') &&
+          !normalizedOriginalKey.includes('/cv/')
+        ) {
+          deleteCandidates.add(`cv/${normalizedOriginalKey}`);
         }
+        for (const candidateKey of deleteCandidates) {
+          try {
+            await sendS3CommandWithRetry(
+              s3,
+              () => new DeleteObjectCommand({ Bucket: bucket, Key: candidateKey }),
+              {
+                maxAttempts: 3,
+                baseDelayMs: 300,
+                maxDelayMs: 3000,
+                retryLogEvent: 'invalid_upload_relocation_retry',
+                retryLogContext: {
+                  ...logContext,
+                  bucket,
+                  fromKey: candidateKey,
+                  toKey: invalidUploadKey,
+                  operation: 'delete_source',
+                },
+              }
+            );
+          } catch (deleteErr) {
+            logStructured('warn', 'failed_upload_source_cleanup_failed', {
+              ...logContext,
+              bucket,
+              fromKey: candidateKey,
+              toKey: invalidUploadKey,
+              error: serializeError(deleteErr),
+            });
+          }
+        }
+        logStructured('warn', 'failed_upload_relocated_to_invalid', {
+          ...logContext,
+          bucket,
+          fromKey: normalizedOriginalKey,
+          toKey: invalidUploadKey,
+          descriptor: descriptorSegment,
+          reason,
+        });
+        originalUploadKey = invalidUploadKey;
+        if (req.file) {
+          req.file.key = invalidUploadKey;
+        }
+        return {
+          storageKey: invalidUploadKey,
+          invalidStorageKey: invalidUploadKey,
+        };
+      } catch (relocationErr) {
+        logStructured('error', 'failed_upload_relocation_failed', {
+          ...logContext,
+          bucket,
+          fromKey: normalizedOriginalKey,
+          toKey: invalidUploadKey,
+          descriptor: descriptorSegment,
+          reason,
+          error: serializeError(relocationErr),
+        });
+        return {
+          storageKey: normalizedOriginalKey,
+          invalidStorageKey: '',
+        };
       }
-      logStructured('warn', 'failed_upload_relocated_to_invalid', {
-        ...logContext,
-        bucket,
-        fromKey: normalizedOriginalKey,
-        toKey: invalidUploadKey,
-        descriptor: descriptorSegment,
-        reason,
-      });
-      originalUploadKey = invalidUploadKey;
-      if (req.file) {
-        req.file.key = invalidUploadKey;
+    };
+
+    await ensureTableExists();
+
+    const writePlaceholderRecord = async (identifier) => {
+      if (!identifier) {
+        return false;
       }
-      return {
-        storageKey: invalidUploadKey,
-        invalidStorageKey: invalidUploadKey,
-      };
-    } catch (relocationErr) {
-      logStructured('error', 'failed_upload_relocation_failed', {
-        ...logContext,
-        bucket,
-        fromKey: normalizedOriginalKey,
-        toKey: invalidUploadKey,
-        descriptor: descriptorSegment,
-        reason,
-        error: serializeError(relocationErr),
-      });
-      return {
-        storageKey: normalizedOriginalKey,
-        invalidStorageKey: '',
-      };
-    }
-  };
-
-  await ensureTableExists();
-
-  const writePlaceholderRecord = async (identifier) => {
-    if (!identifier) {
-      return false;
-    }
-    try {
-      await dynamo.send(
-        new PutItemCommand({
-          TableName: tableName,
-          Item: {
-            linkedinProfileUrl: { S: identifier },
-            timestamp: { S: initialTimestamp },
-            uploadedAt: { S: initialTimestamp },
-            requestId: { S: safeRequestId },
-            jobId: { S: jobId },
-            ipAddress: { S: normalizePersonalData(ipAddress) },
-            userAgent: { S: normalizePersonalData(userAgent) },
-            os: { S: os },
-            browser: { S: browser },
-            device: { S: device },
-            location: { S: locationMeta.label || 'Unknown' },
-            locationCity: { S: locationMeta.city || '' },
-            locationRegion: { S: locationMeta.region || '' },
-            locationCountry: { S: locationMeta.country || '' },
-            s3Bucket: { S: bucket },
-            s3Key: { S: originalUploadKey },
-            s3Url: { S: initialS3Location },
-            jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
-            ...(normalizedManualJobDescription
-              ? {
+      try {
+        await dynamo.send(
+          new PutItemCommand({
+            TableName: tableName,
+            Item: {
+              linkedinProfileUrl: { S: identifier },
+              timestamp: { S: initialTimestamp },
+              uploadedAt: { S: initialTimestamp },
+              requestId: { S: safeRequestId },
+              jobId: { S: jobId },
+              ipAddress: { S: normalizePersonalData(ipAddress) },
+              userAgent: { S: normalizePersonalData(userAgent) },
+              os: { S: os },
+              browser: { S: browser },
+              device: { S: device },
+              location: { S: locationMeta.label || 'Unknown' },
+              locationCity: { S: locationMeta.city || '' },
+              locationRegion: { S: locationMeta.region || '' },
+              locationCountry: { S: locationMeta.country || '' },
+              s3Bucket: { S: bucket },
+              s3Key: { S: originalUploadKey },
+              s3Url: { S: initialS3Location },
+              jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
+              ...(normalizedManualJobDescription
+                ? {
                   sessionInputs: {
                     M: {
                       jobDescription: { S: normalizedManualJobDescription },
@@ -25244,806 +25254,806 @@ app.post(
                     },
                   },
                 }
-              : {}),
-          },
-        })
+                : {}),
+            },
+          })
+        );
+        logStructured('info', 'dynamo_upload_metadata_written', {
+          ...logContext,
+          bucket,
+          key: originalUploadKey,
+        });
+        return true;
+      } catch (err) {
+        logStructured('warn', 'dynamo_upload_metadata_failed', {
+          ...logContext,
+          error: serializeError(err),
+        });
+        return false;
+      }
+    };
+
+    const deletePlaceholderRecord = async (identifier) => {
+      if (!identifier) {
+        return false;
+      }
+      try {
+        await dynamo.send(
+          new DeleteItemCommand({
+            TableName: tableName,
+            Key: { linkedinProfileUrl: { S: identifier } },
+          })
+        );
+        logStructured('info', 'placeholder_record_deleted', {
+          ...logContext,
+          placeholderIdentifier: identifier,
+        });
+        return true;
+      } catch (err) {
+        logStructured('warn', 'placeholder_record_delete_failed', {
+          ...logContext,
+          placeholderIdentifier: identifier,
+          error: serializeError(err),
+        });
+        return false;
+      }
+    };
+
+    let text;
+    try {
+      text = await extractResumeText(req.file);
+    } catch (err) {
+      logStructured('error', 'resume_text_extraction_failed', {
+        ...logContext,
+        error: serializeError(err),
+      });
+      return sendError(
+        res,
+        400,
+        'TEXT_EXTRACTION_FAILED',
+        err.message,
+        { stage: 'extract_text' }
       );
-      logStructured('info', 'dynamo_upload_metadata_written', {
+    }
+    logStructured('info', 'resume_text_extracted', {
+      ...logContext,
+      characters: text.length,
+    });
+    const classificationLogger = createStructuredLogger(logContext);
+    const classification = await classifyResumeDocument(text, {
+      logger: classificationLogger,
+      getGenerativeModel: () => getSharedGenerativeModel(),
+    });
+    const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+    const classificationShouldReject = shouldRejectBasedOnClassification(classification);
+
+    const classificationAccepted = !classificationShouldReject;
+    const classificationSnapshot = classificationAccepted
+      ? captureClassificationSnapshot(classification, { accepted: true })
+      : null;
+
+    logStructured('info', 'resume_classified', {
+      ...logContext,
+      isResume: classification.isResume,
+      description: classification.description,
+      confidence: classification.confidence,
+      accepted: classificationAccepted,
+      overridden: !classification.isResume && classificationAccepted,
+    });
+
+    if (classificationShouldReject) {
+      const rawDescription =
+        typeof classification.description === 'string'
+          ? classification.description.trim()
+          : 'non-resume document';
+      const includesDocument = /document/i.test(rawDescription);
+      const shortDescriptor = includesDocument
+        ? rawDescription
+        : `${rawDescription || 'non-resume'}${rawDescription.endsWith(' document') ? '' : ' document'}`;
+      const descriptorWithArticle = /^(a|an)\s/i.test(shortDescriptor)
+        ? shortDescriptor
+        : /^[aeiou]/i.test(shortDescriptor)
+          ? `an ${shortDescriptor}`
+          : `a ${shortDescriptor}`;
+      const reasonText =
+        typeof classification.reason === 'string' ? classification.reason.trim() : '';
+      const fallbackReason =
+        'The document content does not include the sections typically required in a CV.';
+      const detailReason = reasonText || fallbackReason;
+      const reasonSentence = detailReason.endsWith('.')
+        ? detailReason
+        : `${detailReason}.`;
+      const classificationLabel = deriveDocumentClassificationLabel(
+        shortDescriptor,
+        classification.className
+      );
+      const detectedClassName = classification.className || classificationLabel;
+      const descriptorWithClass = detectedClassName
+        ? `${descriptorWithArticle} (classified as "${detectedClassName}")`
+        : descriptorWithArticle;
+      const validationMessage = `You have uploaded ${descriptorWithClass}. ${reasonSentence} Please upload a correct CV or resume to continue.`;
+      const invalidOwnerSegment =
+        sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: 'candidate' }) ||
+        'candidate';
+      const invalidDateSegment = sanitizeS3KeyComponent(date);
+      const invalidSessionSegment =
+        sanitizeS3KeyComponent(sessionSegment) ||
+        sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
+        sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
+        sanitizeS3KeyComponent(createIdentifier());
+      const invalidPrefixParts = ['invalid', invalidOwnerSegment];
+      if (invalidDateSegment) {
+        invalidPrefixParts.push(invalidDateSegment);
+      }
+      if (invalidSessionSegment) {
+        invalidPrefixParts.push(invalidSessionSegment);
+      }
+      const invalidPrefix = `${invalidPrefixParts.join('/')}/`;
+      const invalidDescriptorSegment =
+        sanitizeS3KeyComponent(classificationLabel, { fallback: 'non-resume' }) || 'non-resume';
+      const invalidIdentifierSegment =
+        sanitizeS3KeyComponent(createIdentifier(), { fallback: '' });
+      const invalidFileName = invalidIdentifierSegment
+        ? `${invalidDescriptorSegment}-${invalidIdentifierSegment}${normalizedExt}`
+        : `${invalidDescriptorSegment}${normalizedExt}`;
+      const invalidUploadKey = `${invalidPrefix}${invalidFileName}`;
+      let recordedInvalidKey = '';
+      let invalidRelocationSucceeded = false;
+      try {
+        await sendS3CommandWithRetry(
+          s3,
+          () =>
+            new CopyObjectCommand(
+              withEnvironmentTagging({
+                Bucket: bucket,
+                CopySource: buildCopySource(bucket, originalUploadKey),
+                Key: invalidUploadKey,
+                MetadataDirective: 'COPY',
+                TaggingDirective: 'REPLACE',
+              })
+            ),
+          {
+            maxAttempts: 4,
+            baseDelayMs: 500,
+            maxDelayMs: 5000,
+            jitterMs: 300,
+            retryLogEvent: 'invalid_upload_relocation_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket,
+              fromKey: originalUploadKey,
+              toKey: invalidUploadKey,
+              classification: classificationLabel,
+            },
+          }
+        );
+        invalidRelocationSucceeded = true;
+        recordedInvalidKey = invalidUploadKey;
+        const deleteCandidates = new Set([originalUploadKey]);
+        if (
+          typeof originalUploadKey === 'string' &&
+          originalUploadKey.startsWith('cv/') &&
+          !originalUploadKey.includes('/cv/')
+        ) {
+          deleteCandidates.add(`cv/${originalUploadKey}`);
+        }
+        for (const candidateKey of deleteCandidates) {
+          try {
+            await sendS3CommandWithRetry(
+              s3,
+              () => new DeleteObjectCommand({ Bucket: bucket, Key: candidateKey }),
+              {
+                maxAttempts: 3,
+                baseDelayMs: 300,
+                maxDelayMs: 3000,
+                retryLogEvent: 'invalid_upload_relocation_retry',
+                retryLogContext: {
+                  ...logContext,
+                  bucket,
+                  fromKey: candidateKey,
+                  toKey: invalidUploadKey,
+                  operation: 'delete_source',
+                },
+              }
+            );
+          } catch (deleteErr) {
+            logStructured('warn', 'invalid_upload_source_cleanup_failed', {
+              ...logContext,
+              bucket,
+              fromKey: candidateKey,
+              toKey: invalidUploadKey,
+              error: serializeError(deleteErr),
+            });
+          }
+        }
+        logStructured('warn', 'resume_validation_failed', {
+          ...logContext,
+          reason: 'not_identified_as_resume',
+          description: classification.description,
+          confidence: classification.confidence,
+          wordCount,
+          invalidKey: invalidUploadKey,
+          classification: classificationLabel,
+        });
+        try {
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'resume_marked_invalid',
+            level: 'warn',
+            metadata: {
+              description: classification.description,
+              confidence: classification.confidence,
+              classification: classificationLabel,
+              className: classification.className || classificationLabel,
+              storageKey: invalidUploadKey,
+            },
+          });
+        } catch (logErr) {
+          logStructured('error', 's3_log_failure', {
+            ...logContext,
+            error: serializeError(logErr),
+          });
+        }
+      } catch (storageErr) {
+        recordedInvalidKey = originalUploadKey;
+        logStructured('error', 'invalid_upload_relocation_failed', {
+          ...logContext,
+          bucket,
+          fromKey: originalUploadKey,
+          toKey: invalidUploadKey,
+          error: serializeError(storageErr),
+        });
+        try {
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'resume_marked_invalid_failed',
+            level: 'error',
+            metadata: {
+              description: classification.description,
+              confidence: classification.confidence,
+              classification: classificationLabel,
+              className: classification.className || classificationLabel,
+              storageKey: invalidUploadKey,
+            },
+          });
+        } catch (logErr) {
+          logStructured('error', 's3_log_failure', {
+            ...logContext,
+            error: serializeError(logErr),
+          });
+        }
+      }
+
+      const errorDetails = {
+        description: classification.description,
+        confidence: classification.confidence,
+        reason: detailReason,
+        classification: classificationLabel,
+        className: classification.className || classificationLabel,
+        storageKey: recordedInvalidKey,
+      };
+      if (invalidRelocationSucceeded) {
+        errorDetails.invalidStorageKey = invalidUploadKey;
+      }
+      return sendError(
+        res,
+        400,
+        'INVALID_RESUME_CONTENT',
+        validationMessage,
+        errorDetails
+      );
+    }
+    const initialContactDetails = extractContactDetails(text, linkedinProfileUrl);
+    const applicantName = extractName(text);
+    const sanitizedName = sanitizeName(applicantName) || 'candidate';
+    const storedApplicantName = normalizePersonalData(applicantName);
+    const resumeLinkedIn = normalizePersonalData(initialContactDetails.linkedin);
+    const profileIdentifierNormalized = normalizePersonalData(profileIdentifier);
+    const storedLinkedIn = resumeLinkedIn || profileIdentifierNormalized;
+    const submittedLinkedInNormalized = normalizePersonalData(linkedinProfileUrlInput);
+    const hasExplicitLinkedInIdentifier = Boolean(
+      resumeLinkedIn || submittedLinkedInNormalized
+    );
+    if (hasExplicitLinkedInIdentifier && storedLinkedIn) {
+      placeholderIdentifier = storedLinkedIn;
+    }
+    const storedIpAddress = normalizePersonalData(ipAddress);
+    const storedUserAgent = normalizePersonalData(userAgent);
+    const storedCredlyProfile = normalizePersonalData(submittedCredly);
+    const jobKeySegment = sanitizeJobSegment(jobId);
+    const ownerSegment = resolveDocumentOwnerSegment({ userId, sanitizedName });
+    const prefix = buildDocumentSessionPrefix({
+      ownerSegment,
+      dateSegment: date,
+      jobSegment: jobKeySegment,
+      sessionSegment,
+    });
+    const finalUploadKey = `${prefix}original${normalizedExt}`;
+    const finalLogKey = `${prefix}logs/processing.jsonl`;
+    const metadataKey = `${prefix}logs/log.json`;
+    const sessionChangeLogKey = `${prefix}logs/change-log.json`;
+
+    if (finalUploadKey !== originalUploadKey) {
+      try {
+        await sendS3CommandWithRetry(
+          s3,
+          () =>
+            new CopyObjectCommand(
+              withEnvironmentTagging({
+                Bucket: bucket,
+                CopySource: buildCopySource(bucket, originalUploadKey),
+                Key: finalUploadKey,
+                MetadataDirective: 'COPY',
+                TaggingDirective: 'REPLACE',
+              })
+            ),
+          {
+            maxAttempts: 4,
+            baseDelayMs: 500,
+            maxDelayMs: 5000,
+            jitterMs: 300,
+            retryLogEvent: 'raw_upload_relocation_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket,
+              fromKey: originalUploadKey,
+              toKey: finalUploadKey,
+              operation: 'copy',
+            },
+          }
+        );
+        await sendS3CommandWithRetry(
+          s3,
+          () => new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
+          {
+            maxAttempts: 3,
+            baseDelayMs: 300,
+            maxDelayMs: 3000,
+            retryLogEvent: 'raw_upload_relocation_retry',
+            retryLogContext: {
+              ...logContext,
+              bucket,
+              fromKey: originalUploadKey,
+              toKey: finalUploadKey,
+              operation: 'delete_source',
+            },
+          }
+        );
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'raw_upload_relocated',
+          message: `Relocated raw upload from ${originalUploadKey} to ${finalUploadKey}`
+        });
+        logStructured('info', 'raw_upload_relocated', {
+          ...logContext,
+          bucket,
+          fromKey: originalUploadKey,
+          toKey: finalUploadKey,
+        });
+        originalUploadKey = finalUploadKey;
+        if (req.file) {
+          req.file.key = finalUploadKey;
+        }
+      } catch (err) {
+        logStructured('error', 'raw_upload_relocation_failed', {
+          ...logContext,
+          bucket,
+          error: serializeError(err),
+        });
+        const relocationReason =
+          typeof err?.message === 'string' && err.message.trim()
+            ? err.message
+            : 'Failed to relocate raw upload to final key';
+        const relocationResult = await relocateFailedUploadToInvalid({
+          descriptor: err?.code || 'raw-upload-relocation',
+          reason: relocationReason,
+        });
+        try {
+          const relocationMetadata = {};
+          if (relocationResult.storageKey) {
+            relocationMetadata.storageKey = relocationResult.storageKey;
+          }
+          if (relocationResult.invalidStorageKey) {
+            relocationMetadata.invalidStorageKey = relocationResult.invalidStorageKey;
+          }
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'raw_upload_relocation_failed',
+            level: 'error',
+            message: relocationReason,
+            ...(Object.keys(relocationMetadata).length
+              ? { metadata: relocationMetadata }
+              : {}),
+          });
+        } catch (logErr) {
+          logStructured('error', 's3_log_failure', {
+            ...logContext,
+            error: serializeError(logErr),
+          });
+        }
+        const relocationDetails = {};
+        if (relocationResult.storageKey) {
+          relocationDetails.storageKey = relocationResult.storageKey;
+        }
+        if (relocationResult.invalidStorageKey) {
+          relocationDetails.invalidStorageKey = relocationResult.invalidStorageKey;
+        }
+        return sendError(
+          res,
+          500,
+          'RAW_UPLOAD_RELOCATION_FAILED',
+          'Uploaded file could not be prepared for processing. Please try again later.',
+          Object.keys(relocationDetails).length ? relocationDetails : undefined
+        );
+      }
+    }
+
+    logKey = finalLogKey;
+    const s3Location = `s3://${bucket}/${originalUploadKey}`;
+    const locationLabel = locationMeta.label || 'Unknown';
+
+    const canonicalSessionId = resolveCanonicalSessionId({
+      sessionId: res.locals.sessionId,
+      sessionSegment,
+      requestId,
+      sessionPrefix: prefix,
+      originalUploadKey,
+      sessionChangeLogKey,
+    });
+    res.locals.sessionId = canonicalSessionId;
+    const canonicalSessionPointer = buildCanonicalSessionPointer({
+      bucket,
+      prefix,
+      sessionId: canonicalSessionId,
+      sessionChangeLogKey,
+    });
+    res.locals.sessionPointer = canonicalSessionPointer;
+
+    try {
+      await ensureTableExists();
+
+      if (
+        tableCreatedThisRequest &&
+        placeholderIdentifier &&
+        placeholderIdentifier !== storedLinkedIn &&
+        placeholderRecordIdentifier !== placeholderIdentifier
+      ) {
+        if (await writePlaceholderRecord(placeholderIdentifier)) {
+          placeholderRecordIdentifier = placeholderIdentifier;
+        }
+      }
+
+      let previousSessionChangeLogKey = '';
+      let previousChangeLogTextKey = '';
+      let previousSessionChangeLogBucket = '';
+
+      let hadPreviousRecord = false;
+      try {
+        const previousRecord = await dynamo.send(
+          new GetItemCommand({
+            TableName: tableName,
+            Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+            ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey',
+          })
+        );
+        const previousItem = previousRecord.Item || {};
+        hadPreviousRecord = Boolean(
+          previousItem && typeof previousItem === 'object' && Object.keys(previousItem).length
+        );
+        if (previousItem.sessionChangeLogKey?.S) {
+          previousSessionChangeLogKey = previousItem.sessionChangeLogKey.S.trim();
+        }
+        if (previousItem.changeLogKey?.S) {
+          previousChangeLogTextKey = previousItem.changeLogKey.S.trim();
+        }
+        if (previousItem.s3Bucket?.S) {
+          previousSessionChangeLogBucket = previousItem.s3Bucket.S.trim();
+        }
+      } catch (lookupErr) {
+        logStructured('warn', 'previous_session_lookup_failed', {
+          ...logContext,
+          error: serializeError(lookupErr),
+        });
+      }
+
+      const existingRecordKnown = Boolean(
+        hadPreviousRecord ||
+        (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn))
+      );
+      if (
+        existingRecordKnown &&
+        requestScopedIdentifier &&
+        placeholderIdentifier !== storedLinkedIn
+      ) {
+        placeholderIdentifier = requestScopedIdentifier;
+      }
+
+      if (
+        placeholderIdentifier &&
+        placeholderIdentifier !== storedLinkedIn &&
+        placeholderRecordIdentifier !== placeholderIdentifier
+      ) {
+        if (await writePlaceholderRecord(placeholderIdentifier)) {
+          placeholderRecordIdentifier = placeholderIdentifier;
+        }
+      }
+
+      const timestamp = new Date().toISOString();
+      const putItemPayload = {
+        TableName: tableName,
+        Item: {
+          linkedinProfileUrl: { S: storedLinkedIn },
+          candidateName: { S: storedApplicantName },
+          timestamp: { S: timestamp },
+          uploadedAt: { S: timestamp },
+          requestId: { S: safeRequestId },
+          jobId: { S: jobId },
+          credlyProfileUrl: { S: storedCredlyProfile },
+          cv1Url: { S: '' },
+          cv2Url: { S: '' },
+          coverLetter1Url: { S: '' },
+          coverLetter2Url: { S: '' },
+          ipAddress: { S: storedIpAddress },
+          userAgent: { S: storedUserAgent },
+          os: { S: os },
+          browser: { S: browser },
+          device: { S: device },
+          location: { S: locationLabel },
+          locationCity: { S: locationMeta.city || '' },
+          locationRegion: { S: locationMeta.region || '' },
+          locationCountry: { S: locationMeta.country || '' },
+          s3Bucket: { S: bucket },
+          s3Key: { S: originalUploadKey },
+          s3Url: { S: s3Location },
+          fileType: { S: storedFileType },
+          status: { S: 'uploaded' },
+          environment: { S: deploymentEnvironment },
+          sessionChangeLogKey: { S: sessionChangeLogKey },
+          jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
+        }
+      };
+      if (classificationSnapshot) {
+        const classificationAttributes = {
+          isResume: { BOOL: Boolean(classificationSnapshot.isResume) },
+          accepted: { BOOL: Boolean(classificationSnapshot.accepted) },
+        };
+        if (typeof classificationSnapshot.description === 'string') {
+          classificationAttributes.description = {
+            S: classificationSnapshot.description,
+          };
+        }
+        if (Number.isFinite(classificationSnapshot.confidence)) {
+          classificationAttributes.confidence = {
+            N: String(classificationSnapshot.confidence),
+          };
+        }
+        if (classificationSnapshot.overridden) {
+          classificationAttributes.overridden = { BOOL: true };
+        }
+        if (typeof classificationSnapshot.reason === 'string') {
+          classificationAttributes.reason = { S: classificationSnapshot.reason };
+        }
+        if (typeof classificationSnapshot.evaluatedAt === 'string') {
+          classificationAttributes.evaluatedAt = { S: classificationSnapshot.evaluatedAt };
+        }
+        putItemPayload.Item.documentClassification = { M: classificationAttributes };
+      }
+      if (normalizedManualJobDescription) {
+        const sessionInputsMap = {
+          jobDescription: { S: normalizedManualJobDescription },
+        };
+        if (manualJobDescriptionDigest) {
+          sessionInputsMap.jobDescriptionDigest = { S: manualJobDescriptionDigest };
+        }
+        putItemPayload.Item.sessionInputs = { M: sessionInputsMap };
+      }
+      if (canonicalSessionId) {
+        putItemPayload.Item.sessionId = { S: canonicalSessionId };
+      }
+      await dynamo.send(new PutItemCommand(putItemPayload));
+      if (storedLinkedIn) {
+        knownResumeIdentifiers.add(storedLinkedIn);
+      }
+      logStructured('info', 'dynamo_initial_record_written', {
         ...logContext,
         bucket,
         key: originalUploadKey,
       });
-      return true;
-    } catch (err) {
-      logStructured('warn', 'dynamo_upload_metadata_failed', {
-        ...logContext,
-        error: serializeError(err),
-      });
-      return false;
-    }
-  };
-
-  const deletePlaceholderRecord = async (identifier) => {
-    if (!identifier) {
-      return false;
-    }
-    try {
-      await dynamo.send(
-        new DeleteItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: identifier } },
-        })
-      );
-      logStructured('info', 'placeholder_record_deleted', {
-        ...logContext,
-        placeholderIdentifier: identifier,
-      });
-      return true;
-    } catch (err) {
-      logStructured('warn', 'placeholder_record_delete_failed', {
-        ...logContext,
-        placeholderIdentifier: identifier,
-        error: serializeError(err),
-      });
-      return false;
-    }
-  };
-
-  let text;
-  try {
-    text = await extractResumeText(req.file);
-  } catch (err) {
-    logStructured('error', 'resume_text_extraction_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
-    return sendError(
-      res,
-      400,
-      'TEXT_EXTRACTION_FAILED',
-      err.message,
-      { stage: 'extract_text' }
-    );
-  }
-  logStructured('info', 'resume_text_extracted', {
-    ...logContext,
-    characters: text.length,
-  });
-  const classificationLogger = createStructuredLogger(logContext);
-  const classification = await classifyResumeDocument(text, {
-    logger: classificationLogger,
-    getGenerativeModel: () => getSharedGenerativeModel(),
-  });
-  const wordCount = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
-  const classificationShouldReject = shouldRejectBasedOnClassification(classification);
-
-  const classificationAccepted = !classificationShouldReject;
-  const classificationSnapshot = classificationAccepted
-    ? captureClassificationSnapshot(classification, { accepted: true })
-    : null;
-
-  logStructured('info', 'resume_classified', {
-    ...logContext,
-    isResume: classification.isResume,
-    description: classification.description,
-    confidence: classification.confidence,
-    accepted: classificationAccepted,
-    overridden: !classification.isResume && classificationAccepted,
-  });
-
-  if (classificationShouldReject) {
-    const rawDescription =
-      typeof classification.description === 'string'
-        ? classification.description.trim()
-        : 'non-resume document';
-    const includesDocument = /document/i.test(rawDescription);
-    const shortDescriptor = includesDocument
-      ? rawDescription
-      : `${rawDescription || 'non-resume'}${rawDescription.endsWith(' document') ? '' : ' document'}`;
-    const descriptorWithArticle = /^(a|an)\s/i.test(shortDescriptor)
-      ? shortDescriptor
-      : /^[aeiou]/i.test(shortDescriptor)
-        ? `an ${shortDescriptor}`
-        : `a ${shortDescriptor}`;
-    const reasonText =
-      typeof classification.reason === 'string' ? classification.reason.trim() : '';
-    const fallbackReason =
-      'The document content does not include the sections typically required in a CV.';
-    const detailReason = reasonText || fallbackReason;
-    const reasonSentence = detailReason.endsWith('.')
-      ? detailReason
-      : `${detailReason}.`;
-    const classificationLabel = deriveDocumentClassificationLabel(
-      shortDescriptor,
-      classification.className
-    );
-    const detectedClassName = classification.className || classificationLabel;
-    const descriptorWithClass = detectedClassName
-      ? `${descriptorWithArticle} (classified as "${detectedClassName}")`
-      : descriptorWithArticle;
-    const validationMessage = `You have uploaded ${descriptorWithClass}. ${reasonSentence} Please upload a correct CV or resume to continue.`;
-    const invalidOwnerSegment =
-      sanitizeS3KeyComponent(uploadContext.ownerSegment, { fallback: 'candidate' }) ||
-      'candidate';
-    const invalidDateSegment = sanitizeS3KeyComponent(date);
-    const invalidSessionSegment =
-      sanitizeS3KeyComponent(sessionSegment) ||
-      sanitizeS3KeyComponent(res.locals.sessionSegment, { fallback: '' }) ||
-      sanitizeS3KeyComponent(requestId, { fallback: '' }) ||
-      sanitizeS3KeyComponent(createIdentifier());
-    const invalidPrefixParts = ['invalid', invalidOwnerSegment];
-    if (invalidDateSegment) {
-      invalidPrefixParts.push(invalidDateSegment);
-    }
-    if (invalidSessionSegment) {
-      invalidPrefixParts.push(invalidSessionSegment);
-    }
-    const invalidPrefix = `${invalidPrefixParts.join('/')}/`;
-    const invalidDescriptorSegment =
-      sanitizeS3KeyComponent(classificationLabel, { fallback: 'non-resume' }) || 'non-resume';
-    const invalidIdentifierSegment =
-      sanitizeS3KeyComponent(createIdentifier(), { fallback: '' });
-    const invalidFileName = invalidIdentifierSegment
-      ? `${invalidDescriptorSegment}-${invalidIdentifierSegment}${normalizedExt}`
-      : `${invalidDescriptorSegment}${normalizedExt}`;
-    const invalidUploadKey = `${invalidPrefix}${invalidFileName}`;
-    let recordedInvalidKey = '';
-    let invalidRelocationSucceeded = false;
-    try {
-      await sendS3CommandWithRetry(
-        s3,
-        () =>
-          new CopyObjectCommand(
-            withEnvironmentTagging({
-              Bucket: bucket,
-              CopySource: buildCopySource(bucket, originalUploadKey),
-              Key: invalidUploadKey,
-              MetadataDirective: 'COPY',
-              TaggingDirective: 'REPLACE',
-            })
-          ),
-        {
-          maxAttempts: 4,
-          baseDelayMs: 500,
-          maxDelayMs: 5000,
-          jitterMs: 300,
-          retryLogEvent: 'invalid_upload_relocation_retry',
-          retryLogContext: {
-            ...logContext,
-            bucket,
-            fromKey: originalUploadKey,
-            toKey: invalidUploadKey,
-            classification: classificationLabel,
-          },
-        }
-      );
-      invalidRelocationSucceeded = true;
-      recordedInvalidKey = invalidUploadKey;
-      const deleteCandidates = new Set([originalUploadKey]);
-      if (
-        typeof originalUploadKey === 'string' &&
-        originalUploadKey.startsWith('cv/') &&
-        !originalUploadKey.includes('/cv/')
-      ) {
-        deleteCandidates.add(`cv/${originalUploadKey}`);
-      }
-      for (const candidateKey of deleteCandidates) {
-        try {
-          await sendS3CommandWithRetry(
-            s3,
-            () => new DeleteObjectCommand({ Bucket: bucket, Key: candidateKey }),
-            {
-              maxAttempts: 3,
-              baseDelayMs: 300,
-              maxDelayMs: 3000,
-              retryLogEvent: 'invalid_upload_relocation_retry',
-              retryLogContext: {
-                ...logContext,
-                bucket,
-                fromKey: candidateKey,
-                toKey: invalidUploadKey,
-                operation: 'delete_source',
-              },
-            }
-          );
-        } catch (deleteErr) {
-          logStructured('warn', 'invalid_upload_source_cleanup_failed', {
-            ...logContext,
-            bucket,
-            fromKey: candidateKey,
-            toKey: invalidUploadKey,
-            error: serializeError(deleteErr),
-          });
-        }
-      }
-      logStructured('warn', 'resume_validation_failed', {
-        ...logContext,
-        reason: 'not_identified_as_resume',
-        description: classification.description,
-        confidence: classification.confidence,
-        wordCount,
-        invalidKey: invalidUploadKey,
-        classification: classificationLabel,
-      });
-      try {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'resume_marked_invalid',
-          level: 'warn',
-          metadata: {
-            description: classification.description,
-            confidence: classification.confidence,
-            classification: classificationLabel,
-            className: classification.className || classificationLabel,
-            storageKey: invalidUploadKey,
-          },
-        });
-      } catch (logErr) {
-        logStructured('error', 's3_log_failure', {
-          ...logContext,
-          error: serializeError(logErr),
-        });
-      }
-    } catch (storageErr) {
-      recordedInvalidKey = originalUploadKey;
-      logStructured('error', 'invalid_upload_relocation_failed', {
-        ...logContext,
-        bucket,
-        fromKey: originalUploadKey,
-        toKey: invalidUploadKey,
-        error: serializeError(storageErr),
-      });
-      try {
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'resume_marked_invalid_failed',
-          level: 'error',
-          metadata: {
-            description: classification.description,
-            confidence: classification.confidence,
-            classification: classificationLabel,
-            className: classification.className || classificationLabel,
-            storageKey: invalidUploadKey,
-          },
-        });
-      } catch (logErr) {
-        logStructured('error', 's3_log_failure', {
-          ...logContext,
-          error: serializeError(logErr),
-        });
-      }
-    }
-
-    const errorDetails = {
-      description: classification.description,
-      confidence: classification.confidence,
-      reason: detailReason,
-      classification: classificationLabel,
-      className: classification.className || classificationLabel,
-      storageKey: recordedInvalidKey,
-    };
-    if (invalidRelocationSucceeded) {
-      errorDetails.invalidStorageKey = invalidUploadKey;
-    }
-    return sendError(
-      res,
-      400,
-      'INVALID_RESUME_CONTENT',
-      validationMessage,
-      errorDetails
-    );
-  }
-  const initialContactDetails = extractContactDetails(text, linkedinProfileUrl);
-  const applicantName = extractName(text);
-  const sanitizedName = sanitizeName(applicantName) || 'candidate';
-  const storedApplicantName = normalizePersonalData(applicantName);
-  const resumeLinkedIn = normalizePersonalData(initialContactDetails.linkedin);
-  const profileIdentifierNormalized = normalizePersonalData(profileIdentifier);
-  const storedLinkedIn = resumeLinkedIn || profileIdentifierNormalized;
-  const submittedLinkedInNormalized = normalizePersonalData(linkedinProfileUrlInput);
-  const hasExplicitLinkedInIdentifier = Boolean(
-    resumeLinkedIn || submittedLinkedInNormalized
-  );
-  if (hasExplicitLinkedInIdentifier && storedLinkedIn) {
-    placeholderIdentifier = storedLinkedIn;
-  }
-  const storedIpAddress = normalizePersonalData(ipAddress);
-  const storedUserAgent = normalizePersonalData(userAgent);
-  const storedCredlyProfile = normalizePersonalData(submittedCredly);
-  const jobKeySegment = sanitizeJobSegment(jobId);
-  const ownerSegment = resolveDocumentOwnerSegment({ userId, sanitizedName });
-  const prefix = buildDocumentSessionPrefix({
-    ownerSegment,
-    dateSegment: date,
-    jobSegment: jobKeySegment,
-    sessionSegment,
-  });
-  const finalUploadKey = `${prefix}original${normalizedExt}`;
-  const finalLogKey = `${prefix}logs/processing.jsonl`;
-  const metadataKey = `${prefix}logs/log.json`;
-  const sessionChangeLogKey = `${prefix}logs/change-log.json`;
-
-  if (finalUploadKey !== originalUploadKey) {
-    try {
-      await sendS3CommandWithRetry(
-        s3,
-        () =>
-          new CopyObjectCommand(
-            withEnvironmentTagging({
-              Bucket: bucket,
-              CopySource: buildCopySource(bucket, originalUploadKey),
-              Key: finalUploadKey,
-              MetadataDirective: 'COPY',
-              TaggingDirective: 'REPLACE',
-            })
-          ),
-        {
-          maxAttempts: 4,
-          baseDelayMs: 500,
-          maxDelayMs: 5000,
-          jitterMs: 300,
-          retryLogEvent: 'raw_upload_relocation_retry',
-          retryLogContext: {
-            ...logContext,
-            bucket,
-            fromKey: originalUploadKey,
-            toKey: finalUploadKey,
-            operation: 'copy',
-          },
-        }
-      );
-      await sendS3CommandWithRetry(
-        s3,
-        () => new DeleteObjectCommand({ Bucket: bucket, Key: originalUploadKey }),
-        {
-          maxAttempts: 3,
-          baseDelayMs: 300,
-          maxDelayMs: 3000,
-          retryLogEvent: 'raw_upload_relocation_retry',
-          retryLogContext: {
-            ...logContext,
-            bucket,
-            fromKey: originalUploadKey,
-            toKey: finalUploadKey,
-            operation: 'delete_source',
-          },
-        }
-      );
       await logEvent({
         s3,
         bucket,
         key: logKey,
         jobId,
-        event: 'raw_upload_relocated',
-        message: `Relocated raw upload from ${originalUploadKey} to ${finalUploadKey}`
+        event: 'dynamodb_initial_record_written'
       });
-      logStructured('info', 'raw_upload_relocated', {
-        ...logContext,
-        bucket,
-        fromKey: originalUploadKey,
-        toKey: finalUploadKey,
-      });
-      originalUploadKey = finalUploadKey;
-      if (req.file) {
-        req.file.key = finalUploadKey;
+
+      const uploadStageMetadata = {
+        uploadedAt: timestamp,
+        fileType: storedFileType,
+      };
+      if (classificationSnapshot) {
+        uploadStageMetadata.classification = classificationSnapshot;
       }
-    } catch (err) {
-      logStructured('error', 'raw_upload_relocation_failed', {
-        ...logContext,
+      if (normalizedManualJobDescription) {
+        const sessionInputs = { jobDescription: normalizedManualJobDescription };
+        if (manualJobDescriptionDigest) {
+          sessionInputs.jobDescriptionDigest = manualJobDescriptionDigest;
+        }
+        uploadStageMetadata.sessionInputs = sessionInputs;
+      }
+
+      const stageMetadataUpdated = await updateStageMetadata({
+        s3,
         bucket,
-        error: serializeError(err),
+        metadataKey,
+        jobId,
+        stage: 'upload',
+        data: uploadStageMetadata,
+        logContext,
       });
-      const relocationReason =
-        typeof err?.message === 'string' && err.message.trim()
-          ? err.message
-          : 'Failed to relocate raw upload to final key';
-      const relocationResult = await relocateFailedUploadToInvalid({
-        descriptor: err?.code || 'raw-upload-relocation',
-        reason: relocationReason,
-      });
-      try {
-        const relocationMetadata = {};
-        if (relocationResult.storageKey) {
-          relocationMetadata.storageKey = relocationResult.storageKey;
-        }
-        if (relocationResult.invalidStorageKey) {
-          relocationMetadata.invalidStorageKey = relocationResult.invalidStorageKey;
-        }
+
+      if (stageMetadataUpdated) {
+        logStructured('info', 'upload_metadata_written', {
+          ...logContext,
+          bucket,
+          key: metadataKey,
+        });
         await logEvent({
           s3,
           bucket,
           key: logKey,
           jobId,
-          event: 'raw_upload_relocation_failed',
-          level: 'error',
-          message: relocationReason,
-          ...(Object.keys(relocationMetadata).length
-            ? { metadata: relocationMetadata }
-            : {}),
+          event: 'uploaded_metadata',
         });
-      } catch (logErr) {
-        logStructured('error', 's3_log_failure', {
+      } else {
+        logStructured('warn', 'upload_metadata_write_failed', {
           ...logContext,
-          error: serializeError(logErr),
+          bucket,
+          key: metadataKey,
         });
       }
-      const relocationDetails = {};
-      if (relocationResult.storageKey) {
-        relocationDetails.storageKey = relocationResult.storageKey;
-      }
-      if (relocationResult.invalidStorageKey) {
-        relocationDetails.invalidStorageKey = relocationResult.invalidStorageKey;
-      }
-      return sendError(
-        res,
-        500,
-        'RAW_UPLOAD_RELOCATION_FAILED',
-        'Uploaded file could not be prepared for processing. Please try again later.',
-        Object.keys(relocationDetails).length ? relocationDetails : undefined
-      );
-    }
-  }
 
-  logKey = finalLogKey;
-  const s3Location = `s3://${bucket}/${originalUploadKey}`;
-  const locationLabel = locationMeta.label || 'Unknown';
-
-  const canonicalSessionId = resolveCanonicalSessionId({
-    sessionId: res.locals.sessionId,
-    sessionSegment,
-    requestId,
-    sessionPrefix: prefix,
-    originalUploadKey,
-    sessionChangeLogKey,
-  });
-  res.locals.sessionId = canonicalSessionId;
-  const canonicalSessionPointer = buildCanonicalSessionPointer({
-    bucket,
-    prefix,
-    sessionId: canonicalSessionId,
-    sessionChangeLogKey,
-  });
-  res.locals.sessionPointer = canonicalSessionPointer;
-
-  try {
-    await ensureTableExists();
-
-    if (
-      tableCreatedThisRequest &&
-      placeholderIdentifier &&
-      placeholderIdentifier !== storedLinkedIn &&
-      placeholderRecordIdentifier !== placeholderIdentifier
-    ) {
-      if (await writePlaceholderRecord(placeholderIdentifier)) {
-        placeholderRecordIdentifier = placeholderIdentifier;
+      if (placeholderIdentifier && placeholderIdentifier !== storedLinkedIn) {
+        shouldDeletePlaceholder = true;
       }
-    }
 
-    let previousSessionChangeLogKey = '';
-    let previousChangeLogTextKey = '';
-    let previousSessionChangeLogBucket = '';
-
-    let hadPreviousRecord = false;
-    try {
-      const previousRecord = await dynamo.send(
-        new GetItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          ProjectionExpression: 's3Bucket, sessionChangeLogKey, changeLogKey',
-        })
-      );
-      const previousItem = previousRecord.Item || {};
-      hadPreviousRecord = Boolean(
-        previousItem && typeof previousItem === 'object' && Object.keys(previousItem).length
-      );
-      if (previousItem.sessionChangeLogKey?.S) {
-        previousSessionChangeLogKey = previousItem.sessionChangeLogKey.S.trim();
-      }
-      if (previousItem.changeLogKey?.S) {
-        previousChangeLogTextKey = previousItem.changeLogKey.S.trim();
-      }
-      if (previousItem.s3Bucket?.S) {
-        previousSessionChangeLogBucket = previousItem.s3Bucket.S.trim();
-      }
-    } catch (lookupErr) {
-      logStructured('warn', 'previous_session_lookup_failed', {
-        ...logContext,
-        error: serializeError(lookupErr),
-      });
-    }
-
-    const existingRecordKnown = Boolean(
-      hadPreviousRecord ||
-        (storedLinkedIn && knownResumeIdentifiers.has(storedLinkedIn))
-    );
-    if (
-      existingRecordKnown &&
-      requestScopedIdentifier &&
-      placeholderIdentifier !== storedLinkedIn
-    ) {
-      placeholderIdentifier = requestScopedIdentifier;
-    }
-
-    if (
-      placeholderIdentifier &&
-      placeholderIdentifier !== storedLinkedIn &&
-      placeholderRecordIdentifier !== placeholderIdentifier
-    ) {
-      if (await writePlaceholderRecord(placeholderIdentifier)) {
-        placeholderRecordIdentifier = placeholderIdentifier;
-      }
-    }
-
-    const timestamp = new Date().toISOString();
-    const putItemPayload = {
-      TableName: tableName,
-      Item: {
-        linkedinProfileUrl: { S: storedLinkedIn },
-        candidateName: { S: storedApplicantName },
-        timestamp: { S: timestamp },
-        uploadedAt: { S: timestamp },
-        requestId: { S: safeRequestId },
-        jobId: { S: jobId },
-        credlyProfileUrl: { S: storedCredlyProfile },
-        cv1Url: { S: '' },
-        cv2Url: { S: '' },
-        coverLetter1Url: { S: '' },
-        coverLetter2Url: { S: '' },
-        ipAddress: { S: storedIpAddress },
-        userAgent: { S: storedUserAgent },
-        os: { S: os },
-        browser: { S: browser },
-        device: { S: device },
-        location: { S: locationLabel },
-        locationCity: { S: locationMeta.city || '' },
-        locationRegion: { S: locationMeta.region || '' },
-        locationCountry: { S: locationMeta.country || '' },
-        s3Bucket: { S: bucket },
-        s3Key: { S: originalUploadKey },
-        s3Url: { S: s3Location },
-        fileType: { S: storedFileType },
-        status: { S: 'uploaded' },
-        environment: { S: deploymentEnvironment },
-        sessionChangeLogKey: { S: sessionChangeLogKey },
-        jobDescriptionDigest: { S: manualJobDescriptionDigest || '' },
-      }
-    };
-    if (classificationSnapshot) {
-      const classificationAttributes = {
-        isResume: { BOOL: Boolean(classificationSnapshot.isResume) },
-        accepted: { BOOL: Boolean(classificationSnapshot.accepted) },
-      };
-      if (typeof classificationSnapshot.description === 'string') {
-        classificationAttributes.description = {
-          S: classificationSnapshot.description,
-        };
-      }
-      if (Number.isFinite(classificationSnapshot.confidence)) {
-        classificationAttributes.confidence = {
-          N: String(classificationSnapshot.confidence),
-        };
-      }
-      if (classificationSnapshot.overridden) {
-        classificationAttributes.overridden = { BOOL: true };
-      }
-      if (typeof classificationSnapshot.reason === 'string') {
-        classificationAttributes.reason = { S: classificationSnapshot.reason };
-      }
-      if (typeof classificationSnapshot.evaluatedAt === 'string') {
-        classificationAttributes.evaluatedAt = { S: classificationSnapshot.evaluatedAt };
-      }
-      putItemPayload.Item.documentClassification = { M: classificationAttributes };
-    }
-    if (normalizedManualJobDescription) {
-      const sessionInputsMap = {
-        jobDescription: { S: normalizedManualJobDescription },
-      };
-      if (manualJobDescriptionDigest) {
-        sessionInputsMap.jobDescriptionDigest = { S: manualJobDescriptionDigest };
-      }
-      putItemPayload.Item.sessionInputs = { M: sessionInputsMap };
-    }
-    if (canonicalSessionId) {
-      putItemPayload.Item.sessionId = { S: canonicalSessionId };
-    }
-    await dynamo.send(new PutItemCommand(putItemPayload));
-    if (storedLinkedIn) {
-      knownResumeIdentifiers.add(storedLinkedIn);
-    }
-    logStructured('info', 'dynamo_initial_record_written', {
-      ...logContext,
-      bucket,
-      key: originalUploadKey,
-    });
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'dynamodb_initial_record_written'
-    });
-
-    const uploadStageMetadata = {
-      uploadedAt: timestamp,
-      fileType: storedFileType,
-    };
-    if (classificationSnapshot) {
-      uploadStageMetadata.classification = classificationSnapshot;
-    }
-    if (normalizedManualJobDescription) {
-      const sessionInputs = { jobDescription: normalizedManualJobDescription };
-      if (manualJobDescriptionDigest) {
-        sessionInputs.jobDescriptionDigest = manualJobDescriptionDigest;
-      }
-      uploadStageMetadata.sessionInputs = sessionInputs;
-    }
-
-    const stageMetadataUpdated = await updateStageMetadata({
-      s3,
-      bucket,
-      metadataKey,
-      jobId,
-      stage: 'upload',
-      data: uploadStageMetadata,
-      logContext,
-    });
-
-    if (stageMetadataUpdated) {
-      logStructured('info', 'upload_metadata_written', {
-        ...logContext,
-        bucket,
-        key: metadataKey,
-      });
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'uploaded_metadata',
-      });
-    } else {
-      logStructured('warn', 'upload_metadata_write_failed', {
-        ...logContext,
-        bucket,
-        key: metadataKey,
-      });
-    }
-
-    if (placeholderIdentifier && placeholderIdentifier !== storedLinkedIn) {
-      shouldDeletePlaceholder = true;
-    }
-
-    const cleanupBucket = previousSessionChangeLogBucket || bucket;
-    const sessionPrefix = typeof prefix === 'string' ? prefix : '';
-    const normalizedPreviousSessionLogKey =
-      typeof previousSessionChangeLogKey === 'string'
-        ? previousSessionChangeLogKey.trim()
-        : '';
-    const normalizedSessionLogKey =
-      typeof sessionChangeLogKey === 'string' ? sessionChangeLogKey.trim() : '';
-    const normalizedPreviousTextKey =
-      typeof previousChangeLogTextKey === 'string'
-        ? previousChangeLogTextKey.trim()
-        : '';
-    const sessionArtifactsPrefix = sessionPrefix ? `${sessionPrefix}artifacts/` : '';
-    const hasReusedSessionPrefix = Boolean(
-      sessionPrefix &&
+      const cleanupBucket = previousSessionChangeLogBucket || bucket;
+      const sessionPrefix = typeof prefix === 'string' ? prefix : '';
+      const normalizedPreviousSessionLogKey =
+        typeof previousSessionChangeLogKey === 'string'
+          ? previousSessionChangeLogKey.trim()
+          : '';
+      const normalizedSessionLogKey =
+        typeof sessionChangeLogKey === 'string' ? sessionChangeLogKey.trim() : '';
+      const normalizedPreviousTextKey =
+        typeof previousChangeLogTextKey === 'string'
+          ? previousChangeLogTextKey.trim()
+          : '';
+      const sessionArtifactsPrefix = sessionPrefix ? `${sessionPrefix}artifacts/` : '';
+      const hasReusedSessionPrefix = Boolean(
+        sessionPrefix &&
         ((normalizedPreviousSessionLogKey &&
           normalizedPreviousSessionLogKey.startsWith(sessionPrefix)) ||
           (normalizedPreviousTextKey &&
             normalizedPreviousTextKey.startsWith(sessionArtifactsPrefix)))
-    );
-    const staleSessionArtifacts = [];
+      );
+      const staleSessionArtifacts = [];
 
-    if (
-      cleanupBucket &&
-      normalizedPreviousSessionLogKey &&
-      (
-        normalizedPreviousSessionLogKey !== normalizedSessionLogKey ||
-        hasReusedSessionPrefix
-      )
-    ) {
-      staleSessionArtifacts.push({
-        key: normalizedPreviousSessionLogKey,
-        type: 'session_change_log',
-      });
-    }
+      if (
+        cleanupBucket &&
+        normalizedPreviousSessionLogKey &&
+        (
+          normalizedPreviousSessionLogKey !== normalizedSessionLogKey ||
+          hasReusedSessionPrefix
+        )
+      ) {
+        staleSessionArtifacts.push({
+          key: normalizedPreviousSessionLogKey,
+          type: 'session_change_log',
+        });
+      }
 
-    const previousTextKeyInCurrentPrefix = Boolean(
-      sessionArtifactsPrefix &&
+      const previousTextKeyInCurrentPrefix = Boolean(
+        sessionArtifactsPrefix &&
         normalizedPreviousTextKey &&
         normalizedPreviousTextKey.startsWith(sessionArtifactsPrefix)
-    );
-
-    if (
-      cleanupBucket &&
-      normalizedPreviousTextKey &&
-      (!previousTextKeyInCurrentPrefix || hasReusedSessionPrefix)
-    ) {
-      staleSessionArtifacts.push({
-        key: normalizedPreviousTextKey,
-        type: 'change_log_artifact',
-      });
-    }
-
-    if (cleanupBucket && staleSessionArtifacts.length) {
-      const cleanupResults = await Promise.allSettled(
-        staleSessionArtifacts.map(({ key, type }) =>
-          sendS3CommandWithRetry(
-            s3,
-            () => new DeleteObjectCommand({ Bucket: cleanupBucket, Key: key }),
-            {
-              maxAttempts: 3,
-              baseDelayMs: 300,
-              maxDelayMs: 3000,
-              retryLogEvent: 'session_transition_cleanup_retry',
-              retryLogContext: { ...logContext, bucket: cleanupBucket, key, type },
-            }
-          )
-        )
       );
 
-      const removed = [];
-      const failures = [];
+      if (
+        cleanupBucket &&
+        normalizedPreviousTextKey &&
+        (!previousTextKeyInCurrentPrefix || hasReusedSessionPrefix)
+      ) {
+        staleSessionArtifacts.push({
+          key: normalizedPreviousTextKey,
+          type: 'change_log_artifact',
+        });
+      }
 
-      cleanupResults.forEach((result, index) => {
-        const target = staleSessionArtifacts[index];
-        if (result.status === 'fulfilled') {
-          removed.push(target);
-        } else {
-          failures.push({
-            ...target,
-            error: serializeError(result.reason),
+      if (cleanupBucket && staleSessionArtifacts.length) {
+        const cleanupResults = await Promise.allSettled(
+          staleSessionArtifacts.map(({ key, type }) =>
+            sendS3CommandWithRetry(
+              s3,
+              () => new DeleteObjectCommand({ Bucket: cleanupBucket, Key: key }),
+              {
+                maxAttempts: 3,
+                baseDelayMs: 300,
+                maxDelayMs: 3000,
+                retryLogEvent: 'session_transition_cleanup_retry',
+                retryLogContext: { ...logContext, bucket: cleanupBucket, key, type },
+              }
+            )
+          )
+        );
+
+        const removed = [];
+        const failures = [];
+
+        cleanupResults.forEach((result, index) => {
+          const target = staleSessionArtifacts[index];
+          if (result.status === 'fulfilled') {
+            removed.push(target);
+          } else {
+            failures.push({
+              ...target,
+              error: serializeError(result.reason),
+            });
+          }
+        });
+
+        if (removed.length) {
+          logStructured('info', 'session_transition_change_log_removed', {
+            ...logContext,
+            bucket: cleanupBucket,
+            removedKeys: removed.map((entry) => entry.key),
           });
         }
+
+        if (failures.length) {
+          logStructured('warn', 'session_transition_change_log_cleanup_failed', {
+            ...logContext,
+            bucket: cleanupBucket,
+            failures,
+          });
+        }
+      }
+    } catch (err) {
+      logStructured('error', 'dynamo_initial_record_failed', {
+        ...logContext,
+        error: serializeError(err),
       });
-
-      if (removed.length) {
-        logStructured('info', 'session_transition_change_log_removed', {
-          ...logContext,
-          bucket: cleanupBucket,
-          removedKeys: removed.map((entry) => entry.key),
-        });
-      }
-
-      if (failures.length) {
-        logStructured('warn', 'session_transition_change_log_cleanup_failed', {
-          ...logContext,
-          bucket: cleanupBucket,
-          failures,
-        });
-      }
-    }
-  } catch (err) {
-    logStructured('error', 'dynamo_initial_record_failed', {
-      ...logContext,
-      error: serializeError(err),
-    });
-    const metadataFailureReason =
-      typeof err?.message === 'string' && err.message.trim()
-        ? err.message
-        : 'Failed to write initial DynamoDB record';
-    const metadataRelocation = await relocateFailedUploadToInvalid({
-      descriptor: err?.code || 'metadata-write',
-      reason: metadataFailureReason,
-    });
-    try {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'dynamodb_initial_record_failed',
-        level: 'error',
-        message: metadataFailureReason,
-        ...(metadataRelocation.storageKey
-          ? {
+      const metadataFailureReason =
+        typeof err?.message === 'string' && err.message.trim()
+          ? err.message
+          : 'Failed to write initial DynamoDB record';
+      const metadataRelocation = await relocateFailedUploadToInvalid({
+        descriptor: err?.code || 'metadata-write',
+        reason: metadataFailureReason,
+      });
+      try {
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'dynamodb_initial_record_failed',
+          level: 'error',
+          message: metadataFailureReason,
+          ...(metadataRelocation.storageKey
+            ? {
               metadata: {
                 storageKey: metadataRelocation.storageKey,
                 ...(metadataRelocation.invalidStorageKey
@@ -26051,645 +26061,645 @@ app.post(
                   : {}),
               },
             }
-          : {}),
-      });
-    } catch (logErr) {
-      logStructured('error', 'dynamo_initial_record_log_failed', {
-        ...logContext,
-        error: serializeError(logErr),
-      });
-    }
-    const metadataFailureDetails = {};
-    if (metadataRelocation.storageKey) {
-      metadataFailureDetails.storageKey = metadataRelocation.storageKey;
-    }
-    if (metadataRelocation.invalidStorageKey) {
-      metadataFailureDetails.invalidStorageKey = metadataRelocation.invalidStorageKey;
-    }
-    return sendError(
-      res,
-      500,
-      'INITIAL_METADATA_WRITE_FAILED',
-      'Failed to record upload metadata. Please try again later.',
-      Object.keys(metadataFailureDetails).length
-        ? metadataFailureDetails
-        : undefined
-    );
-  }
-
-  try {
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'request_received',
-      message: `credlyProfileUrl=${submittedCredly || ''}`
-    });
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'selected_templates',
-      message: `template1=${template1}; template2=${template2}`
-    });
-
-    const jobDescriptionHtml = manualJobDescription;
-    logStructured('info', 'job_description_supplied_manually', {
-      ...logContext,
-      characters: manualJobDescription.length,
-    });
-    await logEvent({
-      s3,
-      bucket,
-      key: logKey,
-      jobId,
-      event: 'job_description_supplied_manually'
-    });
-    const {
-      title: jobTitle,
-      skills: jobSkills,
-      text: jobDescription
-    } = analyzeJobDescription(jobDescriptionHtml);
-    logStructured('info', 'job_description_analyzed', {
-      ...logContext,
-      jobTitle,
-      jobSkills: jobSkills.length,
-    });
-    const resumeSkills = extractResumeSkills(text);
-    const scoreBreakdown = buildScoreBreakdown(text, {
-      jobSkills,
-      resumeSkills,
-      jobText: jobDescription,
-    });
-    const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
-    logStructured('info', 'resume_skills_analyzed', {
-      ...logContext,
-      resumeSkills: resumeSkills.length,
-      originalMatchScore: originalMatch.score,
-    });
-
-    const linkedinData = { experience: [], education: [], certifications: [] };
-
-    const manualCertificates = parseManualCertificates(req.body.manualCertificates);
-    if (manualCertificates.length) {
-      logStructured('info', 'manual_certificates_received', {
-        ...logContext,
-        manualCount: manualCertificates.length,
-      });
-    }
-
-    let credlyCertifications = [];
-    let credlyStatus = {
-      attempted: Boolean(submittedCredly),
-      success: false,
-      manualEntryRequired: false,
-      message: '',
-    };
-    if (submittedCredly) {
-      try {
-        credlyCertifications = await fetchCredlyProfile(submittedCredly);
-        logStructured('info', 'credly_profile_fetched', {
+            : {}),
+        });
+      } catch (logErr) {
+        logStructured('error', 'dynamo_initial_record_log_failed', {
           ...logContext,
-          certifications: credlyCertifications.length,
-        });
-        credlyStatus = {
-          attempted: true,
-          success: true,
-          manualEntryRequired: false,
-          count: credlyCertifications.length,
-        };
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'fetched_credly_profile'
-        });
-      } catch (err) {
-        logStructured('warn', 'credly_profile_fetch_failed', {
-          ...logContext,
-          error: serializeError(err),
-        });
-        credlyStatus = {
-          attempted: true,
-          success: false,
-          manualEntryRequired: err.code === 'CREDLY_AUTH_REQUIRED',
-          message: err.message,
-        };
-        await logEvent({
-          s3,
-          bucket,
-          key: logKey,
-          jobId,
-          event: 'credly_profile_fetch_failed',
-          level: 'error',
-          message: err.message
+          error: serializeError(logErr),
         });
       }
+      const metadataFailureDetails = {};
+      if (metadataRelocation.storageKey) {
+        metadataFailureDetails.storageKey = metadataRelocation.storageKey;
+      }
+      if (metadataRelocation.invalidStorageKey) {
+        metadataFailureDetails.invalidStorageKey = metadataRelocation.invalidStorageKey;
+      }
+      return sendError(
+        res,
+        500,
+        'INITIAL_METADATA_WRITE_FAILED',
+        'Failed to record upload metadata. Please try again later.',
+        Object.keys(metadataFailureDetails).length
+          ? metadataFailureDetails
+          : undefined
+      );
     }
 
-    if (isUploadMicroservice) {
-      logStructured('info', 'resume_upload_async_enqueued', {
+    try {
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'request_received',
+        message: `credlyProfileUrl=${submittedCredly || ''}`
+      });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'selected_templates',
+        message: `template1=${template1}; template2=${template2}`
+      });
+
+      const jobDescriptionHtml = manualJobDescription;
+      logStructured('info', 'job_description_supplied_manually', {
+        ...logContext,
+        characters: manualJobDescription.length,
+      });
+      await logEvent({
+        s3,
+        bucket,
+        key: logKey,
+        jobId,
+        event: 'job_description_supplied_manually'
+      });
+      const {
+        title: jobTitle,
+        skills: jobSkills,
+        text: jobDescription
+      } = analyzeJobDescription(jobDescriptionHtml);
+      logStructured('info', 'job_description_analyzed', {
         ...logContext,
         jobTitle,
         jobSkills: jobSkills.length,
-        manualCertificates: manualCertificates.length,
-        credlyAttempted: credlyStatus.attempted,
+      });
+      const resumeSkills = extractResumeSkills(text);
+      const scoreBreakdown = buildScoreBreakdown(text, {
+        jobSkills,
+        resumeSkills,
+        jobText: jobDescription,
+      });
+      const originalMatch = calculateMatchScore(jobSkills, resumeSkills);
+      logStructured('info', 'resume_skills_analyzed', {
+        ...logContext,
+        resumeSkills: resumeSkills.length,
+        originalMatchScore: originalMatch.score,
       });
 
-      const workflowEventDetail = {
-        jobId,
-        resumeText: text,
-        jobDescription,
-        jobSkills,
-        manualCertificates,
-        targetTitle: jobTitle,
-        enhancementTypes: ENHANCEMENT_TYPES,
-      };
-      if (classificationSnapshot) {
-        workflowEventDetail.classification = classificationSnapshot;
+      const linkedinData = { experience: [], education: [], certifications: [] };
+
+      const manualCertificates = parseManualCertificates(req.body.manualCertificates);
+      if (manualCertificates.length) {
+        logStructured('info', 'manual_certificates_received', {
+          ...logContext,
+          manualCount: manualCertificates.length,
+        });
       }
 
-      scheduleTask(() => {
-        publishResumeWorkflowEvent(workflowEventDetail).catch((eventErr) => {
-          logStructured('warn', 'process_cv_orchestration_event_failed', {
+      let credlyCertifications = [];
+      let credlyStatus = {
+        attempted: Boolean(submittedCredly),
+        success: false,
+        manualEntryRequired: false,
+        message: '',
+      };
+      if (submittedCredly) {
+        try {
+          credlyCertifications = await fetchCredlyProfile(submittedCredly);
+          logStructured('info', 'credly_profile_fetched', {
             ...logContext,
-            error: serializeError(eventErr),
+            certifications: credlyCertifications.length,
+          });
+          credlyStatus = {
+            attempted: true,
+            success: true,
+            manualEntryRequired: false,
+            count: credlyCertifications.length,
+          };
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'fetched_credly_profile'
+          });
+        } catch (err) {
+          logStructured('warn', 'credly_profile_fetch_failed', {
+            ...logContext,
+            error: serializeError(err),
+          });
+          credlyStatus = {
+            attempted: true,
+            success: false,
+            manualEntryRequired: err.code === 'CREDLY_AUTH_REQUIRED',
+            message: err.message,
+          };
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'credly_profile_fetch_failed',
+            level: 'error',
+            message: err.message
+          });
+        }
+      }
+
+      if (isUploadMicroservice) {
+        logStructured('info', 'resume_upload_async_enqueued', {
+          ...logContext,
+          jobTitle,
+          jobSkills: jobSkills.length,
+          manualCertificates: manualCertificates.length,
+          credlyAttempted: credlyStatus.attempted,
+        });
+
+        const workflowEventDetail = {
+          jobId,
+          resumeText: text,
+          jobDescription,
+          jobSkills,
+          manualCertificates,
+          targetTitle: jobTitle,
+          enhancementTypes: ENHANCEMENT_TYPES,
+        };
+        if (classificationSnapshot) {
+          workflowEventDetail.classification = classificationSnapshot;
+        }
+
+        scheduleTask(() => {
+          publishResumeWorkflowEvent(workflowEventDetail).catch((eventErr) => {
+            logStructured('warn', 'process_cv_orchestration_event_failed', {
+              ...logContext,
+              error: serializeError(eventErr),
+            });
           });
         });
-      });
 
-      const classificationResponse = classificationSnapshot
-        ? {
+        const classificationResponse = classificationSnapshot
+          ? {
             ...classification,
             accepted: true,
             evaluatedAt: classificationSnapshot.evaluatedAt,
             ...(classificationSnapshot.overridden ? { overridden: true } : {}),
           }
-        : classification;
+          : classification;
 
-      return res.status(202).json({
-        success: true,
-        queued: true,
-        message:
-          'Resume upload received. Processing will continue asynchronously.',
-        jobId,
-        jobTitle,
-        resumeText: text,
-        jobDescriptionText: jobDescription,
-        jobSkills,
-        manualCertificates,
-        credlyStatus,
-        classification: classificationResponse,
-        sessionPointer: canonicalSessionPointer,
-        upload: {
-          bucket,
-          key: originalUploadKey,
-          metadataKey,
-          logKey,
-          sessionChangeLogKey,
-        },
-      });
-    }
-
-    const aggregatedCertifications = [
-      ...credlyCertifications,
-      ...manualCertificates,
-    ];
-
-    const resumeExperience = extractExperience(text);
-    const linkedinExperience = extractExperience(linkedinData.experience || []);
-    const resumeEducation = extractEducation(text);
-    const linkedinEducation = extractEducation(linkedinData.education || []);
-    const resumeCertifications = extractCertifications(text);
-    const linkedinCertifications = extractCertifications(
-      linkedinData.certifications || []
-    );
-
-    const knownCertificates = dedupeCertificates([
-      ...resumeCertifications,
-      ...linkedinCertifications,
-      ...aggregatedCertifications,
-    ]);
-    const certificateSuggestions = suggestRelevantCertifications(
-      jobDescription,
-      jobSkills,
-      knownCertificates
-    );
-    const manualCertificatesRequired =
-      credlyStatus.manualEntryRequired && manualCertificates.length === 0;
-
-    const originalTitle =
-      resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
-
-    const originalResumeText = text;
-
-    const addedSkills = [];
-    const missingSkills = Array.isArray(originalMatch.newSkills)
-      ? originalMatch.newSkills
-      : [];
-    const finalScoreBreakdown = scoreBreakdown;
-
-    let learningResources = [];
-    if (missingSkills.length) {
-      try {
-        learningResources = await generateLearningResources(missingSkills, {
+        return res.status(202).json({
+          success: true,
+          queued: true,
+          message:
+            'Resume upload received. Processing will continue asynchronously.',
+          jobId,
           jobTitle,
-          jobDescription,
-          disableGenerative: true,
-          requestId,
-        });
-      } catch (err) {
-        logStructured('warn', 'initial_analysis_learning_resources_failed', {
-          error: serializeError(err),
-          missingSkillCount: missingSkills.length,
+          resumeText: text,
+          jobDescriptionText: jobDescription,
+          jobSkills,
+          manualCertificates,
+          credlyStatus,
+          classification: classificationResponse,
+          sessionPointer: canonicalSessionPointer,
+          upload: {
+            bucket,
+            key: originalUploadKey,
+            metadataKey,
+            logKey,
+            sessionChangeLogKey,
+          },
         });
       }
-    }
 
-    const selectionInsights = buildSelectionInsights({
-      jobTitle,
-      originalTitle,
-      modifiedTitle: originalTitle,
-      jobDescriptionText: jobDescription,
-      bestMatch: originalMatch,
-      originalMatch,
-      missingSkills,
-      addedSkills,
-      scoreBreakdown: finalScoreBreakdown,
-      resumeExperience,
-      linkedinExperience,
-      knownCertificates,
-      certificateSuggestions,
-      manualCertificatesRequired,
-      learningResources,
-    });
-
-    logStructured('info', 'process_cv_scoring_completed', {
-      ...logContext,
-      applicantName,
-      originalScore: originalMatch.score,
-      enhancedScore: originalMatch.score,
-      missingSkills: missingSkills.length,
-    });
-
-    try {
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'analysis_completed',
-      });
-    } catch (logErr) {
-      logStructured('error', 's3_log_failure', {
-        ...logContext,
-        error: serializeError(logErr),
-      });
-    }
-
-    const atsSubScores = scoreBreakdownToArray(finalScoreBreakdown);
-
-    const normalizedMissingSkills = Array.isArray(missingSkills)
-      ? missingSkills.map((skill) => String(skill))
-      : [];
-    const normalizedAddedSkills = Array.isArray(addedSkills)
-      ? addedSkills.map((skill) => String(skill))
-      : [];
-    const normalizedScore = Number.isFinite(originalMatch?.score)
-      ? Number(originalMatch.score)
-      : 0;
-    const scoringCompletedAt = new Date().toISOString();
-    const scoringMetadataPrefix =
-      extractSessionScopedPrefixFromKey(logKey) ||
-      extractSessionScopedPrefixFromKey(originalUploadKey);
-    const scoringMetadataKey = scoringMetadataPrefix
-      ? `${scoringMetadataPrefix}logs/log.json`
-      : '';
-
-    const scoringUpdate = {
-      normalizedMissingSkills,
-      normalizedAddedSkills,
-      normalizedScore,
-    };
-
-    const templateContextInput = {
-      template1,
-      template2,
-      coverTemplate1,
-      coverTemplate2,
-    templates: availableCvTemplates,
-    coverTemplates: availableCoverTemplates,
-    selectedTemplate: canonicalSelectedTemplate,
-    templateHistory: normalizeTemplateHistory(req.body.templateHistory, [
-      canonicalSelectedTemplate,
-    ])
-  };
-    const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
-
-    try {
-      const scoringExpressionValues = {
-        ':status': { S: 'scored' },
-        ':completedAt': { S: scoringCompletedAt },
-        ':missing': {
-          L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
-            S: skill,
-          })),
-        },
-        ':added': {
-          L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
-            S: skill,
-          })),
-        },
-        ':score': { N: String(scoringUpdate.normalizedScore) },
-        ':jobDescriptionDigest': { S: manualJobDescriptionDigest || '' },
-        ':jobId': { S: jobId },
-        ':statusUploaded': { S: 'uploaded' },
-        ':environment': { S: deploymentEnvironment },
-      };
-      const scoringExpressionParts = [
-        '#status = :status',
-        'analysisCompletedAt = :completedAt',
-        'missingSkills = :missing',
-        'addedSkills = :added',
-        'enhancedScore = :score',
-        'originalScore = if_not_exists(originalScore, :score)',
-        'jobDescriptionDigest = :jobDescriptionDigest',
-        'environment = if_not_exists(environment, :environment)',
+      const aggregatedCertifications = [
+        ...credlyCertifications,
+        ...manualCertificates,
       ];
-      if (canonicalSessionId) {
-        scoringExpressionValues[':sessionId'] = { S: canonicalSessionId };
-        scoringExpressionParts.push(
-          'sessionId = if_not_exists(sessionId, :sessionId)'
-        );
-      }
-      await dynamo.send(
-        new UpdateItemCommand({
-          TableName: tableName,
-          Key: { linkedinProfileUrl: { S: storedLinkedIn } },
-          UpdateExpression: `SET ${scoringExpressionParts.join(', ')}`,
-          ExpressionAttributeValues: scoringExpressionValues,
-          ExpressionAttributeNames: { '#status': 'status' },
-          ConditionExpression:
-            'jobId = :jobId AND (#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status))',
-        })
+
+      const resumeExperience = extractExperience(text);
+      const linkedinExperience = extractExperience(linkedinData.experience || []);
+      const resumeEducation = extractEducation(text);
+      const linkedinEducation = extractEducation(linkedinData.education || []);
+      const resumeCertifications = extractCertifications(text);
+      const linkedinCertifications = extractCertifications(
+        linkedinData.certifications || []
       );
-      await logEvent({
-        s3,
-        bucket,
-        key: logKey,
-        jobId,
-        event: 'scoring_metadata_updated',
-        metadata: {
-          score: scoringUpdate.normalizedScore,
-          missingSkillsCount: scoringUpdate.normalizedMissingSkills.length,
-          addedSkillsCount: scoringUpdate.normalizedAddedSkills.length,
-        },
-      });
-      await updateStageMetadata({
-        s3,
-        bucket,
-        metadataKey: scoringMetadataKey,
-        jobId,
-      stage: 'scoring',
-      data: {
-        completedAt: scoringCompletedAt,
-        score: scoringUpdate.normalizedScore,
-      },
-      logContext,
-    });
-    } catch (updateErr) {
-      logStructured('error', 'process_cv_status_update_failed', {
-        ...logContext,
-        error: serializeError(updateErr),
-      });
-    }
 
-    let enhancedResponse = null;
-    let lastGenerationError = null;
-    let allowPlainFallbackRetry = false;
-    const generationRequest = {
-      res,
-      s3,
-      dynamo,
-      tableName,
-      bucket,
-      logKey,
-      jobId,
-      requestId,
-      logContext,
-      resumeText: text,
-      originalResumeTextInput: originalResumeText,
-      jobDescription,
-      jobSkills,
-      resumeSkills,
-      originalMatch,
-      linkedinProfileUrl,
-      linkedinData,
-      credlyProfileUrl,
-      credlyCertifications,
-      credlyStatus,
-      manualCertificates,
-      templateContextInput,
-      templateParamConfig,
-      applicantName,
-      sanitizedName,
-      storedLinkedIn,
-      originalUploadKey,
-      selection,
-      geminiApiKey: secrets.GEMINI_API_KEY,
-      changeLogEntries: [],
-      dismissedChangeLogEntries: [],
-      coverLetterChangeLogEntries: [],
-      dismissedCoverLetterChangeLogEntries: [],
-      existingRecord: {
-        device: { S: device },
-        os: { S: os },
-        browser: { S: browser },
-        location: { S: locationLabel },
-        locationCity: { S: locationMeta.city || '' },
-        locationRegion: { S: locationMeta.region || '' },
-        locationCountry: { S: locationMeta.country || '' },
-      },
-      userId: res.locals.userId,
-      plainPdfFallbackEnabled: Boolean(secrets.ENABLE_PLAIN_PDF_FALLBACK),
-      sessionId: canonicalSessionId,
-      sessionPointer: canonicalSessionPointer,
-    };
-
-    try {
-      enhancedResponse = await generateEnhancedDocumentsResponse(generationRequest);
-    } catch (generationErr) {
-      lastGenerationError = generationErr;
-      allowPlainFallbackRetry = Boolean(generationErr?.allowPlainFallback);
-      logStructured('warn', 'process_cv_generation_failed', {
-        ...logContext,
-        error: serializeError(generationErr),
-      });
-    }
-
-    if (!enhancedResponse && !res.headersSent && allowPlainFallbackRetry) {
-      logStructured('info', 'process_cv_generation_retry', {
-        ...logContext,
-        strategy: 'disable_generative_enhancements',
-      });
-      try {
-        enhancedResponse = await generateEnhancedDocumentsResponse({
-          ...generationRequest,
-          geminiApiKey: null,
-        });
-      } catch (retryErr) {
-        lastGenerationError = retryErr;
-        allowPlainFallbackRetry = Boolean(retryErr?.allowPlainFallback);
-        logStructured('error', 'process_cv_generation_retry_failed', {
-          ...logContext,
-          error: serializeError(retryErr),
-        });
-      }
-    }
-
-    if (enhancedResponse) {
-      if (
-        shouldDeletePlaceholder &&
-        placeholderRecordIdentifier &&
-        placeholderRecordIdentifier !== storedLinkedIn
-      ) {
-        await deletePlaceholderRecord(placeholderRecordIdentifier);
-        shouldDeletePlaceholder = false;
-      }
-      if (classificationSnapshot && enhancedResponse && !enhancedResponse.classification) {
-        enhancedResponse.classification = classificationSnapshot;
-      }
-      const generationWorkflowDetail = {
-        jobId,
-        resumeText: generationRequest?.resumeText || originalResumeText,
+      const knownCertificates = dedupeCertificates([
+        ...resumeCertifications,
+        ...linkedinCertifications,
+        ...aggregatedCertifications,
+      ]);
+      const certificateSuggestions = suggestRelevantCertifications(
         jobDescription,
         jobSkills,
-        missingSkills,
-        manualCertificates,
-        targetTitle: jobTitle,
-        enhancementTypes: ENHANCEMENT_TYPES,
-      };
-      if (classificationSnapshot) {
-        generationWorkflowDetail.classification = classificationSnapshot;
+        knownCertificates
+      );
+      const manualCertificatesRequired =
+        credlyStatus.manualEntryRequired && manualCertificates.length === 0;
+
+      const originalTitle =
+        resumeExperience[0]?.title || linkedinExperience[0]?.title || '';
+
+      const originalResumeText = text;
+
+      const addedSkills = [];
+      const missingSkills = Array.isArray(originalMatch.newSkills)
+        ? originalMatch.newSkills
+        : [];
+      const finalScoreBreakdown = scoreBreakdown;
+
+      let learningResources = [];
+      if (missingSkills.length) {
+        try {
+          learningResources = await generateLearningResources(missingSkills, {
+            jobTitle,
+            jobDescription,
+            disableGenerative: true,
+            requestId,
+          });
+        } catch (err) {
+          logStructured('warn', 'initial_analysis_learning_resources_failed', {
+            error: serializeError(err),
+            missingSkillCount: missingSkills.length,
+          });
+        }
       }
 
-      scheduleTask(() => {
-        publishResumeWorkflowEvent(generationWorkflowDetail).catch((eventErr) => {
-          logStructured('warn', 'process_cv_orchestration_event_failed', {
-            ...logContext,
-            error: serializeError(eventErr),
-          });
-        });
+      const selectionInsights = buildSelectionInsights({
+        jobTitle,
+        originalTitle,
+        modifiedTitle: originalTitle,
+        jobDescriptionText: jobDescription,
+        bestMatch: originalMatch,
+        originalMatch,
+        missingSkills,
+        addedSkills,
+        scoreBreakdown: finalScoreBreakdown,
+        resumeExperience,
+        linkedinExperience,
+        knownCertificates,
+        certificateSuggestions,
+        manualCertificatesRequired,
+        learningResources,
       });
-      return res.json(enhancedResponse);
-    }
 
-    if (res.headersSent) {
-      return;
-    }
+      logStructured('info', 'process_cv_scoring_completed', {
+        ...logContext,
+        applicantName,
+        originalScore: originalMatch.score,
+        enhancedScore: originalMatch.score,
+        missingSkills: missingSkills.length,
+      });
 
-    logStructured('error', 'process_cv_generation_unavailable', {
-      ...logContext,
-      error: lastGenerationError ? serializeError(lastGenerationError) : undefined,
-    });
-
-    const generationFailureReason =
-      lastGenerationError &&
-      typeof lastGenerationError.message === 'string' &&
-      lastGenerationError.message.trim()
-        ? lastGenerationError.message
-        : '';
-    const generationRelocation = await relocateFailedUploadToInvalid({
-      descriptor: lastGenerationError?.code || 'document-generation',
-      reason: generationFailureReason || 'Document generation failed',
-    });
-
-    let errorDetails =
-      lastGenerationError && generationFailureReason &&
-      generationFailureReason !== CV_GENERATION_ERROR_MESSAGE
-        ? { reason: generationFailureReason }
-        : undefined;
-    if (generationRelocation.storageKey) {
-      errorDetails = {
-        ...(errorDetails || {}),
-        storageKey: generationRelocation.storageKey,
-        ...(generationRelocation.invalidStorageKey
-          ? { invalidStorageKey: generationRelocation.invalidStorageKey }
-          : {}),
-      };
-    }
-
-    return sendError(
-      res,
-      500,
-      'DOCUMENT_GENERATION_FAILED',
-      LAMBDA_PROCESSING_ERROR_MESSAGE,
-      errorDetails
-    );
-
-
-  } catch (err) {
-    const failureMessage = describeProcessingFailure(err);
-    logStructured('error', 'process_cv_failed', {
-      ...logContext,
-      error: serializeError(err),
-      failureMessage,
-    });
-    const failureRelocation = await relocateFailedUploadToInvalid({
-      descriptor: err?.code || 'processing-failed',
-      reason: failureMessage,
-    });
-    if (bucket) {
       try {
-        const failureMetadata = {};
-        if (failureRelocation.storageKey) {
-          failureMetadata.storageKey = failureRelocation.storageKey;
-        }
-        if (failureRelocation.invalidStorageKey) {
-          failureMetadata.invalidStorageKey = failureRelocation.invalidStorageKey;
-        }
         await logEvent({
           s3,
           bucket,
           key: logKey,
           jobId,
-          event: 'error',
-          level: 'error',
-          message: failureMessage,
-          ...(Object.keys(failureMetadata).length
-            ? { metadata: failureMetadata }
-            : {}),
+          event: 'analysis_completed',
         });
-      } catch (e) {
+      } catch (logErr) {
         logStructured('error', 's3_log_failure', {
           ...logContext,
-          error: serializeError(e),
+          error: serializeError(logErr),
         });
       }
+
+      const atsSubScores = scoreBreakdownToArray(finalScoreBreakdown);
+
+      const normalizedMissingSkills = Array.isArray(missingSkills)
+        ? missingSkills.map((skill) => String(skill))
+        : [];
+      const normalizedAddedSkills = Array.isArray(addedSkills)
+        ? addedSkills.map((skill) => String(skill))
+        : [];
+      const normalizedScore = Number.isFinite(originalMatch?.score)
+        ? Number(originalMatch.score)
+        : 0;
+      const scoringCompletedAt = new Date().toISOString();
+      const scoringMetadataPrefix =
+        extractSessionScopedPrefixFromKey(logKey) ||
+        extractSessionScopedPrefixFromKey(originalUploadKey);
+      const scoringMetadataKey = scoringMetadataPrefix
+        ? `${scoringMetadataPrefix}logs/log.json`
+        : '';
+
+      const scoringUpdate = {
+        normalizedMissingSkills,
+        normalizedAddedSkills,
+        normalizedScore,
+      };
+
+      const templateContextInput = {
+        template1,
+        template2,
+        coverTemplate1,
+        coverTemplate2,
+        templates: availableCvTemplates,
+        coverTemplates: availableCoverTemplates,
+        selectedTemplate: canonicalSelectedTemplate,
+        templateHistory: normalizeTemplateHistory(req.body.templateHistory, [
+          canonicalSelectedTemplate,
+        ])
+      };
+      const templateParamConfig = parseTemplateParamsConfig(req.body.templateParams);
+
+      try {
+        const scoringExpressionValues = {
+          ':status': { S: 'scored' },
+          ':completedAt': { S: scoringCompletedAt },
+          ':missing': {
+            L: scoringUpdate.normalizedMissingSkills.map((skill) => ({
+              S: skill,
+            })),
+          },
+          ':added': {
+            L: scoringUpdate.normalizedAddedSkills.map((skill) => ({
+              S: skill,
+            })),
+          },
+          ':score': { N: String(scoringUpdate.normalizedScore) },
+          ':jobDescriptionDigest': { S: manualJobDescriptionDigest || '' },
+          ':jobId': { S: jobId },
+          ':statusUploaded': { S: 'uploaded' },
+          ':environment': { S: deploymentEnvironment },
+        };
+        const scoringExpressionParts = [
+          '#status = :status',
+          'analysisCompletedAt = :completedAt',
+          'missingSkills = :missing',
+          'addedSkills = :added',
+          'enhancedScore = :score',
+          'originalScore = if_not_exists(originalScore, :score)',
+          'jobDescriptionDigest = :jobDescriptionDigest',
+          'environment = if_not_exists(environment, :environment)',
+        ];
+        if (canonicalSessionId) {
+          scoringExpressionValues[':sessionId'] = { S: canonicalSessionId };
+          scoringExpressionParts.push(
+            'sessionId = if_not_exists(sessionId, :sessionId)'
+          );
+        }
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: tableName,
+            Key: { linkedinProfileUrl: { S: storedLinkedIn } },
+            UpdateExpression: `SET ${scoringExpressionParts.join(', ')}`,
+            ExpressionAttributeValues: scoringExpressionValues,
+            ExpressionAttributeNames: { '#status': 'status' },
+            ConditionExpression:
+              'jobId = :jobId AND (#status = :statusUploaded OR #status = :status OR attribute_not_exists(#status))',
+          })
+        );
+        await logEvent({
+          s3,
+          bucket,
+          key: logKey,
+          jobId,
+          event: 'scoring_metadata_updated',
+          metadata: {
+            score: scoringUpdate.normalizedScore,
+            missingSkillsCount: scoringUpdate.normalizedMissingSkills.length,
+            addedSkillsCount: scoringUpdate.normalizedAddedSkills.length,
+          },
+        });
+        await updateStageMetadata({
+          s3,
+          bucket,
+          metadataKey: scoringMetadataKey,
+          jobId,
+          stage: 'scoring',
+          data: {
+            completedAt: scoringCompletedAt,
+            score: scoringUpdate.normalizedScore,
+          },
+          logContext,
+        });
+      } catch (updateErr) {
+        logStructured('error', 'process_cv_status_update_failed', {
+          ...logContext,
+          error: serializeError(updateErr),
+        });
+      }
+
+      let enhancedResponse = null;
+      let lastGenerationError = null;
+      let allowPlainFallbackRetry = false;
+      const generationRequest = {
+        res,
+        s3,
+        dynamo,
+        tableName,
+        bucket,
+        logKey,
+        jobId,
+        requestId,
+        logContext,
+        resumeText: text,
+        originalResumeTextInput: originalResumeText,
+        jobDescription,
+        jobSkills,
+        resumeSkills,
+        originalMatch,
+        linkedinProfileUrl,
+        linkedinData,
+        credlyProfileUrl,
+        credlyCertifications,
+        credlyStatus,
+        manualCertificates,
+        templateContextInput,
+        templateParamConfig,
+        applicantName,
+        sanitizedName,
+        storedLinkedIn,
+        originalUploadKey,
+        selection,
+        geminiApiKey: secrets.GEMINI_API_KEY,
+        changeLogEntries: [],
+        dismissedChangeLogEntries: [],
+        coverLetterChangeLogEntries: [],
+        dismissedCoverLetterChangeLogEntries: [],
+        existingRecord: {
+          device: { S: device },
+          os: { S: os },
+          browser: { S: browser },
+          location: { S: locationLabel },
+          locationCity: { S: locationMeta.city || '' },
+          locationRegion: { S: locationMeta.region || '' },
+          locationCountry: { S: locationMeta.country || '' },
+        },
+        userId: res.locals.userId,
+        plainPdfFallbackEnabled: Boolean(secrets.ENABLE_PLAIN_PDF_FALLBACK),
+        sessionId: canonicalSessionId,
+        sessionPointer: canonicalSessionPointer,
+      };
+
+      try {
+        enhancedResponse = await generateEnhancedDocumentsResponse(generationRequest);
+      } catch (generationErr) {
+        lastGenerationError = generationErr;
+        allowPlainFallbackRetry = Boolean(generationErr?.allowPlainFallback);
+        logStructured('warn', 'process_cv_generation_failed', {
+          ...logContext,
+          error: serializeError(generationErr),
+        });
+      }
+
+      if (!enhancedResponse && !res.headersSent && allowPlainFallbackRetry) {
+        logStructured('info', 'process_cv_generation_retry', {
+          ...logContext,
+          strategy: 'disable_generative_enhancements',
+        });
+        try {
+          enhancedResponse = await generateEnhancedDocumentsResponse({
+            ...generationRequest,
+            geminiApiKey: null,
+          });
+        } catch (retryErr) {
+          lastGenerationError = retryErr;
+          allowPlainFallbackRetry = Boolean(retryErr?.allowPlainFallback);
+          logStructured('error', 'process_cv_generation_retry_failed', {
+            ...logContext,
+            error: serializeError(retryErr),
+          });
+        }
+      }
+
+      if (enhancedResponse) {
+        if (
+          shouldDeletePlaceholder &&
+          placeholderRecordIdentifier &&
+          placeholderRecordIdentifier !== storedLinkedIn
+        ) {
+          await deletePlaceholderRecord(placeholderRecordIdentifier);
+          shouldDeletePlaceholder = false;
+        }
+        if (classificationSnapshot && enhancedResponse && !enhancedResponse.classification) {
+          enhancedResponse.classification = classificationSnapshot;
+        }
+        const generationWorkflowDetail = {
+          jobId,
+          resumeText: generationRequest?.resumeText || originalResumeText,
+          jobDescription,
+          jobSkills,
+          missingSkills,
+          manualCertificates,
+          targetTitle: jobTitle,
+          enhancementTypes: ENHANCEMENT_TYPES,
+        };
+        if (classificationSnapshot) {
+          generationWorkflowDetail.classification = classificationSnapshot;
+        }
+
+        scheduleTask(() => {
+          publishResumeWorkflowEvent(generationWorkflowDetail).catch((eventErr) => {
+            logStructured('warn', 'process_cv_orchestration_event_failed', {
+              ...logContext,
+              error: serializeError(eventErr),
+            });
+          });
+        });
+        return res.json(enhancedResponse);
+      }
+
+      if (res.headersSent) {
+        return;
+      }
+
+      logStructured('error', 'process_cv_generation_unavailable', {
+        ...logContext,
+        error: lastGenerationError ? serializeError(lastGenerationError) : undefined,
+      });
+
+      const generationFailureReason =
+        lastGenerationError &&
+          typeof lastGenerationError.message === 'string' &&
+          lastGenerationError.message.trim()
+          ? lastGenerationError.message
+          : '';
+      const generationRelocation = await relocateFailedUploadToInvalid({
+        descriptor: lastGenerationError?.code || 'document-generation',
+        reason: generationFailureReason || 'Document generation failed',
+      });
+
+      let errorDetails =
+        lastGenerationError && generationFailureReason &&
+          generationFailureReason !== CV_GENERATION_ERROR_MESSAGE
+          ? { reason: generationFailureReason }
+          : undefined;
+      if (generationRelocation.storageKey) {
+        errorDetails = {
+          ...(errorDetails || {}),
+          storageKey: generationRelocation.storageKey,
+          ...(generationRelocation.invalidStorageKey
+            ? { invalidStorageKey: generationRelocation.invalidStorageKey }
+            : {}),
+        };
+      }
+
+      return sendError(
+        res,
+        500,
+        'DOCUMENT_GENERATION_FAILED',
+        LAMBDA_PROCESSING_ERROR_MESSAGE,
+        errorDetails
+      );
+
+
+    } catch (err) {
+      const failureMessage = describeProcessingFailure(err);
+      logStructured('error', 'process_cv_failed', {
+        ...logContext,
+        error: serializeError(err),
+        failureMessage,
+      });
+      const failureRelocation = await relocateFailedUploadToInvalid({
+        descriptor: err?.code || 'processing-failed',
+        reason: failureMessage,
+      });
+      if (bucket) {
+        try {
+          const failureMetadata = {};
+          if (failureRelocation.storageKey) {
+            failureMetadata.storageKey = failureRelocation.storageKey;
+          }
+          if (failureRelocation.invalidStorageKey) {
+            failureMetadata.invalidStorageKey = failureRelocation.invalidStorageKey;
+          }
+          await logEvent({
+            s3,
+            bucket,
+            key: logKey,
+            jobId,
+            event: 'error',
+            level: 'error',
+            message: failureMessage,
+            ...(Object.keys(failureMetadata).length
+              ? { metadata: failureMetadata }
+              : {}),
+          });
+        } catch (e) {
+          logStructured('error', 's3_log_failure', {
+            ...logContext,
+            error: serializeError(e),
+          });
+        }
+      }
+      const details = {};
+      if (err?.code) details.code = err.code;
+      if (err?.message && err.message !== failureMessage) {
+        details.reason = err.message;
+      }
+      if (failureRelocation.storageKey) {
+        details.storageKey = failureRelocation.storageKey;
+      }
+      if (failureRelocation.invalidStorageKey) {
+        details.invalidStorageKey = failureRelocation.invalidStorageKey;
+      }
+      return sendError(
+        res,
+        500,
+        'PROCESSING_FAILED',
+        failureMessage,
+        Object.keys(details).length ? details : undefined
+      );
     }
-    const details = {};
-    if (err?.code) details.code = err.code;
-    if (err?.message && err.message !== failureMessage) {
-      details.reason = err.message;
-    }
-    if (failureRelocation.storageKey) {
-      details.storageKey = failureRelocation.storageKey;
-    }
-    if (failureRelocation.invalidStorageKey) {
-      details.invalidStorageKey = failureRelocation.invalidStorageKey;
-    }
-    return sendError(
-      res,
-      500,
-      'PROCESSING_FAILED',
-      failureMessage,
-      Object.keys(details).length ? details : undefined
-    );
-  }
-});
+  });
 
 app.use((err, req, res, next) => {
   if (!err) {

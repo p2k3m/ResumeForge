@@ -193,7 +193,7 @@ export function extractHashedIndexAssets(html) {
   }
 
   const assetPattern =
-    /assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\?[^"'\s>]+)?/gi
+    /assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[^/]+\.(?:css|js)(?:\?[^"'\s>]+)?/gi
   const assets = new Set()
   let match
   console.log('[DEBUG] Starting asset extraction...')
@@ -214,6 +214,7 @@ export function extractHashedIndexAssets(html) {
   console.log('[DEBUG] Extraction complete. Assets found:', assets.size)
 
   if (assets.size === 0) {
+    console.error('[DEBUG] index.html content:', html)
     throw createValidationError('[upload-static] index.html does not reference any hashed index assets.')
   }
 
@@ -604,7 +605,7 @@ function resolveBucketConfiguration() {
 }
 
 const IMMUTABLE_HASHED_INDEX_ASSET_PATTERN = /\/assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\.map)?$/
-const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
+const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[^/]+\.(?:css|js)$/i
 const INDEX_ASSET_ALIAS_PATHS = new Set(['assets/index-latest.css', 'assets/index-latest.js'])
 const INDEX_ALIAS_CACHE_CONTROL = 'public, max-age=60, must-revalidate'
 const RESERVED_STATIC_ASSET_PATHS = new Set([

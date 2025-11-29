@@ -14,6 +14,8 @@ process.env.GEMINI_API_KEY = 'test-key';
 process.env.AWS_REGION = 'us-east-1';
 process.env.CLOUDFRONT_ORIGINS = 'https://test.cloudfront.net';
 process.env.ENABLE_GENERATION_STALE_ARTIFACT_CLEANUP = 'false';
+process.env.PUBLISHED_CLOUDFRONT_PATH = '/non-existent/config.json';
+process.env.RUNTIME_CONFIG_PATH = '/non-existent/runtime-config.json';
 
 const clientIndexPath = path.join(process.cwd(), 'client', 'dist', 'index.html');
 
@@ -148,6 +150,8 @@ const MANUAL_JOB_DESCRIPTION = `
 We are seeking a Software Engineer to design, build, and ship scalable web services.
 Collaborate with cross-functional teams, implement APIs, and improve developer workflows.
 `;
+
+const MINIMAL_VALID_PDF_BUFFER = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Count 0>>endobj\nxref\n0 3\n0000000000 65535 f\n0000000009 00000 n\n0000000074 00000 n\ntrailer<</Size 3/Root 1 0 R>>startxref\n106\n%%EOF');
 
 beforeEach(() => {
   setupDefaultDynamoMock();
@@ -1224,7 +1228,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(failed.status).toBe(400);
     expect(failed.body.success).toBe(false);
@@ -1239,7 +1243,7 @@ describe('/api/process-cv', () => {
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
       .field('manualJobDescription', 'Manual JD text outlining requirements and responsibilities.')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(manual.status).toBe(200);
     expect(manual.body.success).toBe(true);
@@ -1255,7 +1259,7 @@ describe('/api/process-cv', () => {
         'manualJobDescription',
         'Senior Engineer<div onclick="steal()">Focus</div><a href="javascript:bad()">Apply</a><svg onload="alert(1)">Hire</svg><img src="x" onerror="bad()">'
       )
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(manual.status).toBe(200);
     expect(manual.body.success).toBe(true);
@@ -1282,7 +1286,7 @@ describe('/api/process-cv', () => {
         'manualJobDescription',
         'Senior Engineer<script>alert("x")</script>Focus on delivery'
       )
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(manual.status).toBe(400);
     expect(manual.body.success).toBe(false);
@@ -1306,7 +1310,7 @@ describe('/api/process-cv', () => {
         'manualJobDescription',
         'Lead Engineer<div>Focus on delivery</div>'
       )
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(manual.status).toBe(200);
     expect(manual.body.success).toBe(true);
@@ -1355,7 +1359,7 @@ describe('/api/process-cv', () => {
       .set('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)')
       .set('X-Forwarded-For', '198.51.100.5')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
@@ -1381,7 +1385,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -1406,7 +1410,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
@@ -1429,7 +1433,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
     expect(res.status).toBe(200);
     expect(res.body.urls.map((u) => u.type).sort()).toEqual([
       'cover_letter1',
@@ -1444,7 +1448,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -1488,7 +1492,7 @@ describe('/api/process-cv', () => {
     const response = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual(
@@ -1596,7 +1600,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     const coverLetterEntry = res.body.urls.find((entry) => entry.type === 'cover_letter1');
     expect(coverLetterEntry).toBeTruthy();
@@ -1642,7 +1646,7 @@ describe('/api/process-cv', () => {
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('template1', 'modern')
       .field('template2', 'professional')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
@@ -1661,7 +1665,7 @@ describe('/api/process-cv', () => {
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
       .field('templates', JSON.stringify(['classic', 'ats']))
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     const calls = serverModule.generatePdf.mock.calls;
     const resumeCalls = calls.filter(([, , opts]) => opts && opts.resumeExperience);
@@ -1712,7 +1716,7 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       expect(res.status).toBe(200);
 
@@ -1774,7 +1778,7 @@ describe('/api/process-cv', () => {
       await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       const prompt = prompts[0];
       expect(prompt).toMatch(/projectSnippet/i);
@@ -1828,7 +1832,7 @@ describe('/api/process-cv', () => {
       await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       expect(texts.some((t) => /Built a portfolio site using React/i.test(t))).toBe(true);
     } finally {
@@ -1881,7 +1885,7 @@ describe('/api/process-cv', () => {
       await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       const resumeText = texts.find((t) => /# Projects/.test(t));
       expect(resumeText).toBeTruthy();
@@ -1924,7 +1928,7 @@ describe('/api/process-cv', () => {
     await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     const coverCalls = serverModule.generatePdf.mock.calls.filter(
       ([, , opts]) => opts && opts.skipRequiredSections
@@ -1990,7 +1994,7 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       expect(res.status).toBe(200);
 
@@ -2063,7 +2067,7 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       expect(res.status).toBe(200);
       expect(generateContentMock).toHaveBeenCalledTimes(3);
@@ -2096,7 +2100,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -2168,7 +2172,7 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
       expect(res.status).toBe(200);
       const resumeText = pdfTexts.find((t) => t.includes('Revised Title')) || '';
@@ -2375,7 +2379,7 @@ describe('/api/process-cv', () => {
     const res = await request(app)
       .post('/api/process-cv')
       .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
@@ -2420,7 +2424,7 @@ describe('/api/process-cv', () => {
       const res = await request(app)
         .post('/api/process-cv')
         .field('manualJobDescription', MANUAL_JOB_DESCRIPTION)
-        .attach('resume', Buffer.from('dummy'), {
+        .attach('resume', MINIMAL_VALID_PDF_BUFFER, {
           filename: 'notes.docx',
           contentType:
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -2447,7 +2451,7 @@ describe('/api/process-cv', () => {
   test('missing job description text', async () => {
     const res = await request(app)
       .post('/api/process-cv')
-      .attach('resume', Buffer.from('dummy'), 'resume.pdf');
+      .attach('resume', MINIMAL_VALID_PDF_BUFFER, 'resume.pdf');
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
@@ -3528,7 +3532,7 @@ describe('generatePdfWithFallback', () => {
   });
 });
 
-  describe('classifyDocument', () => {
+describe('classifyDocument', () => {
   test('identifies resumes by section structure', async () => {
     const result = await classifyDocument('PROFESSIONAL SUMMARY\nExperience\nEducation\nSkills');
     expect(result.isResume).toBe(true);
