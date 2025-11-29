@@ -822,6 +822,13 @@ export function shouldDeleteObjectKey(key, prefix) {
     return false
   }
 
+  // CRITICAL FIX: Do not delete any assets from the assets/ directory.
+  // This prevents 404 errors for users who have a cached index.html that references
+  // older hashed assets that would otherwise be deleted during a new deployment.
+  if (normalizedKey.includes('/assets/')) {
+    return false
+  }
+
   return true
 }
 

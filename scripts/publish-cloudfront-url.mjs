@@ -43,6 +43,8 @@ async function main() {
     outputs.find((output) => output.OutputKey === 'AppBaseUrl') ||
     outputs.find((output) => output.OutputKey === 'CloudFrontUrl')
   const apiGatewayOutput = outputs.find((output) => output.OutputKey === 'ApiBaseUrl')
+  const staticAssetsBucketOutput = outputs.find((output) => output.OutputKey === 'StaticAssetsBucket')
+
   if (!urlOutput?.OutputValue) {
     console.error(
       'Stack is missing an AppBaseUrl/CloudFrontUrl output. Deploy using the provided SAM template.'
@@ -102,7 +104,7 @@ async function main() {
 
   async function sendWithRetry(command, { attempts = 5, baseDelayMs = 500 } = {}) {
     let attempt = 0
-    for (;;) {
+    for (; ;) {
       try {
         return await cloudFront.send(command)
       } catch (err) {
@@ -192,7 +194,7 @@ async function main() {
     payload.apiGatewayUrl = apiGatewayOutput.OutputValue
   }
 
-  const originBucket = selectOriginBucket({ originDetails, previous })
+  const originBucket = staticAssetsBucketOutput?.OutputValue || selectOriginBucket({ originDetails, previous })
   if (originBucket) {
     payload.originBucket = originBucket
   }

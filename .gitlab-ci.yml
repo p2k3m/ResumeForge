@@ -1,0 +1,34 @@
+image: node:20
+
+stages:
+  - build
+  - deploy
+
+cache:
+  paths:
+    - node_modules/
+    - client/node_modules/
+
+build:
+  stage: build
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - client/dist/
+      - .aws-sam/
+
+deploy:
+  stage: deploy
+  image: python:3.11-alpine
+  before_script:
+    - apk add --no-cache nodejs npm aws-cli
+    - pip install aws-sam-cli
+    - npm ci
+  script:
+    - sam deploy --stack-name resume-forge-v2 --region us-east-1 --capabilities CAPABILITY_IAM --no-confirm-changeset --resolve-s3 --parameter-overrides GeminiApiKey=$GEMINI_API_KEY
+    - export STATIC_ASSETS_BUCKET=$(aws cloudformation describe-stacks --stack-name resume-forge-v2 --region us-east-1 --query "Stacks[0].Outputs[?OutputKey=='StaticAssetsBucket'].OutputValue" --output text)
+    - npm run upload:static
+  only:
+    - v2
