@@ -1087,7 +1087,13 @@ async function main() {
     return
   }
 
-  const region = (process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1').trim()
+  const metadata = loadPublishedCloudfrontMetadataSafe()
+  const region = (
+    metadata?.originRegion ||
+    process.env.AWS_REGION ||
+    process.env.AWS_DEFAULT_REGION ||
+    'us-east-1'
+  ).trim()
   const s3 = new S3Client({ region })
 
   console.log(`[verify-static] Verifying static assets in s3://${bucket}/${prefix}/`)
