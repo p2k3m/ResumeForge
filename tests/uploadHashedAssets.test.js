@@ -725,6 +725,63 @@ describe('uploadHashedIndexAssets', () => {
 
     expect(observedCommands).toContain('CopyObjectCommand')
   })
+
+  it('is idempotent (succeeds on subsequent runs when index.html is already stripped)', async () => {
+    process.env.STAGE_NAME = 'prod'
+    process.env.DEPLOYMENT_ENVIRONMENT = 'prod'
+    process.env.STATIC_ASSETS_BUCKET = 'static-bucket-test'
+    process.env.STATIC_ASSETS_PREFIX = 'static/client/prod/latest'
+
+    const distDir = path.join(tempDir, 'dist-idempotency')
+    const assetsDir = path.join(distDir, 'assets')
+    const apiDir = path.join(distDir, 'api')
+    await fs.mkdir(assetsDir, { recursive: true })
+    await fs.mkdir(apiDir, { recursive: true })
+
+    const indexHtml = `
+      <html>
+        <head>
+          <link rel="stylesheet" href="/assets/index-20251101.css" />
+        </head>
+        <body>
+          <script src="/assets/index-20251101.js" type="module"></script>
+        </body>
+      </html>
+    `
+
+    await fs.writeFile(path.join(distDir, 'index.html'), indexHtml, 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251101.css'), 'body{color:blue;}', 'utf8')
+    await fs.writeFile(path.join(assetsDir, 'index-20251101.js'), 'console.log("idempotent")', 'utf8')
+    await fs.writeFile(path.join(apiDir, 'published-cloudfront'), '{"url":"https://example.com"}', 'utf8')
+    await fs.writeFile(
+      path.join(apiDir, 'published-cloudfront.json'),
+      '{"url":"https://example.com"}',
+      'utf8',
+    )
+
+    // First run
+    await uploadHashedIndexAssets({
+      distDirectory: distDir,
+      assetsDirectory: assetsDir,
+      indexHtmlPath: path.join(distDir, 'index.html'),
+      quiet: true,
+    })
+
+    // Verify index.html is stripped
+    const strippedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
+    expect(strippedIndex).not.toContain('index-20251101.css')
+    expect(strippedIndex).not.toContain('index-20251101.js')
+
+    // Second run should succeed by using manifest.json
+    await expect(
+      uploadHashedIndexAssets({
+        distDirectory: distDir,
+        assetsDirectory: assetsDir,
+        indexHtmlPath: path.join(distDir, 'index.html'),
+        quiet: true,
+      }),
+    ).resolves.not.toThrow()
+  })
 })
 
 describe('gatherHashedAssetUploadEntries', () => {
@@ -855,7 +912,7 @@ describe('gatherHashedAssetUploadEntries', () => {
       'utf8',
     )
 
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { })
 
     try {
       const result = await gatherHashedAssetUploadEntries({

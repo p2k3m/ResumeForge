@@ -436,21 +436,30 @@ export async function gatherHashedAssetUploadEntries({
     throw error
   }
 
-  const referencedAssets = extractHashedIndexAssetReferences(html)
+  let referencedAssets = extractHashedIndexAssetReferences(html)
   if (!referencedAssets.length) {
-    const preview = html.length > 500 ? `${html.substring(0, 500)}...` : html
+    // Fallback: check if a local manifest exists and has hashed assets (idempotency)
+    const manifest = await loadLocalManifest({ distDirectory: path.dirname(indexHtmlPath) })
+    if (manifest && Array.isArray(manifest.hashedIndexAssets) && manifest.hashedIndexAssets.length > 0) {
+      referencedAssets = manifest.hashedIndexAssets
+      console.warn(
+        '[upload-hashed-assets] index.html does not reference any hashed index assets, but found them in manifest.json. Proceeding with manifest assets.',
+      )
+    } else {
+      const preview = html.length > 500 ? `${html.substring(0, 500)}...` : html
 
-    // Extract potential script/link tags for debugging
-    const scriptMatches = [...html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)].map(m => m[1])
-    const linkMatches = [...html.matchAll(/<link[^>]+href=["']([^"']+)["'][^>]*>/gi)].map(m => m[1])
+      // Extract potential script/link tags for debugging
+      const scriptMatches = [...html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)].map(m => m[1])
+      const linkMatches = [...html.matchAll(/<link[^>]+href=["']([^"']+)["'][^>]*>/gi)].map(m => m[1])
 
-    throw new Error(
-      `[upload-hashed-assets] index.html does not reference any hashed index assets.\n` +
-      `HTML Preview (${html.length} bytes):\n${preview}\n\n` +
-      `Found Scripts:\n${scriptMatches.join('\n')}\n\n` +
-      `Found Links:\n${linkMatches.join('\n')}\n\n` +
-      `Tip: If this script previously failed, index.html might have been corrupted. Run "npm run build:client" to restore it.`
-    )
+      throw new Error(
+        `[upload-hashed-assets] index.html does not reference any hashed index assets.\n` +
+        `HTML Preview (${html.length} bytes):\n${preview}\n\n` +
+        `Found Scripts:\n${scriptMatches.join('\n')}\n\n` +
+        `Found Links:\n${linkMatches.join('\n')}\n\n` +
+        `Tip: If this script previously failed, index.html might have been corrupted. Run "npm run build:client" to restore it.`
+      )
+    }
   }
 
   const cssCount = referencedAssets.filter((asset) => asset.endsWith('.css')).length
@@ -1274,6 +1283,17 @@ async function updateManifestHashedAssets({
       ),
     ),
   )
+
+  // Write the updated manifest back to disk so subsequent runs can find the hashed assets
+  // even after index.html has been stripped.
+  try {
+    const localManifestPath = path.join(distDirectory, 'manifest.json')
+    await fs.writeFile(localManifestPath, manifestBody, 'utf8')
+  } catch (error) {
+    console.warn(
+      `[upload-hashed-assets] Unable to update local manifest: ${error?.message || error}`,
+    )
+  }
 
   return true
 }
