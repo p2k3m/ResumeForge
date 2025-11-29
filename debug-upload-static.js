@@ -9,7 +9,7 @@ const projectRoot = __dirname
 const clientDistDir = path.join(projectRoot, 'client', 'dist')
 const clientIndexPath = path.join(clientDistDir, 'index.html')
 
-const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)$/i
+const HASHED_INDEX_ASSET_RELATIVE_PATTERN = /^assets\/(?:v[\w.-]+\/)?index-[\w.-]+\.(?:css|js)$/i
 
 function normalizeClientAssetPath(relativePath) {
     if (typeof relativePath !== 'string') {
@@ -33,7 +33,7 @@ export function extractHashedIndexAssets(html) {
     }
 
     const assetPattern =
-        /assets\/(?:v[\w.-]+\/)?index-(?!latest(?:\.|$))[\w.-]+\.(?:css|js)(?:\?[^"'\s>]+)?/gi
+        /assets\/(?:v[\w.-]+\/)?index-[\w.-]+\.(?:css|js)(?:\?[^"'\s>]+)?/gi
     const assets = new Set()
     let match
     while ((match = assetPattern.exec(html)) !== null) {
