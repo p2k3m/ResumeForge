@@ -441,9 +441,16 @@ export async function gatherHashedAssetUploadEntries({
   const referencedAssets = extractHashedIndexAssetReferences(html)
   if (!referencedAssets.length) {
     const preview = html.length > 500 ? `${html.substring(0, 500)}...` : html
+
+    // Extract potential script/link tags for debugging
+    const scriptMatches = [...html.matchAll(/<script[^>]+src=["']([^"']+)["'][^>]*>/gi)].map(m => m[1])
+    const linkMatches = [...html.matchAll(/<link[^>]+href=["']([^"']+)["'][^>]*>/gi)].map(m => m[1])
+
     throw new Error(
       `[upload-hashed-assets] index.html does not reference any hashed index assets.\n` +
       `HTML Preview (${html.length} bytes):\n${preview}\n\n` +
+      `Found Scripts:\n${scriptMatches.join('\n')}\n\n` +
+      `Found Links:\n${linkMatches.join('\n')}\n\n` +
       `Tip: If this script previously failed, index.html might have been modified. Run "npm run build:client" to restore it.`
     )
   }
