@@ -127,6 +127,12 @@ jobs:
           npm run clean
           npm run predeploy:sam
           sam build --template-file template.yaml --cached --parallel
+          
+      - name: Debug build artifacts
+        run: |
+          echo "Listing build artifacts size:"
+          du -h -d 2 .aws-sam/build/
+          ls -R .aws-sam/build/
 
       - name: Upload static client assets
         run: |
