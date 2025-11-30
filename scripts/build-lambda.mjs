@@ -304,7 +304,7 @@ async function runEsbuild() {
     sourcemap: shouldGenerateSourceMap,
     minify: true,
     logLevel: 'info',
-    external: ['aws-sdk'],
+    external: ['aws-sdk', '@aws-sdk/*'],
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
     },
