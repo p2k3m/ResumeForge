@@ -285,18 +285,8 @@ Resources:
                 - !GetAtt WorkflowGenerateFunctionRole.Arn
             Action:
               - s3:ListBucket
-            Resource: !If
-              - CreateDataBucketCondition
               - !Sub arn:aws:s3:::${DataBucket}
               - !Sub arn:aws:s3:::${DataBucketName}
-          - Sid: AllowPublicReadClientAssets
-            Effect: Allow
-            Principal: "*"
-            Action: s3:GetObject
-            Resource: !If
-              - CreateDataBucketCondition
-              - !Sub arn:aws:s3:::${DataBucket}/assets/*
-              - !Sub arn:aws:s3:::${DataBucketName}/assets/*
 
   StaticAssetsBucket:
     Type: AWS::S3::Bucket
