@@ -1067,6 +1067,13 @@ async function serveHashedIndexAssetFromS3({
   const targetClient = getStaticAssetS3Client(metadataConfig?.region);
 
   if (!bucket || !prefix || !targetClient || typeof targetClient.send !== 'function') {
+    logStructured('warn', 'client_asset_s3_setup_failed', {
+      bucket,
+      prefix,
+      region: metadataConfig?.region,
+      hasClient: !!targetClient,
+      hasSend: typeof targetClient?.send === 'function',
+    });
     return false;
   }
 
