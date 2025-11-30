@@ -1,3 +1,4 @@
+import { fetch } from 'undici';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -182,10 +183,21 @@ async function verifyDistributionOrigin(metadata) {
   }
 
   const configuredPath = normalizeOriginPath(matchingOrigin.OriginPath || '');
-  if (expectedOriginPath && configuredPath !== expectedOriginPath) {
+  let expectedPathForOrigin = expectedOriginPath;
+
+  if (domainMatchesApiGateway(matchingOrigin.DomainName, metadata?.apiGatewayUrl)) {
+    try {
+      const apiUrl = new URL(metadata.apiGatewayUrl);
+      expectedPathForOrigin = normalizeOriginPath(apiUrl.pathname);
+    } catch (e) {
+      // Fallback or ignore if URL is invalid, though it should be valid by now
+    }
+  }
+
+  if (expectedPathForOrigin && configuredPath !== expectedPathForOrigin) {
     throw new Error(
       `[verify-cloudfront] Distribution ${distributionId} origin path ${configuredPath || '/'
-      } does not match expected ${expectedOriginPath}.`
+      } does not match expected ${expectedPathForOrigin}.`
     );
   }
 
@@ -262,6 +274,7 @@ async function main() {
       retryDelayMs: 30000,
       logger: console,
       assetPathPrefixes,
+      fetchImpl: fetch,
     });
     const { health, healthChecks = [], assetChecks = [] } = verificationResult;
 

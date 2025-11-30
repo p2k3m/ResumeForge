@@ -7,8 +7,23 @@
     "css": [
       "assets/index-88182d50.css"
     ],
-    "file": "assets/index-70ce539f.js",
+    "file": "assets/index-9191fc44.js",
     "isEntry": true,
     "src": "index.html"
-  }
+  },
+  "files": [
+    "assets/index-70ce539f.js",
+    "assets/index-88182d50.css",
+    "assets/index-a75789fa.js",
+    "assets/index-6fee8d2d.js",
+    "assets/index-57d74f57.js",
+    "assets/index-9191fc44.js"
+  ],
+  "hashedIndexAssets": [
+    "assets/index-88182d50.css",
+    "assets/index-9191fc44.js"
+  ],
+  "hashedIndexAssetCount": 2,
+  "assetVersionLabel": "v20251130154345",
+  "uploadedAt": "2025-11-30T15:43:47.173Z"
 }

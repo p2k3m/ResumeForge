@@ -2,7 +2,7 @@
   "stackName": "ResumeForge",
   "url": "https://d109hwmzrqr39w.cloudfront.net",
   "distributionId": "E2OWOS9JQQDVU3",
-  "apiGatewayUrl": "https://j3a7m3jz11.execute-api.us-east-1.amazonaws.com/prod",
+  "apiGatewayUrl": "https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod",
   "originBucket": "resume-forge-app-2025",
   "originRegion": "ap-south-1",
   "originPath": "/static/client/prod/latest",

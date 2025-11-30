@@ -75,7 +75,7 @@ The runtime looks for the following keys:
 
 ```json
 {
-  "AWS_REGION": "us-east-1",
+  "AWS_REGION": "ap-south-1",
   "PORT": "3000",
   "GEMINI_API_KEY": "<api-key>",
   "S3_BUCKET": "resume-forge-data",
@@ -223,7 +223,7 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 >
 > Origin path: `/static/client/prod/latest`
 >
-> API Gateway fallback: `https://j3a7m3jz11.execute-api.us-east-1.amazonaws.com/prod`
+> API Gateway fallback: `https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod`
 >
 > Published: 18 March 2025 at 09:30 UTC (from [`config/published-cloudfront.json`](config/published-cloudfront.json)).
 

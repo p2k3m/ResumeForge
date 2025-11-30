@@ -238,6 +238,20 @@ const HASHED_INDEX_ASSET_PATH_PATTERN =
 
 let publishedCloudfrontStaticAssetConfigLoaded = false;
 let publishedCloudfrontStaticAssetConfigCache;
+let staticAssetS3Client;
+let staticAssetS3ClientRegion;
+
+function getStaticAssetS3Client(targetRegion) {
+  if (!targetRegion) {
+    return s3Client;
+  }
+  if (staticAssetS3Client && staticAssetS3ClientRegion === targetRegion) {
+    return staticAssetS3Client;
+  }
+  staticAssetS3Client = new S3Client({ region: targetRegion });
+  staticAssetS3ClientRegion = targetRegion;
+  return staticAssetS3Client;
+}
 
 function resolvePublishedCloudfrontStaticAssetConfig() {
   if (publishedCloudfrontStaticAssetConfigLoaded) {
@@ -276,6 +290,7 @@ function resolvePublishedCloudfrontStaticAssetConfig() {
     publishedCloudfrontStaticAssetConfigCache = {
       bucket: bucket || undefined,
       prefix: prefix || undefined,
+      region: typeof parsed?.originRegion === 'string' ? parsed.originRegion.trim() : undefined,
     };
   } catch (error) {
     logStructured('warn', 'published_cloudfront_static_asset_resolution_failed', {
@@ -821,8 +836,10 @@ async function loadStaticAssetManifestFromS3({ forceRefresh = false } = {}) {
 
   const bucket = resolveStaticAssetBucketCandidate();
   const prefix = resolveStaticAssetPrefixCandidate();
+  const metadataConfig = resolvePublishedCloudfrontStaticAssetConfig();
+  const targetClient = getStaticAssetS3Client(metadataConfig?.region);
 
-  if (!bucket || !prefix || !s3Client || typeof s3Client.send !== 'function') {
+  if (!bucket || !prefix || !targetClient || typeof targetClient.send !== 'function') {
     return null;
   }
 
@@ -832,7 +849,7 @@ async function loadStaticAssetManifestFromS3({ forceRefresh = false } = {}) {
   const fetchPromise = (async () => {
     try {
       const response = await sendS3CommandWithRetry(
-        s3Client,
+        targetClient,
         () =>
           new GetObjectCommand({
             Bucket: bucket,
@@ -1046,8 +1063,10 @@ async function serveHashedIndexAssetFromS3({
 }) {
   const bucket = resolveStaticAssetBucketCandidate();
   const prefix = resolveStaticAssetPrefixCandidate();
+  const metadataConfig = resolvePublishedCloudfrontStaticAssetConfig();
+  const targetClient = getStaticAssetS3Client(metadataConfig?.region);
 
-  if (!bucket || !prefix || !s3Client || typeof s3Client.send !== 'function') {
+  if (!bucket || !prefix || !targetClient || typeof targetClient.send !== 'function') {
     return false;
   }
 
@@ -1072,7 +1091,7 @@ async function serveHashedIndexAssetFromS3({
   try {
     if (method === 'HEAD') {
       const headResult = await sendS3CommandWithRetry(
-        s3Client,
+        targetClient,
         () =>
           new HeadObjectCommand({
             Bucket: bucket,
@@ -1091,7 +1110,7 @@ async function serveHashedIndexAssetFromS3({
     }
 
     const objectResult = await sendS3CommandWithRetry(
-      s3Client,
+      targetClient,
       () =>
         new GetObjectCommand({
           Bucket: bucket,
