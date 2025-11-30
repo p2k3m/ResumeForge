@@ -219,7 +219,7 @@ The script uses your configured AWS credentials/region to read the `CloudFrontUr
 >
 > Origin bucket: `resume-forge-app-2025`
 >
-> Origin region: `us-east-1`
+> Origin region: `ap-south-1`
 >
 > Origin path: `/static/client/prod/latest`
 >
