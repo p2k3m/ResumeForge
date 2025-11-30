@@ -618,10 +618,19 @@ describe('static asset proxy endpoint', () => {
   });
 
   test('falls back to S3 when the hashed bundle is unavailable locally', async () => {
+    const originalReadFile = fsPromises.readFile;
+    const readFileSpy = jest
+      .spyOn(fsPromises, 'readFile')
+      .mockImplementation(async (target, ...args) => {
+        if (typeof target === 'string' && target === clientIndexPath) {
+          return '<html><head><link rel="stylesheet" href="/assets/index-123.css"></head><body></body></html>';
+        }
+        return originalReadFile.call(fsPromises, target, ...args);
+      });
+
     const hashedCssName = await extractPrimaryCssAssetName();
     const hashedRelativePath = `assets/${hashedCssName}`;
     const originalStat = fsPromises.stat;
-    const originalReadFile = fsPromises.readFile;
 
     const statSpy = jest
       .spyOn(fsPromises, 'stat')
@@ -635,16 +644,6 @@ describe('static asset proxy endpoint', () => {
           throw notFound;
         }
         return originalStat.call(fsPromises, target, ...args);
-      });
-
-    const htmlSnapshot = await fsPromises.readFile(clientIndexPath, 'utf8');
-    const readFileSpy = jest
-      .spyOn(fsPromises, 'readFile')
-      .mockImplementation(async (target, ...args) => {
-        if (typeof target === 'string' && target === clientIndexPath) {
-          return htmlSnapshot;
-        }
-        return originalReadFile.call(fsPromises, target, ...args);
       });
 
     const proxyBody = '.proxy-fallback { color: #0c0; }';
@@ -687,6 +686,14 @@ describe('static asset proxy endpoint', () => {
   });
 
   test('degrades hashed proxy requests to the index alias when upstream assets are missing', async () => {
+    const originalReadFile = fsPromises.readFile;
+    const readFileSpy = jest.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath, encoding) => {
+      if (filePath === clientIndexPath) {
+        return '<html><head><link rel="stylesheet" href="/assets/index-123.css"></head><body></body></html>';
+      }
+      return originalReadFile.call(fsPromises, filePath, encoding);
+    });
+
     const hashedCssName = await extractPrimaryCssAssetName();
     const hashedRelativePath = `assets/${hashedCssName}`;
     const aliasContent = await readDistAsset('index-latest.css');
@@ -721,10 +728,19 @@ describe('static asset proxy endpoint', () => {
       expect(mockS3Send).toHaveBeenCalled();
     } finally {
       statSpy.mockRestore();
+      readFileSpy.mockRestore();
     }
   });
 
   test('degrades direct hashed asset requests to the index alias when upstream bundles are missing', async () => {
+    const originalReadFile = fsPromises.readFile;
+    const readFileSpy = jest.spyOn(fsPromises, 'readFile').mockImplementation(async (filePath, encoding) => {
+      if (filePath === clientIndexPath) {
+        return '<html><head><link rel="stylesheet" href="/assets/index-123.css"></head><body></body></html>';
+      }
+      return originalReadFile.call(fsPromises, filePath, encoding);
+    });
+
     const hashedCssName = await extractPrimaryCssAssetName();
     const aliasContent = await readDistAsset('index-latest.css');
     const originalStat = fsPromises.stat;
@@ -755,6 +771,7 @@ describe('static asset proxy endpoint', () => {
       expect(mockS3Send).toHaveBeenCalled();
     } finally {
       statSpy.mockRestore();
+      readFileSpy.mockRestore();
     }
   });
 

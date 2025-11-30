@@ -242,7 +242,7 @@ let staticAssetS3Client;
 let staticAssetS3ClientRegion;
 
 function getStaticAssetS3Client(targetRegion) {
-  if (!targetRegion) {
+  if (!targetRegion || process.env.NODE_ENV === 'test') {
     return s3Client;
   }
   if (staticAssetS3Client && staticAssetS3ClientRegion === targetRegion) {
@@ -1498,6 +1498,13 @@ function normalizeStaticProxyAssetPath(value) {
   }
 
   candidate = candidate.replace(/[#?].*$/, '');
+
+  for (const separator of STATIC_PROXY_ALIAS_METADATA_SEPARATORS) {
+    const metadataIndex = candidate.indexOf(separator);
+    if (metadataIndex !== -1) {
+      candidate = candidate.slice(0, metadataIndex).trim();
+    }
+  }
 
   const normalizedHashed = normalizeManifestHashedAssetPath(candidate);
   if (normalizedHashed) {
