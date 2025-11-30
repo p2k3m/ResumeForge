@@ -1,5 +1,29 @@
 import { jest } from '@jest/globals';
-import { withLambdaObservability } from '../../lib/observability/lambda.js';
+
+jest.unstable_mockModule('@aws-sdk/client-cloudwatch', () => ({
+  CloudWatchClient: class {
+    send() { return Promise.resolve({}); }
+  },
+  PutMetricDataCommand: class { },
+}));
+
+jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
+  S3Client: class {
+    send() {
+      return Promise.resolve({
+        Body: {
+          on: (event, cb) => {
+            if (event === 'end') setTimeout(cb, 0);
+          }
+        }
+      });
+    }
+  },
+  GetObjectCommand: class { },
+  PutObjectCommand: class { },
+}));
+
+const { withLambdaObservability } = await import('../../lib/observability/lambda.js');
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -117,7 +141,7 @@ describe('withLambdaObservability HTTP response logging', () => {
       }),
     }), { name: 'test-function' });
 
-    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => { });
 
     await handler(httpEvent, baseContext);
 
@@ -161,8 +185,8 @@ describe('withLambdaObservability HTTP response logging', () => {
       body: 'not found',
     }), { name: 'test-function' });
 
-    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => {});
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => { });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
 
     await handler(assetEvent, baseContext);
 
