@@ -164,7 +164,7 @@ jobs:
           if [ -n "${STATIC_ASSETS_BUCKET:-}" ]; then
             extra_args+=(
               --parameter-overrides
-              CreateStaticAssetsBucket=true
+              CreateStaticAssetsBucket=false
               StaticAssetsBucketName="${STATIC_ASSETS_BUCKET}"
             )
           else
