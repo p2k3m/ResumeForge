@@ -468,6 +468,20 @@ Resources:
               Resource:
                 - !Sub arn:aws:s3:::${DataBucketName}
                 - !Sub arn:aws:s3:::${DataBucketName}/*
+            - Sid: AllowStaticAssetsBucketAccess
+              Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - !If
+                  - CreateStaticAssetsBucketCondition
+                  - !Sub arn:aws:s3:::${StaticAssetsBucket}
+                  - !Sub arn:aws:s3:::${StaticAssetsBucketName}
+                - !If
+                  - CreateStaticAssetsBucketCondition
+                  - !Sub arn:aws:s3:::${StaticAssetsBucket}/*
+                  - !Sub arn:aws:s3:::${StaticAssetsBucketName}/*
         - DynamoDBCrudPolicy:
             TableName: !Ref ResumeTableName
       Layers:
