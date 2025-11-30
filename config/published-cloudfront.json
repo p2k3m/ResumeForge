@@ -1,7 +1,7 @@
 {
   "stackName": "ResumeForge",
   "url": "https://d109hwmzrqr39w.cloudfront.net",
-  "distributionId": "E2HWMZRQR39W0",
+  "distributionId": "E2OWOS9JQQDVU3",
   "apiGatewayUrl": "https://a1b2c3d4e5.execute-api.ap-south-1.amazonaws.com/prod",
   "originBucket": "resume-forge-app-2025",
   "originRegion": "ap-south-1",
