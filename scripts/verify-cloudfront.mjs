@@ -100,9 +100,20 @@ function domainMatchesRegion(domainName, region) {
   const normalizedDomain = domainName.trim().toLowerCase();
   const normalizedRegion = region.trim().toLowerCase();
   return (
-    normalizedDomain.includes(`.${normalizedRegion}.amazonaws.com`) ||
     normalizedDomain.includes(`-${normalizedRegion}.amazonaws.com`)
   );
+}
+
+function domainMatchesApiGateway(domainName, apiGatewayUrl) {
+  if (!domainName || !apiGatewayUrl) {
+    return false;
+  }
+  try {
+    const apiDomain = new URL(apiGatewayUrl).hostname;
+    return domainName.trim().toLowerCase() === apiDomain.trim().toLowerCase();
+  } catch (error) {
+    return false;
+  }
 }
 
 async function verifyDistributionOrigin(metadata) {
@@ -148,15 +159,15 @@ async function verifyDistributionOrigin(metadata) {
 
   const matchingOrigin = origins.find((origin) => {
     const domainName = origin?.DomainName;
-    if (!domainName || !domainMatchesBucket(domainName, expectedBucket)) {
-      return false;
+    if (domainMatchesBucket(domainName, expectedBucket) && domainMatchesRegion(domainName, expectedRegion)) {
+      return true;
     }
 
-    if (!domainMatchesRegion(domainName, expectedRegion)) {
-      return false;
+    if (domainMatchesApiGateway(domainName, metadata?.apiGatewayUrl)) {
+      return true;
     }
 
-    return true;
+    return false;
   });
 
   if (!matchingOrigin) {
@@ -165,26 +176,24 @@ async function verifyDistributionOrigin(metadata) {
       .join(', ');
     throw new Error(
       `[verify-cloudfront] Distribution ${distributionId} is not pointing at bucket ${expectedBucket}` +
-        (expectedRegion ? ` in region ${expectedRegion}` : '') +
-        `. Found origins: ${originSummary}.`,
+      (expectedRegion ? ` in region ${expectedRegion}` : '') +
+      `. Found origins: ${originSummary}.`,
     );
   }
 
   const configuredPath = normalizeOriginPath(matchingOrigin.OriginPath || '');
   if (expectedOriginPath && configuredPath !== expectedOriginPath) {
     throw new Error(
-      `[verify-cloudfront] Distribution ${distributionId} origin path ${
-        configuredPath || '/'
-      } does not match expected ${expectedOriginPath}.`,
+      `[verify-cloudfront] Distribution ${distributionId} origin path ${configuredPath || '/'
+      } does not match expected ${expectedOriginPath}.`
     );
   }
 
   const pathLabel = configuredPath || '/';
   const regionSuffix = expectedRegion ? ` in ${expectedRegion}` : '';
   console.log(
-    `[verify-cloudfront] Distribution ${distributionId} origin ${matchingOrigin.DomainName}${
-      pathLabel === '/' ? '' : pathLabel
-    } matches bucket ${expectedBucket}${regionSuffix}.`,
+    `[verify-cloudfront] Distribution ${distributionId} origin ${matchingOrigin.DomainName}${pathLabel === '/' ? '' : pathLabel
+    } matches configuration (Bucket: ${expectedBucket}${regionSuffix} OR API: ${metadata?.apiGatewayUrl}).`,
   );
 }
 
@@ -261,12 +270,12 @@ async function main() {
         ? healthChecks
         : health
           ? [
-              {
-                profile: 'browser',
-                label: 'browser',
-                result: health,
-              },
-            ]
+            {
+              profile: 'browser',
+              label: 'browser',
+              result: health,
+            },
+          ]
           : [];
 
     for (const entry of reportedHealthChecks) {
@@ -274,8 +283,7 @@ async function main() {
       const status = result?.payload?.status ?? 'unknown';
       const urlForLog = result?.url ?? targetUrl;
       console.log(
-        `CloudFront distribution responded with status "${status}" at ${urlForLog} via ${
-          label || entry.profile || 'unknown'
+        `CloudFront distribution responded with status "${status}" at ${urlForLog} via ${label || entry.profile || 'unknown'
         } user agent.`
       );
     }
@@ -283,8 +291,7 @@ async function main() {
     if (Array.isArray(assetChecks) && assetChecks.length > 0) {
       for (const entry of assetChecks) {
         console.log(
-          `Verified client assets (/, /assets/index-*.js) via ${
-            entry.label || entry.profile || 'unknown'
+          `Verified client assets (/, /assets/index-*.js) via ${entry.label || entry.profile || 'unknown'
           } user agent.`
         );
       }
