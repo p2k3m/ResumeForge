@@ -318,9 +318,14 @@ function normalizeHashedAssetPath(value) {
 async function verifyS3Assets({ s3, bucket, manifest }) {
   const failures = []
   for (const entry of manifest.files) {
-    const key = typeof entry?.key === 'string' && entry.key.trim()
-      ? entry.key.trim()
-      : buildS3Key(manifest.prefix || '', entry?.path || '')
+    let key
+    if (typeof entry === 'string' && entry.trim()) {
+      key = buildS3Key(manifest.prefix || '', entry.trim())
+    } else {
+      key = typeof entry?.key === 'string' && entry.key.trim()
+        ? entry.key.trim()
+        : buildS3Key(manifest.prefix || '', entry?.path || '')
+    }
     if (!key) {
       failures.push('manifest entry missing key/path information')
       continue
