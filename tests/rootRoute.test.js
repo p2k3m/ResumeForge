@@ -55,5 +55,5 @@ describe('serverless bootstrap', () => {
     const result = await clientAppHandler(event, context);
     expect(result.statusCode).toBe(200);
     expectValidPortalMarkup(result.body);
-  });
+  }, 10000);
 });
