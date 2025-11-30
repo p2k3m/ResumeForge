@@ -315,16 +315,16 @@ function normalizeHashedAssetPath(value) {
   return normalized
 }
 
-async function verifyS3Assets({ s3, bucket, manifest }) {
+async function verifyS3Assets({ s3, bucket, manifest, prefix }) {
   const failures = []
   for (const entry of manifest.files) {
     let key
     if (typeof entry === 'string' && entry.trim()) {
-      key = buildS3Key(manifest.prefix || '', entry.trim())
+      key = buildS3Key(prefix || manifest.prefix || '', entry.trim())
     } else {
       key = typeof entry?.key === 'string' && entry.key.trim()
         ? entry.key.trim()
-        : buildS3Key(manifest.prefix || '', entry?.path || '')
+        : buildS3Key(prefix || manifest.prefix || '', entry?.path || '')
     }
     if (!key) {
       failures.push('manifest entry missing key/path information')
@@ -1130,7 +1130,7 @@ async function main() {
     requireJsAlias: true,
   })
 
-  await verifyS3Assets({ s3, bucket, manifest })
+  await verifyS3Assets({ s3, bucket, manifest, prefix })
   console.log(
     '[verify-static] Confirmed uploaded static assets are reachable, have public-read ACLs, and respond to signed URLs.',
   )
