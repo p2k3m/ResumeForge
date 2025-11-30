@@ -285,6 +285,8 @@ Resources:
                 - !GetAtt WorkflowGenerateFunctionRole.Arn
             Action:
               - s3:ListBucket
+            Resource: !If
+              - CreateDataBucketCondition
               - !Sub arn:aws:s3:::${DataBucket}
               - !Sub arn:aws:s3:::${DataBucketName}
 
