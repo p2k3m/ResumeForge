@@ -155,7 +155,14 @@
       container.style.fontFamily = 'monospace';
       container.style.fontSize = '12px';
       container.style.pointerEvents = 'none';
-      document.body.appendChild(container);
+
+      if (document.body) {
+        document.body.appendChild(container);
+      } else {
+        window.addEventListener('DOMContentLoaded', function () {
+          document.body.appendChild(container);
+        });
+      }
 
       function logToScreen(type, args) {
         const msg = args.map(arg => {
