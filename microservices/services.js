@@ -98,6 +98,7 @@ export const services = {
       { method: 'GET', path: '/cover-templates*' },
       { method: 'HEAD', path: '/cover-templates*' },
     ],
+    binaryTypes: DEFAULT_BINARY_TYPES,
   },
   resumeUpload: {
     serviceName: 'resume-upload',
