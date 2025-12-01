@@ -113,7 +113,17 @@ export function createServiceHandler({
     }
     event.headers['x-original-path'] = path;
 
-    return serverlessExpressInstance(event, context);
+    try {
+      return await serverlessExpressInstance(event, context);
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: 'serverless_express_error',
+        message: error.message,
+        stack: error.stack,
+        eventPayload: event
+      }));
+      throw error;
+    }
   };
 
   const operationGroup = (() => {
