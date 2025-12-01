@@ -2419,6 +2419,8 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 function App() {
   console.log('App component rendering...');
   const [manualJobDescription, setManualJobDescription] = useState('')
+  const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
+  const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -5605,8 +5607,7 @@ function App() {
     resetUiAfterDownload
   ])
 
-  const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
-  const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
+
   const closePreview = useCallback(() => {
     setPreviewActionBusy(false)
     setPreviewActiveAction('')
