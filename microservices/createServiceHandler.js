@@ -63,6 +63,16 @@ export function createServiceHandler({
       return route.method === 'ANY' || route.method === method;
     });
 
+    console.log(JSON.stringify({
+      event: 'service_handler_route_check',
+      service: serviceName,
+      incomingPath: event.path,
+      normalizedPath: path,
+      method,
+      routeAllowed,
+      routes: normalizedRoutes.map(r => r.path)
+    }));
+
     if (!routeAllowed) {
       return {
         statusCode: 404,
