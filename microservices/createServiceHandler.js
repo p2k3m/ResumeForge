@@ -101,6 +101,11 @@ export function createServiceHandler({
       });
     }
 
+    if (!event.headers) {
+      event.headers = {};
+    }
+    event.headers['x-original-path'] = path;
+
     return serverlessExpressInstance(event, context);
   };
 

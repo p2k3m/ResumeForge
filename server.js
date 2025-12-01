@@ -4705,29 +4705,24 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
-  const event = req.apiGateway && req.apiGateway.event;
-  logStructured('info', 'middleware_event_debug', {
-    hasApiGateway: !!req.apiGateway,
-    hasEvent: !!event,
-    eventPath: event?.path,
+  const originalPath = req.headers['x-original-path'];
+
+  logStructured('info', 'path_restoration_debug', {
+    originalPathHeader: originalPath,
     reqPath: req.path,
     reqUrl: req.url
   });
 
-  if (event && typeof event.path === 'string') {
-    const assetIndex = event.path.indexOf('/assets/');
-    if (assetIndex !== -1 && !req.path.includes('/assets/')) {
-      const correctPath = event.path.substring(assetIndex);
-      if (correctPath.endsWith(req.path)) {
-        logStructured('info', 'path_rewrite_fix', {
-          original: req.url,
-          fixed: correctPath,
-          eventPath: event.path
-        });
-        req.url = correctPath;
-        req.originalUrl = correctPath;
-      }
-    }
+  if (typeof originalPath === 'string' && originalPath !== req.path) {
+    // Only restore if the original path contains /assets/ and current path doesn't, 
+    // or if we just want to trust the header from our own handler.
+    // Since createServiceHandler sends the normalized path, we should trust it.
+    req.url = originalPath;
+    req.originalUrl = originalPath;
+
+    logStructured('info', 'path_restored_from_header', {
+      restoredPath: req.url
+    });
   }
   next();
 });
