@@ -2419,6 +2419,10 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 function App() {
   console.log('App component rendering...');
   const [manualJobDescription, setManualJobDescription] = useState('')
+  const pendingImprovementRescoreRef = useRef([])
+  const runQueuedImprovementRescoreRef = useRef(null)
+  const analysisContextRef = useRef({ hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' })
+
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
   const API_BASE_URL = useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl])
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
@@ -2918,12 +2922,10 @@ function App() {
   )
   const improvementLockRef = useRef(false)
   const scoreUpdateLockRef = useRef(false)
-  const pendingImprovementRescoreRef = useRef([])
   const autoPreviewSignatureRef = useRef('')
   const lastAutoScoreSignatureRef = useRef('')
   const manualJobDescriptionRef = useRef(null)
   const cvInputRef = useRef(null)
-  const analysisContextRef = useRef({ hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' })
   const cvSignatureRef = useRef('')
   const jobSignatureRef = useRef('')
   const [localUserId] = useState(() => getOrCreateUserId())
@@ -5881,7 +5883,9 @@ function App() {
       setIsProcessing(true)
       setError('', { stage: 'score' })
       try {
-        await runQueuedImprovementRescore()
+        if (runQueuedImprovementRescoreRef.current) {
+          await runQueuedImprovementRescoreRef.current()
+        }
       } finally {
         setIsProcessing(false)
       }
@@ -6280,7 +6284,6 @@ function App() {
       setIsProcessing(false)
     }
   }, [
-    runQueuedImprovementRescore,
     API_BASE_URL,
     cvFile,
     manualCertificatesInput,
@@ -7355,6 +7358,10 @@ function App() {
     setError,
     setImprovementResults
   ])
+
+  useEffect(() => {
+    runQueuedImprovementRescoreRef.current = runQueuedImprovementRescore
+  }, [runQueuedImprovementRescore])
 
   const persistChangeLogEntry = useCallback(
     async (entry) => {
