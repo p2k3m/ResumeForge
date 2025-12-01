@@ -201,6 +201,8 @@ Resources:
         - application/pdf
         - application/octet-stream
         - font/*
+        - font/woff2
+        - application/font-woff2
         - image/*
       Cors:
         AllowMethods: "'OPTIONS,POST,GET'"
