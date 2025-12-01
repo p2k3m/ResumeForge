@@ -4719,6 +4719,14 @@ app.use((req, res, next) => {
 
   const serviceKey = resolveServiceForRoute(method, rawPath);
 
+  logStructured('info', 'service_resolution_check', {
+    method,
+    rawPath,
+    serviceKey,
+    allowed: serviceKey && activeServiceAllowList.has(serviceKey),
+    allowList: Array.from(activeServiceAllowList)
+  });
+
   if (!serviceKey || !activeServiceAllowList.has(serviceKey)) {
     return respondWithServiceNotFound(res, method, rawPath, serviceKey);
   }
