@@ -101,6 +101,13 @@ export function createServiceHandler({
       });
     }
 
+    // Force the path to be the normalized one, bypassing any API Gateway stripping
+    event.path = path;
+    event.rawPath = path;
+    if (event.requestContext && event.requestContext.http) {
+      event.requestContext.http.path = path;
+    }
+
     if (!event.headers) {
       event.headers = {};
     }
