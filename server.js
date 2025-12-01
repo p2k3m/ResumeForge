@@ -4705,6 +4705,17 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
+  logStructured('info', 'request_received', { path: req.path, method: req.method });
+  next();
+});
+
+app.use((req, res, next) => {
+  logStructured('info', 'service_filter_entry', {
+    allowListSize: activeServiceAllowList instanceof Set ? activeServiceAllowList.size : 'not-set',
+    allowList: activeServiceAllowList instanceof Set ? Array.from(activeServiceAllowList) : [],
+    path: req.path
+  });
+
   if (!(activeServiceAllowList instanceof Set) || activeServiceAllowList.size === 0) {
     return next();
   }
