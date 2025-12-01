@@ -132,6 +132,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     manifest: true,
+    minify: false,
   },
   server: {
     proxy: {
