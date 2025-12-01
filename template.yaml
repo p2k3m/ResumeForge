@@ -200,6 +200,8 @@ Resources:
         - multipart/form-data
         - application/pdf
         - application/octet-stream
+        - font/*
+        - image/*
       Cors:
         AllowMethods: "'OPTIONS,POST,GET'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"

@@ -2300,8 +2300,8 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
         {suggestion.accepted !== null && (
           <span
             className={`text-xs px-3 py-1 rounded-full ${suggestion.accepted
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-rose-100 text-rose-600'
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-rose-100 text-rose-600'
               }`}
           >
             {suggestion.accepted ? 'Accepted' : 'Rejected'}
@@ -2461,6 +2461,7 @@ function App() {
   const [certificateInsights, setCertificateInsights] = useState(null)
   const [selectionInsights, setSelectionInsights] = useState(null)
   const [improvementResults, setImprovementResults] = useState([])
+  const [enhanceAllSummaryText, setEnhanceAllSummaryText] = useState('')
   const [changeLog, setChangeLog] = useState([])
   const changeLogSummaryData = useMemo(
     () => buildAggregatedChangeLogSummary(changeLog),
@@ -2820,7 +2821,6 @@ function App() {
       : manualJobDescriptionRequired
         ? 'Paste the full job description to continue.'
         : 'Paste the full JD so we analyse the exact role requirements.'
-  const [enhanceAllSummaryText, setEnhanceAllSummaryText] = useState('')
   const [coverLetterDrafts, setCoverLetterDrafts] = useState({})
   const [coverLetterOriginals, setCoverLetterOriginals] = useState({})
   const [coverLetterEditor, setCoverLetterEditor] = useState(null)
@@ -5380,8 +5380,8 @@ function App() {
       : ''
     const downloadLinkLabel = presentation.linkLabel || 'Download File'
     const downloadLinkClass = `text-sm font-semibold transition ${directDownloadDisabled
-        ? 'text-rose-500 cursor-not-allowed'
-        : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
+      ? 'text-rose-500 cursor-not-allowed'
+      : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
       }`
     const downloadLinkAriaLabel = [
       downloadLinkLabel,
@@ -5392,14 +5392,14 @@ function App() {
       .filter(Boolean)
       .join('. ')
     const downloadButtonClass = `${buttonClass} ${isCoverLetter
-        ? isCoverLetterDownloadDisabled
+      ? isCoverLetterDownloadDisabled
+        ? 'opacity-60 cursor-not-allowed'
+        : ''
+      : isDownloading
+        ? 'opacity-80 cursor-wait'
+        : isDownloadUnavailable
           ? 'opacity-60 cursor-not-allowed'
           : ''
-        : isDownloading
-          ? 'opacity-80 cursor-wait'
-          : isDownloadUnavailable
-            ? 'opacity-60 cursor-not-allowed'
-            : ''
       }`
     const downloadButtonLabel = (() => {
       if (downloadHasError) {
@@ -5579,10 +5579,10 @@ function App() {
         {isCoverLetter && (
           <p
             className={`text-xs ${coverEdited
-                ? 'text-indigo-600 font-semibold'
-                : hasPreviewedCoverLetter
-                  ? 'text-purple-500'
-                  : 'text-amber-600 font-semibold'
+              ? 'text-indigo-600 font-semibold'
+              : hasPreviewedCoverLetter
+                ? 'text-purple-500'
+                : 'text-amber-600 font-semibold'
               }`}
           >
             {coverEdited
@@ -9371,8 +9371,8 @@ function App() {
                 />
                 <p
                   className={`text-xs ${manualJobDescriptionHasError
-                      ? 'text-rose-600 font-semibold'
-                      : 'text-purple-500'
+                    ? 'text-rose-600 font-semibold'
+                    : 'text-purple-500'
                     }`}
                 >
                   {manualJobDescriptionHelperText}
@@ -9426,8 +9426,8 @@ function App() {
                     type="button"
                     onClick={() => setActiveDashboardStage(stage.key)}
                     className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${isActive
-                        ? 'border-purple-600 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30'
-                        : 'border-slate-200 bg-white/80 text-slate-600 hover:border-purple-300 hover:text-purple-700'
+                      ? 'border-purple-600 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30'
+                      : 'border-slate-200 bg-white/80 text-slate-600 hover:border-purple-300 hover:text-purple-700'
                       }`}
                     aria-pressed={isActive ? 'true' : 'false'}
                   >
@@ -9453,8 +9453,8 @@ function App() {
                       onClick={handleScoreSubmit}
                       disabled={rescoreDisabled}
                       className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${rescoreDisabled
-                          ? 'bg-indigo-300 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                        ? 'bg-indigo-300 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
                         }`}
                       aria-busy={isProcessing ? 'true' : 'false'}
                     >
@@ -9513,8 +9513,8 @@ function App() {
                           onClick={handleAcceptAllImprovements}
                           disabled={improvementButtonsDisabled}
                           className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${improvementButtonsDisabled
-                              ? 'bg-purple-300 cursor-not-allowed'
-                              : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
+                            ? 'bg-purple-300 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
                             }`}
                           aria-busy={isBulkAccepting ? 'true' : 'false'}
                         >
@@ -9560,8 +9560,8 @@ function App() {
                 actions={
                   <span
                     className={`text-xs font-semibold rounded-full border px-3 py-1 ${changeLogCount > 0
-                        ? 'border-slate-200 bg-white/70 text-slate-600'
-                        : 'border-slate-200 bg-white/50 text-slate-400'
+                      ? 'border-slate-200 bg-white/70 text-slate-600'
+                      : 'border-slate-200 bg-white/50 text-slate-400'
                       }`}
                   >
                     {changeLogCount} update{changeLogCount === 1 ? '' : 's'}
@@ -9945,8 +9945,8 @@ function App() {
                 onClick={() => handleImprovementClick('improve-certifications')}
                 disabled={improvementButtonsDisabled}
                 className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${improvementButtonsDisabled
-                    ? 'bg-blue-300 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700'
+                  ? 'bg-blue-300 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700'
                   }`}
                 aria-busy={activeImprovement === 'improve-certifications' ? 'true' : 'false'}
               >
@@ -9988,10 +9988,10 @@ function App() {
                         onClick={() => handleImprovementClick(action.key)}
                         disabled={buttonDisabled}
                         className={`rounded-2xl border border-purple-200 bg-white/80 p-4 text-left shadow-sm hover:shadow-lg transition ${isActive
-                            ? 'opacity-70 cursor-wait'
-                            : buttonDisabled
-                              ? 'opacity-60 cursor-not-allowed'
-                              : 'hover:-translate-y-0.5'
+                          ? 'opacity-70 cursor-wait'
+                          : buttonDisabled
+                            ? 'opacity-60 cursor-not-allowed'
+                            : 'hover:-translate-y-0.5'
                           }`}
                         aria-busy={isActive}
                         aria-disabled={buttonDisabled}
@@ -10315,8 +10315,8 @@ function App() {
               : ''
             const previewDownloadLinkLabel = previewPresentation.linkLabel || 'Download File'
             const previewDownloadLinkClass = `text-sm font-semibold transition ${previewLinkDisabled
-                ? 'text-rose-500 cursor-not-allowed'
-                : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
+              ? 'text-rose-500 cursor-not-allowed'
+              : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
               }`
 
             const downloadButtonLabel = (() => {
@@ -10436,8 +10436,8 @@ function App() {
                         }}
                         disabled={previewButtonDisabled}
                         className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${previewButtonDisabled
-                            ? 'bg-purple-300 cursor-not-allowed'
-                            : 'bg-purple-600 hover:bg-purple-700'
+                          ? 'bg-purple-300 cursor-not-allowed'
+                          : 'bg-purple-600 hover:bg-purple-700'
                           }`}
                       >
                         {downloadButtonLabel}

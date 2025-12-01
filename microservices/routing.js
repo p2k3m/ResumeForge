@@ -2,6 +2,14 @@ export const DEFAULT_BINARY_TYPES = [
   'multipart/form-data',
   'application/octet-stream',
   'application/pdf',
+  'font/woff',
+  'font/woff2',
+  'font/ttf',
+  'font/eot',
+  'image/png',
+  'image/jpeg',
+  'image/svg+xml',
+  'image/x-icon',
 ];
 
 export function normalizeRoutePath(path) {
