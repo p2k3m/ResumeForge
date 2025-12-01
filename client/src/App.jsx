@@ -7367,9 +7367,7 @@ function App() {
     runQueuedImprovementRescoreRef.current = runQueuedImprovementRescore
   }, [runQueuedImprovementRescore])
 
-  useEffect(() => {
-    persistChangeLogEntryRef.current = persistChangeLogEntry
-  }, [persistChangeLogEntry])
+
 
   useEffect(() => {
     rescoreAfterImprovementRef.current = rescoreAfterImprovement
@@ -7426,6 +7424,10 @@ function App() {
     },
     [API_BASE_URL, jobId, userIdentifier]
   )
+
+  useEffect(() => {
+    persistChangeLogEntryRef.current = persistChangeLogEntry
+  }, [persistChangeLogEntry])
 
   const applyImprovementSuggestion = useCallback(
     async (suggestion) => {
