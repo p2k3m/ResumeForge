@@ -576,6 +576,18 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /service-worker.js
             Method: HEAD
+        StaticManifestGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/static-manifest
+            Method: GET
+        StaticManifestHead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/static-manifest
+            Method: HEAD
         AssetsGet:
           Type: Api
           Properties:
