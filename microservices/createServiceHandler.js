@@ -106,6 +106,16 @@ export function createServiceHandler({
     }
     event.headers['x-original-path'] = path;
 
+    if (event.multiValueHeaders) {
+      event.multiValueHeaders['x-original-path'] = [path];
+    }
+
+    console.log(JSON.stringify({
+      event: 'debug_event_structure',
+      keys: Object.keys(event),
+      hasMultiValueHeaders: !!event.multiValueHeaders
+    }));
+
     try {
       return await serverlessExpressInstance(event, context);
     } catch (error) {
