@@ -502,7 +502,7 @@ Resources:
       Runtime: nodejs20.x
       MemorySize: 512
       Timeout: 30
-      AutoPublishAlias: !Ref StageName
+
       Events:
         RootGet:
           Type: Api
