@@ -7,6 +7,7 @@ export function bootstrapApp({
   AppComponent,
   reactDomClient
 }) {
+  console.log('bootstrapApp called');
   if (!documentRef || typeof documentRef.getElementById !== 'function') {
     throw new Error('bootstrapApp requires a documentRef with DOM helpers')
   }

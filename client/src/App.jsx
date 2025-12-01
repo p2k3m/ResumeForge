@@ -178,17 +178,17 @@ function buildActionDecorator(actionBuilder) {
 function summariseItems(items, { limit = 5, decorate } = {}) {
   const list = Array.isArray(items)
     ? items
-        .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
-        .filter(Boolean)
+      .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+      .filter(Boolean)
     : []
   if (!list.length) return ''
   const unique = Array.from(new Set(list))
   const decorated =
     typeof decorate === 'function'
       ? unique
-          .map((value) => decorate(value))
-          .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
-          .filter(Boolean)
+        .map((value) => decorate(value))
+        .map((value) => (typeof value === 'string' ? value.trim() : String(value || '').trim()))
+        .filter(Boolean)
       : unique
   if (!decorated.length) return ''
   if (decorated.length <= limit) {
@@ -240,7 +240,7 @@ function normalizeImprovementValidation(validation) {
       : null
   const overallScoreDelta =
     typeof jobAlignmentSource.overallScoreDelta === 'number' &&
-    Number.isFinite(jobAlignmentSource.overallScoreDelta)
+      Number.isFinite(jobAlignmentSource.overallScoreDelta)
       ? jobAlignmentSource.overallScoreDelta
       : null
 
@@ -1405,11 +1405,11 @@ const resolveCoverTemplateSelection = ({
 
   const resolvedTemplateId = canonicalizeCoverTemplateId(
     fileTemplateMeta.templateId ||
-      file.templateId ||
-      file.coverTemplateId ||
-      metadataForType?.id ||
-      context.coverTemplate1 ||
-      DEFAULT_COVER_TEMPLATE,
+    file.templateId ||
+    file.coverTemplateId ||
+    metadataForType?.id ||
+    context.coverTemplate1 ||
+    DEFAULT_COVER_TEMPLATE,
     DEFAULT_COVER_TEMPLATE
   )
 
@@ -1676,10 +1676,10 @@ function deriveChangeLabel(suggestion) {
       : type === 'change-designation'
         ? 'fixed'
         : type === 'add-missing-skills' ||
-            type === 'align-experience' ||
-            type === 'improve-certifications' ||
-            type === 'improve-projects' ||
-            type === 'improve-highlights'
+          type === 'align-experience' ||
+          type === 'improve-certifications' ||
+          type === 'improve-projects' ||
+          type === 'improve-highlights'
           ? 'added'
           : 'fixed'
 
@@ -1738,37 +1738,37 @@ function buildChangeLogEntry(suggestion) {
 
   const summarySegments = Array.isArray(suggestion?.improvementSummary)
     ? suggestion.improvementSummary
-        .map((segment) => {
-          if (!segment) return null
-          const sectionLabel = [segment.section, segment.label, segment.key]
-            .map((value) => (typeof value === 'string' ? value.trim() : ''))
-            .find(Boolean) || ''
-          const addedItems = Array.isArray(segment.added)
-            ? segment.added
-                .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
-                .filter(Boolean)
-            : []
-          const removedItems = Array.isArray(segment.removed)
-            ? segment.removed
-                .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
-                .filter(Boolean)
-            : []
-          const reasons = Array.isArray(segment.reason)
-            ? segment.reason
-                .map((line) => (typeof line === 'string' ? line.trim() : ''))
-                .filter(Boolean)
-            : []
-          if (!sectionLabel && addedItems.length === 0 && removedItems.length === 0 && reasons.length === 0) {
-            return null
-          }
-          return {
-            section: sectionLabel,
-            added: addedItems,
-            removed: removedItems,
-            reason: reasons
-          }
-        })
-        .filter(Boolean)
+      .map((segment) => {
+        if (!segment) return null
+        const sectionLabel = [segment.section, segment.label, segment.key]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .find(Boolean) || ''
+        const addedItems = Array.isArray(segment.added)
+          ? segment.added
+            .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+            .filter(Boolean)
+          : []
+        const removedItems = Array.isArray(segment.removed)
+          ? segment.removed
+            .map((item) => (typeof item === 'string' ? item.trim() : String(item || '').trim()))
+            .filter(Boolean)
+          : []
+        const reasons = Array.isArray(segment.reason)
+          ? segment.reason
+            .map((line) => (typeof line === 'string' ? line.trim() : ''))
+            .filter(Boolean)
+          : []
+        if (!sectionLabel && addedItems.length === 0 && removedItems.length === 0 && reasons.length === 0) {
+          return null
+        }
+        return {
+          section: sectionLabel,
+          added: addedItems,
+          removed: removedItems,
+          reason: reasons
+        }
+      })
+      .filter(Boolean)
     : []
 
   const normalizeSectionKey = (value) => {
@@ -2299,11 +2299,10 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
         </div>
         {suggestion.accepted !== null && (
           <span
-            className={`text-xs px-3 py-1 rounded-full ${
-              suggestion.accepted
+            className={`text-xs px-3 py-1 rounded-full ${suggestion.accepted
                 ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-rose-100 text-rose-600'
-            }`}
+              }`}
           >
             {suggestion.accepted ? 'Accepted' : 'Rejected'}
           </span>
@@ -2418,6 +2417,7 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 }
 
 function App() {
+  console.log('App component rendering...');
   const [manualJobDescription, setManualJobDescription] = useState('')
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
@@ -2632,8 +2632,8 @@ function App() {
         providedSource ||
         (providedCode
           ? normalizeServiceSource(
-              SERVICE_ERROR_SOURCE_BY_CODE[providedCode] || ''
-            )
+            SERVICE_ERROR_SOURCE_BY_CODE[providedCode] || ''
+          )
           : '')
       if (!normalizedRecoveryKey && allowRetry) {
         normalizedRecoveryKey = 'generation'
@@ -2693,79 +2693,79 @@ function App() {
     const options = controller ? { signal: controller.signal } : undefined
     const endpoints = ['/api/published-cloudfront', '/api/published-cloudfront.json']
 
-    ;(async () => {
-      let lastError = null
-      for (const endpoint of endpoints) {
-        if (cancelled) {
+      ; (async () => {
+        let lastError = null
+        for (const endpoint of endpoints) {
+          if (cancelled) {
+            return
+          }
+
+          const url = typeof endpoint === 'string' ? endpoint : ''
+          if (!url) {
+            continue
+          }
+
+          let response
+          try {
+            response = await fetch(url, options)
+          } catch (error) {
+            if (error?.name === 'AbortError') {
+              return
+            }
+            lastError = error
+            continue
+          }
+
+          if (!response || !response.ok) {
+            continue
+          }
+
+          let data = null
+          try {
+            data = await response.json()
+          } catch (error) {
+            lastError = error
+            continue
+          }
+
+          if (cancelled || !data || !data.cloudfront) {
+            continue
+          }
+
+          const canonicalUrl =
+            typeof data.cloudfront.url === 'string' && data.cloudfront.url.trim()
+              ? data.cloudfront.url.trim()
+              : ''
+          let canonicalHost = ''
+          if (canonicalUrl) {
+            try {
+              canonicalHost = new URL(canonicalUrl, window.location.href).hostname
+            } catch (error) {
+              console.warn('Unable to parse canonical CloudFront URL from API metadata.', error)
+              canonicalHost = ''
+            }
+          }
+          const apiGatewayUrl =
+            typeof data.cloudfront.apiGatewayUrl === 'string' && data.cloudfront.apiGatewayUrl.trim()
+              ? data.cloudfront.apiGatewayUrl.trim()
+              : ''
+          const updatedAt =
+            typeof data.cloudfront.updatedAt === 'string' && data.cloudfront.updatedAt.trim()
+              ? data.cloudfront.updatedAt.trim()
+              : ''
+          setCloudfrontMetadata((prev) => ({
+            canonicalUrl: canonicalUrl || prev.canonicalUrl,
+            canonicalHost: canonicalHost || prev.canonicalHost,
+            apiGatewayUrl: apiGatewayUrl || prev.apiGatewayUrl || environmentOrigin,
+            updatedAt: updatedAt || prev.updatedAt
+          }))
           return
         }
 
-        const url = typeof endpoint === 'string' ? endpoint : ''
-        if (!url) {
-          continue
+        if (lastError && lastError?.name !== 'AbortError') {
+          console.warn('Unable to load published CloudFront metadata within the app.', lastError)
         }
-
-        let response
-        try {
-          response = await fetch(url, options)
-        } catch (error) {
-          if (error?.name === 'AbortError') {
-            return
-          }
-          lastError = error
-          continue
-        }
-
-        if (!response || !response.ok) {
-          continue
-        }
-
-        let data = null
-        try {
-          data = await response.json()
-        } catch (error) {
-          lastError = error
-          continue
-        }
-
-        if (cancelled || !data || !data.cloudfront) {
-          continue
-        }
-
-        const canonicalUrl =
-          typeof data.cloudfront.url === 'string' && data.cloudfront.url.trim()
-            ? data.cloudfront.url.trim()
-            : ''
-        let canonicalHost = ''
-        if (canonicalUrl) {
-          try {
-            canonicalHost = new URL(canonicalUrl, window.location.href).hostname
-          } catch (error) {
-            console.warn('Unable to parse canonical CloudFront URL from API metadata.', error)
-            canonicalHost = ''
-          }
-        }
-        const apiGatewayUrl =
-          typeof data.cloudfront.apiGatewayUrl === 'string' && data.cloudfront.apiGatewayUrl.trim()
-            ? data.cloudfront.apiGatewayUrl.trim()
-            : ''
-        const updatedAt =
-          typeof data.cloudfront.updatedAt === 'string' && data.cloudfront.updatedAt.trim()
-            ? data.cloudfront.updatedAt.trim()
-            : ''
-        setCloudfrontMetadata((prev) => ({
-          canonicalUrl: canonicalUrl || prev.canonicalUrl,
-          canonicalHost: canonicalHost || prev.canonicalHost,
-          apiGatewayUrl: apiGatewayUrl || prev.apiGatewayUrl || environmentOrigin,
-          updatedAt: updatedAt || prev.updatedAt
-        }))
-        return
-      }
-
-      if (lastError && lastError?.name !== 'AbortError') {
-        console.warn('Unable to load published CloudFront metadata within the app.', lastError)
-      }
-    })()
+      })()
     return () => {
       cancelled = true
       if (controller) {
@@ -3674,8 +3674,8 @@ function App() {
   const templateHistorySummary = useMemo(() => {
     const baseHistory = Array.isArray(templateContext?.templateHistory)
       ? templateContext.templateHistory
-          .map((item) => canonicalizeTemplateId(item))
-          .filter(Boolean)
+        .map((item) => canonicalizeTemplateId(item))
+        .filter(Boolean)
       : []
     if (!baseHistory.length) {
       return ''
@@ -3735,8 +3735,8 @@ function App() {
         base.selectedTemplate = canonical
         const currentList = Array.isArray(prev?.templates)
           ? prev.templates
-              .map((item) => canonicalizeTemplateId(item))
-              .filter(Boolean)
+            .map((item) => canonicalizeTemplateId(item))
+            .filter(Boolean)
           : []
         if (!currentList.includes(canonical)) {
           base.templates = [canonical, ...currentList]
@@ -3746,8 +3746,8 @@ function App() {
         }
         const currentHistory = Array.isArray(prev?.templateHistory)
           ? prev.templateHistory
-              .map((item) => canonicalizeTemplateId(item))
-              .filter(Boolean)
+            .map((item) => canonicalizeTemplateId(item))
+            .filter(Boolean)
           : []
         if (!currentHistory.includes(canonical)) {
           base.templateHistory = [canonical, ...currentHistory]
@@ -4116,11 +4116,11 @@ function App() {
 
       const flowSnapshot = Array.isArray(flowSteps)
         ? flowSteps.map((step) => ({
-            key: step.key,
-            status: step.status,
-            note: step.note || '',
-            noteTone: step.noteTone || ''
-          }))
+          key: step.key,
+          status: step.status,
+          note: step.note || '',
+          noteTone: step.noteTone || ''
+        }))
         : []
 
       const stageErrorSnapshot = Object.entries(stageErrors || {}).reduce(
@@ -4138,15 +4138,15 @@ function App() {
 
       const navigatorInfo = typeof navigator === 'object' && navigator
         ? {
-            userAgent: typeof navigator.userAgent === 'string' ? navigator.userAgent : '',
-            language: typeof navigator.language === 'string' ? navigator.language : '',
-            platform: typeof navigator.platform === 'string' ? navigator.platform : ''
-          }
+          userAgent: typeof navigator.userAgent === 'string' ? navigator.userAgent : '',
+          language: typeof navigator.language === 'string' ? navigator.language : '',
+          platform: typeof navigator.platform === 'string' ? navigator.platform : ''
+        }
         : {
-            userAgent: '',
-            language: '',
-            platform: ''
-          }
+          userAgent: '',
+          language: '',
+          platform: ''
+        }
 
       const payload = {
         timestamp: new Date().toISOString(),
@@ -4577,31 +4577,31 @@ function App() {
     const sanitizeContactLines = (lines = []) =>
       Array.isArray(lines)
         ? lines.filter((line) =>
-            typeof line === 'string' &&
-            line.trim() &&
-            !/linkedin/i.test(line) &&
-            !/credly/i.test(line) &&
-            !/\bjd\b/i.test(line)
-          )
+          typeof line === 'string' &&
+          line.trim() &&
+          !/linkedin/i.test(line) &&
+          !/credly/i.test(line) &&
+          !/\bjd\b/i.test(line)
+        )
         : []
 
     const contactDetails =
       coverLetterFields && typeof coverLetterFields.contact === 'object'
         ? {
-            contactLines: sanitizeContactLines(coverLetterFields.contact.lines),
-            email:
-              typeof coverLetterFields.contact.email === 'string'
-                ? coverLetterFields.contact.email
-                : '',
-            phone:
-              typeof coverLetterFields.contact.phone === 'string'
-                ? coverLetterFields.contact.phone
-                : '',
-            cityState:
-              typeof coverLetterFields.contact.location === 'string'
-                ? coverLetterFields.contact.location
-                : ''
-          }
+          contactLines: sanitizeContactLines(coverLetterFields.contact.lines),
+          email:
+            typeof coverLetterFields.contact.email === 'string'
+              ? coverLetterFields.contact.email
+              : '',
+          phone:
+            typeof coverLetterFields.contact.phone === 'string'
+              ? coverLetterFields.contact.phone
+              : '',
+          cityState:
+            typeof coverLetterFields.contact.location === 'string'
+              ? coverLetterFields.contact.location
+              : ''
+        }
         : undefined
 
     const sanitizedCoverLetterFields = (() => {
@@ -4610,10 +4610,10 @@ function App() {
       }
       const sanitizedContact = contactDetails
         ? {
-            ...coverLetterFields.contact,
-            lines: contactDetails.contactLines,
-            linkedin: ''
-          }
+          ...coverLetterFields.contact,
+          lines: contactDetails.contactLines,
+          linkedin: ''
+        }
         : undefined
       return {
         ...coverLetterFields,
@@ -5270,7 +5270,7 @@ function App() {
         }
         setPendingDownloadFile(null)
       }
-  },
+    },
     [
       downloadGeneratedAt,
       downloadTemplateMetadata,
@@ -5308,24 +5308,21 @@ function App() {
     const normalizedGeneratedAt = file.generatedAt || downloadGeneratedAt || ''
     const generatedAtLabel = formatDownloadTimestampLabel(normalizedGeneratedAt)
     const generatedAtIso = normalizeIsoTimestamp(normalizedGeneratedAt)
-    const cardClass = `p-5 rounded-2xl shadow-sm flex flex-col gap-4 border ${
-      presentation.cardBorder || 'border-purple-200'
-    } ${presentation.cardAccent || 'bg-white/85'}`
-    const badgeClass = `px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wide ${
-      presentation.badgeStyle || 'bg-purple-100 text-purple-700 border-purple-200'
-    }`
-    const buttonClass = `inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-      presentation.buttonStyle || 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500'
-    }`
+    const cardClass = `p-5 rounded-2xl shadow-sm flex flex-col gap-4 border ${presentation.cardBorder || 'border-purple-200'
+      } ${presentation.cardAccent || 'bg-white/85'}`
+    const badgeClass = `px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-wide ${presentation.badgeStyle || 'bg-purple-100 text-purple-700 border-purple-200'
+      }`
+    const buttonClass = `inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-offset-2 ${presentation.buttonStyle || 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500'
+      }`
     const secondaryButtonClass =
       'inline-flex items-center justify-center px-4 py-2 rounded-xl font-semibold border border-purple-200 text-purple-700 transition hover:text-purple-900 hover:border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-200 focus:ring-offset-2'
     const expiryDate = file.expiresAt ? new Date(file.expiresAt) : null
     const isExpiryValid = expiryDate && !Number.isNaN(expiryDate.getTime())
     const expiryLabel = isExpiryValid
       ? expiryDate.toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short'
-        })
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      })
       : null
     const downloadUrl = typeof file.url === 'string' ? file.url : ''
     const storageKey =
@@ -5372,21 +5369,20 @@ function App() {
     const directDownloadDisabled = !downloadUrl || (isExpired && !canRefresh) || downloadHasError
     const directDownloadFileName = !directDownloadDisabled
       ? deriveDownloadFileName(file, presentation, null, {
-          templateName: templateNameValue,
-          templateId: templateIdValue,
-          generatedAt: file.generatedAt,
-          contentTypeOverride: 'application/pdf',
-          forcePdfExtension: true,
-          versionId: file.versionId,
-          versionHash: file.versionHash,
-        })
+        templateName: templateNameValue,
+        templateId: templateIdValue,
+        generatedAt: file.generatedAt,
+        contentTypeOverride: 'application/pdf',
+        forcePdfExtension: true,
+        versionId: file.versionId,
+        versionHash: file.versionHash,
+      })
       : ''
     const downloadLinkLabel = presentation.linkLabel || 'Download File'
-    const downloadLinkClass = `text-sm font-semibold transition ${
-      directDownloadDisabled
+    const downloadLinkClass = `text-sm font-semibold transition ${directDownloadDisabled
         ? 'text-rose-500 cursor-not-allowed'
         : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
-    }`
+      }`
     const downloadLinkAriaLabel = [
       downloadLinkLabel,
       sessionLabel ? `Session ${sessionLabel}` : '',
@@ -5395,8 +5391,7 @@ function App() {
     ]
       .filter(Boolean)
       .join('. ')
-    const downloadButtonClass = `${buttonClass} ${
-      isCoverLetter
+    const downloadButtonClass = `${buttonClass} ${isCoverLetter
         ? isCoverLetterDownloadDisabled
           ? 'opacity-60 cursor-not-allowed'
           : ''
@@ -5405,7 +5400,7 @@ function App() {
           : isDownloadUnavailable
             ? 'opacity-60 cursor-not-allowed'
             : ''
-    }`
+      }`
     const downloadButtonLabel = (() => {
       if (downloadHasError) {
         return 'Link unavailable'
@@ -5583,13 +5578,12 @@ function App() {
         )}
         {isCoverLetter && (
           <p
-            className={`text-xs ${
-              coverEdited
+            className={`text-xs ${coverEdited
                 ? 'text-indigo-600 font-semibold'
                 : hasPreviewedCoverLetter
                   ? 'text-purple-500'
                   : 'text-amber-600 font-semibold'
-            }`}
+              }`}
           >
             {coverEdited
               ? 'Edits pending — download the refreshed PDF once you are happy with the text.'
@@ -5809,7 +5803,7 @@ function App() {
       .then((registration) => {
         registration.active?.postMessage({ type: 'RETRY_UPLOADS' })
       })
-      .catch(() => {})
+      .catch(() => { })
 
     return () => {
       navigator.serviceWorker.removeEventListener('message', handleMessage)
@@ -6053,7 +6047,7 @@ function App() {
       if (response.status === 202 && data?.queued) {
         setQueuedMessage(
           data.message ||
-            'You are offline. The upload will resume automatically once you reconnect.'
+          'You are offline. The upload will resume automatically once you reconnect.'
         )
         return
       }
@@ -6669,19 +6663,19 @@ function App() {
         }
         const resources = Array.isArray(entry?.resources)
           ? entry.resources
-              .map((item) => {
-                if (!item || typeof item !== 'object') {
-                  return null
-                }
-                const url = typeof item.url === 'string' ? item.url.trim() : ''
-                if (!url) {
-                  return null
-                }
-                const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url
-                const description = typeof item.description === 'string' ? item.description.trim() : ''
-                return { title, url, description }
-              })
-              .filter(Boolean)
+            .map((item) => {
+              if (!item || typeof item !== 'object') {
+                return null
+              }
+              const url = typeof item.url === 'string' ? item.url.trim() : ''
+              if (!url) {
+                return null
+              }
+              const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : url
+              const description = typeof item.description === 'string' ? item.description.trim() : ''
+              return { title, url, description }
+            })
+            .filter(Boolean)
           : []
         if (resources.length === 0) {
           return null
@@ -6856,12 +6850,12 @@ function App() {
 
   const showDeltaSummary = Boolean(
     match ||
-      (certificateInsights &&
-        ((certificateInsights.known && certificateInsights.known.length > 0) ||
-          (certificateInsights.suggestions && certificateInsights.suggestions.length > 0) ||
-          certificateInsights.manualEntryRequired)) ||
-      manualCertificatesData.length > 0 ||
-      changeLog.length > 0
+    (certificateInsights &&
+      ((certificateInsights.known && certificateInsights.known.length > 0) ||
+        (certificateInsights.suggestions && certificateInsights.suggestions.length > 0) ||
+        certificateInsights.manualEntryRequired)) ||
+    manualCertificatesData.length > 0 ||
+    changeLog.length > 0
   )
 
   const rescoreAfterImprovement = useCallback(
@@ -7310,11 +7304,11 @@ function App() {
             prev.map((item) =>
               item.id === id
                 ? {
-                    ...item,
-                    rescorePending: false,
-                    scoreDelta: deltaValue,
-                    rescoreError: ''
-                  }
+                  ...item,
+                  rescorePending: false,
+                  scoreDelta: deltaValue,
+                  rescoreError: ''
+                }
                 : item
             )
           )
@@ -7336,10 +7330,10 @@ function App() {
             prev.map((item) =>
               item.id === id
                 ? {
-                    ...item,
-                    rescorePending: false,
-                    rescoreError: err.message || 'Unable to refresh ATS scores.'
-                  }
+                  ...item,
+                  rescorePending: false,
+                  rescoreError: err.message || 'Unable to refresh ATS scores.'
+                }
                 : item
             )
           )
@@ -7553,23 +7547,23 @@ function App() {
             return [entryPayload, ...prev]
           })
 
-        try {
-          await persistChangeLogEntry(entryPayload)
-        } catch (err) {
-          console.error('Persisting change log entry failed', err)
-          const { source: serviceErrorSource, code: errorCode } =
-            deriveServiceContextFromError(err)
-          const { logs: persistLogs, requestId: persistRequestId } = extractErrorMetadata(err)
-          setError(err.message || 'Unable to store the change log entry.', {
-            serviceError: serviceErrorSource,
-            errorCode,
-            logs: persistLogs,
-            requestId: persistRequestId,
-            stage: 'enhance'
-          })
-          setChangeLog(previousChangeLog || [])
+          try {
+            await persistChangeLogEntry(entryPayload)
+          } catch (err) {
+            console.error('Persisting change log entry failed', err)
+            const { source: serviceErrorSource, code: errorCode } =
+              deriveServiceContextFromError(err)
+            const { logs: persistLogs, requestId: persistRequestId } = extractErrorMetadata(err)
+            setError(err.message || 'Unable to store the change log entry.', {
+              serviceError: serviceErrorSource,
+              errorCode,
+              logs: persistLogs,
+              requestId: persistRequestId,
+              stage: 'enhance'
+            })
+            setChangeLog(previousChangeLog || [])
+          }
         }
-      }
 
         pendingImprovementRescoreRef.current = [
           ...pendingImprovementRescoreRef.current.filter((entry) => entry?.id !== id),
@@ -7770,12 +7764,12 @@ function App() {
         prev.map((item) =>
           item.id === historyEntry.suggestionId
             ? {
-                ...item,
-                accepted: false,
-                rescorePending: false,
-                rescoreError: '',
-                scoreDelta: null
-              }
+              ...item,
+              accepted: false,
+              rescorePending: false,
+              rescoreError: '',
+              scoreDelta: null
+            }
             : item
         )
       )
@@ -8074,7 +8068,7 @@ function App() {
         typeof data.selectionProbabilityDelta === 'number'
           ? data.selectionProbabilityDelta
           : typeof probabilityBeforeValue === 'number' &&
-              typeof probabilityAfterValue === 'number'
+            typeof probabilityAfterValue === 'number'
             ? probabilityAfterValue - probabilityBeforeValue
             : null
       const probabilityFactors = Array.isArray(data.selectionProbabilityFactors)
@@ -8726,8 +8720,8 @@ function App() {
         : []
       revertResumeSkills = Array.isArray(historyEntry.resumeSkillsBefore)
         ? historyEntry.resumeSkillsBefore
-            .map((item) => (typeof item === 'string' ? item.trim() : ''))
-            .filter(Boolean)
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter(Boolean)
         : []
     }
 
@@ -8751,12 +8745,12 @@ function App() {
         prev.map((item) =>
           item.id === id
             ? {
-                ...item,
-                accepted: false,
-                rescorePending: shouldRescore,
-                rescoreError: '',
-                scoreDelta: null
-              }
+              ...item,
+              accepted: false,
+              rescorePending: shouldRescore,
+              rescoreError: '',
+              scoreDelta: null
+            }
             : item
         )
       )
@@ -9036,24 +9030,24 @@ function App() {
   }, [coverLetterEditor, downloadTemplateMetadata, templateContext])
   const coverLetterEditorDraftText = coverLetterEditor
     ? resolveCoverLetterDraftText(
-        coverLetterDrafts,
-        coverLetterOriginals,
-        coverLetterEditorType,
-        coverLetterEditorFile
-      )
+      coverLetterDrafts,
+      coverLetterOriginals,
+      coverLetterEditorType,
+      coverLetterEditorFile
+    )
     : ''
   const coverLetterEditorOriginalText = coverLetterEditor
     ? coverLetterOriginals[coverLetterEditorType] ??
-      getCoverLetterTextFromFile(coverLetterEditorFile)
+    getCoverLetterTextFromFile(coverLetterEditorFile)
     : ''
   const coverLetterEditorHasChanges = Boolean(
     coverLetterEditor && coverLetterEditorDraftText !== coverLetterEditorOriginalText
   )
   const coverLetterEditorWordCount = coverLetterEditorDraftText.trim()
     ? coverLetterEditorDraftText
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean).length
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length
     : 0
 
   const handleCoverEditorChange = useCallback(
@@ -9287,397 +9281,391 @@ function App() {
 
         {currentPhase === 'upload' && (
           <section className="bg-white/80 backdrop-blur rounded-3xl border border-purple-200/60 shadow-xl p-6 md:p-8 space-y-6">
-          <header className="space-y-2">
-            <p className="caps-label text-xs font-semibold text-purple-500">Step 1 · Upload</p>
-            <h2 className="text-2xl font-bold text-purple-900">Upload your resume &amp; target JD</h2>
-            <p className="text-sm text-purple-700/80">
-              Drag in your CV, add the job description, and we&apos;ll automatically score all ATS metrics as soon as both are in place.
-            </p>
-          </header>
-          <div
-            className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={handleUploadAreaClick}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                handleUploadAreaClick()
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label="Upload resume by dragging and dropping or browsing for a file"
-          >
-            <input
-              type="file"
-              accept=".pdf,.doc,.docx"
-              onChange={handleFileChange}
-              className="hidden"
-              id="cv-input"
-              ref={cvInputRef}
-            />
-            <div className="flex flex-col items-center gap-3">
-              {cvFile ? (
-                <div className="space-y-3">
-                  <p className="text-purple-900 font-semibold break-all">{cvFile.name}</p>
-                  <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
-                    {formattedCvFileSize && (
-                      <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1 text-purple-600">
-                        File size · {formattedCvFileSize}
-                      </span>
-                    )}
-                    {uploadStatusDetail.label && (
-                      <span
-                        className={`rounded-full border px-3 py-1 ${uploadStatusDetail.badgeClass}`}
-                      >
-                        Status · {uploadStatusDetail.label}
-                      </span>
-                    )}
+            <header className="space-y-2">
+              <p className="caps-label text-xs font-semibold text-purple-500">Step 1 · Upload</p>
+              <h2 className="text-2xl font-bold text-purple-900">Upload your resume &amp; target JD</h2>
+              <p className="text-sm text-purple-700/80">
+                Drag in your CV, add the job description, and we&apos;ll automatically score all ATS metrics as soon as both are in place.
+              </p>
+            </header>
+            <div
+              className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={handleUploadAreaClick}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleUploadAreaClick()
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label="Upload resume by dragging and dropping or browsing for a file"
+            >
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleFileChange}
+                className="hidden"
+                id="cv-input"
+                ref={cvInputRef}
+              />
+              <div className="flex flex-col items-center gap-3">
+                {cvFile ? (
+                  <div className="space-y-3">
+                    <p className="text-purple-900 font-semibold break-all">{cvFile.name}</p>
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
+                      {formattedCvFileSize && (
+                        <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1 text-purple-600">
+                          File size · {formattedCvFileSize}
+                        </span>
+                      )}
+                      {uploadStatusDetail.label && (
+                        <span
+                          className={`rounded-full border px-3 py-1 ${uploadStatusDetail.badgeClass}`}
+                        >
+                          Status · {uploadStatusDetail.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                ) : (
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-purple-800">Drag &amp; drop your CV</p>
+                    <p className="text-sm text-purple-600">or click to browse (PDF, DOC, or DOCX · max 5 MB)</p>
+                  </div>
+                )}
+                <div className="inline-flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-purple-600">
+                  <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Drag &amp; drop</span>
+                  <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Browse files</span>
                 </div>
-              ) : (
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold text-purple-800">Drag &amp; drop your CV</p>
-                  <p className="text-sm text-purple-600">or click to browse (PDF, DOC, or DOCX · max 5 MB)</p>
-                </div>
-              )}
-              <div className="inline-flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-purple-600">
-                <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Drag &amp; drop</span>
-                <span className="rounded-full border border-purple-200/80 bg-white/80 px-3 py-1">Browse files</span>
+                {!cvFile && uploadStatusDetail.label && (
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${uploadStatusDetail.badgeClass}`}
+                  >
+                    {uploadStatusDetail.label}
+                  </span>
+                )}
               </div>
-              {!cvFile && uploadStatusDetail.label && (
-                <span
-                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${uploadStatusDetail.badgeClass}`}
-                >
-                  {uploadStatusDetail.label}
-                </span>
-              )}
+              <p className="mt-4 text-xs font-medium text-purple-600">{uploadStatusMessage}</p>
             </div>
-            <p className="mt-4 text-xs font-medium text-purple-600">{uploadStatusMessage}</p>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2 space-y-2">
-              <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
-                Paste Full Job Description{' '}
-                <span className={manualJobDescriptionHasError ? 'text-rose-600' : 'text-purple-500'}>*</span>
-              </label>
-              <textarea
-                id="manual-job-description"
-                value={manualJobDescription}
-                onChange={(e) => setManualJobDescription(e.target.value)}
-                placeholder="Paste the entire job post here."
-                className={`w-full h-32 p-3 rounded-xl border focus:outline-none focus:ring-2 ${manualJobDescriptionHasError
-                  ? 'border-rose-300 focus:ring-rose-400'
-                  : 'border-purple-200 focus:ring-purple-400'
-                }`}
-                required
-                ref={manualJobDescriptionRef}
-              />
-              <p
-                className={`text-xs ${
-                  manualJobDescriptionHasError
-                    ? 'text-rose-600 font-semibold'
-                    : 'text-purple-500'
-                }`}
-              >
-                {manualJobDescriptionHelperText}
-              </p>
-              {hasManualJobDescriptionInput && (
-                <JobDescriptionPreview text={manualJobDescription} />
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-sm font-semibold text-purple-700" htmlFor="manual-job-description">
+                  Paste Full Job Description{' '}
+                  <span className={manualJobDescriptionHasError ? 'text-rose-600' : 'text-purple-500'}>*</span>
+                </label>
+                <textarea
+                  id="manual-job-description"
+                  value={manualJobDescription}
+                  onChange={(e) => setManualJobDescription(e.target.value)}
+                  placeholder="Paste the entire job post here."
+                  className={`w-full h-32 p-3 rounded-xl border focus:outline-none focus:ring-2 ${manualJobDescriptionHasError
+                    ? 'border-rose-300 focus:ring-rose-400'
+                    : 'border-purple-200 focus:ring-purple-400'
+                    }`}
+                  required
+                  ref={manualJobDescriptionRef}
+                />
+                <p
+                  className={`text-xs ${manualJobDescriptionHasError
+                      ? 'text-rose-600 font-semibold'
+                      : 'text-purple-500'
+                    }`}
+                >
+                  {manualJobDescriptionHelperText}
+                </p>
+                {hasManualJobDescriptionInput && (
+                  <JobDescriptionPreview text={manualJobDescription} />
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-purple-700" htmlFor="manual-certificates">
+                  Manual Certificates
+                </label>
+                <textarea
+                  id="manual-certificates"
+                  value={manualCertificatesInput}
+                  onChange={(e) => setManualCertificatesInput(e.target.value)}
+                  placeholder="e.g. AWS Certified Solutions Architect - Amazon; PMP by PMI"
+                  className="w-full h-24 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+                <p className="text-xs text-purple-500">
+                  Paste certificates if Credly is unavailable. Separate entries with commas or new
+                  lines.
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-purple-700" htmlFor="manual-certificates">
-                Manual Certificates
-              </label>
-              <textarea
-                id="manual-certificates"
-                value={manualCertificatesInput}
-                onChange={(e) => setManualCertificatesInput(e.target.value)}
-                placeholder="e.g. AWS Certified Solutions Architect - Amazon; PMP by PMI"
-                className="w-full h-24 p-3 rounded-xl border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-              />
-              <p className="text-xs text-purple-500">
-                Paste certificates if Credly is unavailable. Separate entries with commas or new
-                lines.
-              </p>
-            </div>
-          </div>
 
           </section>
         )}
 
         {filteredDashboardStageOptions.length > 0 && (
           <section className="space-y-5" aria-label="Improvement dashboard">
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            {filteredDashboardStageOptions.map((stage) => {
-              const isActive = activeDashboardStage === stage.key
-              const badgeLabel =
-                stage.key === 'score'
-                  ? stage.ready
-                    ? 'Ready'
-                    : 'Pending'
-                  : stage.count > 99
-                    ? '99+'
-                    : String(stage.count ?? 0)
-              const badgeTone = isActive
-                ? 'bg-white/20 text-white'
-                : stage.ready
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-slate-100 text-slate-500'
-              return (
-                <button
-                  key={stage.key}
-                  type="button"
-                  onClick={() => setActiveDashboardStage(stage.key)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
-                    isActive
-                      ? 'border-purple-600 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30'
-                      : 'border-slate-200 bg-white/80 text-slate-600 hover:border-purple-300 hover:text-purple-700'
-                  }`}
-                  aria-pressed={isActive ? 'true' : 'false'}
-                >
-                  <span>{stage.label}</span>
-                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}>
-                    {badgeLabel}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          {currentPhase === 'score' && activeDashboardStage === 'score' && (
-            <DashboardStage
-              stageLabel="Score Stage"
-              title="Score Overview"
-              description="Monitor baseline ATS alignment and rerun scoring after each accepted update."
-              accent="indigo"
-              actions={
-                <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              {filteredDashboardStageOptions.map((stage) => {
+                const isActive = activeDashboardStage === stage.key
+                const badgeLabel =
+                  stage.key === 'score'
+                    ? stage.ready
+                      ? 'Ready'
+                      : 'Pending'
+                    : stage.count > 99
+                      ? '99+'
+                      : String(stage.count ?? 0)
+                const badgeTone = isActive
+                  ? 'bg-white/20 text-white'
+                  : stage.ready
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-slate-100 text-slate-500'
+                return (
                   <button
+                    key={stage.key}
                     type="button"
-                    onClick={handleScoreSubmit}
-                    disabled={rescoreDisabled}
-                    className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
-                      rescoreDisabled
-                        ? 'bg-indigo-300 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
-                    }`}
-                    aria-busy={isProcessing ? 'true' : 'false'}
+                    onClick={() => setActiveDashboardStage(stage.key)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${isActive
+                        ? 'border-purple-600 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30'
+                        : 'border-slate-200 bg-white/80 text-slate-600 hover:border-purple-300 hover:text-purple-700'
+                      }`}
+                    aria-pressed={isActive ? 'true' : 'false'}
                   >
-                    {rescoreButtonLabel}
+                    <span>{stage.label}</span>
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}>
+                      {badgeLabel}
+                    </span>
                   </button>
-                  {rescoreHelperMessage && (
-                    <p className="text-xs font-semibold text-indigo-700/80 text-right">
-                      {rescoreHelperMessage}
-                    </p>
-                  )}
-                </div>
-              }
-            >
-              {scoreDashboardHasContent ? (
-                <>
-                  <ATSScoreDashboard
-                    metrics={scoreBreakdown}
-                    baselineMetrics={baselineScoreBreakdown}
-                    match={match}
-                    metricActionMap={currentPhase === 'enhance' ? metricImprovementActionMap : null}
-                    onImproveMetric={currentPhase === 'enhance' ? handleImprovementClick : undefined}
-                    improvementState={
-                      currentPhase === 'enhance' ? metricImprovementState : {}
-                    }
-                  />
-                  {scoreDashboardReady && showDeltaSummary && (
-                    <DeltaSummaryPanel summary={deltaSummary} />
-                  )}
-                </>
-              ) : (
-                <div className="rounded-3xl border border-dashed border-indigo-200/80 bg-white/70 p-6 text-sm text-indigo-700">
-                  {isProcessing
-                    ? 'Scoring in progress. Sit tight while we calculate your ATS metrics and current chances.'
-                    : 'Upload your resume and job description to generate your ATS scores automatically.'}
-                </div>
-              )}
-            </DashboardStage>
-          )}
+                )
+              })}
+            </div>
 
-          {isEnhancementReviewPhase && activeDashboardStage === 'suggestions' && (
-            <DashboardStage
-              stageLabel="Suggestions Stage"
-              title="Review AI Suggestions"
-              description="Work through targeted improvements and accept the updates you like."
-            >
-              {improvementResults.length > 0 ? (
-                <>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex-1 rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
-                      We added JD-aligned skills and highlights so you can prep for interview questions. Use the cards below to
-                      accept, reject, or preview each update.
-                    </div>
-                    {hasPendingImprovementDecisions && (
-                      <button
-                        type="button"
-                        onClick={handleAcceptAllImprovements}
-                        disabled={improvementButtonsDisabled}
-                        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${
-                          improvementButtonsDisabled
-                            ? 'bg-purple-300 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
+            {currentPhase === 'score' && activeDashboardStage === 'score' && (
+              <DashboardStage
+                stageLabel="Score Stage"
+                title="Score Overview"
+                description="Monitor baseline ATS alignment and rerun scoring after each accepted update."
+                accent="indigo"
+                actions={
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      onClick={handleScoreSubmit}
+                      disabled={rescoreDisabled}
+                      className={`inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${rescoreDisabled
+                          ? 'bg-indigo-300 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
                         }`}
-                        aria-busy={isBulkAccepting ? 'true' : 'false'}
-                      >
-                        {isBulkAccepting ? 'Accepting…' : 'Accept all pending'}
-                      </button>
+                      aria-busy={isProcessing ? 'true' : 'false'}
+                    >
+                      {rescoreButtonLabel}
+                    </button>
+                    {rescoreHelperMessage && (
+                      <p className="text-xs font-semibold text-indigo-700/80 text-right">
+                        {rescoreHelperMessage}
+                      </p>
                     )}
                   </div>
-                  {enhanceAllSummaryText && (
-                    <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-sm text-emerald-900">
-                      <p className="text-sm font-semibold text-emerald-700">Enhance All summary</p>
-                      <p className="mt-1 leading-relaxed">
-                        Combined updates — {enhanceAllSummaryText}
-                      </p>
+                }
+              >
+                {scoreDashboardHasContent ? (
+                  <>
+                    <ATSScoreDashboard
+                      metrics={scoreBreakdown}
+                      baselineMetrics={baselineScoreBreakdown}
+                      match={match}
+                      metricActionMap={currentPhase === 'enhance' ? metricImprovementActionMap : null}
+                      onImproveMetric={currentPhase === 'enhance' ? handleImprovementClick : undefined}
+                      improvementState={
+                        currentPhase === 'enhance' ? metricImprovementState : {}
+                      }
+                    />
+                    {scoreDashboardReady && showDeltaSummary && (
+                      <DeltaSummaryPanel summary={deltaSummary} />
+                    )}
+                  </>
+                ) : (
+                  <div className="rounded-3xl border border-dashed border-indigo-200/80 bg-white/70 p-6 text-sm text-indigo-700">
+                    {isProcessing
+                      ? 'Scoring in progress. Sit tight while we calculate your ATS metrics and current chances.'
+                      : 'Upload your resume and job description to generate your ATS scores automatically.'}
+                  </div>
+                )}
+              </DashboardStage>
+            )}
+
+            {isEnhancementReviewPhase && activeDashboardStage === 'suggestions' && (
+              <DashboardStage
+                stageLabel="Suggestions Stage"
+                title="Review AI Suggestions"
+                description="Work through targeted improvements and accept the updates you like."
+              >
+                {improvementResults.length > 0 ? (
+                  <>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex-1 rounded-2xl border border-purple-200/60 bg-purple-50/60 p-4 text-sm text-purple-800">
+                        We added JD-aligned skills and highlights so you can prep for interview questions. Use the cards below to
+                        accept, reject, or preview each update.
+                      </div>
+                      {hasPendingImprovementDecisions && (
+                        <button
+                          type="button"
+                          onClick={handleAcceptAllImprovements}
+                          disabled={improvementButtonsDisabled}
+                          className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 ${improvementButtonsDisabled
+                              ? 'bg-purple-300 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700'
+                            }`}
+                          aria-busy={isBulkAccepting ? 'true' : 'false'}
+                        >
+                          {isBulkAccepting ? 'Accepting…' : 'Accept all pending'}
+                        </button>
+                      )}
+                    </div>
+                    {enhanceAllSummaryText && (
+                      <div className="rounded-2xl border border-emerald-200/70 bg-emerald-50/70 p-4 text-sm text-emerald-900">
+                        <p className="text-sm font-semibold text-emerald-700">Enhance All summary</p>
+                        <p className="mt-1 leading-relaxed">
+                          Combined updates — {enhanceAllSummaryText}
+                        </p>
+                      </div>
+                    )}
+                    <div className="space-y-4">
+                      {improvementResults.map((item) => (
+                        <ImprovementCard
+                          key={item.id}
+                          suggestion={item}
+                          onReject={() => handleRejectImprovement(item.id)}
+                          onPreview={() => handlePreviewImprovement(item)}
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+                    {improvementsUnlocked
+                      ? 'Review the Step 2 ATS dashboard, then choose an improvement above to preview tailored rewrites before you generate downloads.'
+                      : 'Complete Step 2 (Score) to populate your ATS dashboard. Once the metrics are ready, you can unlock focused improvement options tailored to the analysis.'}
+                  </div>
+                )}
+              </DashboardStage>
+            )}
+
+            {isEnhancementReviewPhase && activeDashboardStage === 'changelog' && (
+              <DashboardStage
+                stageLabel="Change Log Stage"
+                title="Track accepted changes"
+                description="Review every applied enhancement and download previous versions when needed."
+                accent="slate"
+                actions={
+                  <span
+                    className={`text-xs font-semibold rounded-full border px-3 py-1 ${changeLogCount > 0
+                        ? 'border-slate-200 bg-white/70 text-slate-600'
+                        : 'border-slate-200 bg-white/50 text-slate-400'
+                      }`}
+                  >
+                    {changeLogCount} update{changeLogCount === 1 ? '' : 's'}
+                  </span>
+                }
+              >
+                <div className="space-y-4">
+                  {(Array.isArray(changeLogSummaryData?.highlights) && changeLogSummaryData.highlights.length > 0) ||
+                    (Array.isArray(changeLogSummaryData?.categories) && changeLogSummaryData.categories.length > 0) ||
+                    (changeLogSummaryContext &&
+                      Object.values(changeLogSummaryContext).some(
+                        (value) => typeof value === 'string' && value.trim()
+                      )) ? (
+                    <ChangeLogSummaryPanel
+                      summary={changeLogSummaryData}
+                      context={changeLogSummaryContext}
+                    />
+                  ) : null}
+
+                  {changeLog.length > 0 ? (
+                    <ul className="space-y-3">
+                      {changeLog.map((entry) => {
+                        const historyEntry = resumeHistoryMap.get(entry.id)
+                        const reverted = Boolean(entry.reverted)
+                        const revertedAtLabel = (() => {
+                          if (!reverted) return ''
+                          const timestamp = entry.revertedAt ? new Date(entry.revertedAt) : null
+                          if (!timestamp || Number.isNaN(timestamp.getTime())) {
+                            return 'Reverted'
+                          }
+                          return `Reverted ${timestamp.toLocaleString()}`
+                        })()
+                        return (
+                          <li
+                            key={entry.id}
+                            className="rounded-2xl border border-slate-200/70 bg-white/85 shadow-sm p-4 space-y-2"
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="text-base font-semibold text-slate-900">{entry.title}</p>
+                                <p className="text-sm text-slate-700/90 leading-relaxed">{entry.detail}</p>
+                              </div>
+                              <span
+                                className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${changeLabelStyles[entry.label] || changeLabelStyles.fixed
+                                  }`}
+                              >
+                                {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
+                              </span>
+                            </div>
+                            {historyEntry && (
+                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadPreviousVersion(entry.id)}
+                                  className="px-3 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 transition"
+                                >
+                                  Download previous version
+                                </button>
+                                {!reverted && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevertChange(entry.id)}
+                                    className="px-3 py-1.5 rounded-full border border-rose-200 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:text-rose-700 transition"
+                                  >
+                                    Undo change
+                                  </button>
+                                )}
+                                {reverted && (
+                                  <span className="text-xs font-semibold text-rose-600">{revertedAtLabel}</span>
+                                )}
+                              </div>
+                            )}
+                            {(entry.before ||
+                              entry.after ||
+                              (entry.summarySegments && entry.summarySegments.length > 0) ||
+                              (entry.addedItems && entry.addedItems.length > 0) ||
+                              (entry.removedItems && entry.removedItems.length > 0) ||
+                              (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
+                                <ChangeComparisonView
+                                  before={entry.before}
+                                  after={entry.after}
+                                  summarySegments={entry.summarySegments}
+                                  addedItems={entry.addedItems}
+                                  removedItems={entry.removedItems}
+                                  itemizedChanges={entry.itemizedChanges}
+                                  categoryChangelog={entry.categoryChangelog}
+                                />
+                              )}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-4 text-sm text-slate-600">
+                      Accept improvements to build your change history and compare every revision.
                     </div>
                   )}
-                  <div className="space-y-4">
-                    {improvementResults.map((item) => (
-                      <ImprovementCard
-                        key={item.id}
-                        suggestion={item}
-                        onReject={() => handleRejectImprovement(item.id)}
-                        onPreview={() => handlePreviewImprovement(item)}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
-                  {improvementsUnlocked
-                    ? 'Review the Step 2 ATS dashboard, then choose an improvement above to preview tailored rewrites before you generate downloads.'
-                    : 'Complete Step 2 (Score) to populate your ATS dashboard. Once the metrics are ready, you can unlock focused improvement options tailored to the analysis.'}
                 </div>
-              )}
-            </DashboardStage>
-          )}
-
-          {isEnhancementReviewPhase && activeDashboardStage === 'changelog' && (
-            <DashboardStage
-              stageLabel="Change Log Stage"
-              title="Track accepted changes"
-              description="Review every applied enhancement and download previous versions when needed."
-              accent="slate"
-              actions={
-                <span
-                  className={`text-xs font-semibold rounded-full border px-3 py-1 ${
-                    changeLogCount > 0
-                      ? 'border-slate-200 bg-white/70 text-slate-600'
-                      : 'border-slate-200 bg-white/50 text-slate-400'
-                  }`}
-                >
-                  {changeLogCount} update{changeLogCount === 1 ? '' : 's'}
-                </span>
-              }
-            >
-              <div className="space-y-4">
-                {(Array.isArray(changeLogSummaryData?.highlights) && changeLogSummaryData.highlights.length > 0) ||
-                (Array.isArray(changeLogSummaryData?.categories) && changeLogSummaryData.categories.length > 0) ||
-                (changeLogSummaryContext &&
-                  Object.values(changeLogSummaryContext).some(
-                    (value) => typeof value === 'string' && value.trim()
-                  )) ? (
-                  <ChangeLogSummaryPanel
-                    summary={changeLogSummaryData}
-                    context={changeLogSummaryContext}
-                  />
-                ) : null}
-
-                {changeLog.length > 0 ? (
-                  <ul className="space-y-3">
-                    {changeLog.map((entry) => {
-                    const historyEntry = resumeHistoryMap.get(entry.id)
-                    const reverted = Boolean(entry.reverted)
-                    const revertedAtLabel = (() => {
-                      if (!reverted) return ''
-                      const timestamp = entry.revertedAt ? new Date(entry.revertedAt) : null
-                      if (!timestamp || Number.isNaN(timestamp.getTime())) {
-                        return 'Reverted'
-                      }
-                      return `Reverted ${timestamp.toLocaleString()}`
-                    })()
-                    return (
-                      <li
-                        key={entry.id}
-                        className="rounded-2xl border border-slate-200/70 bg-white/85 shadow-sm p-4 space-y-2"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="text-base font-semibold text-slate-900">{entry.title}</p>
-                            <p className="text-sm text-slate-700/90 leading-relaxed">{entry.detail}</p>
-                          </div>
-                          <span
-                            className={`text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full ${
-                              changeLabelStyles[entry.label] || changeLabelStyles.fixed
-                            }`}
-                          >
-                            {CHANGE_TYPE_LABELS[entry.label] || CHANGE_TYPE_LABELS.fixed}
-                          </span>
-                        </div>
-                        {historyEntry && (
-                          <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadPreviousVersion(entry.id)}
-                              className="px-3 py-1.5 rounded-full border border-slate-200 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:text-slate-900 transition"
-                            >
-                              Download previous version
-                            </button>
-                            {!reverted && (
-                              <button
-                                type="button"
-                                onClick={() => handleRevertChange(entry.id)}
-                                className="px-3 py-1.5 rounded-full border border-rose-200 text-xs font-semibold text-rose-600 hover:border-rose-300 hover:text-rose-700 transition"
-                              >
-                                Undo change
-                              </button>
-                            )}
-                            {reverted && (
-                              <span className="text-xs font-semibold text-rose-600">{revertedAtLabel}</span>
-                            )}
-                          </div>
-                        )}
-                        {(entry.before ||
-                          entry.after ||
-                          (entry.summarySegments && entry.summarySegments.length > 0) ||
-                          (entry.addedItems && entry.addedItems.length > 0) ||
-                          (entry.removedItems && entry.removedItems.length > 0) ||
-                          (entry.itemizedChanges && entry.itemizedChanges.length > 0)) && (
-                          <ChangeComparisonView
-                            before={entry.before}
-                            after={entry.after}
-                            summarySegments={entry.summarySegments}
-                            addedItems={entry.addedItems}
-                            removedItems={entry.removedItems}
-                            itemizedChanges={entry.itemizedChanges}
-                            categoryChangelog={entry.categoryChangelog}
-                          />
-                        )}
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-white/70 p-4 text-sm text-slate-600">
-                  Accept improvements to build your change history and compare every revision.
-                </div>
-              )}
-              </div>
-            </DashboardStage>
-          )}
+              </DashboardStage>
+            )}
           </section>
         )}
 
-          {currentPhase === 'score' && selectionInsights && (
+        {currentPhase === 'score' && selectionInsights && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-emerald-200/70 shadow-xl p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
@@ -9813,7 +9801,7 @@ function App() {
           </section>
         )}
 
-          {currentPhase === 'score' && analysisHighlights.length > 0 && (
+        {currentPhase === 'score' && analysisHighlights.length > 0 && (
           <section className="space-y-4 rounded-3xl bg-white/85 border border-purple-200/70 shadow-xl p-6">
             <div>
               <h2 className="text-xl font-semibold text-purple-900">Match Checklist</h2>
@@ -9825,9 +9813,8 @@ function App() {
               {analysisHighlights.map((item) => (
                 <li
                   key={item.key}
-                  className={`rounded-2xl border px-4 py-3 shadow-sm ${
-                    highlightToneStyles[item.tone] || highlightToneStyles.info
-                  }`}
+                  className={`rounded-2xl border px-4 py-3 shadow-sm ${highlightToneStyles[item.tone] || highlightToneStyles.info
+                    }`}
                 >
                   <p className="text-sm font-semibold">{item.title}</p>
                   <p className="mt-1 text-sm leading-relaxed">{item.message}</p>
@@ -9837,7 +9824,7 @@ function App() {
           </section>
         )}
 
-          {currentPhase === 'score' && match && (
+        {currentPhase === 'score' && match && (
           <section className="space-y-4">
             <div className="rounded-3xl bg-white/80 backdrop-blur border border-purple-200/70 shadow-xl p-6 space-y-4">
               <h3 className="text-xl font-semibold text-purple-900">Skill Coverage Snapshot</h3>
@@ -9957,11 +9944,10 @@ function App() {
                 type="button"
                 onClick={() => handleImprovementClick('improve-certifications')}
                 disabled={improvementButtonsDisabled}
-                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
-                  improvementButtonsDisabled
+                className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${improvementButtonsDisabled
                     ? 'bg-blue-300 cursor-not-allowed'
                     : 'bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700'
-                }`}
+                  }`}
                 aria-busy={activeImprovement === 'improve-certifications' ? 'true' : 'false'}
               >
                 {activeImprovement === 'improve-certifications'
@@ -10001,13 +9987,12 @@ function App() {
                         type="button"
                         onClick={() => handleImprovementClick(action.key)}
                         disabled={buttonDisabled}
-                        className={`rounded-2xl border border-purple-200 bg-white/80 p-4 text-left shadow-sm hover:shadow-lg transition ${
-                          isActive
+                        className={`rounded-2xl border border-purple-200 bg-white/80 p-4 text-left shadow-sm hover:shadow-lg transition ${isActive
                             ? 'opacity-70 cursor-wait'
                             : buttonDisabled
                               ? 'opacity-60 cursor-not-allowed'
                               : 'hover:-translate-y-0.5'
-                        }`}
+                          }`}
                         aria-busy={isActive}
                         aria-disabled={buttonDisabled}
                         title={
@@ -10085,9 +10070,8 @@ function App() {
                   >
                     {improvementBusy && activeImprovement === 'batch'
                       ? 'Generating…'
-                      : `Generate selected${
-                          hasSelectedImprovements ? ` (${selectedImprovementCount})` : ''
-                        }`}
+                      : `Generate selected${hasSelectedImprovements ? ` (${selectedImprovementCount})` : ''
+                      }`}
                   </button>
                 </div>
                 {improvementsUnlocked && improvementResults.length === 0 && (
@@ -10166,25 +10150,25 @@ function App() {
           improvementsUnlocked &&
           improvementsRequireAcceptance &&
           !hasAcceptedImprovement && (
-          <section className="space-y-4">
-            <div className="space-y-1">
-              <h2 className="text-2xl font-bold text-purple-900">Review Improvements First</h2>
-              <p className="text-sm text-purple-700/80">
-                Apply at least one AI-generated improvement to unlock the enhanced CV and cover letter downloads.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
-              Explore the targeted fixes above, accept the ones you like, and then return here to generate the upgraded documents.
-            </div>
-          </section>
-        )}
-
-          {currentPhase === 'generate' && outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
             <section className="space-y-4">
-              <header className="space-y-1">
-                <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Generate</p>
-                <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
+              <div className="space-y-1">
+                <h2 className="text-2xl font-bold text-purple-900">Review Improvements First</h2>
                 <p className="text-sm text-purple-700/80">
+                  Apply at least one AI-generated improvement to unlock the enhanced CV and cover letter downloads.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-dashed border-purple-300 bg-white/70 p-4 text-sm text-purple-700">
+                Explore the targeted fixes above, accept the ones you like, and then return here to generate the upgraded documents.
+              </div>
+            </section>
+          )}
+
+        {currentPhase === 'generate' && outputFiles.length === 0 && improvementsUnlocked && canGenerateEnhancedDocs && (
+          <section className="space-y-4">
+            <header className="space-y-1">
+              <p className="caps-label text-xs font-semibold text-purple-500">Step 4 · Generate</p>
+              <h2 className="text-2xl font-bold text-purple-900">Generate Enhanced Documents</h2>
+              <p className="text-sm text-purple-700/80">
                 {improvementsRequireAcceptance
                   ? 'Apply the improvements you like, then create polished CV and cover letter downloads tailored to the JD.'
                   : 'Great news — no manual fixes were required. Generate polished CV and cover letter downloads tailored to the JD.'}
@@ -10213,12 +10197,12 @@ function App() {
           </section>
         )}
 
-          {currentPhase === 'download' && downloadsReady && (
-            <section className="space-y-5">
-              <header className="space-y-1">
-                <p className="caps-label text-xs font-semibold text-purple-500">Step 5 · Download</p>
-                <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
-                <p className="text-sm text-purple-700/80">
+        {currentPhase === 'download' && downloadsReady && (
+          <section className="space-y-5">
+            <header className="space-y-1">
+              <p className="caps-label text-xs font-semibold text-purple-500">Step 5 · Download</p>
+              <h2 className="text-2xl font-bold text-purple-900">Download Enhanced Documents</h2>
+              <p className="text-sm text-purple-700/80">
                 Download tailored cover letters plus your original and AI-enhanced CVs. Links remain active for 60 minutes.
               </p>
             </header>
@@ -10288,8 +10272,8 @@ function App() {
               : ''
             const previewRequiresConfirmation = Boolean(
               pendingDownloadFile &&
-                ((pendingDownloadKey && pendingDownloadKey === previewDownloadStateKey) ||
-                  (pendingDownloadFile.url && pendingDownloadFile.url === previewFile.url))
+              ((pendingDownloadKey && pendingDownloadKey === previewDownloadStateKey) ||
+                (pendingDownloadFile.url && pendingDownloadFile.url === previewFile.url))
             )
             const expiryDate = previewFile.expiresAt ? new Date(previewFile.expiresAt) : null
             const expiryValid = expiryDate && !Number.isNaN(expiryDate.getTime())
@@ -10320,21 +10304,20 @@ function App() {
               ''
             const previewDownloadFileName = previewHasUrl
               ? deriveDownloadFileName(previewFile, previewPresentation, null, {
-                  templateName: previewTemplateName,
-                  templateId: previewTemplateId,
-                  generatedAt: previewFile.generatedAt,
-                  contentTypeOverride: 'application/pdf',
-                  forcePdfExtension: true,
-                  versionId: previewFile.versionId,
-                  versionHash: previewFile.versionHash,
-                })
+                templateName: previewTemplateName,
+                templateId: previewTemplateId,
+                generatedAt: previewFile.generatedAt,
+                contentTypeOverride: 'application/pdf',
+                forcePdfExtension: true,
+                versionId: previewFile.versionId,
+                versionHash: previewFile.versionHash,
+              })
               : ''
             const previewDownloadLinkLabel = previewPresentation.linkLabel || 'Download File'
-            const previewDownloadLinkClass = `text-sm font-semibold transition ${
-              previewLinkDisabled
+            const previewDownloadLinkClass = `text-sm font-semibold transition ${previewLinkDisabled
                 ? 'text-rose-500 cursor-not-allowed'
                 : 'text-purple-700 hover:text-purple-900 underline decoration-purple-300 decoration-2 underline-offset-4'
-            }`
+              }`
 
             const downloadButtonLabel = (() => {
               if (previewHasError) return 'Link unavailable'
@@ -10452,11 +10435,10 @@ function App() {
                           await handleDownloadFile(previewFile)
                         }}
                         disabled={previewButtonDisabled}
-                        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
-                          previewButtonDisabled
+                        className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold text-white shadow focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${previewButtonDisabled
                             ? 'bg-purple-300 cursor-not-allowed'
                             : 'bg-purple-600 hover:bg-purple-700'
-                        }`}
+                          }`}
                       >
                         {downloadButtonLabel}
                       </button>
