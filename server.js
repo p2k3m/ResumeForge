@@ -4705,6 +4705,26 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
+  const event = req.apiGateway && req.apiGateway.event;
+  if (event && typeof event.path === 'string') {
+    const assetIndex = event.path.indexOf('/assets/');
+    if (assetIndex !== -1 && !req.path.includes('/assets/')) {
+      const correctPath = event.path.substring(assetIndex);
+      if (correctPath.endsWith(req.path)) {
+        logStructured('info', 'path_rewrite_fix', {
+          original: req.url,
+          fixed: correctPath,
+          eventPath: event.path
+        });
+        req.url = correctPath;
+        req.originalUrl = correctPath;
+      }
+    }
+  }
+  next();
+});
+
+app.use((req, res, next) => {
   logStructured('info', 'request_received', { path: req.path, method: req.method });
   next();
 });
