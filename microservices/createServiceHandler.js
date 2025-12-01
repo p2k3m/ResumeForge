@@ -95,6 +95,7 @@ export function createServiceHandler({
     if (!serverlessExpressInstance) {
       serverlessExpressInstance = configure({
         app,
+        binaryMimeTypes: binaryTypes,
         request: {
           binaryTypes,
         },
