@@ -4706,6 +4706,14 @@ app.use(cors(corsOptions));
 
 app.use((req, res, next) => {
   const event = req.apiGateway && req.apiGateway.event;
+  logStructured('info', 'middleware_event_debug', {
+    hasApiGateway: !!req.apiGateway,
+    hasEvent: !!event,
+    eventPath: event?.path,
+    reqPath: req.path,
+    reqUrl: req.url
+  });
+
   if (event && typeof event.path === 'string') {
     const assetIndex = event.path.indexOf('/assets/');
     if (assetIndex !== -1 && !req.path.includes('/assets/')) {
