@@ -167,7 +167,8 @@ describe('uploadHashedIndexAssets', () => {
     })
 
     const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
-    expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
+    expect(updatedIndex).toContain('id="resumeforge-cloudfront-metadata"')
+    expect(updatedIndex).toContain('type="application/json"')
     expect(updatedIndex).toContain('"url":"https://d109hwmzrqr39w.cloudfront.net"')
 
     const cssAlias = await fs.readFile(path.join(assetsDir, 'index-latest.css'), 'utf8')
@@ -431,7 +432,8 @@ describe('uploadHashedIndexAssets', () => {
     expect(result.prefix).toBe('static/client/prod/latest')
 
     const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
-    expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
+    expect(updatedIndex).toContain('id="resumeforge-cloudfront-metadata"')
+    expect(updatedIndex).toContain('type="application/json"')
     expect(updatedIndex).toContain('"originBucket":"resume-forge-app-2025"')
 
     const putCommands = sendMock.mock.calls
@@ -593,7 +595,8 @@ describe('uploadHashedIndexAssets', () => {
     expect(fallbackPayload.cloudfront.updatedAt.length).toBeGreaterThan(0)
 
     const updatedIndex = await fs.readFile(path.join(distDir, 'index.html'), 'utf8')
-    expect(updatedIndex).toContain('__RESUMEFORGE_CLOUDFRONT_METADATA__')
+    expect(updatedIndex).toContain('id="resumeforge-cloudfront-metadata"')
+    expect(updatedIndex).toContain('type="application/json"')
     expect(updatedIndex).toContain('"apiGatewayUrl":"https://api.resume.example.com/prod"')
 
     const putCommands = sendMock.mock.calls
