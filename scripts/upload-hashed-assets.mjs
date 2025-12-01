@@ -96,8 +96,14 @@ function stripHashedEntryTagsFromHtml(html) {
     return html
   }
 
-  let updated = html.replace(HASHED_ENTRY_SCRIPT_PATTERN, '')
-  updated = updated.replace(HASHED_ENTRY_STYLESHEET_PATTERN, '')
+  let updated = html.replace(
+    HASHED_ENTRY_SCRIPT_PATTERN,
+    '<script type="module" crossorigin src="assets/index-latest.js"></script>'
+  )
+  updated = updated.replace(
+    HASHED_ENTRY_STYLESHEET_PATTERN,
+    '<link rel="stylesheet" href="assets/index-latest.css">'
+  )
 
   return updated
 }
