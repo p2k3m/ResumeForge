@@ -4722,10 +4722,10 @@ app.use((req, res, next) => {
 
   const method = typeof req.method === 'string' ? req.method.toUpperCase() : 'GET';
   const rawPath =
-    typeof req.path === 'string'
-      ? req.path
-      : typeof req.originalUrl === 'string'
-        ? (req.originalUrl.split('?')[0] || '/')
+    typeof req.originalUrl === 'string'
+      ? (req.originalUrl.split('?')[0] || '/')
+      : typeof req.path === 'string'
+        ? req.path
         : '/';
 
   const serviceKey = resolveServiceForRoute(method, rawPath);
