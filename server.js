@@ -1145,6 +1145,7 @@ async function serveHashedIndexAssetFromS3({
 }
 
 async function tryServeHashedIndexAssetFromS3(req, res, next) {
+  logStructured('info', 'try_serve_hashed_asset_entry', { path: req.path });
   if (!HASHED_INDEX_ASSET_PATH_PATTERN.test(req.path || '')) {
     return next();
   }
