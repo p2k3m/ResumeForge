@@ -2421,6 +2421,8 @@ function App() {
   const [manualJobDescription, setManualJobDescription] = useState('')
   const pendingImprovementRescoreRef = useRef([])
   const runQueuedImprovementRescoreRef = useRef(null)
+  const persistChangeLogEntryRef = useRef(null)
+  const rescoreAfterImprovementRef = useRef(null)
   const analysisContextRef = useRef({ hasAnalysis: false, cvSignature: '', jobSignature: '', jobId: '' })
 
   const rawBaseUrl = useMemo(() => getApiBaseCandidate(), [])
@@ -7263,12 +7265,14 @@ function App() {
         )
 
         try {
-          const result = await rescoreAfterImprovement({
-            updatedResume,
-            baselineScore,
-            previousMissingSkills,
-            rescoreSummary
-          })
+          const result = rescoreAfterImprovementRef.current
+            ? await rescoreAfterImprovementRef.current({
+              updatedResume,
+              baselineScore,
+              previousMissingSkills,
+              rescoreSummary
+            })
+            : null
           const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null
 
           if (changeLogEntry && Number.isFinite(deltaValue)) {
@@ -7284,7 +7288,9 @@ function App() {
                 const payloadWithDelta = persistedEntryPayload
                   ? { ...persistedEntryPayload, scoreDelta: deltaValue }
                   : { ...changeLogEntry, scoreDelta: deltaValue }
-                await persistChangeLogEntry(payloadWithDelta)
+                if (persistChangeLogEntryRef.current) {
+                  await persistChangeLogEntryRef.current(payloadWithDelta)
+                }
               } catch (persistErr) {
                 console.error('Updating change log entry failed', persistErr)
                 const { source: serviceErrorSource, code: errorCode } =
@@ -7351,8 +7357,6 @@ function App() {
     }
   }, [
     deriveServiceContextFromError,
-    persistChangeLogEntry,
-    rescoreAfterImprovement,
     setArtifactsUploaded,
     setChangeLog,
     setError,
@@ -7362,6 +7366,14 @@ function App() {
   useEffect(() => {
     runQueuedImprovementRescoreRef.current = runQueuedImprovementRescore
   }, [runQueuedImprovementRescore])
+
+  useEffect(() => {
+    persistChangeLogEntryRef.current = persistChangeLogEntry
+  }, [persistChangeLogEntry])
+
+  useEffect(() => {
+    rescoreAfterImprovementRef.current = rescoreAfterImprovement
+  }, [rescoreAfterImprovement])
 
   const persistChangeLogEntry = useCallback(
     async (entry) => {
