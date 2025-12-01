@@ -4776,6 +4776,11 @@ app.use((req, res, next) => {
 });
 
 if (shouldServeClientAppRoutes) {
+  app.use((req, res, next) => {
+    logStructured('info', 'client_app_routes_entered', { path: req.path });
+    next();
+  });
+
   app.use(serveIndexAssetAlias);
 
   app.use(tryServeHashedIndexAssetFromS3);
