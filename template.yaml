@@ -496,6 +496,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub '${AWS::StackName}-${StageName}-client-app'
+      AutoPublishAlias: !Ref StageName
       CodeUri: .
       Handler: lambdas/clientApp.handler
       Runtime: nodejs20.x
