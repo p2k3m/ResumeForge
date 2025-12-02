@@ -4154,15 +4154,7 @@ function parseAllowedOrigins(value) {
   return parsed.length ? parsed : resolveDefaultAllowedOrigins();
 }
 
-function resolvePublishedCloudfrontPath() {
-  const override = readEnvValue('PUBLISHED_CLOUDFRONT_PATH');
-  if (override) {
-    return path.isAbsolute(override)
-      ? override
-      : path.resolve(process.cwd(), override);
-  }
-  return path.resolve(__dirname, 'config', 'published-cloudfront.json');
-}
+
 
 let publishedCloudfrontOriginLoaded = false;
 let publishedCloudfrontOriginCache;
