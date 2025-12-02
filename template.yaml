@@ -1494,12 +1494,7 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/refresh-download-link
             Method: POST
-        PublishedCloudfront:
-          Type: Api
-          Properties:
-            RestApiId: !Ref ResumeForgeApi
-            Path: /api/published-cloudfront
-            Method: GET
+
         Healthz:
           Type: Api
           Properties:
