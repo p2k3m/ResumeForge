@@ -1497,37 +1497,52 @@ async function serveIndexAssetAlias(req, res, next) {
 }
 
 async function servePublishedCloudfrontMetadata(req, res) {
-  const config = resolvePublishedCloudfrontStaticAssetConfig();
-  if (!config) {
-    res.status(404).json({ error: 'CloudFront metadata not found' });
-    return;
-  }
-
-  // Reconstruct the JSON format expected by the client
-  const metadata = {
-    url: config.url, // Note: resolvePublishedCloudfrontStaticAssetConfig might not return URL if it wasn't in the cache structure. Let's check.
-    // Actually, resolvePublishedCloudfrontStaticAssetConfig returns { bucket, prefix, region }.
-    // We might need to read the raw file again or update the helper.
-    // Let's just read the file directly here to be safe and simple, reusing the logic.
-    ...config
-  };
-
-  // Wait, resolvePublishedCloudfrontStaticAssetConfig returns a subset. 
-  // Let's use the raw file reading logic from the helper but return the full content.
-  // Or better, just read the file.
-
   try {
     const metadataPath = resolvePublishedCloudfrontPath();
     if (!metadataPath || !fsSync.existsSync(metadataPath)) {
-      res.status(404).json({ error: 'CloudFront metadata file not found' });
+      res.status(404).json({
+        success: false,
+        error: {
+          code: 'PUBLISHED_CLOUDFRONT_UNAVAILABLE',
+        },
+      });
       return;
     }
+
     const raw = fsSync.readFileSync(metadataPath, 'utf8');
     const parsed = JSON.parse(raw);
-    res.json(parsed);
+
+    // The test expects a specific structure for the success response too.
+    // Let's check the test expectation:
+    // expect(response.body).toEqual({ success: true, cloudfront: { ... } });
+    // My previous code returned `res.json(parsed)`.
+    // If `parsed` is just the metadata, I need to wrap it.
+    // Wait, `lib/cloudfront/metadata.js` has `createPublishedCloudfrontPayload`.
+    // I should use that if possible, or just manually wrap it.
+    // The test expects: { success: true, cloudfront: { ... } }
+    // The file content itself might be just the metadata object.
+    // Let's check `lib/cloudfront/metadata.js` again to see what `createPublishedCloudfrontPayload` does.
+    // It does exactly that: { success: true, cloudfront: metadata }
+
+    // So I should import `createPublishedCloudfrontPayload` and use it.
+    // Or just manually construct it to match the test.
+    // Manually is safer to avoid circular deps or import issues, but importing is cleaner.
+    // I already import `resolvePublishedCloudfrontPath` from there.
+
+    res.json({
+      success: true,
+      cloudfront: parsed,
+    });
+
   } catch (error) {
     logStructured('error', 'serve_published_cloudfront_metadata_failed', { error: serializeError(error) });
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: error.message,
+      },
+    });
   }
 }
 
