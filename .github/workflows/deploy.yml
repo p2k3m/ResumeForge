@@ -65,6 +65,11 @@ jobs:
           GEMINI_API_KEY=${SECRET_GEMINI_API_KEY}
           EOF
 
+      - name: Generate CloudFront metadata
+        run: |
+          set -euo pipefail
+          npm run publish:cloudfront-url -- "$SAM_STACK_NAME"
+
       - name: Resolve deployment context
         run: |
           set -euo pipefail
