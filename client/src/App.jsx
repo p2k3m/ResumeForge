@@ -9163,30 +9163,7 @@ function App() {
           </section>
         )}
 
-        <section className="rounded-3xl border border-slate-200/80 bg-white/70 p-6 shadow-lg">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="space-y-3 md:max-w-sm">
-              <p className="caps-label text-xs font-semibold text-slate-500">
-                Explore the output
-              </p>
-              <h2 className="text-2xl font-bold text-slate-900">Preview an optimised resume</h2>
-              <p className="text-sm leading-relaxed text-slate-600">
-                Scan the QR code to view an example of the AI-enhanced download package. Every section shown
-                in the dashboard is preserved in the PDF so you can confidently review the final design on any device.
-              </p>
-            </div>
-            <figure className="mx-auto flex flex-col items-center gap-3 rounded-2xl bg-slate-50/80 p-4 shadow-inner">
-              <img
-                src={qrOptimisedResume}
-                alt="QR code linking to a sample optimised resume"
-                className="h-32 w-32 md:h-36 md:w-36"
-              />
-              <figcaption className="caps-label-tight text-xs font-medium text-slate-500">
-                Scan &amp; explore
-              </figcaption>
-            </figure>
-          </div>
-        </section>
+
 
         <ProcessFlow steps={flowSteps} />
 
