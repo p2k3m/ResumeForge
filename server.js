@@ -121,6 +121,7 @@ import { notifyMissingClientAssets } from './lib/deploy/notifications.js';
 import {
   embedCloudfrontMetadataIntoHtml,
   ensureMetaApiBase,
+  resolvePublishedCloudfrontPath,
   updateBackupApiInputs,
   updateMetaApiBase,
 } from './lib/cloudfront/metadata.js';
@@ -1494,6 +1495,49 @@ async function serveIndexAssetAlias(req, res, next) {
     requestPath: req.path,
   });
 }
+
+async function servePublishedCloudfrontMetadata(req, res) {
+  const config = resolvePublishedCloudfrontStaticAssetConfig();
+  if (!config) {
+    res.status(404).json({ error: 'CloudFront metadata not found' });
+    return;
+  }
+
+  // Reconstruct the JSON format expected by the client
+  const metadata = {
+    url: config.url, // Note: resolvePublishedCloudfrontStaticAssetConfig might not return URL if it wasn't in the cache structure. Let's check.
+    // Actually, resolvePublishedCloudfrontStaticAssetConfig returns { bucket, prefix, region }.
+    // We might need to read the raw file again or update the helper.
+    // Let's just read the file directly here to be safe and simple, reusing the logic.
+    ...config
+  };
+
+  // Wait, resolvePublishedCloudfrontStaticAssetConfig returns a subset. 
+  // Let's use the raw file reading logic from the helper but return the full content.
+  // Or better, just read the file.
+
+  try {
+    const metadataPath = resolvePublishedCloudfrontPath();
+    if (!metadataPath || !fsSync.existsSync(metadataPath)) {
+      res.status(404).json({ error: 'CloudFront metadata file not found' });
+      return;
+    }
+    const raw = fsSync.readFileSync(metadataPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    res.json(parsed);
+  } catch (error) {
+    logStructured('error', 'serve_published_cloudfront_metadata_failed', { error: serializeError(error) });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
+
+// ... existing code ...
+
+// Register the route (need to find where app routes are registered)
+// I will insert the function definition here, and then I need to find `app.use` or `app.get` calls to register it.
+// Wait, I should probably insert this function and then register it.
+// Let's look for `const app = express()` or similar.
+
 
 function normalizeStaticProxyAssetPath(value) {
   if (typeof value !== 'string') {
@@ -4617,6 +4661,9 @@ function respondWithServiceNotFound(res, method, path, serviceKey) {
 }
 
 const app = express();
+
+app.get('/api/published-cloudfront', servePublishedCloudfrontMetadata);
+app.get('/api/published-cloudfront.json', servePublishedCloudfrontMetadata);
 
 app.use((req, res, next) => {
   const stage = resolveApiGatewayStage(req);

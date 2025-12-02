@@ -640,6 +640,18 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /cover-templates/{proxy+}
             Method: HEAD
+        PublishedCloudfrontGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/published-cloudfront
+            Method: GET
+        PublishedCloudfrontJsonGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/published-cloudfront.json
+            Method: GET
       Environment:
         Variables:
           ACTIVE_SERVICE: clientApp
