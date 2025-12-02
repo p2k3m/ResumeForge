@@ -1511,27 +1511,28 @@ async function servePublishedCloudfrontMetadata(req, res) {
 
     const raw = fsSync.readFileSync(metadataPath, 'utf8');
     const parsed = JSON.parse(raw);
+    
+    const url = parsed.url ? parsed.url.replace(/\/+$/, '') : null;
+    const originPath = parsed.originPath || '/';
+    
+    const enriched = {
+      ...parsed,
+      url,
+      originPath,
+      apiGatewayUrl: parsed.apiGatewayUrl || null,
+      distributionId: parsed.distributionId || null,
+      updatedAt: parsed.updatedAt || null,
+      degraded: !url,
+      fileUrl: url,
+    };
 
-    // The test expects a specific structure for the success response too.
-    // Let's check the test expectation:
-    // expect(response.body).toEqual({ success: true, cloudfront: { ... } });
-    // My previous code returned `res.json(parsed)`.
-    // If `parsed` is just the metadata, I need to wrap it.
-    // Wait, `lib/cloudfront/metadata.js` has `createPublishedCloudfrontPayload`.
-    // I should use that if possible, or just manually wrap it.
-    // The test expects: { success: true, cloudfront: { ... } }
-    // The file content itself might be just the metadata object.
-    // Let's check `lib/cloudfront/metadata.js` again to see what `createPublishedCloudfrontPayload` does.
-    // It does exactly that: { success: true, cloudfront: metadata }
-
-    // So I should import `createPublishedCloudfrontPayload` and use it.
-    // Or just manually construct it to match the test.
-    // Manually is safer to avoid circular deps or import issues, but importing is cleaner.
-    // I already import `resolvePublishedCloudfrontPath` from there.
-
+    if (url) {
+      enriched.typeUrl = `${url}#download`;
+    }
+    
     res.json({
       success: true,
-      cloudfront: parsed,
+      cloudfront: enriched,
     });
 
   } catch (error) {
