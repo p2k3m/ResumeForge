@@ -578,6 +578,11 @@ function resolveS3ContentLength(metadata) {
 
 function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPath) {
   const { ContentType, CacheControl, ETag, LastModified } = metadata || {};
+  const ContentLength = resolveS3ContentLength(metadata);
+
+  if (ContentLength) {
+    setResponseHeader(res, 'Content-Length', ContentLength);
+  }
 
   if (ContentType) {
     setResponseHeader(res, 'Content-Type', ContentType);
@@ -1140,6 +1145,9 @@ async function serveHashedIndexAssetFromS3({
       ...logContext,
       error: serializeError(error),
     });
+    if (res.headersSent) {
+      return true;
+    }
   }
 
   return false;
