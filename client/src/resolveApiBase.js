@@ -38,10 +38,10 @@ export function resolveApiBase(rawBaseUrl) {
     }
 
     if (looksLikeCloudFront && normalizedPath) {
-      return `${url.origin}/${normalizedPath}`
+      return `${url.origin}${normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`}`
     }
 
-    return `${url.origin}${normalizedPath ? `/${normalizedPath}` : ''}`
+    return `${url.origin}${normalizedPath ? (normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`) : ''}`
   } catch {
     if (cleanedCandidate.startsWith('/')) {
       return cleanedCandidate.replace(/\/+$/u, '')
@@ -60,7 +60,7 @@ export function buildApiUrl(base, path) {
   if (/^https?:\/\//iu.test(base)) {
     const url = new URL(base)
     const prefix = normalizePath(url.pathname)
-    const fullPath = `${prefix ? `/${prefix}` : ''}${normalizedPath}`
+    const fullPath = `${prefix}${normalizedPath}`
     url.pathname = fullPath
     url.search = ''
     url.hash = ''

@@ -992,6 +992,16 @@ function resolveHashedAssetCacheControl(relativePath) {
 }
 
 function resolveContentType(relativePath) {
+  if (typeof relativePath === 'string') {
+    const lower = relativePath.toLowerCase()
+    if (lower.endsWith('.woff2')) return 'font/woff2'
+    if (lower.endsWith('.woff')) return 'font/woff'
+    if (lower.endsWith('.ttf')) return 'font/ttf'
+    if (lower.endsWith('.otf')) return 'font/otf'
+    if (lower.endsWith('.eot')) return 'application/vnd.ms-fontobject'
+    if (lower.endsWith('.svg')) return 'image/svg+xml'
+  }
+
   const lookup = mime.lookup(relativePath)
   if (typeof lookup === 'string' && lookup.trim()) {
     return lookup
