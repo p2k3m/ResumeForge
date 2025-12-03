@@ -9290,10 +9290,7 @@ function App() {
             </header>
             <div
               className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
-              onDragOver={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
+              onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
               onClick={handleUploadAreaClick}
               onKeyDown={(e) => {
@@ -9316,7 +9313,7 @@ function App() {
               />
               <div className="flex flex-col items-center gap-3">
                 {cvFile ? (
-                  <div className="space-y-3">
+                  <div key="file-selected" className="space-y-3">
                     <p className="text-purple-900 font-semibold break-all">{cvFile.name}</p>
                     <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-semibold">
                       {formattedCvFileSize && (
@@ -9334,7 +9331,7 @@ function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-1">
+                  <div key="no-file" className="space-y-1">
                     <p className="text-lg font-semibold text-purple-800">Drag &amp; drop your CV</p>
                     <p className="text-sm text-purple-600">or click to browse (PDF, DOC, or DOCX · max 5 MB)</p>
                   </div>
