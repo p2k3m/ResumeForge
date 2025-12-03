@@ -1007,6 +1007,7 @@ function resetStaticAssetManifestCache() {
 }
 
 function resolveClientDistAssetPath(assetPath) {
+  console.log(`DEBUG: resolveClientDistAssetPath input: '${assetPath}'`);
   let sanitized = typeof assetPath === 'string' ? assetPath : '';
   sanitized = sanitized.replace(/[?#].*$/, '');
 
@@ -1018,8 +1019,11 @@ function resolveClientDistAssetPath(assetPath) {
   }
 
   sanitized = sanitized.replace(/[,;]+$/, '');
+  console.log(`DEBUG: resolveClientDistAssetPath sanitized: '${sanitized}'`);
   const withoutLeadingSlashes = sanitized.replace(/^\/+/, '');
-  return path.join(clientDistDir, withoutLeadingSlashes);
+  const finalPath = path.join(clientDistDir, withoutLeadingSlashes);
+  console.log(`DEBUG: resolveClientDistAssetPath final: '${finalPath}'`);
+  return finalPath;
 }
 
 async function serveClientDistAsset({
