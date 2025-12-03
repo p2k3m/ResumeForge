@@ -34,14 +34,18 @@ describe('runPostDeploymentApiTests', () => {
     mockCheckCloudfrontHealth.mockResolvedValue(healthResult);
     mockVerifyClientAssets.mockResolvedValue(undefined);
 
-    const result = await runPostDeploymentApiTests({ baseUrl: ' https://example.com ' });
+    const mockFetch = jest.fn();
+    const result = await runPostDeploymentApiTests({
+      baseUrl: ' https://example.com ',
+      fetchImpl: mockFetch
+    });
 
     expect(mockCheckCloudfrontHealth).toHaveBeenCalledTimes(2);
     expect(mockCheckCloudfrontHealth).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         url: 'https://example.com',
-        fetchImpl: globalThis.fetch,
+        fetchImpl: mockFetch,
         userAgent: MOCK_BROWSER_UA,
       })
     );
@@ -49,7 +53,7 @@ describe('runPostDeploymentApiTests', () => {
       2,
       expect.objectContaining({
         url: 'https://example.com',
-        fetchImpl: globalThis.fetch,
+        fetchImpl: mockFetch,
         userAgent: 'curl/8.4.0',
       })
     );
@@ -60,7 +64,7 @@ describe('runPostDeploymentApiTests', () => {
       expect.objectContaining({
         baseUrl: 'https://example.com',
         logger: console,
-        fetchImpl: globalThis.fetch,
+        fetchImpl: mockFetch,
         userAgent: MOCK_BROWSER_UA,
         acceptHtml: true,
       })
@@ -70,7 +74,7 @@ describe('runPostDeploymentApiTests', () => {
       expect.objectContaining({
         baseUrl: 'https://example.com',
         logger: console,
-        fetchImpl: globalThis.fetch,
+        fetchImpl: mockFetch,
         userAgent: 'curl/8.4.0',
         acceptHtml: false,
       })

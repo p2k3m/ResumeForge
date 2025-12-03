@@ -1,5 +1,20 @@
-import { describe, expect, it } from '@jest/globals'
+/**
+ * @jest-environment jsdom
+ */
+import { describe, expect, it, beforeAll } from '@jest/globals'
 import { detectPdfSignature, normalizePdfBlob } from '../../client/src/utils/assetValidation.js'
+
+beforeAll(() => {
+  if (!Blob.prototype.arrayBuffer) {
+    Blob.prototype.arrayBuffer = function () {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsArrayBuffer(this);
+      });
+    };
+  }
+});
 
 const createBlob = (body, options = {}) => {
   return new Blob(Array.isArray(body) ? body : [body], options)
