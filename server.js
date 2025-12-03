@@ -1083,6 +1083,8 @@ async function serveHashedIndexAssetFromS3({
     return false;
   }
 
+  applyStaticProxyCorsHeaders(res);
+
   const key = buildStaticAssetKey(prefix, assetPath);
   const logContext = {
     bucket,
