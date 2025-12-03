@@ -1,9 +1,6 @@
 name: Publish static assets
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       skip_verify:
