@@ -14,6 +14,15 @@ beforeAll(() => {
       });
     };
   }
+  if (!Blob.prototype.text) {
+    Blob.prototype.text = function () {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.readAsText(this);
+      });
+    };
+  }
 });
 
 const createBlob = (body, options = {}) => {
