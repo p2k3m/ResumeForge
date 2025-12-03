@@ -5817,6 +5817,7 @@ function App() {
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
+    e.stopPropagation()
     const file = e.dataTransfer.files[0]
     if (file && !file.name.toLowerCase().match(/\.(pdf|docx?)$/)) {
       setError('Only PDF, DOC, or DOCX files are supported.', { stage: 'upload' })
@@ -9289,7 +9290,10 @@ function App() {
             </header>
             <div
               className="w-full p-6 border-2 border-dashed border-purple-300 rounded-2xl text-center bg-gradient-to-r from-white to-purple-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
               onDrop={handleDrop}
               onClick={handleUploadAreaClick}
               onKeyDown={(e) => {
