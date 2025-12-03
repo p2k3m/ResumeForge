@@ -177,6 +177,7 @@ const MINIMAL_VALID_PDF_BUFFER = Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/P
 
 beforeEach(() => {
   setupDefaultDynamoMock();
+  mockS3Send.mockClear();
   getSignedUrlMock.mockClear();
   getObjectCommandMock.mockClear();
   headObjectCommandMock.mockClear();

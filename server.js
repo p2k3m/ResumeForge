@@ -1007,7 +1007,17 @@ function resetStaticAssetManifestCache() {
 }
 
 function resolveClientDistAssetPath(assetPath) {
-  const sanitized = typeof assetPath === 'string' ? assetPath.replace(/[?#].*$/, '').replace(/[,;]+$/, '') : '';
+  let sanitized = typeof assetPath === 'string' ? assetPath : '';
+  sanitized = sanitized.replace(/[?#].*$/, '');
+
+  for (const separator of STATIC_PROXY_ALIAS_METADATA_SEPARATORS) {
+    const index = sanitized.indexOf(separator);
+    if (index !== -1) {
+      sanitized = sanitized.slice(0, index);
+    }
+  }
+
+  sanitized = sanitized.replace(/[,;]+$/, '');
   const withoutLeadingSlashes = sanitized.replace(/^\/+/, '');
   return path.join(clientDistDir, withoutLeadingSlashes);
 }
