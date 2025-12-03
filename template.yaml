@@ -184,7 +184,7 @@ Globals:
         LOG_LEVEL: !If [IsProductionStage, 'info', 'debug']
         ENABLE_DEBUG_LOGGING: 'false'
         STATIC_ASSETS_BUCKET: !If [CreateStaticAssetsBucketCondition, !Ref StaticAssetsBucket, !Ref StaticAssetsBucketName]
-        CLOUDFRONT_ORIGINS: !Sub https://${ResumeForgeDistribution.DomainName}
+        CLOUDFRONT_ORIGINS: '*'
 
 Resources:
   ResumeForgeApi:
