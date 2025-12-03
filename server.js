@@ -498,6 +498,11 @@ async function streamS3BodyToResponse(body, res) {
     return;
   }
 
+  if (typeof body.pipe === 'function') {
+    await streamPipeline(body, res);
+    return;
+  }
+
   if (Symbol.asyncIterator in body) {
     const chunks = [];
     for await (const chunk of body) {
@@ -505,11 +510,6 @@ async function streamS3BodyToResponse(body, res) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     res.send(Buffer.concat(chunks));
-    return;
-  }
-
-  if (typeof body.pipe === 'function') {
-    await streamPipeline(body, res);
     return;
   }
 
@@ -999,7 +999,7 @@ function resetStaticAssetManifestCache() {
 }
 
 function resolveClientDistAssetPath(assetPath) {
-  const sanitized = typeof assetPath === 'string' ? assetPath.replace(/\?.*$/, '') : '';
+  const sanitized = typeof assetPath === 'string' ? assetPath.replace(/[?#].*$/, '').replace(/[,;]+$/, '') : '';
   const withoutLeadingSlashes = sanitized.replace(/^\/+/, '');
   return path.join(clientDistDir, withoutLeadingSlashes);
 }
