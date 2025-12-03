@@ -588,9 +588,9 @@ describe('static asset proxy endpoint', () => {
     fsPromises.readFile(path.join(distAssetsDir, relativePath), 'utf8');
 
   const extractPrimaryCssAssetName = async () => {
-    const html = await fsPromises.readFile(clientIndexPath, 'utf8');
-    const match = html.match(/assets\/(index-[^"'>]+\.css)/i);
-    return match && match[1] ? match[1] : 'index-latest.css';
+    const files = await fsPromises.readdir(distAssetsDir);
+    const hashedCss = files.find((f) => /^index-(?!latest).+\.css$/.test(f));
+    return hashedCss || 'index-latest.css';
   };
 
   const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
