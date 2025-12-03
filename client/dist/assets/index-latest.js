@@ -7621,9 +7621,9 @@ function resolveApiBase(rawBaseUrl) {
       return url.origin;
     }
     if (looksLikeCloudFront && normalizedPath) {
-      return `${url.origin}/${normalizedPath}`;
+      return `${url.origin}${normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}`}`;
     }
-    return `${url.origin}${normalizedPath ? `/${normalizedPath}` : ""}`;
+    return `${url.origin}${normalizedPath ? normalizedPath.startsWith("/") ? normalizedPath : `/${normalizedPath}` : ""}`;
   } catch {
     if (cleanedCandidate.startsWith("/")) {
       return cleanedCandidate.replace(/\/+$/u, "");
@@ -7639,7 +7639,7 @@ function buildApiUrl(base, path) {
   if (/^https?:\/\//iu.test(base)) {
     const url = new URL(base);
     const prefix = normalizePath(url.pathname);
-    const fullPath = `${prefix ? `/${prefix}` : ""}${normalizedPath}`;
+    const fullPath = `${prefix}${normalizedPath}`;
     url.pathname = fullPath;
     url.search = "";
     url.hash = "";
@@ -11941,7 +11941,6 @@ const certificationsIcon = "" + new URL("icon-certifications-69654b69.svg", impo
 const projectsIcon = "" + new URL("icon-projects-0997c76f.svg", import.meta.url).href;
 const highlightsIcon = "" + new URL("icon-highlights-468cb4b9.svg", import.meta.url).href;
 const enhanceIcon = "" + new URL("icon-enhance-08c73f02.svg", import.meta.url).href;
-const qrOptimisedResume = "" + new URL("qr-optimised-resume-dc4882c4.svg", import.meta.url).href;
 const CATEGORY_KEYS = [
   "skills",
   "experience",
@@ -14084,7 +14083,7 @@ function extractErrorMetadata(err) {
 }
 function getBuildVersion() {
   {
-    return "cbd4417";
+    return "7abd71b";
   }
 }
 const BUILD_VERSION = getBuildVersion();
@@ -16139,6 +16138,13 @@ function App() {
   var _a;
   console.log("App component rendering...");
   const [manualJobDescription, setManualJobDescription] = reactExports.useState("");
+  const pendingImprovementRescoreRef = reactExports.useRef([]);
+  const runQueuedImprovementRescoreRef = reactExports.useRef(null);
+  const persistChangeLogEntryRef = reactExports.useRef(null);
+  const rescoreAfterImprovementRef = reactExports.useRef(null);
+  const analysisContextRef = reactExports.useRef({ hasAnalysis: false, cvSignature: "", jobSignature: "", jobId: "" });
+  const rawBaseUrl = reactExports.useMemo(() => getApiBaseCandidate(), []);
+  const API_BASE_URL = reactExports.useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl]);
   const [manualCertificatesInput, setManualCertificatesInput] = reactExports.useState("");
   const [cvFile, setCvFile] = reactExports.useState(null);
   const [isProcessing, setIsProcessing] = reactExports.useState(false);
@@ -16181,6 +16187,7 @@ function App() {
   const [certificateInsights, setCertificateInsights] = reactExports.useState(null);
   const [selectionInsights, setSelectionInsights] = reactExports.useState(null);
   const [improvementResults, setImprovementResults] = reactExports.useState([]);
+  const [enhanceAllSummaryText, setEnhanceAllSummaryText] = reactExports.useState("");
   const [changeLog, setChangeLog] = reactExports.useState([]);
   const changeLogSummaryData = reactExports.useMemo(
     () => buildAggregatedChangeLogSummary(changeLog),
@@ -16466,7 +16473,6 @@ function App() {
   const [manualJobDescriptionRequired, setManualJobDescriptionRequired] = reactExports.useState(false);
   const manualJobDescriptionHasError = manualJobDescriptionRequired || manualJobDescriptionLooksLikeUrl || manualJobDescriptionHasProhibitedHtml;
   const manualJobDescriptionHelperText = manualJobDescriptionHasProhibitedHtml ? "Remove HTML tags like <script> before continuing." : manualJobDescriptionLooksLikeUrl ? "Paste the full job description text instead of a link." : manualJobDescriptionRequired ? "Paste the full job description to continue." : "Paste the full JD so we analyse the exact role requirements.";
-  const [enhanceAllSummaryText, setEnhanceAllSummaryText] = reactExports.useState("");
   const [coverLetterDrafts, setCoverLetterDrafts] = reactExports.useState({});
   const [coverLetterOriginals, setCoverLetterOriginals] = reactExports.useState({});
   const [coverLetterEditor, setCoverLetterEditor] = reactExports.useState(null);
@@ -16561,12 +16567,10 @@ function App() {
   );
   const improvementLockRef = reactExports.useRef(false);
   const scoreUpdateLockRef = reactExports.useRef(false);
-  const pendingImprovementRescoreRef = reactExports.useRef([]);
   const autoPreviewSignatureRef = reactExports.useRef("");
   const lastAutoScoreSignatureRef = reactExports.useRef("");
   const manualJobDescriptionRef = reactExports.useRef(null);
   const cvInputRef = reactExports.useRef(null);
-  const analysisContextRef = reactExports.useRef({ hasAnalysis: false, cvSignature: "", jobSignature: "", jobId: "" });
   const cvSignatureRef = reactExports.useRef("");
   const jobSignatureRef = reactExports.useRef("");
   const [localUserId] = reactExports.useState(() => getOrCreateUserId());
@@ -18732,8 +18736,6 @@ function App() {
     refreshDownloadLink,
     resetUiAfterDownload
   ]);
-  const rawBaseUrl = reactExports.useMemo(() => getApiBaseCandidate(), []);
-  const API_BASE_URL = reactExports.useMemo(() => resolveApiBase(rawBaseUrl), [rawBaseUrl]);
   const closePreview = reactExports.useCallback(() => {
     setPreviewActionBusy(false);
     setPreviewActiveAction("");
@@ -18954,7 +18956,9 @@ function App() {
       setIsProcessing(true);
       setError("", { stage: "score" });
       try {
-        await runQueuedImprovementRescore();
+        if (runQueuedImprovementRescoreRef.current) {
+          await runQueuedImprovementRescoreRef.current();
+        }
       } finally {
         setIsProcessing(false);
       }
@@ -19263,7 +19267,6 @@ function App() {
       setIsProcessing(false);
     }
   }, [
-    runQueuedImprovementRescore,
     API_BASE_URL,
     cvFile,
     manualCertificatesInput,
@@ -19992,12 +19995,12 @@ function App() {
           )
         );
         try {
-          const result = await rescoreAfterImprovement({
+          const result = rescoreAfterImprovementRef.current ? await rescoreAfterImprovementRef.current({
             updatedResume,
             baselineScore,
             previousMissingSkills,
             rescoreSummary
-          });
+          }) : null;
           const deltaValue = result && Number.isFinite(result.delta) ? result.delta : null;
           if (changeLogEntry && Number.isFinite(deltaValue)) {
             setChangeLog(
@@ -20008,7 +20011,9 @@ function App() {
             if (changeLogEntry.id) {
               try {
                 const payloadWithDelta = persistedEntryPayload ? { ...persistedEntryPayload, scoreDelta: deltaValue } : { ...changeLogEntry, scoreDelta: deltaValue };
-                await persistChangeLogEntry(payloadWithDelta);
+                if (persistChangeLogEntryRef.current) {
+                  await persistChangeLogEntryRef.current(payloadWithDelta);
+                }
               } catch (persistErr) {
                 console.error("Updating change log entry failed", persistErr);
                 const { source: serviceErrorSource, code: errorCode } = deriveServiceContextFromError(persistErr);
@@ -20066,13 +20071,17 @@ function App() {
     }
   }, [
     deriveServiceContextFromError,
-    persistChangeLogEntry,
-    rescoreAfterImprovement,
     setArtifactsUploaded,
     setChangeLog,
     setError,
     setImprovementResults
   ]);
+  reactExports.useEffect(() => {
+    runQueuedImprovementRescoreRef.current = runQueuedImprovementRescore;
+  }, [runQueuedImprovementRescore]);
+  reactExports.useEffect(() => {
+    rescoreAfterImprovementRef.current = rescoreAfterImprovement;
+  }, [rescoreAfterImprovement]);
   const persistChangeLogEntry = reactExports.useCallback(
     async (entry) => {
       if (!entry || !jobId) {
@@ -20119,6 +20128,9 @@ function App() {
     },
     [API_BASE_URL, jobId, userIdentifier]
   );
+  reactExports.useEffect(() => {
+    persistChangeLogEntryRef.current = persistChangeLogEntry;
+  }, [persistChangeLogEntry]);
   const applyImprovementSuggestion = reactExports.useCallback(
     async (suggestion) => {
       var _a2, _b;
@@ -21527,24 +21539,6 @@ function App() {
         ]
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "rounded-3xl border border-slate-200/80 bg-white/70 p-6 shadow-lg", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-6 md:flex-row md:items-center md:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3 md:max-w-sm", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "caps-label text-xs font-semibold text-slate-500", children: "Explore the output" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-bold text-slate-900", children: "Preview an optimised resume" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-slate-600", children: "Scan the QR code to view an example of the AI-enhanced download package. Every section shown in the dashboard is preserved in the PDF so you can confidently review the final design on any device." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("figure", { className: "mx-auto flex flex-col items-center gap-3 rounded-2xl bg-slate-50/80 p-4 shadow-inner", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "img",
-          {
-            src: qrOptimisedResume,
-            alt: "QR code linking to a sample optimised resume",
-            className: "h-32 w-32 md:h-36 md:w-36"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("figcaption", { className: "caps-label-tight text-xs font-medium text-slate-500", children: "Scan & explore" })
-      ] })
-    ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(ProcessFlow, { steps: flowSteps }),
     queuedMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-blue-700 text-center", children: queuedMessage }),
     isProcessing && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 h-10 w-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" }) }),

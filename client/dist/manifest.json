@@ -1,6 +1,6 @@
 {
   "index.css": {
-    "file": "assets/index-28249dc6.css",
+    "file": "assets/index-0da4b4af.css",
     "src": "index.css"
   },
   "index.html": {
@@ -13,7 +13,6 @@
       "assets/icon-projects-0997c76f.svg",
       "assets/icon-highlights-468cb4b9.svg",
       "assets/icon-enhance-08c73f02.svg",
-      "assets/qr-optimised-resume-dc4882c4.svg",
       "assets/inter-cyrillic-ext-wght-normal-ca157063.woff2",
       "assets/inter-cyrillic-wght-normal-71d5ee93.woff2",
       "assets/inter-greek-ext-wght-normal-6e9e020a.woff2",
@@ -57,9 +56,9 @@
       "assets/jetbrains-mono-latin-700-normal-5e7319f2.woff"
     ],
     "css": [
-      "assets/index-28249dc6.css"
+      "assets/index-0da4b4af.css"
     ],
-    "file": "assets/index-b5b29853.js",
+    "file": "assets/index-f92be23f.js",
     "isEntry": true,
     "src": "index.html"
   },

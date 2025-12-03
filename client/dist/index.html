@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="resumeforge-api-base" content="https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod" />
-  <script id="resumeforge-cloudfront-metadata" type="application/json">{"success":true,"cloudfront":{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2OWOS9JQQDVU3","apiGatewayUrl":"https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}}</script>
+  <script id="resumeforge-cloudfront-metadata" type="application/json">{"success":true,"cloudfront":{"stackName":"ResumeForge","distributionId":"E2OWOS9JQQDVU3","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","url":"https://d109hwmzrqr39w.cloudfront.net","apiGatewayUrl":"https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod","degraded":false,"updatedAt":"2025-03-18T09:30:00.000Z"}}</script>
   <script>
     ; (function seedPublishedCloudfrontMetadata() {
       const parseInlineMetadata = () => {
@@ -135,71 +135,7 @@
       }
     })();
   </script>
-  <script>
-    (function () {
-      const originalLog = console.log;
-      const originalWarn = console.warn;
-      const originalError = console.error;
-      const container = document.createElement('div');
-      container.id = 'debug-console';
-      container.style.position = 'fixed';
-      container.style.bottom = '0';
-      container.style.right = '0';
-      container.style.width = '50%';
-      container.style.height = '300px';
-      container.style.overflowY = 'scroll';
-      container.style.backgroundColor = 'rgba(0,0,0,0.8)';
-      container.style.color = '#fff';
-      container.style.zIndex = '10000';
-      container.style.padding = '10px';
-      container.style.fontFamily = 'monospace';
-      container.style.fontSize = '12px';
-      container.style.pointerEvents = 'none';
 
-      if (document.body) {
-        document.body.appendChild(container);
-      } else {
-        window.addEventListener('DOMContentLoaded', function () {
-          document.body.appendChild(container);
-        });
-      }
-
-      function logToScreen(type, args) {
-        const msg = args.map(arg => {
-          try {
-            return typeof arg === 'object' ? JSON.stringify(arg) : String(arg);
-          } catch (e) {
-            return String(arg);
-          }
-        }).join(' ');
-        const line = document.createElement('div');
-        line.style.color = type === 'error' ? '#ffaaaa' : type === 'warn' ? '#ffffaa' : '#ffffff';
-        line.textContent = `[${type}] ${msg}`;
-        container.appendChild(line);
-        container.scrollTop = container.scrollHeight;
-      }
-
-      console.log = function (...args) {
-        logToScreen('log', args);
-        originalLog.apply(console, args);
-      };
-      console.warn = function (...args) {
-        logToScreen('warn', args);
-        originalWarn.apply(console, args);
-      };
-      console.error = function (...args) {
-        logToScreen('error', args);
-        originalError.apply(console, args);
-      };
-
-      window.addEventListener('error', function (event) {
-        logToScreen('error', ['Global Error:', event.error ? event.error.stack : event.message]);
-      });
-      window.addEventListener('unhandledrejection', function (event) {
-        logToScreen('error', ['Unhandled Rejection:', event.reason]);
-      });
-    })();
-  </script>
   <title>ResumeForge</title>
   
   <style>
@@ -341,9 +277,7 @@
       }
     }
   </style>
-  <script type="module" crossorigin src="./assets/index-b5b29853.js"></script>
-  <link rel="stylesheet" href="./assets/index-28249dc6.css">
-</head>
+  <script type="module" crossorigin src="assets/index-latest.js"></script><link rel="stylesheet" href="assets/index-latest.css"></head>
 
 <body>
   <div id="root"></div>
