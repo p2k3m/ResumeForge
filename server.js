@@ -498,19 +498,27 @@ async function streamS3BodyToResponse(body, res) {
     return;
   }
 
-  if (typeof body.pipe === 'function') {
-    await streamPipeline(body, res);
-    return;
-  }
-
-  if (Symbol.asyncIterator in body) {
-    const chunks = [];
-    for await (const chunk of body) {
-      if (chunk === undefined || chunk === null) continue;
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    }
-    res.send(Buffer.concat(chunks));
-    return;
+  if (typeof body.pipe === 'function' || Symbol.asyncIterator in body) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      body.on('data', (chunk) => {
+        if (chunk !== undefined && chunk !== null) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+      });
+      body.on('end', () => {
+        try {
+          const fullBody = Buffer.concat(chunks);
+          res.send(fullBody);
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+      body.on('error', (err) => {
+        reject(err);
+      });
+    });
   }
 
   res.end();
