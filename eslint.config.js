@@ -1,3 +1,5 @@
+import jestPlugin from 'eslint-plugin-jest';
+
 export default [
   {
     ignores: [
@@ -6,6 +8,7 @@ export default [
       'client/dist/',
       'coverage/',
       '.aws-sam/',
+      'tests/server.test.mjs',
     ],
   },
   {
@@ -30,6 +33,21 @@ export default [
           jsx: true,
         },
       },
+    },
+  },
+  {
+    files: ['**/*.test.mjs', '**/*.test.js'],
+    plugins: {
+      jest: jestPlugin,
+    },
+    languageOptions: {
+      globals: {
+        ...jestPlugin.environments.globals.globals,
+      },
+    },
+    rules: {
+      ...jestPlugin.configs.recommended.rules,
+      'jest/no-deprecated-functions': 'off',
     },
   },
 ];

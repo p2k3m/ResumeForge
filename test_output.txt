@@ -24,9 +24,9 @@ FAIL tests/server.test.js
 
     Details:
 
-    /Users/pushkarmishra/Documents/ResumeForge/ResumeForge/tests/server.test.js:164
-    const serverModule = await Promise.resolve().then(() => _interopRequireWildcard(require('../server.js')));
-                         ^^^^^
+    /Users/pushkarmishra/Documents/ResumeForge/ResumeForge/tests/setupTests.js:5
+      await Promise.resolve().then(() => _interopRequireWildcard(require('@testing-library/jest-dom')));
+      ^^^^^
 
     SyntaxError: await is only valid in async functions and the top level bodies of modules
 
@@ -87,6 +87,6 @@ All files                      |       0 |        0 |       0 |       0 |
 Test Suites: 1 failed, 1 total
 Tests:       0 total
 Snapshots:   0 total
-Time:        20.97 s
+Time:        26.449 s
 Ran all test suites matching /tests\/server.test.js/i.
 Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

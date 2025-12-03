@@ -121,27 +121,47 @@ jest.unstable_mockModule('mammoth', () => ({
   }
 }));
 
-const serverModule = await import('../server.js');
-const {
-  default: app,
-  extractText,
-  setGeneratePdf,
-  generatePdfWithFallback,
-  setTemplateBackstop,
-  setPlainPdfFallbackOverride,
-  setMinimalPlainPdfBufferGenerator,
-  PdfGenerationError,
-  parseContent,
-  classifyDocument,
-  CHANGE_LOG_FIELD_LIMITS,
-  setCoverLetterFallbackBuilder,
-  resetStaticAssetManifestCache,
-} = serverModule;
-const { default: pdfParseMock } = await import('pdf-parse/lib/pdf-parse.js');
-const mammothMock = (await import('mammoth')).default;
-const axios = (await import('axios')).default;
-axios.get = jest.fn();
-setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+let app;
+let extractText;
+let setGeneratePdf;
+let generatePdfWithFallback;
+let setTemplateBackstop;
+let setPlainPdfFallbackOverride;
+let setMinimalPlainPdfBufferGenerator;
+let PdfGenerationError;
+let parseContent;
+let classifyDocument;
+let CHANGE_LOG_FIELD_LIMITS;
+let setCoverLetterFallbackBuilder;
+let resetStaticAssetManifestCache;
+let pdfParseMock;
+let mammothMock;
+let axios;
+let serverModule;
+
+beforeAll(async () => {
+  serverModule = await import('../server.js');
+  app = serverModule.default;
+  extractText = serverModule.extractText;
+  setGeneratePdf = serverModule.setGeneratePdf;
+  generatePdfWithFallback = serverModule.generatePdfWithFallback;
+  setTemplateBackstop = serverModule.setTemplateBackstop;
+  setPlainPdfFallbackOverride = serverModule.setPlainPdfFallbackOverride;
+  setMinimalPlainPdfBufferGenerator = serverModule.setMinimalPlainPdfBufferGenerator;
+  PdfGenerationError = serverModule.PdfGenerationError;
+  parseContent = serverModule.parseContent;
+  classifyDocument = serverModule.classifyDocument;
+  CHANGE_LOG_FIELD_LIMITS = serverModule.CHANGE_LOG_FIELD_LIMITS;
+  setCoverLetterFallbackBuilder = serverModule.setCoverLetterFallbackBuilder;
+  resetStaticAssetManifestCache = serverModule.resetStaticAssetManifestCache;
+
+  const pdfParseModule = await import('pdf-parse/lib/pdf-parse.js');
+  pdfParseMock = pdfParseModule.default;
+  mammothMock = (await import('mammoth')).default;
+  axios = (await import('axios')).default;
+  axios.get = jest.fn();
+  setGeneratePdf(jest.fn().mockResolvedValue(Buffer.from('pdf')));
+});
 
 const LAMBDA_PROCESSING_ERROR_MESSAGE =
   'Our Lambda resume engine is temporarily unavailable. Please try again shortly.';

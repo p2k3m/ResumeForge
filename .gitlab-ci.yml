@@ -42,6 +42,7 @@ deploy:
   script:
     - sam deploy --stack-name resume-forge-v2 --region us-east-1 --capabilities CAPABILITY_IAM --no-confirm-changeset --resolve-s3 --parameter-overrides GeminiApiKey=$GEMINI_API_KEY
     - export STATIC_ASSETS_BUCKET=$(aws cloudformation describe-stacks --stack-name resume-forge-v2 --region us-east-1 --query "Stacks[0].Outputs[?OutputKey=='StaticAssetsBucket'].OutputValue" --output text)
+    - npm run publish:cloudfront-url -- resume-forge-v2
     - npm run upload:static
   only:
     - v2

@@ -59,6 +59,37 @@ function maybeRespondToAlias(target, method, overrides = {}) {
 }
 
 describe('verifyClientAssets', () => {
+  let originalResponse;
+
+  class MockResponse {
+    constructor(body, init = {}) {
+      this.bodyContent = body;
+      this.status = init.status || 200;
+      this.statusText = init.statusText || '';
+      this.headers = new Map(Object.entries(init.headers || {}));
+      // Add get method to headers if it's a plain object in init, but here we convert to Map.
+      // Map has get().
+      // But headers might be accessed as object?
+      // lib/cloudfrontAssetCheck.js uses headers?.get?.(...)
+      // So Map is fine.
+      this.ok = this.status >= 200 && this.status < 300;
+    }
+
+    async text() {
+      return this.bodyContent;
+    }
+  }
+
+  beforeAll(() => {
+    originalResponse = global.Response;
+    if (!global.Response) {
+      global.Response = MockResponse;
+    }
+  });
+
+  afterAll(() => {
+    global.Response = originalResponse;
+  });
   test('adds a cache-busting query parameter when an asset initially returns 404', async () => {
     const html = `<!doctype html>
       <html>

@@ -1325,6 +1325,10 @@ async function handleIndexAssetAliasRequest({
       }
     }
 
+    if (res.headersSent) {
+      return true;
+    }
+
     res.status(503).type('text/plain').send('Static assets are temporarily unavailable.');
     return true;
   }
@@ -1511,10 +1515,10 @@ async function servePublishedCloudfrontMetadata(req, res) {
 
     const raw = fsSync.readFileSync(metadataPath, 'utf8');
     const parsed = JSON.parse(raw);
-    
+
     const url = parsed.url ? parsed.url.replace(/\/+$/, '') : null;
     const originPath = parsed.originPath || '/';
-    
+
     const enriched = {
       ...parsed,
       url,
@@ -1529,7 +1533,7 @@ async function servePublishedCloudfrontMetadata(req, res) {
     if (url) {
       enriched.typeUrl = `${url}#download`;
     }
-    
+
     res.json({
       success: true,
       cloudfront: enriched,
@@ -19056,6 +19060,9 @@ app.get('/api/static-proxy', async (req, res) => {
           ...(logContext || {}),
           fallbackCandidates: attemptedFallbacks,
         });
+        if (res.headersSent) {
+          return;
+        }
         res
           .status(502)
           .type('text/plain')
