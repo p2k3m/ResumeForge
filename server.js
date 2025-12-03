@@ -1615,8 +1615,13 @@ function normalizeStaticProxyAssetPath(value) {
     return normalizedHashed;
   }
 
-  while (/^(?:\.\.\/|\.\/)/.test(candidate)) {
-    candidate = candidate.replace(/^(?:\.\.\/|\.\/)/, '');
+  // Reject path traversal attempts
+  if (candidate.includes('..')) {
+    return '';
+  }
+
+  while (/^\.\//.test(candidate)) {
+    candidate = candidate.replace(/^\.\//, '');
   }
 
   candidate = candidate.replace(/^\/+/, '').replace(/\\/g, '/');
