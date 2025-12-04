@@ -502,6 +502,7 @@ async function streamS3BodyToResponse(body, res) {
     return new Promise((resolve, reject) => {
       const chunks = [];
       body.on('data', (chunk) => {
+        console.log(`DEBUG: streamS3BodyToResponse data chunk length=${chunk ? chunk.length : 0}`);
         if (chunk !== undefined && chunk !== null) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         }
@@ -509,6 +510,7 @@ async function streamS3BodyToResponse(body, res) {
       body.on('end', () => {
         try {
           const fullBody = Buffer.concat(chunks);
+          console.log(`DEBUG: streamS3BodyToResponse end fullBody length=${fullBody.length}`);
           res.send(fullBody);
           resolve();
         } catch (err) {
@@ -612,6 +614,7 @@ function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPat
   }
 
   const resolvedContentLength = resolveS3ContentLength(metadata);
+  console.log(`DEBUG: applyS3ResponseHeaders ContentLength=${ContentLength} resolved=${resolvedContentLength} metadata=${JSON.stringify(metadata)}`);
   if (resolvedContentLength !== undefined) {
     setResponseHeader(res, 'Content-Length', resolvedContentLength);
   }
@@ -1597,6 +1600,7 @@ function normalizeStaticProxyAssetPath(value) {
   }
 
   let candidate = value.trim();
+  console.log(`DEBUG: normalizeStaticProxyAssetPath input='${value}' candidate='${candidate}'`);
   if (!candidate) {
     return '';
   }
