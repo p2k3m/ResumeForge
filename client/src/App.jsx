@@ -2417,7 +2417,11 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 }
 
 function App() {
-  console.log('App component rendering...');
+  const renderCountRef = useRef(0);
+  renderCountRef.current += 1;
+  if (renderCountRef.current % 100 === 0) {
+    console.warn(`[Diagnostic] App component rendered ${renderCountRef.current} times`);
+  }
   const [manualJobDescription, setManualJobDescription] = useState('')
   const pendingImprovementRescoreRef = useRef([])
   const runQueuedImprovementRescoreRef = useRef(null)

@@ -1,0 +1,551 @@
+{
+    "events": [
+        {
+            "timestamp": 1764859044802,
+            "message": "INIT_START Runtime Version: nodejs:20.v91\tRuntime Version ARN: arn:aws:lambda:ap-south-1::runtime:10a462e31cab25e158637e367add6f0cb2340955bd723a5304ec7834d6db399e\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859044877,
+            "message": "LOGS\tName: cloudwatch_lambda_agent\tState: Subscribed\tTypes: [Platform]\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046491,
+            "message": "EXTENSION\tName: cloudwatch_lambda_agent\tState: Ready\tEvents: [INVOKE, SHUTDOWN]\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046494,
+            "message": "START RequestId: 7219f6c8-3642-4e02-a1a7-d27820593db2 Version: 404\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046497,
+            "message": "2025-12-04T14:37:26.497Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tLambda invocation started {\n  invocationId: 'aad2066a-0dd5-4114-a0f4-099d6805e8bf',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '840f61a4-b5ec-4b79-b60b-d594b19b64f3',\n  sessionId: '',\n  jobId: '',\n  coldStart: true,\n  operationGroup: 'artifact-download',\n  requestMetadata: {\n    type: 'http-legacy',\n    method: 'GET',\n    path: '/assets/index-47097f74.js'\n  }\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046815,
+            "message": "2025-12-04T14:37:26.815Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"event\":\"service_handler_route_check\",\"service\":\"client-app\",\"incomingPath\":\"/assets/index-47097f74.js\",\"normalizedPath\":\"/assets/index-47097f74.js\",\"method\":\"GET\",\"routeAllowed\":true,\"routes\":[\"/\",\"/\",\"/index.html\",\"/index.html\",\"/favicon.ico\",\"/favicon.ico\",\"/manifest.webmanifest\",\"/manifest.webmanifest\",\"/robots.txt\",\"/robots.txt\",\"/service-worker.js\",\"/service-worker.js\",\"/api/published-cloudfront\",\"/api/published-cloudfront\",\"/api/static-proxy\",\"/api/static-proxy\",\"/api/static-manifest\",\"/api/static-manifest\",\"/assets*\",\"/assets*\",\"/fonts*\",\"/fonts*\",\"/images*\",\"/images*\",\"/cover-templates*\",\"/cover-templates*\"]}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046815,
+            "message": "2025-12-04T14:37:26.815Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"event\":\"debug_event_structure\",\"keys\":[\"resource\",\"path\",\"httpMethod\",\"headers\",\"multiValueHeaders\",\"queryStringParameters\",\"multiValueQueryStringParameters\",\"pathParameters\",\"stageVariables\",\"requestContext\",\"body\",\"isBase64Encoded\"],\"hasMultiValueHeaders\":true}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046816,
+            "message": "2025-12-04T14:37:26.816Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tWARN\t[DEPRECATION NOTICE] { binaryMimeTypes: [] } is deprecated. base64 encoding is now automatically determined based on response content-type and content-encoding. If you need to manually set binary content types, instead, use { binarySettings: { contentTypes: [] } }\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046829,
+            "message": "2025-12-04T14:37:26.829Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.828Z\",\"level\":\"info\",\"message\":\"http_request_received\",\"requestId\":\"20e77dc4-7e5d-4b36-8150-ab3182a2006b\",\"method\":\"GET\",\"path\":\"/index-47097f74.js\",\"template\":\"unknown\",\"session\":\"20e77dc4-7e5d-4b36-8150-ab3182a2006b\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"20e77dc4-7e5d-4b36-8150-ab3182a2006b\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046830,
+            "message": "2025-12-04T14:37:26.830Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.830Z\",\"level\":\"info\",\"message\":\"path_restoration_debug\",\"originalPathHeader\":\"/assets/index-47097f74.js\",\"reqPath\":\"/index-47097f74.js\",\"reqUrl\":\"/index-47097f74.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046830,
+            "message": "2025-12-04T14:37:26.830Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.830Z\",\"level\":\"info\",\"message\":\"path_restored_from_header\",\"restoredPath\":\"/assets/index-47097f74.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046831,
+            "message": "2025-12-04T14:37:26.831Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.830Z\",\"level\":\"info\",\"message\":\"request_received\",\"path\":\"/assets/index-47097f74.js\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046831,
+            "message": "2025-12-04T14:37:26.831Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.831Z\",\"level\":\"info\",\"message\":\"service_filter_entry\",\"allowListSize\":1,\"allowList\":[\"clientApp\"],\"path\":\"/assets/index-47097f74.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046832,
+            "message": "2025-12-04T14:37:26.832Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.831Z\",\"level\":\"info\",\"message\":\"service_resolution_check\",\"method\":\"GET\",\"rawPath\":\"/assets/index-47097f74.js\",\"serviceKey\":\"clientApp\",\"allowed\":true,\"allowList\":[\"clientApp\"],\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046832,
+            "message": "2025-12-04T14:37:26.832Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.832Z\",\"level\":\"info\",\"message\":\"client_app_routes_entered\",\"path\":\"/assets/index-47097f74.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046833,
+            "message": "2025-12-04T14:37:26.833Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.832Z\",\"level\":\"info\",\"message\":\"try_serve_hashed_asset_entry\",\"path\":\"/assets/index-47097f74.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046833,
+            "message": "2025-12-04T14:37:26.833Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tDEBUG: resolveClientDistAssetPath input: '/assets/index-47097f74.js'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046833,
+            "message": "2025-12-04T14:37:26.833Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tDEBUG: resolveClientDistAssetPath sanitized: '/assets/index-47097f74.js'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046833,
+            "message": "2025-12-04T14:37:26.833Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tDEBUG: resolveClientDistAssetPath final: '/var/task/client/dist/assets/index-47097f74.js'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046890,
+            "message": "2025-12-04T14:37:26.890Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.890Z\",\"level\":\"info\",\"message\":\"http_request_completed\",\"requestId\":\"20e77dc4-7e5d-4b36-8150-ab3182a2006b\",\"method\":\"GET\",\"path\":\"/index-47097f74.js\",\"statusCode\":200,\"durationMs\":63,\"contentLength\":\"943626\",\"template\":\"unknown\",\"session\":\"20e77dc4-7e5d-4b36-8150-ab3182a2006b\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"20e77dc4-7e5d-4b36-8150-ab3182a2006b\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046894,
+            "message": "2025-12-04T14:37:26.894Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tLambda invocation completed {\n  invocationId: 'aad2066a-0dd5-4114-a0f4-099d6805e8bf',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '840f61a4-b5ec-4b79-b60b-d594b19b64f3',\n  sessionId: '',\n  jobId: '',\n  durationMs: 79,\n  operationGroup: 'artifact-download',\n  coldStart: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046908,
+            "message": "2025-12-04T14:37:26.908Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tAPI gateway response summary {\n  invocationId: 'aad2066a-0dd5-4114-a0f4-099d6805e8bf',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '840f61a4-b5ec-4b79-b60b-d594b19b64f3',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 79,\n  method: 'GET',\n  path: '/assets/index-47097f74.js',\n  pathCategory: '/assets',\n  statusCode: 200,\n  contentLength: 943626,\n  sessionCount: 0,\n  downloadCount: 0,\n  assetRequest: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046909,
+            "message": "2025-12-04T14:37:26.909Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\tAPI gateway asset response {\n  invocationId: 'aad2066a-0dd5-4114-a0f4-099d6805e8bf',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '840f61a4-b5ec-4b79-b60b-d594b19b64f3',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 79,\n  method: 'GET',\n  path: '/assets/index-47097f74.js',\n  pathCategory: '/assets',\n  statusCode: 200,\n  contentLength: 943626,\n  sessionCount: 0,\n  downloadCount: 0,\n  assetRequest: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859046928,
+            "message": "2025-12-04T14:37:26.928Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tINFO\t{\"timestamp\":\"2025-12-04T14:37:26.928Z\",\"level\":\"info\",\"message\":\"client_asset_hashed_local_served\",\"assetPath\":\"/assets/index-47097f74.js\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047069,
+            "message": "2025-12-04T14:37:27.069Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tWARN\tFailed to publish lambda metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047088,
+            "message": "2025-12-04T14:37:27.088Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tWARN\tFailed to publish HTTP summary metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047095,
+            "message": "2025-12-04T14:37:27.095Z\t7219f6c8-3642-4e02-a1a7-d27820593db2\tWARN\tFailed to publish artifact metrics {\n  operationGroup: 'artifact-download',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047133,
+            "message": "END RequestId: 7219f6c8-3642-4e02-a1a7-d27820593db2\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047133,
+            "message": "REPORT RequestId: 7219f6c8-3642-4e02-a1a7-d27820593db2\tDuration: 638.42 ms\tBilled Duration: 2328 ms\tMemory Size: 512 MB\tMax Memory Used: 191 MB\tInit Duration: 1689.13 ms\t\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047621,
+            "message": "START RequestId: 7856ddfb-7838-4535-87dc-93f626a2e3ae Version: 404\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047625,
+            "message": "2025-12-04T14:37:27.625Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tLambda invocation started {\n  invocationId: '073dcd1a-6bf7-477b-b9f5-e5f2b55884f7',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'fef42e14-e7b4-4078-ab6a-0564e9811577',\n  sessionId: '',\n  jobId: '',\n  coldStart: false,\n  operationGroup: 'artifact-download',\n  requestMetadata: {\n    type: 'http-legacy',\n    method: 'GET',\n    path: '/assets/index-latest.css'\n  }\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047675,
+            "message": "2025-12-04T14:37:27.675Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"event\":\"service_handler_route_check\",\"service\":\"client-app\",\"incomingPath\":\"/assets/index-latest.css\",\"normalizedPath\":\"/assets/index-latest.css\",\"method\":\"GET\",\"routeAllowed\":true,\"routes\":[\"/\",\"/\",\"/index.html\",\"/index.html\",\"/favicon.ico\",\"/favicon.ico\",\"/manifest.webmanifest\",\"/manifest.webmanifest\",\"/robots.txt\",\"/robots.txt\",\"/service-worker.js\",\"/service-worker.js\",\"/api/published-cloudfront\",\"/api/published-cloudfront\",\"/api/static-proxy\",\"/api/static-proxy\",\"/api/static-manifest\",\"/api/static-manifest\",\"/assets*\",\"/assets*\",\"/fonts*\",\"/fonts*\",\"/images*\",\"/images*\",\"/cover-templates*\",\"/cover-templates*\"]}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047675,
+            "message": "2025-12-04T14:37:27.675Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"event\":\"debug_event_structure\",\"keys\":[\"resource\",\"path\",\"httpMethod\",\"headers\",\"multiValueHeaders\",\"queryStringParameters\",\"multiValueQueryStringParameters\",\"pathParameters\",\"stageVariables\",\"requestContext\",\"body\",\"isBase64Encoded\"],\"hasMultiValueHeaders\":true}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047675,
+            "message": "2025-12-04T14:37:27.675Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tWARN\t[DEPRECATION NOTICE] { binaryMimeTypes: [] } is deprecated. base64 encoding is now automatically determined based on response content-type and content-encoding. If you need to manually set binary content types, instead, use { binarySettings: { contentTypes: [] } }\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047676,
+            "message": "2025-12-04T14:37:27.676Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.676Z\",\"level\":\"info\",\"message\":\"http_request_received\",\"requestId\":\"e3bbe203-6e69-49a9-afde-33933a89fd49\",\"method\":\"GET\",\"path\":\"/index-latest.css\",\"template\":\"unknown\",\"session\":\"e3bbe203-6e69-49a9-afde-33933a89fd49\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"e3bbe203-6e69-49a9-afde-33933a89fd49\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047677,
+            "message": "2025-12-04T14:37:27.677Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.676Z\",\"level\":\"info\",\"message\":\"path_restoration_debug\",\"originalPathHeader\":\"/assets/index-latest.css\",\"reqPath\":\"/index-latest.css\",\"reqUrl\":\"/index-latest.css\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047677,
+            "message": "2025-12-04T14:37:27.677Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.677Z\",\"level\":\"info\",\"message\":\"path_restored_from_header\",\"restoredPath\":\"/assets/index-latest.css\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047677,
+            "message": "2025-12-04T14:37:27.677Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.677Z\",\"level\":\"info\",\"message\":\"request_received\",\"path\":\"/assets/index-latest.css\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047677,
+            "message": "2025-12-04T14:37:27.677Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.677Z\",\"level\":\"info\",\"message\":\"service_filter_entry\",\"allowListSize\":1,\"allowList\":[\"clientApp\"],\"path\":\"/assets/index-latest.css\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047677,
+            "message": "2025-12-04T14:37:27.677Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.677Z\",\"level\":\"info\",\"message\":\"service_resolution_check\",\"method\":\"GET\",\"rawPath\":\"/assets/index-latest.css\",\"serviceKey\":\"clientApp\",\"allowed\":true,\"allowList\":[\"clientApp\"],\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047678,
+            "message": "2025-12-04T14:37:27.678Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.677Z\",\"level\":\"info\",\"message\":\"client_app_routes_entered\",\"path\":\"/assets/index-latest.css\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047678,
+            "message": "2025-12-04T14:37:27.678Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tDEBUG: resolveClientDistAssetPath input: '/assets/index-latest.css'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047678,
+            "message": "2025-12-04T14:37:27.678Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tDEBUG: resolveClientDistAssetPath sanitized: '/assets/index-latest.css'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047679,
+            "message": "2025-12-04T14:37:27.679Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tDEBUG: resolveClientDistAssetPath final: '/var/task/client/dist/assets/index-latest.css'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047689,
+            "message": "2025-12-04T14:37:27.689Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.689Z\",\"level\":\"info\",\"message\":\"http_request_completed\",\"requestId\":\"e3bbe203-6e69-49a9-afde-33933a89fd49\",\"method\":\"GET\",\"path\":\"/index-latest.css\",\"statusCode\":200,\"durationMs\":13,\"contentLength\":\"106285\",\"template\":\"unknown\",\"session\":\"e3bbe203-6e69-49a9-afde-33933a89fd49\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"e3bbe203-6e69-49a9-afde-33933a89fd49\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047690,
+            "message": "2025-12-04T14:37:27.690Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tLambda invocation completed {\n  invocationId: '073dcd1a-6bf7-477b-b9f5-e5f2b55884f7',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'fef42e14-e7b4-4078-ab6a-0564e9811577',\n  sessionId: '',\n  jobId: '',\n  durationMs: 15,\n  operationGroup: 'artifact-download',\n  coldStart: false\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047690,
+            "message": "2025-12-04T14:37:27.690Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tAPI gateway response summary {\n  invocationId: '073dcd1a-6bf7-477b-b9f5-e5f2b55884f7',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'fef42e14-e7b4-4078-ab6a-0564e9811577',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 15,\n  method: 'GET',\n  path: '/assets/index-latest.css',\n  pathCategory: '/assets',\n  statusCode: 200,\n  contentLength: 106285,\n  sessionCount: 0,\n  downloadCount: 0,\n  assetRequest: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047691,
+            "message": "2025-12-04T14:37:27.691Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\tAPI gateway asset response {\n  invocationId: '073dcd1a-6bf7-477b-b9f5-e5f2b55884f7',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'fef42e14-e7b4-4078-ab6a-0564e9811577',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 15,\n  method: 'GET',\n  path: '/assets/index-latest.css',\n  pathCategory: '/assets',\n  statusCode: 200,\n  contentLength: 106285,\n  sessionCount: 0,\n  downloadCount: 0,\n  assetRequest: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047694,
+            "message": "2025-12-04T14:37:27.694Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tINFO\t{\"timestamp\":\"2025-12-04T14:37:27.693Z\",\"level\":\"info\",\"message\":\"client_asset_alias_local_served\",\"aliasPath\":\"/assets/index-latest.css\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047804,
+            "message": "2025-12-04T14:37:27.804Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tWARN\tFailed to publish lambda metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047809,
+            "message": "2025-12-04T14:37:27.809Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tWARN\tFailed to publish HTTP summary metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047814,
+            "message": "2025-12-04T14:37:27.814Z\t7856ddfb-7838-4535-87dc-93f626a2e3ae\tWARN\tFailed to publish artifact metrics {\n  operationGroup: 'artifact-download',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047828,
+            "message": "END RequestId: 7856ddfb-7838-4535-87dc-93f626a2e3ae\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047828,
+            "message": "REPORT RequestId: 7856ddfb-7838-4535-87dc-93f626a2e3ae\tDuration: 207.02 ms\tBilled Duration: 208 ms\tMemory Size: 512 MB\tMax Memory Used: 191 MB\t\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047965,
+            "message": "START RequestId: 3f94bc17-751f-46cd-91ff-cfe08df2f62b Version: 404\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859047967,
+            "message": "2025-12-04T14:37:27.967Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tLambda invocation started {\n  invocationId: '3c779c4e-26c4-4a21-9240-776526d15f78',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'b71d75ab-58fa-4c13-bfe7-5fd7880b4cd9',\n  sessionId: '',\n  jobId: '',\n  coldStart: false,\n  operationGroup: 'artifact-download',\n  requestMetadata: {\n    type: 'http-legacy',\n    method: 'GET',\n    path: '/assets/index-latest.js'\n  }\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048008,
+            "message": "2025-12-04T14:37:28.008Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"event\":\"service_handler_route_check\",\"service\":\"client-app\",\"incomingPath\":\"/assets/index-latest.js\",\"normalizedPath\":\"/assets/index-latest.js\",\"method\":\"GET\",\"routeAllowed\":true,\"routes\":[\"/\",\"/\",\"/index.html\",\"/index.html\",\"/favicon.ico\",\"/favicon.ico\",\"/manifest.webmanifest\",\"/manifest.webmanifest\",\"/robots.txt\",\"/robots.txt\",\"/service-worker.js\",\"/service-worker.js\",\"/api/published-cloudfront\",\"/api/published-cloudfront\",\"/api/static-proxy\",\"/api/static-proxy\",\"/api/static-manifest\",\"/api/static-manifest\",\"/assets*\",\"/assets*\",\"/fonts*\",\"/fonts*\",\"/images*\",\"/images*\",\"/cover-templates*\",\"/cover-templates*\"]}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048008,
+            "message": "2025-12-04T14:37:28.008Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"event\":\"debug_event_structure\",\"keys\":[\"resource\",\"path\",\"httpMethod\",\"headers\",\"multiValueHeaders\",\"queryStringParameters\",\"multiValueQueryStringParameters\",\"pathParameters\",\"stageVariables\",\"requestContext\",\"body\",\"isBase64Encoded\"],\"hasMultiValueHeaders\":true}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048008,
+            "message": "2025-12-04T14:37:28.008Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tWARN\t[DEPRECATION NOTICE] { binaryMimeTypes: [] } is deprecated. base64 encoding is now automatically determined based on response content-type and content-encoding. If you need to manually set binary content types, instead, use { binarySettings: { contentTypes: [] } }\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048009,
+            "message": "2025-12-04T14:37:28.009Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.009Z\",\"level\":\"info\",\"message\":\"http_request_received\",\"requestId\":\"f9735277-2772-4b4c-a09b-d9d8bf7ba336\",\"method\":\"GET\",\"path\":\"/index-latest.js\",\"template\":\"unknown\",\"session\":\"f9735277-2772-4b4c-a09b-d9d8bf7ba336\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"f9735277-2772-4b4c-a09b-d9d8bf7ba336\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048009,
+            "message": "2025-12-04T14:37:28.009Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.009Z\",\"level\":\"info\",\"message\":\"path_restoration_debug\",\"originalPathHeader\":\"/assets/index-latest.js\",\"reqPath\":\"/index-latest.js\",\"reqUrl\":\"/index-latest.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048010,
+            "message": "2025-12-04T14:37:28.010Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.009Z\",\"level\":\"info\",\"message\":\"path_restored_from_header\",\"restoredPath\":\"/assets/index-latest.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048010,
+            "message": "2025-12-04T14:37:28.010Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.010Z\",\"level\":\"info\",\"message\":\"request_received\",\"path\":\"/assets/index-latest.js\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048010,
+            "message": "2025-12-04T14:37:28.010Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.010Z\",\"level\":\"info\",\"message\":\"service_filter_entry\",\"allowListSize\":1,\"allowList\":[\"clientApp\"],\"path\":\"/assets/index-latest.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048010,
+            "message": "2025-12-04T14:37:28.010Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.010Z\",\"level\":\"info\",\"message\":\"service_resolution_check\",\"method\":\"GET\",\"rawPath\":\"/assets/index-latest.js\",\"serviceKey\":\"clientApp\",\"allowed\":true,\"allowList\":[\"clientApp\"],\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048011,
+            "message": "2025-12-04T14:37:28.011Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.010Z\",\"level\":\"info\",\"message\":\"client_app_routes_entered\",\"path\":\"/assets/index-latest.js\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048011,
+            "message": "2025-12-04T14:37:28.011Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tDEBUG: resolveClientDistAssetPath input: '/assets/index-latest.js'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048011,
+            "message": "2025-12-04T14:37:28.011Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tDEBUG: resolveClientDistAssetPath sanitized: '/assets/index-latest.js'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048011,
+            "message": "2025-12-04T14:37:28.011Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tDEBUG: resolveClientDistAssetPath final: '/var/task/client/dist/assets/index-latest.js'\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048048,
+            "message": "2025-12-04T14:37:28.048Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.048Z\",\"level\":\"info\",\"message\":\"http_request_completed\",\"requestId\":\"f9735277-2772-4b4c-a09b-d9d8bf7ba336\",\"method\":\"GET\",\"path\":\"/index-latest.js\",\"statusCode\":200,\"durationMs\":39,\"contentLength\":\"943626\",\"template\":\"unknown\",\"session\":\"f9735277-2772-4b4c-a09b-d9d8bf7ba336\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"f9735277-2772-4b4c-a09b-d9d8bf7ba336\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048051,
+            "message": "2025-12-04T14:37:28.051Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tLambda invocation completed {\n  invocationId: '3c779c4e-26c4-4a21-9240-776526d15f78',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'b71d75ab-58fa-4c13-bfe7-5fd7880b4cd9',\n  sessionId: '',\n  jobId: '',\n  durationMs: 43,\n  operationGroup: 'artifact-download',\n  coldStart: false\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048052,
+            "message": "2025-12-04T14:37:28.052Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tAPI gateway response summary {\n  invocationId: '3c779c4e-26c4-4a21-9240-776526d15f78',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'b71d75ab-58fa-4c13-bfe7-5fd7880b4cd9',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 43,\n  method: 'GET',\n  path: '/assets/index-latest.js',\n  pathCategory: '/assets',\n  statusCode: 200,\n  contentLength: 943626,\n  sessionCount: 0,\n  downloadCount: 0,\n  assetRequest: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048052,
+            "message": "2025-12-04T14:37:28.052Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\tAPI gateway asset response {\n  invocationId: '3c779c4e-26c4-4a21-9240-776526d15f78',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'b71d75ab-58fa-4c13-bfe7-5fd7880b4cd9',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 43,\n  method: 'GET',\n  path: '/assets/index-latest.js',\n  pathCategory: '/assets',\n  statusCode: 200,\n  contentLength: 943626,\n  sessionCount: 0,\n  downloadCount: 0,\n  assetRequest: true\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048054,
+            "message": "2025-12-04T14:37:28.054Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.054Z\",\"level\":\"info\",\"message\":\"client_asset_alias_local_served\",\"aliasPath\":\"/assets/index-latest.js\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048193,
+            "message": "2025-12-04T14:37:28.193Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tWARN\tFailed to publish lambda metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048211,
+            "message": "2025-12-04T14:37:28.211Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tWARN\tFailed to publish HTTP summary metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048228,
+            "message": "2025-12-04T14:37:28.228Z\t3f94bc17-751f-46cd-91ff-cfe08df2f62b\tWARN\tFailed to publish artifact metrics {\n  operationGroup: 'artifact-download',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048270,
+            "message": "END RequestId: 3f94bc17-751f-46cd-91ff-cfe08df2f62b\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048270,
+            "message": "REPORT RequestId: 3f94bc17-751f-46cd-91ff-cfe08df2f62b\tDuration: 303.62 ms\tBilled Duration: 304 ms\tMemory Size: 512 MB\tMax Memory Used: 191 MB\t\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048518,
+            "message": "START RequestId: 6845b490-e5e4-4910-b483-2c24d0a39eaf Version: 404\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048519,
+            "message": "2025-12-04T14:37:28.519Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tINFO\tLambda invocation started {\n  invocationId: '4937c898-0cc7-451e-848a-3569202acf51',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'c895dc0e-bfd8-4867-9709-f12e1fd613ba',\n  sessionId: '',\n  jobId: '',\n  coldStart: false,\n  operationGroup: 'artifact-download',\n  requestMetadata: {\n    type: 'http-legacy',\n    method: 'GET',\n    path: '/api/published-cloudfront'\n  }\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048561,
+            "message": "2025-12-04T14:37:28.561Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tINFO\t{\"event\":\"service_handler_route_check\",\"service\":\"client-app\",\"incomingPath\":\"/api/published-cloudfront\",\"normalizedPath\":\"/api/published-cloudfront\",\"method\":\"GET\",\"routeAllowed\":true,\"routes\":[\"/\",\"/\",\"/index.html\",\"/index.html\",\"/favicon.ico\",\"/favicon.ico\",\"/manifest.webmanifest\",\"/manifest.webmanifest\",\"/robots.txt\",\"/robots.txt\",\"/service-worker.js\",\"/service-worker.js\",\"/api/published-cloudfront\",\"/api/published-cloudfront\",\"/api/static-proxy\",\"/api/static-proxy\",\"/api/static-manifest\",\"/api/static-manifest\",\"/assets*\",\"/assets*\",\"/fonts*\",\"/fonts*\",\"/images*\",\"/images*\",\"/cover-templates*\",\"/cover-templates*\"]}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048561,
+            "message": "2025-12-04T14:37:28.561Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tINFO\t{\"event\":\"debug_event_structure\",\"keys\":[\"resource\",\"path\",\"httpMethod\",\"headers\",\"multiValueHeaders\",\"queryStringParameters\",\"multiValueQueryStringParameters\",\"pathParameters\",\"stageVariables\",\"requestContext\",\"body\",\"isBase64Encoded\"],\"hasMultiValueHeaders\":true}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048561,
+            "message": "2025-12-04T14:37:28.561Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tWARN\t[DEPRECATION NOTICE] { binaryMimeTypes: [] } is deprecated. base64 encoding is now automatically determined based on response content-type and content-encoding. If you need to manually set binary content types, instead, use { binarySettings: { contentTypes: [] } }\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048564,
+            "message": "2025-12-04T14:37:28.564Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tINFO\tLambda invocation completed {\n  invocationId: '4937c898-0cc7-451e-848a-3569202acf51',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'c895dc0e-bfd8-4867-9709-f12e1fd613ba',\n  sessionId: '',\n  jobId: '',\n  durationMs: 3,\n  operationGroup: 'artifact-download',\n  coldStart: false\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048564,
+            "message": "2025-12-04T14:37:28.564Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tINFO\tAPI gateway response summary {\n  invocationId: '4937c898-0cc7-451e-848a-3569202acf51',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: 'c895dc0e-bfd8-4867-9709-f12e1fd613ba',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 3,\n  method: 'GET',\n  path: '/api/published-cloudfront',\n  pathCategory: '/api/published-cloudfront',\n  statusCode: 304,\n  contentLength: 0,\n  sessionCount: 0,\n  downloadCount: 0\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048691,
+            "message": "2025-12-04T14:37:28.691Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tWARN\tFailed to publish lambda metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048717,
+            "message": "2025-12-04T14:37:28.717Z\t6845b490-e5e4-4910-b483-2c24d0a39eaf\tWARN\tFailed to publish artifact metrics {\n  operationGroup: 'artifact-download',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048728,
+            "message": "END RequestId: 6845b490-e5e4-4910-b483-2c24d0a39eaf\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048728,
+            "message": "REPORT RequestId: 6845b490-e5e4-4910-b483-2c24d0a39eaf\tDuration: 209.91 ms\tBilled Duration: 210 ms\tMemory Size: 512 MB\tMax Memory Used: 192 MB\t\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048906,
+            "message": "START RequestId: e74e9c51-707a-44cd-85fd-40879aa9bada Version: 404\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048907,
+            "message": "2025-12-04T14:37:28.907Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\tLambda invocation started {\n  invocationId: 'ebba27d9-5ea4-40ce-b711-5b764017b8b1',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '27a6b2ed-f129-473a-9552-a5c5d385a685',\n  sessionId: '',\n  jobId: '',\n  coldStart: false,\n  operationGroup: 'artifact-download',\n  requestMetadata: { type: 'http-legacy', method: 'GET', path: '/favicon.ico' }\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048951,
+            "message": "2025-12-04T14:37:28.951Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"event\":\"service_handler_route_check\",\"service\":\"client-app\",\"incomingPath\":\"/favicon.ico\",\"normalizedPath\":\"/favicon.ico\",\"method\":\"GET\",\"routeAllowed\":true,\"routes\":[\"/\",\"/\",\"/index.html\",\"/index.html\",\"/favicon.ico\",\"/favicon.ico\",\"/manifest.webmanifest\",\"/manifest.webmanifest\",\"/robots.txt\",\"/robots.txt\",\"/service-worker.js\",\"/service-worker.js\",\"/api/published-cloudfront\",\"/api/published-cloudfront\",\"/api/static-proxy\",\"/api/static-proxy\",\"/api/static-manifest\",\"/api/static-manifest\",\"/assets*\",\"/assets*\",\"/fonts*\",\"/fonts*\",\"/images*\",\"/images*\",\"/cover-templates*\",\"/cover-templates*\"]}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048951,
+            "message": "2025-12-04T14:37:28.951Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"event\":\"debug_event_structure\",\"keys\":[\"resource\",\"path\",\"httpMethod\",\"headers\",\"multiValueHeaders\",\"queryStringParameters\",\"multiValueQueryStringParameters\",\"pathParameters\",\"stageVariables\",\"requestContext\",\"body\",\"isBase64Encoded\"],\"hasMultiValueHeaders\":true}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048951,
+            "message": "2025-12-04T14:37:28.951Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tWARN\t[DEPRECATION NOTICE] { binaryMimeTypes: [] } is deprecated. base64 encoding is now automatically determined based on response content-type and content-encoding. If you need to manually set binary content types, instead, use { binarySettings: { contentTypes: [] } }\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048952,
+            "message": "2025-12-04T14:37:28.952Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.952Z\",\"level\":\"info\",\"message\":\"http_request_received\",\"requestId\":\"4224e3e0-cee7-4579-a5e8-ca6091acbc75\",\"method\":\"GET\",\"path\":\"/favicon.ico\",\"template\":\"unknown\",\"session\":\"4224e3e0-cee7-4579-a5e8-ca6091acbc75\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"4224e3e0-cee7-4579-a5e8-ca6091acbc75\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048952,
+            "message": "2025-12-04T14:37:28.952Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.952Z\",\"level\":\"info\",\"message\":\"path_restoration_debug\",\"originalPathHeader\":\"/favicon.ico\",\"reqPath\":\"/favicon.ico\",\"reqUrl\":\"/favicon.ico\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048953,
+            "message": "2025-12-04T14:37:28.953Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.953Z\",\"level\":\"info\",\"message\":\"request_received\",\"path\":\"/favicon.ico\",\"method\":\"GET\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048953,
+            "message": "2025-12-04T14:37:28.953Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.953Z\",\"level\":\"info\",\"message\":\"service_filter_entry\",\"allowListSize\":1,\"allowList\":[\"clientApp\"],\"path\":\"/favicon.ico\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048953,
+            "message": "2025-12-04T14:37:28.953Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.953Z\",\"level\":\"info\",\"message\":\"service_resolution_check\",\"method\":\"GET\",\"rawPath\":\"/favicon.ico\",\"serviceKey\":\"clientApp\",\"allowed\":true,\"allowList\":[\"clientApp\"],\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048953,
+            "message": "2025-12-04T14:37:28.953Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.953Z\",\"level\":\"info\",\"message\":\"client_app_routes_entered\",\"path\":\"/favicon.ico\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048953,
+            "message": "2025-12-04T14:37:28.953Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.953Z\",\"level\":\"info\",\"message\":\"try_serve_hashed_asset_entry\",\"path\":\"/favicon.ico\",\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"unknown\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048955,
+            "message": "2025-12-04T14:37:28.955Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\t{\"timestamp\":\"2025-12-04T14:37:28.955Z\",\"level\":\"info\",\"message\":\"http_request_completed\",\"requestId\":\"4224e3e0-cee7-4579-a5e8-ca6091acbc75\",\"method\":\"GET\",\"path\":\"/favicon.ico\",\"statusCode\":204,\"durationMs\":3,\"template\":\"unknown\",\"session\":\"4224e3e0-cee7-4579-a5e8-ca6091acbc75\",\"build\":\"404\",\"artifactType\":\"none\",\"metadata\":{\"template\":\"unknown\",\"session\":\"4224e3e0-cee7-4579-a5e8-ca6091acbc75\",\"build\":\"404\",\"artifactType\":\"none\"}}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048955,
+            "message": "2025-12-04T14:37:28.955Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\tLambda invocation completed {\n  invocationId: 'ebba27d9-5ea4-40ce-b711-5b764017b8b1',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '27a6b2ed-f129-473a-9552-a5c5d385a685',\n  sessionId: '',\n  jobId: '',\n  durationMs: 4,\n  operationGroup: 'artifact-download',\n  coldStart: false\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859048956,
+            "message": "2025-12-04T14:37:28.956Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tINFO\tAPI gateway response summary {\n  invocationId: 'ebba27d9-5ea4-40ce-b711-5b764017b8b1',\n  functionName: 'ResumeForge-prod-client-app',\n  requestId: '27a6b2ed-f129-473a-9552-a5c5d385a685',\n  sessionId: '',\n  jobId: '',\n  operationGroup: 'artifact-download',\n  durationMs: 4,\n  method: 'GET',\n  path: '/favicon.ico',\n  pathCategory: '/favicon.ico',\n  statusCode: 204,\n  contentLength: 0,\n  sessionCount: 0,\n  downloadCount: 0\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859049065,
+            "message": "2025-12-04T14:37:29.065Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tWARN\tFailed to publish lambda metrics {\n  functionName: 'ResumeForge-prod-client-app',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859049069,
+            "message": "2025-12-04T14:37:29.069Z\te74e9c51-707a-44cd-85fd-40879aa9bada\tWARN\tFailed to publish artifact metrics {\n  operationGroup: 'artifact-download',\n  stage: 'prod',\n  errorMessage: 'User: arn:aws:sts::957650740525:assumed-role/ResumeForge-ClientAppFunctionRole-L8cIMcxbnltm/ResumeForge-prod-client-app is not authorized to perform: cloudwatch:PutMetricData because no identity-based policy allows the cloudwatch:PutMetricData action'\n}\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859049071,
+            "message": "END RequestId: e74e9c51-707a-44cd-85fd-40879aa9bada\n",
+            "ingestionTime": 1764859049168
+        },
+        {
+            "timestamp": 1764859049071,
+            "message": "REPORT RequestId: e74e9c51-707a-44cd-85fd-40879aa9bada\tDuration: 163.80 ms\tBilled Duration: 164 ms\tMemory Size: 512 MB\tMax Memory Used: 192 MB\t\n",
+            "ingestionTime": 1764859049168
+        }
+    ],
+    "nextForwardToken": "f/39357671964653424666177378065767262161433658598011306092/s",
+    "nextBackwardToken": "b/39357671869451543413650147874551280855497803328980910080/s"
+}
