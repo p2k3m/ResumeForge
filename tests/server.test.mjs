@@ -21,6 +21,26 @@ process.env.RUNTIME_CONFIG_PATH = '/non-existent/runtime-config.json';
 
 const clientIndexPath = path.join(process.cwd(), 'client', 'dist', 'index.html');
 
+// Ensure a hashed asset exists for tests (fixes CI failures where build artifacts might be missing)
+const ensureHashedAssetExists = async () => {
+  const assetsDir = path.join(process.cwd(), 'client', 'dist', 'assets');
+  const hashedCssName = 'index-0da4b4af.css';
+  const hashedAssetPath = path.join(assetsDir, hashedCssName);
+
+  try {
+    await fsPromises.mkdir(assetsDir, { recursive: true });
+    if (!fs.existsSync(hashedAssetPath)) {
+      await fsPromises.writeFile(hashedAssetPath, '.alias { color: #f00; }');
+    }
+  } catch (error) {
+    console.error('Failed to create dummy hashed asset:', error);
+  }
+};
+
+beforeAll(async () => {
+  await ensureHashedAssetExists();
+});
+
 const mockS3Send = jest.fn().mockResolvedValue({});
 const getObjectCommandMock = jest.fn((input) => ({ input, __type: 'GetObjectCommand' }));
 const headObjectCommandMock = jest.fn((input) => ({ input, __type: 'HeadObjectCommand' }));
