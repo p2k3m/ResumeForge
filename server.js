@@ -19188,9 +19188,9 @@ app.get('/api/static-proxy', async (req, res) => {
             fallbackCandidates: attemptedFallbacks,
           });
           res
-            .status(502)
+            .status(404)
             .type('text/plain')
-            .send('Static assets are temporarily unavailable.');
+            .send('Static asset not found.');
           return true;
         },
       });
@@ -19202,8 +19202,8 @@ app.get('/api/static-proxy', async (req, res) => {
     }
   }
 
-  logStructured('error', 'client_asset_proxy_unavailable', logContext);
-  res.status(502).type('text/plain').send('Static assets are temporarily unavailable.');
+  logStructured('warn', 'client_asset_proxy_unavailable', logContext);
+  res.status(404).type('text/plain').send('Static asset not found.');
 });
 
 app.get('/api/static-manifest', async (req, res) => {
