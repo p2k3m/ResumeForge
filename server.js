@@ -4777,32 +4777,43 @@ app.use((req, res, next) => {
 });
 
 const allowedOrigins = resolveCurrentAllowedOrigins();
-const corsOptions = {
-  origin(origin, callback) {
-    if (!origin) {
-      return callback(null, true);
-    }
 
-    if (!allowedOrigins.length) {
-      return callback(new Error('Origin not allowed by CORS policy'));
-    }
+// Robust CORS middleware to ensure headers are always present
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
+  const allowedOrigins = resolveCurrentAllowedOrigins(runtimeConfig);
 
-    const isAllowed = allowedOrigins.some((allowedOrigin) => {
-      if (allowedOrigin === origin) return true;
-      if (allowedOrigin.endsWith('*')) {
-        const prefix = allowedOrigin.slice(0, -1);
-        return origin.startsWith(prefix);
+  if (origin && (allowedOrigins.includes('*') || allowedOrigins.includes(origin))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (allowedOrigins.includes('*')) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,PUT,PATCH,POST,DELETE');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Amz-Date, X-Api-Key, X-Amz-Security-Token');
+    return res.status(204).end();
+  }
+  next();
+});
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
+      const allowed = resolveCurrentAllowedOrigins(runtimeConfig);
+      if (!origin || allowed.includes('*') || allowed.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
       }
-      return false;
-    });
-
-    return callback(
-      isAllowed ? null : new Error('Origin not allowed by CORS policy')
-    );
-  },
-  credentials: true
-};
-app.use(cors(corsOptions));
+    },
+    credentials: true,
+  })
+);
 
 app.use((req, res, next) => {
   const originalPath = req.headers['x-original-path'];
@@ -19105,9 +19116,9 @@ app.get('/api/static-proxy', async (req, res) => {
           return;
         }
         res
-          .status(502)
+          .status(404)
           .type('text/plain')
-          .send('Static assets are temporarily unavailable.');
+          .send('Static asset not found.');
         return true;
       },
     });
