@@ -2419,9 +2419,16 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 function App() {
   const renderCountRef = useRef(0);
   renderCountRef.current += 1;
-  if (renderCountRef.current % 100 === 0) {
-    console.warn(`[Diagnostic] App component rendered ${renderCountRef.current} times`);
-  }
+
+  useEffect(() => {
+    console.log(`[Diagnostic] App mounted. Initial render count: ${renderCountRef.current}`);
+  }, []);
+
+  useEffect(() => {
+    if (renderCountRef.current % 50 === 0) {
+      console.warn(`[Diagnostic] App component rendered ${renderCountRef.current} times`);
+    }
+  });
   const [manualJobDescription, setManualJobDescription] = useState('')
   const pendingImprovementRescoreRef = useRef([])
   const runQueuedImprovementRescoreRef = useRef(null)
