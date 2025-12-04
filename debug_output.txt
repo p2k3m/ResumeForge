@@ -1,0 +1,209 @@
+
+> resumeforge@1.0.0 test
+> node --experimental-vm-modules node_modules/jest/bin/jest.js tests/server.test.mjs
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+(node:8965) ExperimentalWarning: VM Modules is an experimental feature. This feature could change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+  console.log
+    {"timestamp":"2025-12-04T13:14:56.996Z","level":"info","message":"http_request_received","requestId":"328c0f93-f72d-45a9-a14e-00cfaec57bfc","method":"GET","path":"/api/static-proxy?asset=assets%2Findex-latest.css","template":"unknown","session":"328c0f93-f72d-45a9-a14e-00cfaec57bfc","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"328c0f93-f72d-45a9-a14e-00cfaec57bfc","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.056Z","level":"info","message":"path_restoration_debug","reqPath":"/api/static-proxy","reqUrl":"/api/static-proxy?asset=assets%2Findex-latest.css","template":"unknown","session":"unknown","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.064Z","level":"info","message":"request_received","path":"/api/static-proxy","method":"GET","template":"unknown","session":"unknown","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.076Z","level":"info","message":"service_filter_entry","allowListSize":"not-set","allowList":[],"path":"/api/static-proxy","template":"unknown","session":"unknown","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.081Z","level":"info","message":"client_app_routes_entered","path":"/api/static-proxy","template":"unknown","session":"unknown","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.090Z","level":"info","message":"try_serve_hashed_asset_entry","path":"/api/static-proxy","template":"unknown","session":"unknown","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    DEBUG: normalizeStaticProxyAssetPath input='assets/index-latest.css' candidate='assets/index-latest.css'
+
+      at normalizeStaticProxyAssetPath (server.js:1603:11)
+
+  console.log
+    DEBUG: resolveClientDistAssetPath input: '/assets/index-latest.css'
+
+      at resolveClientDistAssetPath (server.js:1013:11)
+
+  console.log
+    DEBUG: resolveClientDistAssetPath sanitized: '/assets/index-latest.css'
+
+      at resolveClientDistAssetPath (server.js:1025:11)
+
+  console.log
+    DEBUG: resolveClientDistAssetPath final: '/Users/pushkarmishra/Documents/ResumeForge/ResumeForge/client/dist/assets/index-latest.css'
+
+      at resolveClientDistAssetPath (server.js:1028:11)
+
+  console.log
+    DEBUG: resolveClientDistAssetPath input: '/assets/index-0da4b4af.css'
+
+      at resolveClientDistAssetPath (server.js:1013:11)
+
+  console.log
+    DEBUG: resolveClientDistAssetPath sanitized: '/assets/index-0da4b4af.css'
+
+      at resolveClientDistAssetPath (server.js:1025:11)
+
+  console.log
+    DEBUG: resolveClientDistAssetPath final: '/Users/pushkarmishra/Documents/ResumeForge/ResumeForge/client/dist/assets/index-0da4b4af.css'
+
+      at resolveClientDistAssetPath (server.js:1028:11)
+
+  console.log
+    DEBUG: applyS3ResponseHeaders ContentLength=undefined resolved=undefined metadata={"Body":{"_readableState":{"objectMode":true,"highWaterMark":1,"buffer":{"head":null,"tail":null,"length":0},"length":0,"pipes":[],"flowing":null,"ended":false,"endEmitted":false,"reading":false,"constructed":true,"sync":true,"needReadable":false,"emittedReadable":false,"readableListening":false,"resumeScheduled":false,"errorEmitted":false,"emitClose":true,"autoDestroy":true,"destroyed":false,"errored":null,"closed":false,"closeEmitted":false,"defaultEncoding":"utf8","awaitDrainWriters":null,"multiAwaitDrain":false,"readingMore":false,"dataEmitted":false,"decoder":null,"encoding":null},"_events":{},"_eventsCount":0},"ContentType":"text/css","CacheControl":"public, max-age=60"}
+
+      at applyS3ResponseHeaders (server.js:617:11)
+
+  console.log
+    DEBUG: streamS3BodyToResponse data chunk length=32
+
+      at Readable.<anonymous> (server.js:505:17)
+
+  console.log
+    DEBUG: streamS3BodyToResponse end fullBody length=32
+
+      at Readable.<anonymous> (server.js:513:19)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.126Z","level":"info","message":"http_request_completed","requestId":"328c0f93-f72d-45a9-a14e-00cfaec57bfc","method":"GET","path":"/api/static-proxy?asset=assets%2Findex-latest.css","statusCode":200,"durationMs":130,"contentLength":"32","template":"unknown","session":"328c0f93-f72d-45a9-a14e-00cfaec57bfc","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"328c0f93-f72d-45a9-a14e-00cfaec57bfc","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+  console.log
+    {"timestamp":"2025-12-04T13:14:57.128Z","level":"info","message":"client_asset_alias_proxy_s3_served","bucket":"test-bucket","key":"static/client/test/latest/assets/index-0da4b4af.css","path":"assets/index-0da4b4af.css","method":"GET","aliasPath":"/assets/index-latest.css","resolvedPath":"/assets/index-0da4b4af.css","s3Key":"assets/index-0da4b4af.css","proxy":true,"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none","metadata":{"template":"unknown","session":"unknown","build":"local-dev","artifactType":"none"}}
+
+      at logStructured (server.js:3455:5)
+
+PASS tests/server.test.mjs
+  health check
+    ○ skipped GET /healthz
+  static asset fallbacks
+    ○ skipped GET /favicon.ico returns 204
+    ○ skipped serves hashed index asset from S3 when local file is missing
+    ○ skipped serves hashed index asset directly from the bundled client when available
+    ○ skipped strips API Gateway stage prefixes before resolving static index aliases
+    ○ skipped performs HEAD lookup against S3 for hashed index asset metadata
+    ○ skipped serves the latest index asset alias via S3 when local files are unavailable
+    ○ skipped serves the index asset alias via the S3 manifest when the local manifest is missing
+    ○ skipped serves the index asset alias when the manifest contains prefixed S3 keys
+    ○ skipped serves the index asset alias via manifest fallback when the primary bundle is missing from S3
+  static asset proxy endpoint
+    ✓ falls back to S3 when the hashed bundle is unavailable locally (270 ms)
+    ○ skipped serves the index alias via the local build
+    ○ skipped normalizes stray punctuation in proxy asset queries
+    ○ skipped strips inline alias annotations from hashed proxy asset queries
+    ○ skipped degrades hashed proxy requests to the index alias when upstream assets are missing
+    ○ skipped degrades direct hashed asset requests to the index alias when upstream bundles are missing
+    ○ skipped rejects invalid asset paths
+  static asset manifest endpoint
+    ○ skipped returns manifest data when available
+    ○ skipped allows forcing a manifest refresh via query parameter
+    ○ skipped returns 503 when manifest is unavailable
+  /api/process-cv
+    ○ skipped handles DynamoDB table lifecycle
+    ○ skipped removes stale session change logs when starting a new upload session
+    ○ skipped removes session change log data when the session prefix is reused
+    ○ skipped requires manual job description input
+    ○ skipped sanitizes manual job description input before analysis
+    ○ skipped rejects manual job description input containing prohibited HTML tags
+    ○ skipped stores sanitized job description as session input metadata
+    ○ skipped accepts uploads without a LinkedIn profile URL
+    ○ skipped malformed AI response
+    ○ skipped handles code-fenced JSON with extra text
+    ○ skipped handles JSON surrounded by text
+    ○ skipped returns presigned PDF URLs with labeled asset types
+    ○ skipped returns a structured error when download URLs cannot be generated
+    ○ skipped cover letter urls include structured metadata
+    ○ skipped uses provided templates in preferred order
+    ○ skipped uses templates array
+    ○ skipped filters AI guidance lines
+    ○ skipped resume prompt asks for a project matching job skills
+    ○ skipped inserts project into resume text
+    ○ skipped adds project section when job description provided
+    ○ skipped cover letters omit placeholder sections
+    ○ skipped normalizes structured cover letter responses into text
+    ○ skipped uses sanitized resume fallback when AI returns plain text for versions
+    ○ skipped falls back to plain PDFs when template rendering fails
+    ○ skipped final CV includes updated title, project, and skills
+    ○ skipped missing file
+    ○ skipped unsupported file type
+    ○ skipped rejects non-resume content with descriptive feedback
+    ○ skipped requires re-upload when classification does not identify a CV
+    ○ skipped missing job description text
+    download link refresh
+      ○ skipped resigns an existing artifact key for the active job
+      ○ skipped returns not found when the storage key does not match the job context
+    resume size handling
+      ○ skipped accepts tiny PDF (32 KB) uploads up to 5 MB
+      ○ skipped accepts small DOCX (256 KB) uploads up to 5 MB
+      ○ skipped accepts mid-sized PDF (2 MB) uploads up to 5 MB
+      ○ skipped accepts near-limit DOCX (just under 5 MB) uploads up to 5 MB
+      ○ skipped rejects resumes larger than 5 MB
+  /api/generate-enhanced-docs
+    ○ skipped responds with structured details when jobId is missing
+    ○ skipped queues message when fallback cover letters are used
+    ○ skipped replaces whitespace cover letters with fallback copy
+    ○ skipped audits cover letters for placeholders and applies fallback
+    ○ skipped replaces weak closing cover letters with confident fallback copy
+    ○ skipped replaces cover letters exceeding the word limit with confident fallback copy
+    ○ skipped surfaces message when cover letters remain unavailable
+    ○ skipped refreshes session artifacts when job description changes for a new enhancement
+    ○ skipped refreshes session artifacts automatically when job description changes
+    ○ skipped persists template vs population errors in stage metadata
+  generatePdfWithFallback
+    ○ skipped records retry message when 2025 renderer fails
+    ○ skipped announces next template when fallback occurs for non-2025 resume
+    ○ skipped announces actual next template when 2025 fallback prefers contrast option
+    ○ skipped throws explicit PdfGenerationError with summary when all strategies fail
+  classifyDocument
+    ○ skipped identifies resumes by section structure
+    ○ skipped detects cover letters
+    ○ skipped rejects job descriptions that mimic resume sections
+  extractText
+    ○ skipped extracts text from pdf
+    ○ skipped extracts text from docx
+    ○ skipped guides user when pdf parsing fails
+    ○ skipped guides user when docx parsing fails
+    ○ skipped extracts text from doc
+    ○ skipped rejects plain text files
+  client download labels
+    ○ skipped App displays correct labels for each file type
+  change log persistence safeguards
+    ○ skipped truncates oversized change log fields before persisting
+    ○ skipped persists category changelog details for ATS, skills, and related sections
+    ○ skipped captures rescore summary and updates session score snapshot
+    ○ skipped stores session change logs under a user session prefix when no prior key exists
+  change log session visibility
+    ○ skipped persists reverted entries when updating the change log
+    ○ skipped stores rejected entries in the session change log dismissed list
+    ○ skipped persists cover letter change log payloads to S3
+    ○ skipped removing a cover letter entry records dismissal state in S3
+    ○ skipped persists activity logs from nested payloads into the session change log
+
+Test Suites: 1 passed, 1 total
+Tests:       89 skipped, 1 passed, 90 total
+Snapshots:   0 total
+Time:        2.639 s, estimated 3 s
+Ran all test suites matching /tests\/server.test.mjs/i.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

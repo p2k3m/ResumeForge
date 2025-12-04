@@ -488,7 +488,7 @@ async function streamS3BodyToResponse(body, res) {
             }
           })()
         );
-    await streamPipeline(nodeStream, res);
+    await pipeline(nodeStream, res);
     return;
   }
 
@@ -502,7 +502,6 @@ async function streamS3BodyToResponse(body, res) {
     return new Promise((resolve, reject) => {
       const chunks = [];
       body.on('data', (chunk) => {
-        console.log(`DEBUG: streamS3BodyToResponse data chunk length=${chunk ? chunk.length : 0}`);
         if (chunk !== undefined && chunk !== null) {
           chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         }
@@ -510,7 +509,6 @@ async function streamS3BodyToResponse(body, res) {
       body.on('end', () => {
         try {
           const fullBody = Buffer.concat(chunks);
-          console.log(`DEBUG: streamS3BodyToResponse end fullBody length=${fullBody.length}`);
           res.send(fullBody);
           resolve();
         } catch (err) {
@@ -1149,22 +1147,23 @@ async function serveHashedIndexAssetFromS3({
       return true;
     }
 
-    const objectResult = await sendS3CommandWithRetry(
-      targetClient,
-      () =>
-        new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        }),
-      {
-        retryLogEvent: labels.retry,
-        retryLogContext: logContext,
-      },
+    const response = await targetClient.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      })
     );
 
-    applyS3ResponseHeaders(res, objectResult, assetPath, requestPath);
+    const body = response.Body;
+    if (!body) {
+      throw new Error('Empty body');
+    }
+
+    applyS3ResponseHeaders(res, response, assetPath, requestPath);
+
     res.status(200);
-    await streamS3BodyToResponse(objectResult.Body, res);
+    await streamS3BodyToResponse(body, res);
+
     logStructured('info', labels.served, logContext);
     return true;
   } catch (error) {
@@ -1276,8 +1275,8 @@ async function handleIndexAssetAliasRequest({
   requestPath,
   logContext: additionalLogContext = {},
   logLabels = {},
-  onMissingManifest,
   onUnavailable,
+  metadataConfig,
 }) {
   const normalizedAliasPath = typeof aliasPath === 'string' ? aliasPath : '';
   if (!normalizedAliasPath) {
@@ -1416,17 +1415,15 @@ async function handleIndexAssetAliasRequest({
     ...logLabels,
   };
 
-  const servedFromS3 = await serveHashedIndexAssetFromS3({
+  if (await serveHashedIndexAssetFromS3({
     assetPath: remoteHashedAssetPath,
-    method,
+    bucket: metadataConfig.bucket,
+    prefix: metadataConfig.prefix,
     res,
-    logContext,
+    logContext: { ...logContext, ...logLabels },
     logLabels: aliasLabels,
     requestPath: cacheRequestPath,
-  });
-
-  if (servedFromS3) {
-    enforceAliasCacheControl();
+  })) {
     return true;
   }
 
@@ -1532,6 +1529,10 @@ async function serveIndexAssetAlias(req, res, next) {
     method,
     res,
     requestPath: req.path,
+    metadataConfig: {
+      bucket: resolveStaticAssetBucketCandidate(),
+      prefix: resolveStaticAssetPrefixCandidate(),
+    },
   });
 }
 
@@ -19100,13 +19101,16 @@ app.get('/api/static-proxy', async (req, res) => {
   };
 
   if (INDEX_ASSET_ALIAS_PATH_PATTERN.test(normalizedAssetPath)) {
-    await handleIndexAssetAliasRequest({
+    const served = await handleIndexAssetAliasRequest({
       aliasPath: normalizedAssetPath,
       method,
       res,
       requestPath: normalizedAssetPath,
       logContext: { proxy: true },
-      logLabels: aliasProxyLogLabels,
+      metadataConfig: {
+        bucket: resolveStaticAssetBucketCandidate(),
+        prefix: resolveStaticAssetPrefixCandidate(),
+      },
       onUnavailable: async ({ logContext, attemptedFallbacks }) => {
         logStructured('error', 'client_asset_alias_proxy_unavailable', {
           ...(logContext || {}),
@@ -19122,7 +19126,10 @@ app.get('/api/static-proxy', async (req, res) => {
         return true;
       },
     });
-    return;
+
+    if (served) {
+      return;
+    }
   }
 
   const logContext = {
@@ -19132,6 +19139,7 @@ app.get('/api/static-proxy', async (req, res) => {
     ...(annotatedAliasPath ? { aliasPath: annotatedAliasPath, annotatedAlias: true } : {}),
   };
 
+  console.log('DEBUG: proxy handler', { normalizedAssetPath });
   if (
     await serveClientDistAsset({
       assetPath: normalizedAssetPath,
@@ -19182,6 +19190,10 @@ app.get('/api/static-proxy', async (req, res) => {
         requestPath: aliasPath,
         logContext: aliasLogContext,
         logLabels: aliasProxyLogLabels,
+        metadataConfig: {
+          bucket: resolveStaticAssetBucketCandidate(),
+          prefix: resolveStaticAssetPrefixCandidate(),
+        },
         onUnavailable: async ({ logContext: unavailableContext, attemptedFallbacks }) => {
           logStructured('error', 'client_asset_alias_proxy_unavailable', {
             ...(unavailableContext || {}),

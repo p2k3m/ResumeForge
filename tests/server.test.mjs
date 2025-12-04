@@ -41,7 +41,10 @@ beforeAll(async () => {
   await ensureHashedAssetExists();
 });
 
-const mockS3Send = jest.fn().mockResolvedValue({});
+const mockS3Send = jest.fn().mockImplementation((command) => {
+  console.log('DEBUG: mockS3Send called with:', command.__type, command.input);
+  return Promise.resolve({});
+});
 const getObjectCommandMock = jest.fn((input) => ({ input, __type: 'GetObjectCommand' }));
 const headObjectCommandMock = jest.fn((input) => ({ input, __type: 'HeadObjectCommand' }));
 jest.unstable_mockModule('@aws-sdk/client-s3', () => ({
@@ -218,6 +221,10 @@ beforeEach(() => {
   mockS3Send.mockResolvedValue({});
   setPlainPdfFallbackOverride();
   setMinimalPlainPdfBufferGenerator();
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe('health check', () => {
