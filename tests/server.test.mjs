@@ -708,9 +708,11 @@ describe('static asset proxy endpoint', () => {
         });
       })
       .mockImplementationOnce((command) => {
-        // Expect a HEAD request for the alias or hashed asset
+        // Expect a HEAD request for the alias, which should fail to trigger fallback
         expect(command.__type).toBe('HeadObjectCommand');
-        return Promise.resolve({});
+        const error = new Error('Not Found');
+        error.name = 'NotFound';
+        return Promise.reject(error);
       })
       .mockImplementationOnce((command) => {
         expect(command.__type).toBe('GetObjectCommand');
