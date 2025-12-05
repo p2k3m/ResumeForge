@@ -458,6 +458,12 @@ Resources:
             RestApiId: !Ref ResumeForgeApi
             Path: /api/process-cv
             Method: POST
+        JobStatus:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ResumeForgeApi
+            Path: /api/job-status
+            Method: GET
       Environment:
         Variables:
           ACTIVE_SERVICE: resumeUpload

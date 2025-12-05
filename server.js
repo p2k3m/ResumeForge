@@ -24705,6 +24705,78 @@ app.post('/api/refresh-download-link', assignJobContext, async (req, res) => {
   }
 });
 
+app.get('/api/job-status', async (req, res) => {
+  const jobId = req.query.jobId;
+  const linkedinProfileUrl = req.query.linkedinProfileUrl;
+
+  if (!jobId && !linkedinProfileUrl) {
+    return sendError(res, 400, 'MISSING_IDENTIFIER', 'jobId or linkedinProfileUrl required');
+  }
+
+  const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+  const dynamo = new DynamoDBClient({ region });
+
+  const key = normalizePersonalData(linkedinProfileUrl || jobId);
+
+  try {
+    const record = await dynamo.send(
+      new GetItemCommand({
+        TableName: tableName,
+        Key: { linkedinProfileUrl: { S: key } },
+      })
+    );
+
+    if (!record.Item) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    const item = record.Item;
+    if (jobId && item.jobId && item.jobId.S !== jobId) {
+      return res.status(404).json({ success: false, message: 'Job ID mismatch' });
+    }
+
+    const status = item.status?.S || 'pending';
+
+    if (status === 'scored' || status === 'completed') {
+      const bucket = item.s3Bucket?.S;
+      const sessionChangeLogKey = item.sessionChangeLogKey?.S;
+
+      if (bucket && sessionChangeLogKey) {
+        try {
+          const s3Response = await s3Client.send(
+            new GetObjectCommand({
+              Bucket: bucket,
+              Key: sessionChangeLogKey,
+            })
+          );
+          const body = await streamToBuffer(s3Response.Body);
+          const json = JSON.parse(body.toString());
+
+          return res.json({
+            success: true,
+            status,
+            rescore: json.scores,
+            jobId: item.jobId?.S,
+          });
+        } catch (s3Err) {
+          logStructured('warn', 'job_status_s3_read_failed', {
+            error: serializeError(s3Err),
+            bucket,
+            key: sessionChangeLogKey,
+          });
+        }
+      }
+    }
+
+    return res.json({ success: true, status });
+  } catch (err) {
+    logStructured('error', 'job_status_check_failed', {
+      error: serializeError(err),
+    });
+    return sendError(res, 500, 'STATUS_CHECK_FAILED', err.message);
+  }
+});
+
 app.post(
   '/api/process-cv',
   assignJobContext,
@@ -27039,4 +27111,4 @@ export {
   normalizeManifestHashedAssetPath,
   normalizeHashedIndexAssetPath,
   buildStaticAssetKey,
-
+};

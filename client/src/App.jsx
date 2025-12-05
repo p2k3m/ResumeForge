@@ -2431,6 +2431,83 @@ function App() {
   const [manualCertificatesInput, setManualCertificatesInput] = useState('')
   const [cvFile, setCvFile] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [pollingJobId, setPollingJobId] = useState(null)
+
+  useEffect(() => {
+    if (!pollingJobId) return
+
+    let isMounted = true
+    const poll = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/job-status?jobId=${pollingJobId}`)
+        if (!response.ok) return
+
+        const data = await response.json()
+        if (data.success && (data.status === 'scored' || data.status === 'completed') && data.rescore) {
+          if (isMounted) {
+            setPollingJobId(null)
+            setQueuedMessage('')
+
+            const rescore = data.rescore
+            const before = rescore.overall?.before || {}
+            const after = rescore.overall?.after || {}
+            const insights = rescore.selectionInsights || {}
+
+            const normalizePercent = (value) =>
+              typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
+
+            const probabilityValue = normalizePercent(insights.probability)
+            const probabilityMeaning = insights.level
+            const probabilityRationale = insights.message || insights.rationale
+
+            const matchPayload = {
+              table: [],
+              addedSkills: rescore.overall?.delta?.coveredSkills || [],
+              missingSkills: before.missingSkills || [],
+              atsScoreBefore: normalizePercent(before.score),
+              atsScoreAfter: normalizePercent(after.score),
+              originalScore: normalizePercent(before.score),
+              enhancedScore: normalizePercent(after.score),
+              originalTitle: data.originalTitle || '',
+              modifiedTitle: data.modifiedTitle || '',
+              selectionProbability: probabilityValue,
+              selectionProbabilityMeaning: probabilityMeaning,
+              selectionProbabilityRationale: probabilityRationale,
+              selectionProbabilityBefore: probabilityValue,
+              selectionProbabilityBeforeMeaning: probabilityMeaning,
+              selectionProbabilityBeforeRationale: probabilityRationale,
+              selectionProbabilityAfter: probabilityValue,
+              selectionProbabilityAfterMeaning: probabilityMeaning,
+              selectionProbabilityAfterRationale: probabilityRationale,
+              selectionProbabilityFactors: insights.factors || [],
+              atsScoreBeforeExplanation: '',
+              atsScoreAfterExplanation: '',
+              originalScoreExplanation: '',
+              enhancedScoreExplanation: ''
+            }
+
+            setMatch(matchPayload)
+            setScoreBreakdown(after.scoreBreakdown || [])
+            setBaselineScoreBreakdown(before.scoreBreakdown || [])
+
+            if (data.jobId) {
+              analysisContextRef.current.jobId = data.jobId
+            }
+
+            setIsProcessing(false)
+          }
+        }
+      } catch (err) {
+        console.error('Polling failed', err)
+      }
+    }
+
+    const intervalId = setInterval(poll, 3000)
+    return () => {
+      isMounted = false
+      clearInterval(intervalId)
+    }
+  }, [pollingJobId, API_BASE_URL])
   const [outputFiles, setOutputFiles] = useState([])
   const [downloadGeneratedAt, setDownloadGeneratedAt] = useState('')
   const [downloadStates, setDownloadStates] = useState({})
@@ -6058,6 +6135,9 @@ function App() {
           data.message ||
           'You are offline. The upload will resume automatically once you reconnect.'
         )
+        if (data.jobId) {
+          setPollingJobId(data.jobId)
+        }
         return
       }
 
