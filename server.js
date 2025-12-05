@@ -1247,6 +1247,10 @@ async function tryServeHashedIndexAssetFromS3(req, res, next) {
       requestPath: req.path,
       logContext,
       logLabels: aliasLabels,
+      metadataConfig: {
+        bucket: resolveStaticAssetBucketCandidate(),
+        prefix: resolveStaticAssetPrefixCandidate(),
+      },
       onUnavailable: async ({ logContext: unavailableContext, attemptedFallbacks }) => {
         logStructured('error', 'client_asset_alias_direct_unavailable', {
           ...(unavailableContext || {}),
@@ -2387,7 +2391,7 @@ async function getChromiumBrowser() {
     chromiumLaunchAttempted = true;
     const executablePath = await chromium.executablePath();
     return await puppeteerCore.launch({
-      args: chromium.args,
+      args: [...(chromium.args || []), '--no-sandbox', '--disable-dev-shm-usage'],
       defaultViewport: chromium.defaultViewport,
       executablePath,
       headless: chromium.headless,

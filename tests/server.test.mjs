@@ -636,6 +636,7 @@ describe('static asset proxy endpoint', () => {
   });
 
   test('normalizes stray punctuation in proxy asset queries', async () => {
+    mockS3Send.mockClear();
     const cssContent = await readDistAsset('index-latest.css');
 
     const res = await request(app)
@@ -696,6 +697,8 @@ describe('static asset proxy endpoint', () => {
 
     const proxyBody = '.proxy-fallback { color: #0c0; }';
 
+    mockS3Send.mockClear();
+
     mockS3Send
       .mockImplementationOnce((command) => {
         expect(command.__type).toBe('GetObjectCommand');
@@ -706,13 +709,6 @@ describe('static asset proxy endpoint', () => {
           ]),
           ContentType: 'application/json',
         });
-      })
-      .mockImplementationOnce((command) => {
-        // Expect a HEAD request for the alias, which should fail to trigger fallback
-        expect(command.__type).toBe('HeadObjectCommand');
-        const error = new Error('Not Found');
-        error.name = 'NotFound';
-        return Promise.reject(error);
       })
       .mockImplementationOnce((command) => {
         expect(command.__type).toBe('GetObjectCommand');
@@ -733,7 +729,7 @@ describe('static asset proxy endpoint', () => {
       expect(res.headers['access-control-allow-origin']).toBe('*');
       expect(res.text).toBe(proxyBody);
       expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
-      expect(mockS3Send).toHaveBeenCalledTimes(3);
+      expect(mockS3Send).toHaveBeenCalledTimes(2);
     } finally {
       statSpy.mockRestore();
       readFileSpy.mockRestore();
@@ -831,6 +827,7 @@ describe('static asset proxy endpoint', () => {
   });
 
   test('rejects invalid asset paths', async () => {
+    mockS3Send.mockClear();
     const res = await request(app)
       .get('/api/static-proxy')
       .query({ asset: '../secrets.txt' });
