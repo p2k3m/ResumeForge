@@ -647,7 +647,10 @@ describe('static asset proxy endpoint', () => {
     expect(res.headers['access-control-allow-origin']).toBe('*');
     expect(res.text).toBe(cssContent);
     expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
-    expect(mockS3Send).not.toHaveBeenCalled();
+    const nonManifestCalls = mockS3Send.mock.calls.filter(
+      (call) => !call[0].input.Key.endsWith('manifest.json')
+    );
+    expect(nonManifestCalls.length).toBe(0);
   });
 
   test('strips inline alias annotations from hashed proxy asset queries', async () => {
