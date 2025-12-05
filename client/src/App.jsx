@@ -2442,6 +2442,33 @@ function App() {
       // Add other key state if visible
     });
   });
+
+  const prevDebugState = useRef({});
+  useEffect(() => {
+    const current = {
+      manualJobDescription,
+      cvFile,
+      outputFiles,
+      changeLog,
+      improvementResults,
+      downloadStates,
+      cloudfrontMetadata
+    };
+    const prev = prevDebugState.current;
+    const changes = {};
+    let hasChanges = false;
+    for (const key in current) {
+      if (prev[key] !== current[key]) {
+        // Simple equality check. For objects/arrays, reference equality is enough to trigger render.
+        changes[key] = { from: prev[key], to: current[key] };
+        hasChanges = true;
+      }
+    }
+    if (hasChanges) {
+      console.log('[Diagnostic] State changed:', changes);
+      prevDebugState.current = current;
+    }
+  });
   const [manualJobDescription, setManualJobDescription] = useState('')
   const pendingImprovementRescoreRef = useRef([])
   const runQueuedImprovementRescoreRef = useRef(null)

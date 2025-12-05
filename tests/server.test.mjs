@@ -651,8 +651,8 @@ describe('static asset proxy endpoint', () => {
   });
 
   test('strips inline alias annotations from hashed proxy asset queries', async () => {
-    mockS3Send.mockClear();
     const hashedCssName = await extractPrimaryCssAssetName();
+    mockS3Send.mockClear();
     const hashedContent = await readDistAsset(hashedCssName);
     const annotatedPath = `assets/${hashedCssName},, {"alias":"/assets/index-latest.css"}`;
 

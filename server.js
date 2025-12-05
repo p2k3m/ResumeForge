@@ -585,11 +585,15 @@ function resolveS3ContentLength(metadata) {
 }
 
 function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPath) {
-  const { ContentType, CacheControl, ETag, LastModified } = metadata || {};
+  const { ContentType, CacheControl, ETag, LastModified, ContentEncoding } = metadata || {};
   const ContentLength = resolveS3ContentLength(metadata);
 
   if (ContentLength) {
     setResponseHeader(res, 'Content-Length', ContentLength);
+  }
+
+  if (ContentEncoding) {
+    setResponseHeader(res, 'Content-Encoding', ContentEncoding);
   }
 
   if (ContentType) {
@@ -612,7 +616,6 @@ function applyS3ResponseHeaders(res, metadata, assetPath, requestPath = assetPat
   }
 
   const resolvedContentLength = resolveS3ContentLength(metadata);
-  console.log(`DEBUG: applyS3ResponseHeaders ContentLength=${ContentLength} resolved=${resolvedContentLength} metadata=${JSON.stringify(metadata)}`);
   if (resolvedContentLength !== undefined) {
     setResponseHeader(res, 'Content-Length', resolvedContentLength);
   }
