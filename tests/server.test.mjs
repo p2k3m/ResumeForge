@@ -697,24 +697,26 @@ describe('static asset proxy endpoint', () => {
     const proxyBody = '.proxy-fallback { color: #0c0; }';
 
     mockS3Send
-      .mockImplementationOnce((command) => {
-        expect(command.__type).toBe('GetObjectCommand');
-        expect(command.input.Key).toMatch(/manifest\.json$/);
-        return Promise.resolve({
-          Body: Readable.from([
-            JSON.stringify({ hashedIndexAssets: [hashedRelativePath] }),
-          ]),
-          ContentType: 'application/json',
-        });
-      })
-      .mockImplementationOnce((command) => {
-        expect(command.__type).toBe('GetObjectCommand');
-        expect(command.input.Key).toMatch(new RegExp(`${escapeRegex(hashedCssName)}$`));
-        return Promise.resolve({
-          Body: Readable.from([proxyBody]),
-          ContentType: 'text/css',
-          CacheControl: 'public, max-age=60',
-        });
+      .mockImplementation((command) => {
+        if (command.__type === 'HeadObjectCommand') {
+          return Promise.resolve({});
+        }
+        if (command.input.Key && command.input.Key.endsWith('manifest.json')) {
+          return Promise.resolve({
+            Body: Readable.from([
+              JSON.stringify({ hashedIndexAssets: [hashedRelativePath] }),
+            ]),
+            ContentType: 'application/json',
+          });
+        }
+        if (command.input.Key && command.input.Key.endsWith(hashedCssName)) {
+          return Promise.resolve({
+            Body: Readable.from([proxyBody]),
+            ContentType: 'text/css',
+            CacheControl: 'public, max-age=60',
+          });
+        }
+        return Promise.resolve({ Body: Readable.from(['']) });
       });
 
     try {
@@ -726,7 +728,7 @@ describe('static asset proxy endpoint', () => {
       expect(res.headers['access-control-allow-origin']).toBe('*');
       expect(res.text).toBe(proxyBody);
       expect(res.headers['cache-control']).toBe('no-cache, no-store, must-revalidate');
-      expect(mockS3Send).toHaveBeenCalledTimes(2);
+      expect(mockS3Send).toHaveBeenCalledTimes(3);
     } finally {
       statSpy.mockRestore();
       readFileSpy.mockRestore();
