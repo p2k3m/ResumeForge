@@ -205,6 +205,7 @@ Resources:
         - font/woff2
         - application/font-woff2
         - image/*
+        - */*
       Cors:
         AllowMethods: "'OPTIONS,POST,GET'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"

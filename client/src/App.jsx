@@ -2417,58 +2417,8 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 }
 
 function App() {
-  const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
 
-  useEffect(() => {
-    console.log(`[Diagnostic] App mounted. Initial render count: ${renderCountRef.current}`);
-  }, []);
 
-  useEffect(() => {
-    if (renderCountRef.current % 50 === 0) {
-      console.warn(`[Diagnostic] App component rendered ${renderCountRef.current} times`);
-    }
-  });
-
-  const prevProps = useRef({});
-  useEffect(() => {
-    const changes = {};
-    // Check props (if any were passed to App, though usually none for root)
-    // Check state/context if possible, but for now let's just log that we rendered.
-    // Actually, let's log the values of some key state variables to see if they are flipping.
-    console.log('[Diagnostic] Render state:', {
-      manualJobDescription: manualJobDescription?.slice(0, 20),
-      pendingImprovementRescore: pendingImprovementRescoreRef.current.length,
-      // Add other key state if visible
-    });
-  });
-
-  const prevDebugState = useRef({});
-  useEffect(() => {
-    const current = {
-      manualJobDescription,
-      cvFile,
-      outputFiles,
-      changeLog,
-      improvementResults,
-      downloadStates,
-      cloudfrontMetadata
-    };
-    const prev = prevDebugState.current;
-    const changes = {};
-    let hasChanges = false;
-    for (const key in current) {
-      if (prev[key] !== current[key]) {
-        // Simple equality check. For objects/arrays, reference equality is enough to trigger render.
-        changes[key] = { from: prev[key], to: current[key] };
-        hasChanges = true;
-      }
-    }
-    if (hasChanges) {
-      console.log('[Diagnostic] State changed:', changes);
-      prevDebugState.current = current;
-    }
-  });
   const [manualJobDescription, setManualJobDescription] = useState('')
   const pendingImprovementRescoreRef = useRef([])
   const runQueuedImprovementRescoreRef = useRef(null)
@@ -6366,7 +6316,7 @@ function App() {
     if (!signature) {
       return
     }
-    if (lastAutoScoreSignatureRef.current === signature && (isProcessing || scoreComplete)) {
+    if (lastAutoScoreSignatureRef.current === signature) {
       return
     }
     handleScoreSubmit()
