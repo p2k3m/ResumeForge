@@ -7,7 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, jest } from '@j
 let bootstrapApp
 
 beforeAll(async () => {
-  ;({ bootstrapApp } = await import('../bootstrapApp.js'))
+  ; ({ bootstrapApp } = await import('../bootstrapApp.js'))
 })
 
 const renderMock = jest.fn()
@@ -30,12 +30,14 @@ beforeEach(() => {
   document.body.innerHTML = ''
   document.head.innerHTML = ''
   delete window.__RESUMEFORGE_API_BASE_URL__
+  delete window.__RESUMEFORGE_APP_MOUNTED__
 })
 
 afterEach(() => {
   document.body.innerHTML = ''
   document.head.innerHTML = ''
   delete window.__RESUMEFORGE_API_BASE_URL__
+  delete window.__RESUMEFORGE_APP_MOUNTED__
 })
 
 describe('client bootstrap', () => {
