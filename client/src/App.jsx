@@ -2429,6 +2429,19 @@ function App() {
       console.warn(`[Diagnostic] App component rendered ${renderCountRef.current} times`);
     }
   });
+
+  const prevProps = useRef({});
+  useEffect(() => {
+    const changes = {};
+    // Check props (if any were passed to App, though usually none for root)
+    // Check state/context if possible, but for now let's just log that we rendered.
+    // Actually, let's log the values of some key state variables to see if they are flipping.
+    console.log('[Diagnostic] Render state:', {
+      manualJobDescription: manualJobDescription?.slice(0, 20),
+      pendingImprovementRescore: pendingImprovementRescoreRef.current.length,
+      // Add other key state if visible
+    });
+  });
   const [manualJobDescription, setManualJobDescription] = useState('')
   const pendingImprovementRescoreRef = useRef([])
   const runQueuedImprovementRescoreRef = useRef(null)
