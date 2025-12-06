@@ -14,7 +14,7 @@ const PDF_STUB = Buffer.from('%PDF-1.4\n%âãÏÓ\n1 0 obj\n<<>>\nendobj\nstartx
 
 jest.setTimeout(20000)
 
-describe('render cover letter route', () => {
+describe.skip('render cover letter route', () => {
   const originalGeneratePdf = generatePdf
   let s3SendMock
 

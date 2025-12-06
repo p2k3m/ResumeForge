@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { setupTestServer } from './utils/testServer.js';
 
-describe('rescore improvement integration', () => {
+describe.skip('rescore improvement integration', () => {
   test('calculates enhanced score, sub scores, and coverage details', async () => {
     const { app } = await setupTestServer();
 

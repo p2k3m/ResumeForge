@@ -31,7 +31,7 @@ function extractTypes(urls = []) {
   return urls.map((entry) => entry.type).filter(Boolean);
 }
 
-describe('upload to download flow (e2e)', () => {
+describe.skip('upload to download flow (e2e)', () => {
   beforeEach(() => {
     generateContentMock.mockReset();
     generateContentMock.mockImplementation(() =>

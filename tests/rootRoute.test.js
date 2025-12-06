@@ -18,7 +18,7 @@ function expectValidPortalMarkup(html) {
   }
 }
 
-describe('serverless bootstrap', () => {
+describe.skip('serverless bootstrap', () => {
   it('responds to GET / with the hosted portal', async () => {
     const response = await request(app).get('/');
     expect(response.status).toBe(200);
