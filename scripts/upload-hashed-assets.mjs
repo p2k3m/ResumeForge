@@ -1470,71 +1470,72 @@ export async function uploadHashedIndexAssets(options = {}) {
           },
           { versionLabel },
         ),
-  }
-  uploaded.push(entry.relativePath)
-}
-
-// Wait for S3 eventual consistency before verifying
-await new Promise((resolve) => setTimeout(resolve, 2000))
-
-await verifyUploadedObjects({
-  s3,
-  bucket,
-  prefix,
-  uploads,
-})
-
-await ensureAliasObjectsInS3({
-  s3,
-  bucket,
-  prefix,
-  aliasEntries,
-  versionLabel,
-})
-
-await updateManifestHashedAssets({
-  s3,
-  bucket,
-  prefix,
-  hashedEntries: entries,
-  versionLabel,
-  distDirectory,
-})
-
-await replicateUploadsToFallbackPrefixes({
-  s3,
-  bucket,
-  sourcePrefix: prefix,
-  fallbackPrefixes: configuration.fallbackPrefixes,
-  uploads,
-})
-
-
-
-if (!options?.quiet) {
-  const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
-  const hashedSummary = entries.map((entry) => entry.relativePath)
-  const versionSummary = versionedEntries.map((entry) => entry.relativePath)
-
-  const supplementarySummary = supplementaryEntries.map((entry) => entry.relativePath)
-
-  const messageParts = [`hashed assets (${hashedSummary.join(', ')})`]
-  if (aliasSummary.length) {
-    messageParts.push(`aliases (${aliasSummary.join(', ')})`)
-  }
-  if (supplementarySummary.length) {
-    messageParts.push(`metadata (${supplementarySummary.join(', ')})`)
-  }
-  if (versionSummary.length) {
-    messageParts.push(`versioned copies (${versionSummary.join(', ')})`)
+      ),
+    )
+    uploaded.push(entry.relativePath)
   }
 
-  console.log(
-    `[upload-hashed-assets] Uploaded ${uploads.length} bundle${uploads.length === 1 ? '' : 's'} to s3://${bucket}/${prefix}/: ${messageParts.join('; ')}`,
-  )
-}
+  // Wait for S3 eventual consistency before verifying
+  await new Promise((resolve) => setTimeout(resolve, 2000))
 
-return { uploaded, bucket, prefix, versionLabel }
+  await verifyUploadedObjects({
+    s3,
+    bucket,
+    prefix,
+    uploads,
+  })
+
+  await ensureAliasObjectsInS3({
+    s3,
+    bucket,
+    prefix,
+    aliasEntries,
+    versionLabel,
+  })
+
+  await updateManifestHashedAssets({
+    s3,
+    bucket,
+    prefix,
+    hashedEntries: entries,
+    versionLabel,
+    distDirectory,
+  })
+
+  await replicateUploadsToFallbackPrefixes({
+    s3,
+    bucket,
+    sourcePrefix: prefix,
+    fallbackPrefixes: configuration.fallbackPrefixes,
+    uploads,
+  })
+
+
+
+  if (!options?.quiet) {
+    const aliasSummary = aliasEntries.map((entry) => entry.relativePath)
+    const hashedSummary = entries.map((entry) => entry.relativePath)
+    const versionSummary = versionedEntries.map((entry) => entry.relativePath)
+
+    const supplementarySummary = supplementaryEntries.map((entry) => entry.relativePath)
+
+    const messageParts = [`hashed assets (${hashedSummary.join(', ')})`]
+    if (aliasSummary.length) {
+      messageParts.push(`aliases (${aliasSummary.join(', ')})`)
+    }
+    if (supplementarySummary.length) {
+      messageParts.push(`metadata (${supplementarySummary.join(', ')})`)
+    }
+    if (versionSummary.length) {
+      messageParts.push(`versioned copies (${versionSummary.join(', ')})`)
+    }
+
+    console.log(
+      `[upload-hashed-assets] Uploaded ${uploads.length} bundle${uploads.length === 1 ? '' : 's'} to s3://${bucket}/${prefix}/: ${messageParts.join('; ')}`,
+    )
+  }
+
+  return { uploaded, bucket, prefix, versionLabel }
 }
 
 async function replicateUploadsToFallbackPrefixes({
