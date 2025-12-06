@@ -27,6 +27,7 @@ const {
   PutItemCommand,
   UpdateItemCommand,
   DeleteItemCommand,
+  ScanCommand,
 } = DynamoDB;
 import fs from 'fs/promises';
 import fsSync from 'fs';
@@ -24726,11 +24727,37 @@ app.get('/api/job-status', async (req, res) => {
       })
     );
 
-    if (!record.Item) {
+    let item = record.Item;
+    if (!item && jobId) {
+      try {
+        const scanResult = await dynamo.send(
+          new ScanCommand({
+            TableName: tableName,
+            FilterExpression: 'jobId = :jobId',
+            ExpressionAttributeValues: { ':jobId': { S: jobId } },
+            Limit: 1,
+          })
+        );
+        if (scanResult.Items && scanResult.Items.length > 0) {
+          item = scanResult.Items[0];
+          logStructured('warn', 'job_status_fallback_scan_used', {
+            jobId,
+            linkedinProfileUrl: key,
+          });
+        }
+      } catch (scanErr) {
+        logStructured('warn', 'job_status_fallback_scan_failed', {
+          error: serializeError(scanErr),
+          jobId,
+        });
+      }
+    }
+
+    if (!item) {
       return res.status(404).json({ success: false, message: 'Job not found' });
     }
 
-    const item = record.Item;
+
     if (jobId && item.jobId && item.jobId.S !== jobId) {
       return res.status(404).json({ success: false, message: 'Job ID mismatch' });
     }
