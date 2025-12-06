@@ -10,7 +10,7 @@ export function bootstrapApp({
   console.log('bootstrapApp called');
   if (typeof windowRef !== 'undefined') {
     if (windowRef.__RESUMEFORGE_APP_MOUNTED__) {
-      console.warn('ResumeForge app already mounted. Skipping duplicate initialization.');
+      console.info('ResumeForge app already mounted. Skipping duplicate initialization.');
       return { container: null, app: null };
     }
     windowRef.__RESUMEFORGE_APP_MOUNTED__ = true;

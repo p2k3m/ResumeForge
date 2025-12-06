@@ -14083,7 +14083,7 @@ function extractErrorMetadata(err) {
 }
 function getBuildVersion() {
   {
-    return "7abd71b";
+    return "9268a01";
   }
 }
 const BUILD_VERSION = getBuildVersion();
@@ -16136,7 +16136,6 @@ function ImprovementCard({ suggestion, onReject, onPreview }) {
 }
 function App() {
   var _a;
-  console.log("App component rendering...");
   const [manualJobDescription, setManualJobDescription] = reactExports.useState("");
   const pendingImprovementRescoreRef = reactExports.useRef([]);
   const runQueuedImprovementRescoreRef = reactExports.useRef(null);
@@ -16148,6 +16147,74 @@ function App() {
   const [manualCertificatesInput, setManualCertificatesInput] = reactExports.useState("");
   const [cvFile, setCvFile] = reactExports.useState(null);
   const [isProcessing, setIsProcessing] = reactExports.useState(false);
+  const [pollingJobId, setPollingJobId] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (!pollingJobId)
+      return;
+    let isMounted = true;
+    const poll = async () => {
+      var _a2, _b, _c, _d;
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/job-status?jobId=${pollingJobId}`);
+        if (!response.ok)
+          return;
+        const data = await response.json();
+        if (data.success && (data.status === "scored" || data.status === "completed") && data.rescore) {
+          if (isMounted) {
+            setPollingJobId(null);
+            setQueuedMessage("");
+            const rescore = data.rescore;
+            const before = ((_a2 = rescore.overall) == null ? void 0 : _a2.before) || {};
+            const after = ((_b = rescore.overall) == null ? void 0 : _b.after) || {};
+            const insights = rescore.selectionInsights || {};
+            const normalizePercent2 = (value) => typeof value === "number" && Number.isFinite(value) ? Math.round(value) : null;
+            const probabilityValue = normalizePercent2(insights.probability);
+            const probabilityMeaning = insights.level;
+            const probabilityRationale = insights.message || insights.rationale;
+            const matchPayload = {
+              table: [],
+              addedSkills: ((_d = (_c = rescore.overall) == null ? void 0 : _c.delta) == null ? void 0 : _d.coveredSkills) || [],
+              missingSkills: before.missingSkills || [],
+              atsScoreBefore: normalizePercent2(before.score),
+              atsScoreAfter: normalizePercent2(after.score),
+              originalScore: normalizePercent2(before.score),
+              enhancedScore: normalizePercent2(after.score),
+              originalTitle: data.originalTitle || "",
+              modifiedTitle: data.modifiedTitle || "",
+              selectionProbability: probabilityValue,
+              selectionProbabilityMeaning: probabilityMeaning,
+              selectionProbabilityRationale: probabilityRationale,
+              selectionProbabilityBefore: probabilityValue,
+              selectionProbabilityBeforeMeaning: probabilityMeaning,
+              selectionProbabilityBeforeRationale: probabilityRationale,
+              selectionProbabilityAfter: probabilityValue,
+              selectionProbabilityAfterMeaning: probabilityMeaning,
+              selectionProbabilityAfterRationale: probabilityRationale,
+              selectionProbabilityFactors: insights.factors || [],
+              atsScoreBeforeExplanation: "",
+              atsScoreAfterExplanation: "",
+              originalScoreExplanation: "",
+              enhancedScoreExplanation: ""
+            };
+            setMatch(matchPayload);
+            setScoreBreakdown(after.scoreBreakdown || []);
+            setBaselineScoreBreakdown(before.scoreBreakdown || []);
+            if (data.jobId) {
+              analysisContextRef.current.jobId = data.jobId;
+            }
+            setIsProcessing(false);
+          }
+        }
+      } catch (err) {
+        console.error("Polling failed", err);
+      }
+    };
+    const intervalId = setInterval(poll, 3e3);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [pollingJobId, API_BASE_URL]);
   const [outputFiles, setOutputFiles] = reactExports.useState([]);
   const [downloadGeneratedAt, setDownloadGeneratedAt] = reactExports.useState("");
   const [downloadStates, setDownloadStates] = reactExports.useState({});
@@ -18901,6 +18968,7 @@ function App() {
   }, []);
   const handleDrop = reactExports.useCallback((e) => {
     e.preventDefault();
+    e.stopPropagation();
     const file = e.dataTransfer.files[0];
     if (file && !file.name.toLowerCase().match(/\.(pdf|docx?)$/)) {
       setError("Only PDF, DOC, or DOCX files are supported.", { stage: "upload" });
@@ -19109,6 +19177,9 @@ function App() {
         setQueuedMessage(
           data.message || "You are offline. The upload will resume automatically once you reconnect."
         );
+        if (data.jobId) {
+          setPollingJobId(data.jobId);
+        }
         return;
       }
       const outputFilesValue = normalizeOutputFiles(data.urls, {
@@ -19290,7 +19361,7 @@ function App() {
     if (!signature) {
       return;
     }
-    if (lastAutoScoreSignatureRef.current === signature && (isProcessing || scoreComplete)) {
+    if (lastAutoScoreSignatureRef.current === signature) {
       return;
     }
     handleScoreSubmit();
@@ -21680,10 +21751,10 @@ function App() {
                     }
                   )
                 ] })
-              ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+              ] }, "file-selected") : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg font-semibold text-purple-800", children: "Drag & drop your CV" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-purple-600", children: "or click to browse (PDF, DOC, or DOCX · max 5 MB)" })
-              ] }),
+              ] }, "no-file"),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "inline-flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-purple-600", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-purple-200/80 bg-white/80 px-3 py-1", children: "Drag & drop" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-purple-200/80 bg-white/80 px-3 py-1", children: "Browse files" })
@@ -22610,6 +22681,13 @@ function bootstrapApp({
 }) {
   var _a, _b;
   console.log("bootstrapApp called");
+  if (typeof windowRef !== "undefined") {
+    if (windowRef.__RESUMEFORGE_APP_MOUNTED__) {
+      console.info("ResumeForge app already mounted. Skipping duplicate initialization.");
+      return { container: null, app: null };
+    }
+    windowRef.__RESUMEFORGE_APP_MOUNTED__ = true;
+  }
   if (!documentRef || typeof documentRef.getElementById !== "function") {
     throw new Error("bootstrapApp requires a documentRef with DOM helpers");
   }
