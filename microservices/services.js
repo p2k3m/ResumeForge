@@ -105,6 +105,7 @@ export const services = {
     description: 'Accepts resumes and uploads artifacts to S3/DynamoDB.',
     allowedRoutes: [
       { method: 'POST', path: '/api/process-cv' },
+      { method: 'GET', path: '/api/job-status' },
     ],
     binaryTypes: DEFAULT_BINARY_TYPES,
   },
