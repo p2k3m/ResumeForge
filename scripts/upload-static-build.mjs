@@ -605,11 +605,21 @@ function resolveBucketConfiguration() {
     }
   }
 
+  // Extract region from metadata if available
+  let region = process.env.AWS_REGION
+  if (!region) {
+    const metadata = loadPublishedCloudfrontMetadataSafe()
+    if (metadata?.originRegion) {
+      region = metadata.originRegion
+    }
+  }
+
   return {
     bucket,
     prefix: normalizedPrefix,
     stage: effectiveStage,
     deploymentEnvironment: effectiveEnvironment,
+    region,
   }
 }
 
@@ -1534,11 +1544,11 @@ async function main() {
 
   try {
     const { files, hashedAssets } = await gatherClientAssetFiles()
-    const { bucket, prefix, stage, deploymentEnvironment } = resolveBucketConfiguration()
+    const { bucket, prefix, stage, deploymentEnvironment, region } = resolveBucketConfiguration()
     Object.assign(deployContext, { bucket, prefix, stage, deploymentEnvironment })
     const buildVersion = resolveBuildVersion()
     const versionLabel = resolveVersionLabel()
-    const s3 = new S3Client({})
+    const s3 = new S3Client(region ? { region } : {})
 
     if (buildVersion) {
       console.log(`[upload-static] Using build version ${buildVersion}`)
