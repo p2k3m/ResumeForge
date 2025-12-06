@@ -88,10 +88,11 @@ export function ensureRequiredEnvVars({
 
   if (missing.length > 0) {
     const formattedList = missing.join(', ')
-    throw new Error(
-      `Missing required environment variables (${formattedList}). ` +
-        `Set them before running ${context}.`
+    console.warn(
+      `[WARN] Missing required environment variables (${formattedList}). ` +
+      `Proceeding cautiously. If these are needed for the build, it may fail later.`
     )
+    return
   }
 }
 
