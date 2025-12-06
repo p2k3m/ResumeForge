@@ -4184,8 +4184,13 @@ function sanitizeAllowedOrigins(value) {
 
   const sanitized = [];
   for (const candidate of normalized) {
-    if (!candidate || candidate === '*') {
+    if (!candidate) {
       continue;
+    }
+
+    // Allow '*' as a wildcard
+    if (candidate === '*') {
+      return ['*'];
     }
 
     try {
