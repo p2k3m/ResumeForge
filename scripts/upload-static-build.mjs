@@ -529,7 +529,16 @@ function resolveBucketConfiguration() {
     dataBucket,
   } = applyStageEnvironment({ propagateToProcessEnv: true, propagateViteEnv: false })
 
-  const bucket = staticAssetsBucket || dataBucket
+  let bucket = staticAssetsBucket || dataBucket
+
+  if (!bucket) {
+    const metadata = loadPublishedCloudfrontMetadataSafe()
+    if (metadata?.originBucket) {
+      bucket = metadata.originBucket
+      console.log(`[upload-static] Inferred bucket ${bucket} from published metadata.`)
+    }
+  }
+
   if (!bucket) {
     throw new Error(
       'STATIC_ASSETS_BUCKET (or DATA_BUCKET/S3_BUCKET) must be set to upload static assets to S3.',
