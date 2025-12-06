@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Cover Letter</title>
+    <link rel="stylesheet" href="cover_modern.css" />
+  </head>
+  <body>
+    <div class="letter-shell">
+      <header class="letter-header">
+        <div class="letter-identity">
+          <h1>{{name}}</h1>
+          {{#if headline}}
+          <p class="letter-tagline">{{headline}}</p>
+          {{/if}}
+          {{#if title}}
+          <p class="letter-tagline">{{title}}</p>
+          {{/if}}
+        </div>
+        {{#if contactLines.length}}
+        <ul class="letter-contact">
+          {{#each contactLines}}
+          <li>{{this}}</li>
+          {{/each}}
+        </ul>
+        {{/if}}
+      </header>
+      <main class="letter-body">
+        {{#each sections}}
+          {{#each items}}
+            <p>{{{this}}}</p>
+          {{/each}}
+        {{/each}}
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resume</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+      --page-bg: #eef3fb;
+      --canvas: #ffffff;
+      --ink: #0b1220;
+      --muted: #4a6072;
+      --muted-soft: rgba(74, 96, 114, 0.72);
+      --accent: #2f7bff;
+      --accent-strong: #1341b9;
+      --accent-soft: rgba(47, 123, 255, 0.18);
+      --teal: #00c6b8;
+      --border: rgba(11, 18, 32, 0.08);
+      --divider: rgba(15, 23, 42, 0.18);
+      --shadow: 0 32px 80px rgba(15, 37, 89, 0.16);
+      --radius-xl: 30px;
+      --radius-lg: 24px;
+      --radius-md: 18px;
+      --gradient: linear-gradient(120deg, rgba(19, 65, 185, 0.93), rgba(0, 198, 184, 0.85));
+      --gradient-soft: linear-gradient(145deg, rgba(47, 123, 255, 0.1), rgba(0, 198, 184, 0.08));
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: clamp(32px, 6vw, 80px);
+      font-family: 'Plus Jakarta Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(0, 198, 184, 0.22), transparent 55%),
+        radial-gradient(circle at bottom left, rgba(47, 123, 255, 0.18), transparent 60%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(238, 243, 251, 0.85)),
+        var(--page-bg);
+      color: var(--ink);
+    }
+
+    .resume-shell {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: var(--canvas);
+      border-radius: var(--radius-xl);
+      padding: clamp(52px, 6vw, 76px);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(19, 65, 185, 0.12);
+      display: grid;
+      gap: clamp(36px, 5vw, 50px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .resume-shell::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(160deg, rgba(0, 198, 184, 0.12), transparent 58%),
+        var(--gradient-soft);
+      pointer-events: none;
+    }
+
+    .hero {
+      position: relative;
+      z-index: 1;
+      padding: clamp(32px, 4vw, 42px);
+      border-radius: var(--radius-lg);
+      background: var(--gradient);
+      color: #f8fafc;
+      display: grid;
+      gap: clamp(22px, 3vw, 30px);
+      box-shadow: inset 0 0 0 1px rgba(248, 250, 252, 0.15);
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.28), transparent 55%);
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .hero__meta {
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero__badge {
+      justify-self: start;
+      padding: 9px 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fdfbf6;
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      backdrop-filter: blur(6px);
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2.8rem, 4vw, 3.5rem);
+      letter-spacing: -0.02em;
+    }
+
+    .hero__headline,
+    .hero__title,
+    .hero__note {
+      margin: 0;
+      font-size: 1.08rem;
+      line-height: 1.7;
+      color: rgba(240, 246, 255, 0.9);
+    }
+
+    .hero__note {
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(248, 250, 252, 0.82);
+    }
+
+    .hero__contact {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.22);
+    }
+
+    .hero__contact li {
+      font-size: 0.93rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgba(248, 250, 252, 0.88);
+      position: relative;
+      padding-left: 18px;
+      display: flex;
+      align-items: center;
+    }
+
+    .hero__contact li::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(0, 198, 184, 0.85);
+      transform: translateY(-50%);
+    }
+
+    .resume-sections {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: clamp(26px, 3vw, 36px);
+    }
+
+    @media (min-width: 960px) {
+      .resume-sections {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+      }
+    }
+
+    .section-card {
+      border-radius: var(--radius-lg);
+      padding: clamp(26px, 3vw, 34px);
+      background:
+        linear-gradient(135deg, rgba(239, 246, 255, 0.92), rgba(255, 255, 255, 0.96));
+      border: 1px solid rgba(19, 65, 185, 0.14);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.85),
+        0 24px 60px rgba(12, 41, 96, 0.08);
+      display: grid;
+      gap: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .section-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top right, rgba(47, 123, 255, 0.12), transparent 55%);
+      opacity: 0;
+      transition: opacity 200ms ease;
+      pointer-events: none;
+    }
+
+    .section-card:hover::before {
+      opacity: 1;
+    }
+
+    .section-card--wide {
+      grid-column: 1 / -1;
+      background:
+        linear-gradient(135deg, rgba(250, 252, 255, 0.96), rgba(239, 246, 255, 0.88));
+      border: 1px solid rgba(0, 198, 184, 0.18);
+      box-shadow: inset 0 0 0 1px rgba(47, 123, 255, 0.16);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+    }
+
+    .section-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--accent-strong);
+      font-weight: 700;
+    }
+
+    .section-header .rule {
+      flex: 1;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(47, 123, 255, 0.7), transparent);
+    }
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 16px;
+    }
+
+    li {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 16px;
+      align-items: start;
+      white-space: pre-wrap;
+      line-height: 1.72;
+      color: var(--ink);
+      font-size: 1.02rem;
+    }
+
+    .section-item--contact,
+    .section-item--summary,
+    .section-item--skills,
+    .section-item--certifications {
+      grid-template-columns: 1fr;
+    }
+
+    .section--contact {
+      display: none;
+    }
+
+    .section--experience .dot {
+      display: none;
+    }
+
+    .dot {
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 50%;
+      background: rgba(47, 123, 255, 0.2);
+      border: 1px solid rgba(19, 65, 185, 0.4);
+      margin-top: 6px;
+      position: relative;
+      box-shadow: 0 0 0 5px rgba(47, 123, 255, 0.08);
+    }
+
+    .section--experience .section-item {
+      position: relative;
+      padding-left: 10px;
+    }
+
+    .section--experience .section-item::before {
+      content: '';
+      position: absolute;
+      top: 0.7rem;
+      left: -3px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(47, 123, 255, 0.9), rgba(0, 198, 184, 0.9));
+      box-shadow: 0 0 0 5px rgba(47, 123, 255, 0.16);
+    }
+
+    .section--experience .section-item::after {
+      content: '';
+      position: absolute;
+      top: 1.6rem;
+      left: 1px;
+      width: 2px;
+      bottom: -1.6rem;
+      background: linear-gradient(180deg, rgba(47, 123, 255, 0.25), transparent 90%);
+    }
+
+    .section--experience .section-item:last-child::after {
+      display: none;
+    }
+
+    .item-text {
+      display: block;
+      min-width: 0;
+    }
+
+    .item-text .bullet,
+    .item-text .edu-bullet {
+      display: none;
+    }
+
+    strong {
+      color: var(--accent-strong);
+    }
+
+    em {
+      color: var(--muted-soft);
+      font-style: normal;
+    }
+
+    .tab {
+      display: inline-block;
+      width: 1.4em;
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff;
+      }
+
+      .resume-shell {
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+        padding: 48px 60px;
+      }
+
+      .hero {
+        background: #111827;
+      }
+
+      .section-card,
+      .section-card--wide {
+        background: #ffffff;
+        box-shadow: none;
+      }
+
+      .section--contact {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="resume-shell">
+    <header class="hero">
+      <div class="hero__meta">
+        <span class="hero__badge">Business Portfolio • Updated Oct 2025</span>
+        <h1>{{name}}</h1>
+        {{#if headline}}
+        <p class="hero__headline">{{headline}}</p>
+        {{/if}}
+        {{#if title}}
+        <p class="hero__title">{{title}}</p>
+        {{/if}}
+        <p class="hero__note">Boardroom-ready storytelling calibrated for October 2025 hiring cycles.</p>
+      </div>
+      {{#if contactLines.length}}
+      <ul class="hero__contact">
+        {{#each contactLines}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+      {{/if}}
+    </header>
+    <main class="resume-sections">
+      {{#each sections}}
+      <section class="section-card {{#if @first}}section-card--wide{{/if}} {{sectionClass}}">
+        {{#if heading}}
+        <div class="section-header">
+          <h2 class="section-title {{headingClass}}">{{heading}}</h2>
+          <span class="rule"></span>
+        </div>
+        {{/if}}
+        {{#if items}}
+        <ul class="section-list {{listClass}}">
+          {{#each items}}
+          <li class="section-item {{../itemClass}}">
+            {{#if ../showMarkers}}
+            <span class="dot {{../markerClass}}"></span>
+            {{/if}}
+            <span class="item-text {{../textClass}}">{{{this}}}</span>
+          </li>
+          {{/each}}
+        </ul>
+        {{/if}}
+      </section>
+      {{/each}}
+    </main>
+  </div>
+</body>
+</html>

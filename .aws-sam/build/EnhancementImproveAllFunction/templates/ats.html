@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resume</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 40px 32px;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      color: #111827;
+      background: #f8fafc;
+    }
+
+    .page {
+      max-width: 760px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      padding: 48px 56px;
+    }
+
+    header {
+      margin-bottom: 28px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      font-size: 16px;
+      font-weight: 500;
+      color: #374151;
+    }
+
+    .contact-list {
+      list-style: none;
+      margin: 16px 0 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 20px;
+    }
+
+    .contact-list li {
+      font-size: 13px;
+      color: #1f2937;
+    }
+
+    .contact-label {
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-right: 4px;
+      color: #111827;
+    }
+
+    .contact-separator {
+      margin-right: 4px;
+      color: #6b7280;
+    }
+
+    .contact-value {
+      color: #1f2937;
+    }
+
+    section {
+      margin-bottom: 24px;
+    }
+
+    section:last-of-type {
+      margin-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #111827;
+    }
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    li {
+      line-height: 1.55;
+      color: #111827;
+      white-space: pre-wrap;
+    }
+
+    .section-item--experience,
+    .section-item--education,
+    .section-item--other {
+      display: block;
+    }
+
+    .section-list--experience,
+    .section-list--education,
+    .section-list--other {
+      gap: 12px;
+    }
+
+    .section-list--skills,
+    .section-list--certifications,
+    .section-list--summary,
+    .section-list--contact {
+      gap: 6px;
+    }
+
+    .section-list--skills .bullet,
+    .section-list--certifications .bullet,
+    .section-list--summary .bullet,
+    .section-list--contact .bullet {
+      display: none;
+    }
+
+    .section-item--skills,
+    .section-item--certifications,
+    .section-item--summary,
+    .section-item--contact {
+      padding-left: 0;
+    }
+
+    .bullet,
+    .edu-bullet {
+      margin-right: 8px;
+      color: #111827;
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff;
+      }
+
+      .page {
+        border: none;
+        box-shadow: none;
+        padding: 32px 40px;
+      }
+
+      .contact-list {
+        gap: 6px 16px;
+      }
+    }
+  </style>
+</head>
+<body{{#if templateParams.atsMode}} data-ats-mode="true"{{/if}}>
+  <div class="page">
+    <header>
+      <h1>{{name}}</h1>
+      {{#if templateParams.jobTitle}}
+      <p class="subtitle">{{templateParams.jobTitle}}</p>
+      {{else}}
+        {{#if templateParams.contact.jobTitle}}
+      <p class="subtitle">{{templateParams.contact.jobTitle}}</p>
+        {{else}}
+          {{#if contact.jobTitle}}
+      <p class="subtitle">{{contact.jobTitle}}</p>
+          {{/if}}
+        {{/if}}
+      {{/if}}
+      {{#if contact.entries.length}}
+      <ul class="contact-list">
+        {{#each contact.entries}}
+        <li>{{{html}}}</li>
+        {{/each}}
+      </ul>
+      {{else}}
+        {{#if contactLines.length}}
+      <ul class="contact-list">
+        {{#each contactLines}}
+        <li>{{this}}</li>
+        {{/each}}
+      </ul>
+        {{/if}}
+      {{/if}}
+    </header>
+    <main>
+      {{#each sections}}
+      <section class="section{{#if sectionClass}} {{sectionClass}}{{/if}}">
+        {{#if heading}}
+        <h2 class="section-heading{{#if headingClass}} {{headingClass}}{{/if}}">{{heading}}</h2>
+        {{/if}}
+        {{#if items}}
+        <ul class="section-list{{#if listClass}} {{listClass}}{{/if}}">
+          {{#each items}}
+          <li class="section-item{{#if ../itemClass}} {{../itemClass}}{{/if}}">
+            {{{this}}}
+          </li>
+          {{/each}}
+        </ul>
+        {{/if}}
+      </section>
+      {{/each}}
+    </main>
+  </div>
+</body>
+</html>

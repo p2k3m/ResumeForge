@@ -5,7 +5,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/resumeUpload.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["ResumeForgeFunction"]
 
@@ -17,7 +17,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/clientApp.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["ClientAppFunction"]
 
@@ -29,7 +29,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/jobEvaluation.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["JobEvaluationFunction"]
 
@@ -41,7 +41,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/scoring.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["ScoringFunction"]
 
@@ -53,7 +53,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveSummary.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveSummaryFunction"]
 
@@ -65,7 +65,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveSkills.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveSkillsFunction"]
 
@@ -77,7 +77,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveDesignation.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveDesignationFunction"]
 
@@ -89,7 +89,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveExperience.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveExperienceFunction"]
 
@@ -101,7 +101,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveCertifications.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveCertificationsFunction"]
 
@@ -113,7 +113,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveProjects.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveProjectsFunction"]
 
@@ -125,7 +125,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveHighlights.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveHighlightsFunction"]
 
@@ -137,7 +137,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveAts.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveAtsFunction"]
 
@@ -149,7 +149,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/enhancementImproveAll.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["EnhancementImproveAllFunction"]
 
@@ -161,7 +161,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/documentGeneration.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["DocumentGenerationFunction"]
 
@@ -173,7 +173,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/documentGenerationWorker.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["DocumentGenerationWorkerFunction"]
 
@@ -185,7 +185,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/workflowScore.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["WorkflowScoreFunction"]
 
@@ -197,7 +197,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/workflowEnhancementSection.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["WorkflowEnhancementSectionFunction"]
 
@@ -209,7 +209,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/workflowCombine.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["WorkflowCombineFunction"]
 
@@ -221,7 +221,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/workflowGeneratePdf.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["WorkflowGenerateFunction"]
 
@@ -233,7 +233,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/cloudfrontLogProcessor.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["CloudFrontLogProcessorFunction"]
 
@@ -245,7 +245,7 @@ codeuri = "/Users/pushkarmishra/Documents/ResumeForge/ResumeForge"
 runtime = "nodejs20.x"
 architecture = "x86_64"
 handler = "lambdas/auditing.handler"
-manifest_hash = ""
+manifest_hash = "5eed9e659f9d36c85b9277002bb4dbb1"
 packagetype = "Zip"
 functions = ["AuditingFunction"]
 

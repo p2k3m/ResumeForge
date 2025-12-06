@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Resume</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --bg: #eef2ff;
+      --sheet: #ffffff;
+      --ink: #111827;
+      --muted: #4b5563;
+      --accent: #4338ca;
+      --accent-soft: rgba(67, 56, 202, 0.12);
+      --border: rgba(67, 56, 202, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: clamp(32px, 6vw, 72px);
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0.15), transparent 70%), var(--bg);
+      font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+      color: var(--ink);
+    }
+
+    .wrapper {
+      max-width: 880px;
+      margin: 0 auto;
+      background: var(--sheet);
+      border-radius: 32px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: 0 32px 68px rgba(67, 56, 202, 0.18);
+      overflow: hidden;
+    }
+
+    header {
+      padding: clamp(44px, 6vw, 56px);
+      background: linear-gradient(120deg, rgba(67, 56, 202, 0.18), rgba(59, 130, 246, 0.1));
+      border-bottom: 1px solid rgba(67, 56, 202, 0.18);
+      display: grid;
+      gap: 12px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 4vw, 3.3rem);
+      letter-spacing: -0.015em;
+      color: #0b1120;
+    }
+
+    header p {
+      margin: 0;
+      color: rgba(15, 23, 42, 0.7);
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    main {
+      padding: clamp(40px, 5vw, 56px);
+      display: grid;
+      gap: clamp(24px, 3vw, 36px);
+      background: var(--sheet);
+    }
+
+    section {
+      position: relative;
+      padding: 28px clamp(28px, 4vw, 36px);
+      border-radius: 24px;
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      box-shadow: inset 0 0 0 1px rgba(67, 56, 202, 0.06);
+      background: linear-gradient(135deg, rgba(67, 56, 202, 0.06), rgba(99, 102, 241, 0.03));
+    }
+
+    section::before {
+      content: '';
+      position: absolute;
+      inset: 24px auto 24px 18px;
+      width: 4px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(67, 56, 202, 0.8), rgba(129, 140, 248, 0.8));
+    }
+
+    h2 {
+      margin: 0 0 16px 0;
+      padding-left: 24px;
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #1e1b4b;
+    }
+
+    ul {
+      margin: 0;
+      padding: 0 0 0 24px;
+      list-style: none;
+      display: grid;
+      gap: 12px;
+    }
+
+    li {
+      position: relative;
+      padding-left: 20px;
+      line-height: 1.6;
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+
+    li::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0.75em;
+      width: 10px;
+      height: 2px;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+      border-radius: 999px;
+    }
+
+    .section-list--contact,
+    .section-list--summary,
+    .section-list--skills,
+    .section-list--certifications {
+      padding: 0;
+      gap: 8px;
+    }
+
+    .section-list--contact li,
+    .section-list--summary li,
+    .section-list--skills li,
+    .section-list--certifications li {
+      padding-left: 0;
+    }
+
+    .section-list--contact li::before,
+    .section-list--summary li::before,
+    .section-list--skills li::before,
+    .section-list--certifications li::before {
+      display: none;
+    }
+
+    strong {
+      color: #1f1d51;
+    }
+
+    em {
+      color: var(--muted);
+    }
+
+    @media (min-width: 920px) {
+      main {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+      }
+      section:nth-of-type(1),
+      section:nth-of-type(2) {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media print {
+      body {
+        padding: 0;
+        background: #ffffff;
+      }
+      .wrapper {
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+      }
+      header,
+      main,
+      section {
+        box-shadow: none;
+        background: #ffffff;
+      }
+      section::before {
+        background: #111827;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <header>
+      <h1>{{name}}</h1>
+      <p>Precision Professional Resume</p>
+    </header>
+    <main>
+      {{#each sections}}
+      <section class="{{sectionClass}}">
+        {{#if heading}}
+        <h2 class="{{headingClass}}">{{heading}}</h2>
+        {{/if}}
+        {{#if items}}
+        <ul class="{{listClass}}">
+          {{#each items}}
+          <li class="{{../itemClass}}">{{{this}}}</li>
+          {{/each}}
+        </ul>
+        {{/if}}
+      </section>
+      {{/each}}
+    </main>
+  </div>
+</body>
+</html>

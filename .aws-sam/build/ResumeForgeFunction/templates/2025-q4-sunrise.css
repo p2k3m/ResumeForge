@@ -1,0 +1,12 @@
+@import url('./2025.css');
+
+:root {
+  --accent: #ea580c;
+  --accent-soft: #fff3e8;
+  --border: #fed7aa;
+  --text: #1f2933;
+  --muted: #9a3412;
+  --pill: #f97316;
+  --pill-bg: rgba(251, 146, 60, 0.18);
+  --card-shadow: 0 22px 44px rgba(249, 115, 22, 0.16);
+}
