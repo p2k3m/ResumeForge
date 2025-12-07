@@ -24720,24 +24720,61 @@ app.get('/api/job-status', async (req, res) => {
   }
 
   const tableName = process.env.RESUME_TABLE_NAME || 'ResumeForge';
+  const logsTableName = process.env.RESUME_LOGS_TABLE_NAME || 'ResumeForgeLogs';
   const dynamo = new DynamoDBClient({ region });
 
   const key = normalizePersonalData(linkedinProfileUrl || jobId);
 
   try {
-    const record = await dynamo.send(
-      new GetItemCommand({
-        TableName: tableName,
-        Key: { linkedinProfileUrl: { S: key } },
-      })
-    );
+    let item;
 
-    let item = record.Item;
+    // If we have an explicit jobId, look in the logs table first since that's where job status lives
+    if (jobId) {
+      try {
+        const record = await dynamo.send(
+          new GetItemCommand({
+            TableName: logsTableName,
+            Key: { jobId: { S: jobId } },
+          })
+        );
+        item = record.Item;
+      } catch (err) {
+        logStructured('warn', 'job_status_logs_lookup_failed', {
+          error: serializeError(err),
+          jobId,
+          tableName: logsTableName
+        });
+        // Fallthrough to try legacy lookup or scan if needed
+      }
+    }
+
+    // If no item found yet, OR if we only have linkedinProfileUrl, try the main user table
+    if (!item) {
+      // Avoid querying user table with jobId as key if schema doesn't match
+      if (linkedinProfileUrl) {
+        try {
+          const record = await dynamo.send(
+            new GetItemCommand({
+              TableName: tableName,
+              Key: { linkedinProfileUrl: { S: key } },
+            })
+          );
+          item = record.Item;
+        } catch (err) {
+          logStructured('warn', 'job_status_user_table_lookup_failed', {
+            error: serializeError(err),
+            key,
+            tableName
+          });
+        }
+      }
+    }
+
     if (!item && jobId) {
       try {
         const scanResult = await dynamo.send(
           new ScanCommand({
-            TableName: tableName,
+            TableName: logsTableName, // Scan logs table for jobId (though Key lookup should have worked)
             FilterExpression: 'jobId = :jobId',
             ExpressionAttributeValues: { ':jobId': { S: jobId } },
             Limit: 1,
@@ -24747,7 +24784,7 @@ app.get('/api/job-status', async (req, res) => {
           item = scanResult.Items[0];
           logStructured('warn', 'job_status_fallback_scan_used', {
             jobId,
-            linkedinProfileUrl: key,
+            tableName: logsTableName
           });
         }
       } catch (scanErr) {
