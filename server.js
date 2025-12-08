@@ -4613,6 +4613,20 @@ function getRuntimeConfig() {
 let runtimeConfigSnapshot = loadRuntimeConfig({ logOnError: true });
 
 function resolveCurrentAllowedOrigins() {
+  const envOrigins =
+    readEnvValue('CLOUDFRONT_ORIGINS') || readEnvValue('ALLOWED_ORIGINS');
+
+  if (envOrigins) {
+    const parsedEnvOrigins = parseAllowedOrigins(envOrigins);
+    if (parsedEnvOrigins.length) {
+      logStructured('info', 'cors_debug_resolve_env', {
+        origins: parsedEnvOrigins,
+        raw: envOrigins
+      });
+      return parsedEnvOrigins;
+    }
+  }
+
   const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
   if (Array.isArray(runtimeConfig?.CLOUDFRONT_ORIGINS)) {
     const configuredOrigins = sanitizeAllowedOrigins(
@@ -4624,19 +4638,6 @@ function resolveCurrentAllowedOrigins() {
         raw: runtimeConfig.CLOUDFRONT_ORIGINS
       });
       return configuredOrigins;
-    }
-  }
-
-  const envOrigins =
-    readEnvValue('CLOUDFRONT_ORIGINS') || readEnvValue('ALLOWED_ORIGINS');
-  if (envOrigins) {
-    const parsedEnvOrigins = parseAllowedOrigins(envOrigins);
-    if (parsedEnvOrigins.length) {
-      logStructured('info', 'cors_debug_resolve_env', {
-        origins: parsedEnvOrigins,
-        raw: envOrigins
-      });
-      return parsedEnvOrigins;
     }
   }
 
