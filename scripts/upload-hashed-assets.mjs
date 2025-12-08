@@ -979,7 +979,7 @@ function buildS3Key(prefix, relativePath) {
 }
 
 function buildS3CopySource(bucket, key) {
-  const encodedKey = encodeURIComponent(key).replace(/%2F/g, '/')
+  const encodedKey = encodeURIComponent(key)
   return `${bucket}/${encodedKey}`
 }
 
