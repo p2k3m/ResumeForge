@@ -58,7 +58,7 @@
     "css": [
       "assets/index-0da4b4af.css"
     ],
-    "file": "assets/index-6c1d1efa.js",
+    "file": "assets/index-be932cad.js",
     "isEntry": true,
     "src": "index.html"
   },
@@ -261,16 +261,5 @@
   "src/assets/qr-optimised-resume.svg": {
     "file": "assets/qr-optimised-resume-dc4882c4.svg",
     "src": "src/assets/qr-optimised-resume.svg"
-  },
-  "files": [
-    "assets/index-0da4b4af.css",
-    "assets/index-6c1d1efa.js"
-  ],
-  "hashedIndexAssets": [
-    "assets/index-0da4b4af.css",
-    "assets/index-6c1d1efa.js"
-  ],
-  "hashedIndexAssetCount": 2,
-  "assetVersionLabel": "v20251208084438",
-  "uploadedAt": "2025-12-08T08:44:44.139Z"
+  }
 }
