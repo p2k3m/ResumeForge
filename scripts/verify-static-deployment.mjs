@@ -13,6 +13,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import axios from 'axios'
 import { resolvePublishedCloudfrontUrl } from '../lib/cloudfrontHealthCheck.js'
 import {
   verifyClientAssets,
@@ -426,13 +427,13 @@ async function ensureObjectSignedUrlAccessible({ s3, bucket, key }) {
   }
 
   try {
-    const response = await fetch(trimmedUrl, { method: 'GET' })
-    if (!response.ok) {
-      const status = response.status || 0
-      const statusText = response.statusText ? ` ${response.statusText}` : ''
+    await axios.get(trimmedUrl)
+  } catch (error) {
+    if (error.response) {
+      const status = error.response.status
+      const statusText = error.response.statusText ? ` ${error.response.statusText}` : ''
       return `(signed URL request failed: HTTP ${status}${statusText})`
     }
-  } catch (error) {
     const detail = error?.message || error
     return `(signed URL request failed: ${detail})`
   }

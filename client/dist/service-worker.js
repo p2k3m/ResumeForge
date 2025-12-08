@@ -227,10 +227,12 @@ async function handleUploadRequest(event) {
         }
       )
     } catch (queueErr) {
+      const originalErrorMessage = err?.message || String(err || 'Unknown network error');
       return new Response(
         JSON.stringify({
           error: 'Unable to queue upload for retry.',
           detail: queueErr?.message || String(queueErr || 'Unknown error'),
+          originalError: originalErrorMessage,
         }),
         {
           status: 503,
@@ -355,14 +357,14 @@ function normalizePayload(payload) {
 
   const match = payload.table || payload.addedSkills || payload.missingSkills
     ? {
-        table: payload.table || [],
-        addedSkills: payload.addedSkills || [],
-        missingSkills: payload.missingSkills || [],
-        originalScore: payload.originalScore || 0,
-        enhancedScore: payload.enhancedScore || 0,
-        originalTitle: payload.originalTitle || '',
-        modifiedTitle: payload.modifiedTitle || '',
-      }
+      table: payload.table || [],
+      addedSkills: payload.addedSkills || [],
+      missingSkills: payload.missingSkills || [],
+      originalScore: payload.originalScore || 0,
+      enhancedScore: payload.enhancedScore || 0,
+      originalTitle: payload.originalTitle || '',
+      modifiedTitle: payload.modifiedTitle || '',
+    }
     : null
 
   return {
