@@ -214,11 +214,9 @@ Resources:
         DEFAULT_4XX:
           ResponseParameters:
             gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
-            gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         DEFAULT_5XX:
           ResponseParameters:
             gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
-            gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
 
   ResumeForgeOrchestrationBus:
     Type: AWS::Events::EventBus
