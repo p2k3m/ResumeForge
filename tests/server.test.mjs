@@ -965,6 +965,7 @@ describe('/api/process-cv', () => {
       'PutItemCommand',
       'GetItemCommand',
       'PutItemCommand',
+      'PutItemCommand',
       'UpdateItemCommand',
       'UpdateItemCommand',
       'DeleteItemCommand'
@@ -1147,6 +1148,7 @@ describe('/api/process-cv', () => {
     expect(types).toEqual([
       'DescribeTableCommand',
       'GetItemCommand',
+      'PutItemCommand',
       'PutItemCommand',
       'PutItemCommand',
       'UpdateItemCommand',
