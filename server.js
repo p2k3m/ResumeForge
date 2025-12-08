@@ -4619,6 +4619,10 @@ function resolveCurrentAllowedOrigins() {
       runtimeConfig.CLOUDFRONT_ORIGINS
     );
     if (configuredOrigins.length) {
+      logStructured('info', 'cors_debug_resolve_runtime', {
+        origins: configuredOrigins,
+        raw: runtimeConfig.CLOUDFRONT_ORIGINS
+      });
       return configuredOrigins;
     }
   }
@@ -4628,11 +4632,19 @@ function resolveCurrentAllowedOrigins() {
   if (envOrigins) {
     const parsedEnvOrigins = parseAllowedOrigins(envOrigins);
     if (parsedEnvOrigins.length) {
+      logStructured('info', 'cors_debug_resolve_env', {
+        origins: parsedEnvOrigins,
+        raw: envOrigins
+      });
       return parsedEnvOrigins;
     }
   }
 
-  return resolveDefaultAllowedOrigins();
+  const defaultOrigins = resolveDefaultAllowedOrigins();
+  logStructured('info', 'cors_debug_resolve_default', {
+    origins: defaultOrigins
+  });
+  return defaultOrigins;
 }
 
 function collectActiveServiceDeclarations() {
@@ -4819,6 +4831,14 @@ app.use(
     origin: (origin, callback) => {
       const runtimeConfig = loadRuntimeConfig() || runtimeConfigSnapshot;
       const allowed = resolveCurrentAllowedOrigins(runtimeConfig);
+
+      logStructured('info', 'cors_debug_callback', {
+        origin,
+        allowed,
+        envCloudfront: process.env.CLOUDFRONT_ORIGINS,
+        runtimeConfig: runtimeConfig ? 'present' : 'missing'
+      });
+
       if (!origin || allowed.includes('*') || allowed.includes(origin)) {
         callback(null, true);
       } else {
