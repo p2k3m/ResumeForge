@@ -654,6 +654,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -877,6 +882,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -945,6 +955,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1020,6 +1035,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1088,6 +1108,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1163,6 +1188,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1238,6 +1268,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1313,6 +1348,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1381,6 +1421,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1449,6 +1494,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1517,6 +1567,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1592,6 +1647,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1660,6 +1720,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1776,6 +1841,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -1837,6 +1907,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
@@ -2279,6 +2354,11 @@ Resources:
             - CreateStaticAssetsBucketCondition
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucket}/*
             - Fn::Sub: arn:aws:s3:::${StaticAssetsBucketName}/*
+        - Sid: AllowCloudWatchMetrics
+          Effect: Allow
+          Action:
+          - cloudwatch:PutMetricData
+          Resource: '*'
       - DynamoDBCrudPolicy:
           TableName:
             Ref: ResumeTableName
