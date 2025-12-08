@@ -223,7 +223,7 @@ describe('uploadHashedIndexAssets', () => {
 
     for (const command of copyCommands) {
       expect(command.input.MetadataDirective).toBe('COPY')
-      expect(command.input.CopySource).toContain('static/client/prod/latest')
+      expect(decodeURIComponent(command.input.CopySource)).toContain('static/client/prod/latest')
     }
 
     const manifestPut = putCommands.find((command) =>
