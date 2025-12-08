@@ -26255,6 +26255,33 @@ app.post(
         event: 'dynamodb_initial_record_written'
       });
 
+      // DUAL-WRITE FIX: Also write to ResumeForgeLogs so /api/job-status can find it immediately
+      try {
+        const logsTableName = process.env.RESUME_LOGS_TABLE_NAME || 'ResumeForgeLogs';
+        const logItemPayload = {
+          TableName: logsTableName,
+          Item: {
+            jobId: { S: jobId },
+            timestamp: { S: timestamp },
+            status: { S: 'uploaded' }, // Initial status
+            candidateName: { S: storedApplicantName }, // Helpful for debugging
+            linkedinProfileUrl: { S: storedLinkedIn }, // Link back to profile
+          }
+        };
+        await dynamo.send(new PutItemCommand(logItemPayload));
+        logStructured('info', 'dynamo_logs_initial_record_written', {
+          ...logContext,
+          tableName: logsTableName,
+          jobId
+        });
+      } catch (logWriteErr) {
+        logStructured('warn', 'dynamo_logs_initial_write_failed', {
+          ...logContext,
+          error: serializeError(logWriteErr)
+        });
+        // We do not block the request if this fails, but job status polling might 404 until the first workflow step runs
+      }
+
       const uploadStageMetadata = {
         uploadedAt: timestamp,
         fileType: storedFileType,
