@@ -14083,7 +14083,7 @@ function extractErrorMetadata(err) {
 }
 function getBuildVersion() {
   {
-    return "790b456";
+    return "3dd942a";
   }
 }
 const BUILD_VERSION = getBuildVersion();
@@ -18883,7 +18883,7 @@ function App() {
     if (typeof window === "undefined") {
       return void 0;
     }
-    const isDevEnvironment = typeof import.meta !== "undefined" && { "VITE_STAGE_NAME": "dev", "VITE_DEPLOYMENT_ENVIRONMENT": "dev", "VITE_API_BASE_URL": "https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod", "VITE_PUBLISHED_CLOUDFRONT_METADATA": '{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2OWOS9JQQDVU3","apiGatewayUrl":"https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}', "BASE_URL": "./", "MODE": "production", "DEV": false, "PROD": true, "SSR": false } && false;
+    const isDevEnvironment = typeof import.meta !== "undefined" && { "VITE_STAGE_NAME": "prod", "VITE_DEPLOYMENT_ENVIRONMENT": "prod", "VITE_API_BASE_URL": "https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod", "VITE_PUBLISHED_CLOUDFRONT_METADATA": '{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2OWOS9JQQDVU3","apiGatewayUrl":"https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}', "BASE_URL": "./", "MODE": "production", "DEV": false, "PROD": true, "SSR": false } && false;
     if (isDevEnvironment) {
       window.__RESUMEFORGE_DEBUG_SET_IMPROVEMENTS__ = (payload) => {
         if (!Array.isArray(payload)) {
@@ -22725,7 +22725,7 @@ const wghtItalic = "";
 const _400 = "";
 const _500 = "";
 const _700 = "";
-const resolvedImportMetaEnv = typeof import.meta !== "undefined" && import.meta && typeof import.meta === "object" && { "VITE_STAGE_NAME": "dev", "VITE_DEPLOYMENT_ENVIRONMENT": "dev", "VITE_API_BASE_URL": "https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod", "VITE_PUBLISHED_CLOUDFRONT_METADATA": '{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2OWOS9JQQDVU3","apiGatewayUrl":"https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}', "BASE_URL": "./", "MODE": "production", "DEV": false, "PROD": true, "SSR": false } || globalThis.__RESUMEFORGE_IMPORT_META_ENV__ || {};
+const resolvedImportMetaEnv = typeof import.meta !== "undefined" && import.meta && typeof import.meta === "object" && { "VITE_STAGE_NAME": "prod", "VITE_DEPLOYMENT_ENVIRONMENT": "prod", "VITE_API_BASE_URL": "https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod", "VITE_PUBLISHED_CLOUDFRONT_METADATA": '{"stackName":"ResumeForge","url":"https://d109hwmzrqr39w.cloudfront.net","distributionId":"E2OWOS9JQQDVU3","apiGatewayUrl":"https://j3a7m3jz11.execute-api.ap-south-1.amazonaws.com/prod","originBucket":"resume-forge-app-2025","originRegion":"ap-south-1","originPath":"/static/client/prod/latest","updatedAt":"2025-03-18T09:30:00.000Z","degraded":false}', "BASE_URL": "./", "MODE": "production", "DEV": false, "PROD": true, "SSR": false } || globalThis.__RESUMEFORGE_IMPORT_META_ENV__ || {};
 bootstrapApp({
   documentRef: typeof document !== "undefined" ? document : void 0,
   windowRef: typeof window !== "undefined" ? window : void 0,
