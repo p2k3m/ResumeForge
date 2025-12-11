@@ -22,7 +22,7 @@ if (shouldLoadDotEnv) {
   }
 }
 
-const requiredEnvVars = ['S3_BUCKET', 'GEMINI_API_KEY'];
+const requiredEnvVars = ['S3_BUCKET'];
 const optionalEnvHints = ['CLOUDFRONT_ORIGINS'];
 const missing = requiredEnvVars.filter((name) => !hasValue(process.env[name]));
 optionalEnvHints.forEach((name) => {
@@ -44,7 +44,7 @@ if (!hasValue(process.env.AWS_REGION)) {
 if (missing.length > 0) {
   throw new Error(
     `Missing required environment variables: ${missing.join(', ')}. ` +
-      'Ensure they are configured via deployment secrets or a local .env file.'
+    'Ensure they are configured via deployment secrets or a local .env file.'
   );
 }
 

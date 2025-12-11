@@ -117,7 +117,23 @@ export function createServiceHandler({
     }));
 
     try {
-      return await serverlessExpressInstance(event, context);
+      const response = await serverlessExpressInstance(event, context);
+
+      if (response && typeof response === 'object') {
+        response.headers = response.headers || {};
+        // Ensure CORS headers are present
+        if (!response.headers['Access-Control-Allow-Origin']) {
+          response.headers['Access-Control-Allow-Origin'] = '*';
+        }
+        if (!response.headers['Access-Control-Allow-Headers']) {
+          response.headers['Access-Control-Allow-Headers'] = 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token';
+        }
+        if (!response.headers['Access-Control-Allow-Methods']) {
+          response.headers['Access-Control-Allow-Methods'] = 'OPTIONS,GET,POST,PUT,DELETE';
+        }
+      }
+
+      return response;
     } catch (error) {
       console.error(JSON.stringify({
         event: 'serverless_express_error',
@@ -125,7 +141,22 @@ export function createServiceHandler({
         stack: error.stack,
         eventPayload: event
       }));
-      throw error;
+
+      // Return a 500 with CORS headers instead of throwing, so the client sees the error
+      return {
+        statusCode: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+          'Access-Control-Allow-Methods': 'OPTIONS,GET,POST,PUT,DELETE'
+        },
+        body: JSON.stringify({
+          message: 'Internal Server Error',
+          requestId: context.awsRequestId,
+          error: error.message
+        })
+      };
     }
   };
 
