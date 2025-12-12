@@ -17,6 +17,7 @@ import {
   GetBucketPolicyCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutBucketWebsiteCommand,
   PutObjectCommand,
@@ -1337,29 +1338,43 @@ export async function verifyUploadedAssets({ s3, bucket, uploads }) {
 
   const failures = []
 
+  const RETRY_DELAY_MS = 1000
+  const MAX_ATTEMPTS = 3
+
   for (const upload of uploads) {
     const key = typeof upload?.key === 'string' ? upload.key.trim() : ''
     if (!key) {
       continue
     }
 
-    try {
-      const response = await s3.send(
-        new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        }),
-      )
+    let verified = false
+    let lastError = null
 
-      if (response?.Body && typeof response.Body.destroy === 'function') {
-        response.Body.destroy()
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        await s3.send(
+          new HeadObjectCommand({
+            Bucket: bucket,
+            Key: key,
+          }),
+        )
+        verified = true
+        break
+      } catch (error) {
+        lastError = error
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
+        }
       }
-    } catch (error) {
+    }
+
+    if (!verified) {
       const pathLabel =
         typeof upload?.path === 'string' && upload.path.trim()
           ? upload.path.trim()
           : key
 
+      const error = lastError
       const statusCode = error?.$metadata?.httpStatusCode
       const errorCode = error?.name || error?.Code || error?.code
       const reason = error?.message || String(error)
