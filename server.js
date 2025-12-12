@@ -1617,9 +1617,8 @@ function normalizeStaticProxyAssetPath(value) {
   candidate = candidate.replace(/[#?].*$/, '');
 
   for (const separator of STATIC_PROXY_ALIAS_METADATA_SEPARATORS) {
-    const metadataIndex = candidate.indexOf(separator);
-    if (metadataIndex !== -1) {
-      candidate = candidate.slice(0, metadataIndex).trim();
+    if (candidate.includes(separator)) {
+      candidate = candidate.split(separator)[0].trim();
     }
   }
 
