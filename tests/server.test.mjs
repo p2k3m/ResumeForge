@@ -26,11 +26,19 @@ const ensureHashedAssetExists = async () => {
   const assetsDir = path.join(process.cwd(), 'client', 'dist', 'assets');
   const hashedCssName = 'index-0da4b4af.css';
   const hashedAssetPath = path.join(assetsDir, hashedCssName);
+  const aliasCssPath = path.join(assetsDir, 'index-latest.css');
+  const aliasJsPath = path.join(assetsDir, 'index-latest.js');
 
   try {
     await fsPromises.mkdir(assetsDir, { recursive: true });
     if (!fs.existsSync(hashedAssetPath)) {
       await fsPromises.writeFile(hashedAssetPath, '.alias { color: #f00; }');
+    }
+    if (!fs.existsSync(aliasCssPath)) {
+      await fsPromises.writeFile(aliasCssPath, '/* alias css */');
+    }
+    if (!fs.existsSync(aliasJsPath)) {
+      await fsPromises.writeFile(aliasJsPath, '// alias js');
     }
   } catch (error) {
     console.error('Failed to create dummy hashed asset:', error);
