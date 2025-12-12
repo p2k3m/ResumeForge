@@ -8,7 +8,7 @@ import {
   statementAllowsPublicAssetDownload,
   findMissingBucketPolicyKeys,
 } from '../scripts/upload-static-build.mjs'
-import { GetObjectCommand } from '@aws-sdk/client-s3'
+import { HeadObjectCommand } from '@aws-sdk/client-s3'
 
 describe('resolvePrimaryIndexAssets', () => {
   it('prefers hashed assets discovered in index.html', () => {
@@ -185,7 +185,7 @@ describe('verifyUploadedAssets', () => {
     }
   }
 
-  it('issues a GET request for each uploaded asset', async () => {
+  it('issues a HEAD request for each uploaded asset', async () => {
     const client = new FakeS3Client([{}, {}])
     const uploads = [
       { path: 'index.html', key: 'static/client/prod/latest/index.html' },
@@ -198,7 +198,7 @@ describe('verifyUploadedAssets', () => {
 
     expect(client.commands).toHaveLength(2)
     for (const command of client.commands) {
-      expect(command).toBeInstanceOf(GetObjectCommand)
+      expect(command).toBeInstanceOf(HeadObjectCommand)
       expect(command.input).toEqual(expect.objectContaining({ Bucket: 'my-bucket' }))
     }
     expect(client.commands[0].input.Key).toBe('static/client/prod/latest/index.html')
@@ -212,7 +212,7 @@ describe('verifyUploadedAssets', () => {
       $metadata: { httpStatusCode: 404 },
       name: 'NotFound',
     })
-    const client = new FakeS3Client([error])
+    const client = new FakeS3Client([error, error, error])
     const uploads = [
       { path: 'index.html', key: 'static/client/prod/latest/index.html' },
     ]
