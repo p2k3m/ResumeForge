@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 // Mock Environment Variables
 process.env.AWS_REGION = 'us-east-1';
 process.env.AWS_LAMBDA_FUNCTION_NAME = 'ResumeForge-prod-client-app';
-process.env.S3_BUCKET = 'test-bucket';
+// process.env.S3_BUCKET = 'test-bucket';
 // process.env.GEMINI_API_KEY = 'test-key';
 // process.env.CLOUDFRONT_ORIGINS = '*';
 process.env.LOG_LEVEL = 'debug';
